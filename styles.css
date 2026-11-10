@@ -174,3 +174,26 @@ body.sem-rolagem { overflow: hidden; }
 .link { background: none; border: 0; color: var(--azul); cursor: pointer; font: inherit; font-size: 12px; }
 @media (max-width: 1000px) { .filtros-topo { grid-template-columns: 1fr 1fr; position: static; } .filtros-topo .cresce { grid-column: 1 / -1; } }
 @media (max-width: 520px) { .filtros-topo { grid-template-columns: 1fr; } }
+
+/* ocorrências */
+.menu-cont { margin-left: auto; background: var(--vermelho); color: #fff; border-radius: 99px; font-size: 11px; padding: 1px 7px; }
+.tag-oc { display: inline-block; margin-top: 3px; font-size: 10px; font-weight: 600; border-radius: 4px; padding: 1px 5px; }
+.tag-oc.ok { color: var(--verde); background: var(--verde-bg); }
+.tag-oc.pend { color: var(--vermelho); background: var(--vermelho-bg); }
+.oc-resumo { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 10px; }
+.oc-card { border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; background: #fff; }
+.oc-card span { font-size: 11px; font-weight: 700; color: var(--texto-2); }
+.oc-card b { font-size: 24px; color: var(--verde); }
+.oc-card.pend { border-left: 4px solid var(--vermelho); }
+.oc-card.pend b { color: var(--vermelho); }
+.oc-card em { font-style: normal; font-size: 11px; color: var(--texto-2); }
+.passos { margin: 10px 0 14px; padding-left: 20px; color: var(--texto); font-size: 13px; line-height: 1.6; background: #fffbea; border: 1px solid #f3e3a0; border-radius: 10px; padding: 10px 14px 10px 30px; }
+.passos a { color: var(--azul); }
+.oc-grupo { margin-top: 14px; }
+.oc-grupo h3 { margin: 0 0 6px; font-size: 14px; color: var(--marinho); }
+.tabela-oc th { text-align: left; font-size: 12px; color: var(--texto-2); border-bottom: 2px solid var(--texto-2); padding: 6px 8px; }
+.tabela-oc th.num { text-align: right; }
+.tabela-oc td { padding: 7px 8px; border-bottom: 1px solid var(--borda); font-size: 13px; vertical-align: top; }
+.tabela-oc td.dir { text-align: right; }
+.tabela-oc summary { cursor: pointer; color: var(--azul); font-size: 12px; }
+.btn.feito { background: var(--verde-bg); border-color: var(--verde); color: var(--verde); }

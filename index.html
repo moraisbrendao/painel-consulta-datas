@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="styles.css?v=7">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -43,6 +43,7 @@
     <div class="corpo">
     <nav class="menu-lateral" aria-label="Menu">
       <button class="menu-item ativo" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
+      <button class="menu-item" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
     </nav>
     <main class="conteudo" id="pagina-preventivo">
       <!-- filtros: valem para todas as tabelas da página -->
@@ -120,6 +121,36 @@
         <nav id="paginacao" class="paginacao"></nav>
       </section>
     </main>
+
+    <!-- ============ OCORRÊNCIAS ============ -->
+    <main class="conteudo" id="pagina-ocorrencias" hidden>
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Ocorrências no portal da transportadora</h2>
+            <p class="sub">Pedidos em DESTINATÁRIO AUSENTE, ENDEREÇO NÃO LOCALIZADO, AGUARDANDO INSTRUÇÃO, DESTINATÁRIO MUDOU-SE,
+              CARGA RECUSADA PELO DESTINATARIO e ESTABELECIMENTO FECHADO precisam ter ocorrência cadastrada no portal.</p>
+            <p id="oc-info" class="info-base"></p>
+          </div>
+          <label class="btn amarelo" title="Planilha com as ocorrências já cadastradas no portal">
+            Enviar ocorrências cadastradas<input id="arquivo-ocorrencias" type="file" accept=".xlsx,.xls,.csv" hidden>
+          </label>
+        </div>
+        <div id="oc-resumo" class="oc-resumo"></div>
+      </section>
+
+      <section class="cartao">
+        <h2>A cadastrar no portal</h2>
+        <p class="sub">Um template por micro status e transportadora (já com o nome da transportadora como aparece no portal).</p>
+        <ol class="passos">
+          <li>No portal (<a href="https://ccp.360multi.com/occurrences" target="_blank" rel="noopener noreferrer">ccp.360multi.com/occurrences</a>), clique em <b>Importar Ocorrências</b>.</li>
+          <li>Aqui, clique em <b>Baixar template</b> do grupo e importe esse arquivo no portal.</li>
+          <li>Em <b>Selecione um motivo em massa</b>, escolha o motivo do grupo; em <b>Transportadora</b>, a transportadora indicada aqui.</li>
+          <li>Clique em <b>Enviar Notas</b>. Depois envie aqui a planilha de ocorrências cadastradas: as notas saem desta lista e ganham a marca <b>✓ ocorrência cadastrada</b>.</li>
+        </ol>
+        <div id="oc-grupos"></div>
+      </section>
+    </main>
     </div>
   </div>
 
@@ -136,7 +167,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=6"></script>
-  <script src="app.js?v=6"></script>
+  <script src="config.js?v=7"></script>
+  <script src="app.js?v=7"></script>
 </body>
 </html>

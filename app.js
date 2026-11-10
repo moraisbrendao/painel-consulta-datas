@@ -100,6 +100,7 @@
       info = i.data && i.data[0];
       infoFech = fi.data && fi.data[0];
       ocultos = Math.max(0, (tot.count || 0) - base.length);
+      await carregarOcorrencias();
     } catch (err) {
       $("info-base").textContent = "";
       toast(/base_|tratativas|fechados|schema cache/.test(err.message)
@@ -115,6 +116,7 @@
       : "Envie o arquivo da Intelipost (\"Enviar Intelipost\") para tirar do painel os pedidos entregues e cancelados.";
     montarOpcoes();
     redesenhar();
+    desenharOcorrencias();
   }
 
   // atualização das tratativas feitas por outras pessoas
@@ -337,7 +339,7 @@
         <td><div class="p">${esc(p.pedido)}</div><div class="s">NF ${esc(p.nf || "—")} · ${esc(p.canal || "")}</div>
           ${p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : ""}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
-        <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div></td>
+        <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div>${marcaOc(p)}</td>
         <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}</td>
         <td><input type="date" data-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
         <td class="col-obs"><input data-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
@@ -424,7 +426,7 @@
       </div>
       <h3>Rastreio</h3>
       <div class="det-grade">
-        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>`)}${item("Status Intelipost", esc(p.status_intelipost))}
+        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Status Intelipost", esc(p.status_intelipost))}
         ${item("Última atualização", `${dh(p.ultima_atualizacao)}${p._parado !== null ? ` <span class="s">(${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento)</span>` : ""}`)}
         ${item("Ocorrência", esc(p.ocorrencia))}
       </div>
@@ -569,7 +571,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=6");
+        const w = new Worker("leitor-intelipost.js?v=7");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -602,5 +604,133 @@
     carregando("");
     toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.`);
     carregar();
+  });
+  // =================================================================
+  // OCORRÊNCIAS: micro status que precisam de ocorrência no portal
+  // =================================================================
+  const MS_OCORRENCIA = ["DESTINATÁRIO AUSENTE", "ENDEREÇO NÃO LOCALIZADO", "AGUARDANDO INSTRUÇÃO", "DESTINATÁRIO MUDOU-SE",
+    "CARGA RECUSADA PELO DESTINATARIO", "ESTABELECIMENTO FECHADO"];
+  const MS_OC = new Set(MS_OCORRENCIA.map(norm));
+  // nome da transportadora como aparece no portal (planilha "metodos_tps_int": coluna "Transportadora a considerar")
+  const TRANSP_PORTAL = ["Aceville", "Anjun Express", "Atual Cargas", "Bento Brasil", "Costa Transportes", "DLOG Transportes",
+    "Dominalog Express", "Flog Transportes", "Formato Transportes", "IDH", "JadLog", "MF Transportes", "Frota Interna",
+    "Passaro transportes", "Petrymar", "PROLOG TRANSPORTES E LOGISTICA LTDA", "RAJLOG SERVICOS LOGISTICOS", "Rapido Alem Paraiba",
+    "Reunidas", "SAJOB", "VM TRANSPORTES", "Termaco", "Tradicional Log", "Trans Sua Log", "TRANSCAI TRANSPORTES", "Transiga",
+    "Transito Brasil", "Translaguna", "Translovato", "Transportadora BLZ", "Transvanio", "Trilog Express", "TSL Transportes",
+    "Zafer Standard", "Zelog Transportes"];
+  function transpPortal(nome) {
+    const n = norm(nome); if (!n) return "(sem transportadora)";
+    const igual = TRANSP_PORTAL.find((t) => norm(t) === n); if (igual) return igual;
+    const w = n.split(" ")[0];
+    const porPalavra = TRANSP_PORTAL.filter((t) => norm(t).split(" ")[0] === w);
+    return porPalavra.length === 1 ? porPalavra[0] : nome;
+  }
+  const semZero = (v) => String(v ?? "").trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "");
+  function nfSerie(p) { const [n, sr] = String(p.nf || "").split("-"); return { nf: semZero(n), serie: semZero(sr) }; }
+  let ocKeys = new Set(), ocSoNF = new Set(), ocInfo = null, ocOk = true;
+  const precisaOc = (p) => MS_OC.has(norm(p.micro_status));
+  function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
+  function marcaOc(p) {
+    if (!precisaOc(p)) return "";
+    return ocCadastrada(p) ? `<div class="tag-oc ok">✓ ocorrência cadastrada</div>` : `<div class="tag-oc pend">ocorrência a cadastrar</div>`;
+  }
+
+  async function carregarOcorrencias() {
+    try {
+      const [lista, inf] = await Promise.all([buscarTudo("ocorrencias_cadastradas", "nf"), sb.from("ocorrencias_info").select("*").limit(1)]);
+      ocKeys = new Set(); ocSoNF = new Set();
+      lista.forEach((o) => (o.serie ? ocKeys.add(semZero(o.nf) + "-" + semZero(o.serie)) : ocSoNF.add(semZero(o.nf))));
+      ocInfo = inf.data && inf.data[0]; ocOk = true;
+    } catch (_) { ocOk = false; }
+  }
+
+  function desenharOcorrencias() {
+    const alvo = base.filter(precisaOc);
+    const falta = alvo.filter((p) => !ocCadastrada(p));
+    $("oc-info").textContent = !ocOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase."
+      : ocInfo ? `Última planilha de ocorrências: ${ocInfo.arquivo || ""} · ${new Date(ocInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${ocInfo.enviado_por ? " por " + ocInfo.enviado_por : ""} · ${fmt(ocKeys.size + ocSoNF.size)} notas cadastradas no total`
+      : "Ainda não foi enviada nenhuma planilha de ocorrências cadastradas.";
+    $("menu-oc").hidden = !falta.length; $("menu-oc").textContent = fmt(falta.length);
+    $("oc-resumo").innerHTML = MS_OCORRENCIA.map((ms) => {
+      const t = alvo.filter((p) => norm(p.micro_status) === norm(ms)), f = t.filter((p) => !ocCadastrada(p)).length;
+      return `<div class="oc-card ${f ? "pend" : ""}"><span>${esc(ms)}</span><b>${fmt(f)}</b><em>a cadastrar · ${fmt(t.length - f)} de ${fmt(t.length)} já cadastrada${t.length - f === 1 ? "" : "s"}</em></div>`;
+    }).join("");
+    if (!falta.length) { $("oc-grupos").innerHTML = `<p class="vazio">Nenhuma nota para cadastrar agora. 🎉</p>`; return; }
+    $("oc-grupos").innerHTML = MS_OCORRENCIA.map((ms) => {
+      const doMs = falta.filter((p) => norm(p.micro_status) === norm(ms));
+      if (!doMs.length) return "";
+      const grupos = new Map();
+      doMs.forEach((p) => { const k = transpPortal(p.transportadora); (grupos.get(k) || grupos.set(k, []).get(k)).push(p); });
+      const linhas = [...grupos.entries()].sort((a, b) => b[1].length - a[1].length).map(([tp, ps]) => `
+        <tr><td><b>${esc(tp)}</b>${norm(tp) !== norm(ps[0].transportadora) ? `<div class="s">na base: ${esc(ps[0].transportadora || "—")}</div>` : ""}</td>
+          <td class="num">${fmt(ps.length)}</td>
+          <td><details><summary>ver notas</summary><div class="s">${ps.map((p) => esc(p.nf)).join(", ")}</div></details></td>
+          <td class="dir"><button class="btn" data-template="${esc(ms)}|${esc(tp)}">⬇ Baixar template</button></td></tr>`).join("");
+      return `<div class="oc-grupo"><h3>${esc(ms)} <span class="s">· motivo em massa: ${esc(ms)} · ${fmt(doMs.length)} nota${doMs.length === 1 ? "" : "s"}</span></h3>
+        <table class="tabela-oc"><thead><tr><th>Transportadora no portal</th><th class="num">Notas</th><th></th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`;
+    }).join("");
+  }
+
+  $("oc-grupos").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-template]"); if (!b) return;
+    const [ms, tp] = b.dataset.template.split("|");
+    const ps = base.filter((p) => precisaOc(p) && !ocCadastrada(p) && norm(p.micro_status) === norm(ms) && transpPortal(p.transportadora) === tp);
+    const linhas = [["Nota", "Serie"]].concat(ps.map((p) => { const { nf, serie } = nfSerie(p); return [/^\d+$/.test(nf) ? Number(nf) : nf, /^\d+$/.test(serie) ? Number(serie) : serie]; }));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Planilha1");
+    const limpa = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w -]+/g, "").trim();
+    XLSX.writeFile(wb, `${limpa(ms)} - ${limpa(tp)}.xlsx`);
+    b.textContent = "✓ Baixado"; b.classList.add("feito");
+  });
+
+  // planilha de ocorrências cadastradas (todo dia)
+  $("arquivo-ocorrencias").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = "";
+    if (!arq) return;
+    carregando("Lendo a planilha de ocorrências…");
+    await new Promise((r) => setTimeout(r, 50));
+    let linhas;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+      const ehNota = (c) => { const n = norm(c); return n === "NF" || n === "NOTA" || (n.includes("NOTA") && !n.includes("CHAVE") && !n.includes("SERIE") && !n.includes("VALOR") && !n.includes("DATA")) || n === "NUMERO NF"; };
+      const iCab = rows.findIndex((r) => r && r.some(ehNota));
+      if (iCab < 0) throw new Error('Não achei a coluna da nota fiscal (ex.: "Nota", "NF" ou "Nota Fiscal").');
+      const cab = rows[iCab];
+      const cNf = cab.findIndex(ehNota);
+      const cSr = cab.findIndex((c) => norm(c).includes("SERIE"));
+      const cMot = cab.findIndex((c) => /MOTIVO|OCORRENCIA/.test(norm(c)));
+      const vistos = new Set(); linhas = [];
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r || r[cNf] == null || r[cNf] === "") return;
+        let nf = semZero(r[cNf]), serie = cSr >= 0 ? semZero(r[cSr]) : "";
+        if (nf.includes("-") && !serie) [nf, serie] = nf.split("-").map(semZero);
+        const k = nf + "-" + serie; if (!nf || vistos.has(k)) return; vistos.add(k);
+        linhas.push({ nf, serie, motivo: cMot >= 0 && r[cMot] != null ? String(r[cMot]).trim() : null });
+      });
+      if (!linhas.length) throw new Error("A planilha não tem notas.");
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    const antes = base.filter((p) => precisaOc(p) && !ocCadastrada(p)).length;
+    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} notas com ocorrência encontradas.\nElas serão somadas às já enviadas antes.\n\nEnviar?`)) return;
+    try {
+      for (let i = 0; i < linhas.length; i += 5000) {
+        carregando(`Enviando… ${fmt(Math.min(i + 5000, linhas.length))} de ${fmt(linhas.length)}`);
+        const { error } = await sb.rpc("importar_ocorrencias", { linhas: linhas.slice(i, i + 5000), arquivo: arq.name, primeiro: i === 0, total: linhas.length });
+        if (error) throw error;
+      }
+    } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
+    await carregarOcorrencias();
+    carregando("");
+    const depois = base.filter((p) => precisaOc(p) && !ocCadastrada(p)).length;
+    toast(`Ocorrências atualizadas: ${fmt(antes - depois)} nota${antes - depois === 1 ? "" : "s"} saíram da lista "a cadastrar".`);
+    desenharOcorrencias(); redesenhar(true);
+  });
+
+  // ---------------- menu lateral ----------------
+  document.querySelector(".menu-lateral").addEventListener("click", (e) => {
+    const b = e.target.closest(".menu-item"); if (!b) return;
+    document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x === b));
+    document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + b.dataset.pagina));
+    window.scrollTo(0, 0);
   });
 })();

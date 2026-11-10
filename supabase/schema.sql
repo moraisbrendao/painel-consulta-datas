@@ -173,3 +173,49 @@ begin
 end $$;
 revoke all on function public.importar_fechados(jsonb, boolean, text, integer, integer) from public, anon;
 grant execute on function public.importar_fechados(jsonb, boolean, text, integer, integer) to authenticated;
+
+-- 8) Ocorrências já cadastradas no portal (planilha enviada pela Logística todo dia).
+--    Cada envio SOMA à lista (não apaga as dos dias anteriores).
+create table if not exists public.ocorrencias_cadastradas (
+  nf        text not null,
+  serie     text not null default '',
+  motivo    text,
+  primeiro_envio timestamptz not null default now(),
+  primary key (nf, serie)
+);
+create table if not exists public.ocorrencias_info (
+  id          integer primary key default 1 check (id = 1),
+  arquivo     text,
+  linhas      integer,
+  enviado_por text,
+  enviado_em  timestamptz not null default now()
+);
+alter table public.ocorrencias_cadastradas enable row level security;
+alter table public.ocorrencias_info enable row level security;
+drop policy if exists "logados leem" on public.ocorrencias_cadastradas;
+drop policy if exists "logados leem" on public.ocorrencias_info;
+create policy "logados leem" on public.ocorrencias_cadastradas for select to authenticated using (true);
+create policy "logados leem" on public.ocorrencias_info for select to authenticated using (true);
+revoke all on public.ocorrencias_cadastradas, public.ocorrencias_info from anon;
+grant select on public.ocorrencias_cadastradas, public.ocorrencias_info to authenticated;
+
+create or replace function public.importar_ocorrencias(linhas jsonb, arquivo text, primeiro boolean, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if primeiro then
+    insert into public.ocorrencias_info (id, arquivo, linhas, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.ocorrencias_cadastradas (nf, serie, motivo)
+  select r.nf, coalesce(r.serie, ''), r.motivo from jsonb_to_recordset(linhas) as r(nf text, serie text, motivo text)
+  where r.nf is not null and r.nf <> ''
+  on conflict (nf, serie) do update set motivo = coalesce(excluded.motivo, public.ocorrencias_cadastradas.motivo);
+  return (select count(*) from public.ocorrencias_cadastradas);
+end $$;
+revoke all on function public.importar_ocorrencias(jsonb, text, boolean, integer) from public, anon;
+grant execute on function public.importar_ocorrencias(jsonb, text, boolean, integer) to authenticated;

@@ -26,6 +26,15 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
 5. **Lista de pedidos**: em cada pedido preencha a **Nova data** e a **Observação**. Salva sozinho, mostra quem alterou e
    fica guardado até o pedido aparecer como entregue ou cancelado na Intelipost. Clique na linha para abrir o detalhe do pedido. **Exportar (Excel)** baixa o que está na lista.
 
+6. **Ocorrências** (menu da esquerda): mostra as notas com micro status *Destinatário ausente*, *Endereço não localizado*,
+   *Aguardando instrução*, *Destinatário mudou-se*, *Carga recusada* e *Estabelecimento fechado*.
+   - Todo dia clique em **Enviar ocorrências cadastradas** e escolha a planilha de ocorrências (precisa ter a coluna
+     *Nota* ou *NF*; *Série* e *Motivo* são opcionais). As notas que estão nela ganham a marca "✓ ocorrência cadastrada"
+     na lista de pedidos; as outras ficam como "ocorrência a cadastrar".
+   - Para as que faltam, a página separa por micro status e por transportadora do portal (conforme a planilha
+     *Transportadora a considerar*). Clique em **Baixar template**, e no portal https://ccp.360multi.com/occurrences use
+     *Importar Ocorrências*, escolha o arquivo, selecione o motivo em massa e a transportadora e clique em *Enviar Notas*.
+
 ## Arquivos
 
 | Arquivo | Para que serve |
