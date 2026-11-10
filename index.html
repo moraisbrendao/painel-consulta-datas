@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=8">
+  <link rel="stylesheet" href="styles.css?v=9">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -29,10 +29,10 @@
       <img src="assets/logo.png" alt="Multimóveis" class="topo-logo">
       <div class="topo-titulo">Preventivo Logística</div>
       <div class="topo-direita">
-        <label class="btn amarelo" title="Planilha exportada (aba Export) com os pedidos">
+        <label class="btn amarelo so-log" title="Planilha exportada (aba Export) com os pedidos">
           Enviar base<input id="arquivo" type="file" accept=".xlsx,.xlsm,.xls" hidden>
         </label>
-        <label class="btn amarelo" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
+        <label class="btn amarelo so-log" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
           Enviar Intelipost<input id="arquivo-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
         </label>
         <span id="usuario" class="usuario"></span>
@@ -42,8 +42,9 @@
 
     <div class="corpo">
     <nav class="menu-lateral" aria-label="Menu">
-      <button class="menu-item ativo" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
-      <button class="menu-item" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
+      <button class="menu-item ativo so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
+      <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
+      <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
     </nav>
     <main class="conteudo" id="pagina-preventivo">
       <!-- filtros: valem para todas as tabelas da página -->
@@ -151,6 +152,50 @@
         <div id="oc-grupos"></div>
       </section>
     </main>
+    <!-- ============ CONSULTA SAC ============ -->
+    <main class="conteudo" id="pagina-sac" hidden>
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Consulta de entregas</h2>
+            <p class="sub">Pedidos ainda não entregues nem cancelados, com a data prometida ao cliente, a nova data e a observação da Logística.</p>
+            <p id="sac-info" class="info-base">Carregando…</p>
+          </div>
+          <button id="sac-baixar" class="btn">Baixar (Excel)</button>
+        </div>
+        <div class="filtros-sac">
+          <label class="cresce">Buscar<input id="sac-busca" type="search" placeholder="NF ou pedido…"></label>
+          <label>Canal<select id="sac-canal"></select></label>
+          <label>Transportadora<select id="sac-transp"></select></label>
+          <label>Nova data<select id="sac-nova">
+            <option value="">Todas</option><option value="com">Com nova data</option>
+            <option value="sem">Sem nova data</option><option value="obs">Com observação</option>
+          </select></label>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos tabela-sac">
+            <thead><tr>
+              <th>Nota fiscal</th><th>Pedido</th><th>Canal</th><th>Transportadora</th><th>Micro status</th>
+              <th>Prometido ao cliente</th><th>Nova data</th><th class="col-obs">Observação da Logística</th><th></th>
+            </tr></thead>
+            <tbody id="sac-linhas"></tbody>
+          </table>
+          <p id="sac-vazio" class="vazio" hidden>Nenhum pedido encontrado.</p>
+        </div>
+        <nav id="sac-paginacao" class="paginacao"></nav>
+      </section>
+
+      <section class="cartao so-log">
+        <h2>Logins do SAC</h2>
+        <p class="sub">Quem estiver nesta lista entra no painel vendo <b>só</b> esta consulta (sem editar nada).
+          O login em si é criado no Supabase, em <b>Authentication › Users › Add user</b>.</p>
+        <form id="form-sac" class="form-sac">
+          <label class="cresce">E-mail do login do SAC<input id="sac-email" type="email" required placeholder="sac@empresa.com.br"></label>
+          <button class="btn primario" type="submit">Adicionar</button>
+        </form>
+        <div id="lista-sac" class="chips-sac"></div>
+      </section>
+    </main>
     </div>
   </div>
 
@@ -167,7 +212,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=8"></script>
-  <script src="app.js?v=8"></script>
+  <script src="config.js?v=9"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>

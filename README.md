@@ -35,6 +35,12 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
      *Transportadora a considerar*). Clique em **Baixar template**, e no portal https://ccp.360multi.com/occurrences use
      *Importar Ocorrências*, escolha o arquivo, selecione o motivo em massa e a transportadora e clique em *Enviar Notas*.
 
+7. **Consulta SAC** (menu da esquerda): busca por NF ou pedido, filtros de canal, transportadora e nova data, e
+   **Baixar (Excel)**. Mostra a data prometida ao cliente, a nova data e a observação da Logística (só leitura).
+   - Para um login do SAC ver **só** essa tela: crie o login no Supabase (*Authentication › Users › Add user*) e
+     adicione o e-mail no quadro **Logins do SAC**, no fim da página Consulta SAC. Esse login não envia arquivos,
+     não altera nada e não vê as outras páginas.
+
 ## Arquivos
 
 | Arquivo | Para que serve |

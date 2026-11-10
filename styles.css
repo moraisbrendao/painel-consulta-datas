@@ -197,3 +197,15 @@ body.sem-rolagem { overflow: hidden; }
 .tabela-oc td.dir { text-align: right; }
 .tabela-oc summary { cursor: pointer; color: var(--azul); font-size: 12px; }
 .btn.feito { background: var(--verde-bg); border-color: var(--verde); color: var(--verde); }
+
+/* perfil SAC: só a consulta */
+body[data-perfil="sac"] .so-log { display: none !important; }
+.filtros-sac { display: grid; grid-template-columns: minmax(0,1.6fr) repeat(3, minmax(0,1fr)); gap: 10px; align-items: end; margin-bottom: 10px; }
+.filtros-sac label, .form-sac label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--texto-2); }
+.tabela-sac td { vertical-align: top; }
+.form-sac { display: flex; gap: 10px; align-items: end; flex-wrap: wrap; margin: 8px 0; }
+.form-sac .cresce { flex: 1; min-width: 220px; }
+.chips-sac { display: flex; flex-wrap: wrap; gap: 6px; }
+.chips-sac span { display: inline-flex; align-items: center; gap: 6px; background: var(--cinza-bg); border-radius: 99px; padding: 4px 6px 4px 12px; font-size: 13px; }
+.chips-sac button { border: 0; background: none; cursor: pointer; font-size: 15px; color: var(--texto-2); }
+@media (max-width: 800px) { .filtros-sac { grid-template-columns: 1fr 1fr; } .filtros-sac .cresce { grid-column: 1 / -1; } }

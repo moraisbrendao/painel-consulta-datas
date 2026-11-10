@@ -16,6 +16,8 @@
   const POR_PAGINA = 50;
 
   let usuarioId = null;
+  let perfil = "";              // "sac" ou "logistica"
+  let paginaAtual = "preventivo";
   let base = [];               // pedidos da planilha
   let trat = new Map();        // pedido -> tratativa
   let info = null;
@@ -64,15 +66,33 @@
       usuarioId = sessao.user.id;
       $("usuario").textContent = sessao.user.email;
       $("tela-login").hidden = true;
-      $("tela-painel").hidden = false;
-      setTimeout(carregar, 0);
-      ligarTempoReal();
+      setTimeout(entrar, 0);
     } else {
-      usuarioId = null;
+      usuarioId = null; perfil = "";
+      delete document.body.dataset.perfil;
       $("tela-painel").hidden = true;
       $("tela-login").hidden = false;
     }
   });
+
+  // descobre o perfil antes de mostrar o painel (SAC só vê a Consulta SAC)
+  async function entrar() {
+    carregando("Entrando…");
+    let r = { data: "logistica" };
+    try { r = await sb.rpc("meu_perfil_painel"); } catch (_) { /* banco antigo: trata como Logística */ }
+    carregando("");
+    perfil = r && r.data === "sac" ? "sac" : "logistica";
+    document.body.dataset.perfil = perfil;
+    $("tela-painel").hidden = false;
+    if (perfil === "sac") {
+      irPara("sac");
+      carregarSac();
+    } else {
+      irPara("preventivo");
+      carregar();
+      ligarTempoReal();
+    }
+  }
 
   // ---------------- carregar ----------------
   async function buscarTudo(tabela, ordem) {
@@ -117,6 +137,7 @@
     montarOpcoes();
     redesenhar();
     desenharOcorrencias();
+    if (paginaAtual === "sac") desenharSacLogistica();
   }
 
   // atualização das tratativas feitas por outras pessoas
@@ -571,7 +592,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=8");
+        const w = new Worker("leitor-intelipost.js?v=9");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -728,10 +749,136 @@
   });
 
   // ---------------- menu lateral ----------------
+  function irPara(pag) {
+    paginaAtual = pag;
+    document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
+    document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
+    window.scrollTo(0, 0);
+  }
   document.querySelector(".menu-lateral").addEventListener("click", (e) => {
     const b = e.target.closest(".menu-item"); if (!b) return;
-    document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x === b));
-    document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + b.dataset.pagina));
-    window.scrollTo(0, 0);
+    irPara(b.dataset.pagina);
+    if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
+  });
+
+  // ---------------- consulta SAC ----------------
+  // O SAC recebe só as colunas liberadas (função consultar_sac do banco).
+  // A Logística vê a mesma consulta montada com os dados que já carregou.
+  let sacLinhas = [], sacFiltrados = [], sacPagina = 1, sacCarregadoEm = 0;
+
+  async function carregarSac() {
+    $("sac-info").textContent = "Carregando…";
+    let lista = [];
+    try {
+      for (let de = 0; ; de += 1000) {
+        const { data, error } = await sb.rpc("consultar_sac").range(de, de + 999);
+        if (error) throw error;
+        lista = lista.concat(data);
+        if (data.length < 1000) break;
+      }
+    } catch (err) {
+      $("sac-info").textContent = "";
+      toast("Erro ao carregar: " + err.message, true);
+      return;
+    }
+    sacCarregadoEm = Date.now();
+    montarSac(lista);
+  }
+  setInterval(() => { if (perfil === "sac" && !document.hidden && Date.now() - sacCarregadoEm > 5 * 60000) carregarSac(); }, 60000);
+
+  function desenharSacLogistica() {
+    montarSac(base.map((p) => {
+      const t = trat.get(p.pedido) || {};
+      return { pedido: p.pedido, nf: p.nf, canal: p.canal, transportadora: p.transportadora, micro_status: p.micro_status,
+        prometido: p.prev_original || p.prev_atual, nova_data: t.nova_data, observacao: t.observacao,
+        atualizado_em: t.atualizado_em, link_rastreio: p.link_rastreio };
+    }));
+    carregarLoginsSac();
+  }
+
+  function montarSac(lista) {
+    sacLinhas = lista;
+    $("sac-info").textContent = `${fmt(lista.length)} pedidos em aberto · atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    const preencher = (id, valores, rotulo) => {
+      const sel = $(id), atual = sel.value;
+      const unicos = [...new Set(valores.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+      sel.innerHTML = `<option value="">${rotulo}</option>` + unicos.map((v) => `<option>${esc(v)}</option>`).join("");
+      if (unicos.includes(atual)) sel.value = atual;
+    };
+    preencher("sac-canal", lista.map((l) => l.canal), "Todos");
+    preencher("sac-transp", lista.map((l) => l.transportadora), "Todas");
+    filtrarSac(true);
+  }
+
+  function filtrarSac(manter) {
+    const busca = norm($("sac-busca").value).replace(/\s/g, "");
+    const canal = $("sac-canal").value, transp = $("sac-transp").value, nova = $("sac-nova").value;
+    sacFiltrados = sacLinhas.filter((l) =>
+      (!busca || [l.nf, l.pedido].some((v) => norm(v).replace(/\s/g, "").includes(busca))) &&
+      (!canal || l.canal === canal) && (!transp || l.transportadora === transp) &&
+      (!nova || (nova === "com" && l.nova_data) || (nova === "sem" && !l.nova_data) || (nova === "obs" && l.observacao)));
+    sacFiltrados.sort((a, b) => String(a.prometido || "9999").localeCompare(String(b.prometido || "9999")));
+    if (!manter) sacPagina = 1;
+    desenharSac();
+  }
+
+  function chipData(d) {
+    if (!d) return "";
+    const n = diasEntre(hojeISO(), d);
+    return n < 0 ? `<span class="chip vermelho">vencido há ${-n} d</span>` : n === 0 ? `<span class="chip ambar">hoje</span>` : `<span class="chip ${n <= 5 ? "ambar" : "verde"}">em ${n} d</span>`;
+  }
+
+  function desenharSac() {
+    const total = sacFiltrados.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+    sacPagina = Math.min(sacPagina, paginas);
+    $("sac-linhas").innerHTML = sacFiltrados.slice((sacPagina - 1) * POR_PAGINA, sacPagina * POR_PAGINA).map((l) => `<tr>
+        <td><b>${esc(l.nf || "—")}</b></td><td>${esc(l.pedido)}</td><td>${esc(l.canal || "")}</td><td>${esc(l.transportadora || "—")}</td>
+        <td><span class="ms">${esc(l.micro_status || "—")}</span></td>
+        <td>${br(l.prometido) || "—"}<div>${chipData(l.prometido)}</div></td>
+        <td>${l.nova_data ? `<b>${br(l.nova_data)}</b><div>${chipData(l.nova_data)}</div>` : `<span class="s">—</span>`}</td>
+        <td class="col-obs">${l.observacao ? esc(l.observacao) : `<span class="s">—</span>`}${l.observacao && l.atualizado_em ? `<div class="s">${new Date(l.atualizado_em).toLocaleDateString("pt-BR")}</div>` : ""}</td>
+        <td>${/^https?:\/\//i.test(l.link_rastreio || "") ? `<a href="${esc(l.link_rastreio)}" target="_blank" rel="noopener noreferrer">Rastreio ↗</a>` : ""}</td>
+      </tr>`).join("");
+    $("sac-vazio").hidden = total > 0;
+    $("sac-paginacao").innerHTML = total > POR_PAGINA
+      ? `<button class="btn" data-p="-1" ${sacPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${sacPagina} de ${paginas} · ${fmt(total)} pedidos</span>
+         <button class="btn" data-p="1" ${sacPagina === paginas ? "disabled" : ""}>Próxima ›</button>` : "";
+  }
+
+  let esperaSac; $("sac-busca").addEventListener("input", () => { clearTimeout(esperaSac); esperaSac = setTimeout(() => filtrarSac(), 250); });
+  ["sac-canal", "sac-transp", "sac-nova"].forEach((id) => $(id).addEventListener("change", () => filtrarSac()));
+  $("sac-paginacao").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-p]"); if (!b) return;
+    sacPagina += Number(b.dataset.p); desenharSac(); $("pagina-sac").scrollIntoView({ block: "start" });
+  });
+  $("sac-baixar").addEventListener("click", () => {
+    const linhas = [["Nota fiscal", "Pedido", "Canal", "Transportadora", "Micro status", "Prometido ao cliente", "Nova data", "Observação da Logística", "Rastreio"]]
+      .concat(sacFiltrados.map((l) => [l.nf, l.pedido, l.canal, l.transportadora, l.micro_status, br(l.prometido), br(l.nova_data), l.observacao || "", l.link_rastreio || ""]));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Consulta");
+    XLSX.writeFile(wb, `consulta_sac_${hojeISO()}.xlsx`);
+  });
+
+  // lista de logins do SAC (só a Logística mexe)
+  async function carregarLoginsSac() {
+    const { data, error } = await sb.from("logins_sac").select("email").order("email");
+    if (error) { $("lista-sac").innerHTML = `<p class="s">Para usar a lista de logins do SAC, rode de novo o supabase/schema.sql no Supabase.</p>`; return; }
+    $("lista-sac").innerHTML = data.length
+      ? data.map((x) => `<span>${esc(x.email)}<button type="button" data-tirar="${esc(x.email)}" title="Tirar da lista">×</button></span>`).join("")
+      : `<p class="s">Nenhum login do SAC ainda.</p>`;
+  }
+  $("form-sac").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const email = $("sac-email").value.trim().toLowerCase(); if (!email) return;
+    const { error } = await sb.from("logins_sac").upsert({ email, incluido_por: $("usuario").textContent }, { onConflict: "email" });
+    if (error) return toast("Não foi possível adicionar: " + error.message, true);
+    $("sac-email").value = ""; toast(`${email} agora entra vendo só a Consulta SAC.`); carregarLoginsSac();
+  });
+  $("lista-sac").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-tirar]"); if (!b) return;
+    if (!confirm(`Tirar ${b.dataset.tirar} da lista do SAC? Esse login passa a ver o painel inteiro.`)) return;
+    const { error } = await sb.from("logins_sac").delete().eq("email", b.dataset.tirar);
+    if (error) return toast("Erro: " + error.message, true);
+    carregarLoginsSac();
   });
 })();

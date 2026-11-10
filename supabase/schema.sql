@@ -93,6 +93,7 @@ language plpgsql security definer set search_path = public
 as $$
 begin
   if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
   if limpar then
     delete from public.base_pedidos where true;
     insert into public.base_info (id, arquivo, total, enviado_por, enviado_em)
@@ -158,6 +159,7 @@ language plpgsql security definer set search_path = public
 as $$
 begin
   if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
   if limpar then
     delete from public.intelipost_fechados where true;
     insert into public.fechados_info (id, arquivo, total_linhas, fechados, enviado_por, enviado_em)
@@ -205,6 +207,7 @@ language plpgsql security definer set search_path = public
 as $$
 begin
   if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
   if primeiro then
     insert into public.ocorrencias_info (id, arquivo, linhas, enviado_por, enviado_em)
     values (1, arquivo, total, auth.jwt() ->> 'email', now())
@@ -219,3 +222,63 @@ begin
 end $$;
 revoke all on function public.importar_ocorrencias(jsonb, text, boolean, integer) from public, anon;
 grant execute on function public.importar_ocorrencias(jsonb, text, boolean, integer) to authenticated;
+
+-- 9) SAC: quem estiver na lista abaixo entra no painel vendo SÓ a "Consulta SAC"
+--    (NF, pedido, canal, transportadora, micro status, data prometida, nova data,
+--    observação da Logística e rastreio). A lista é preenchida pelo próprio painel,
+--    na página Consulta SAC (quadro "Logins do SAC").
+create table if not exists public.logins_sac (
+  email        text primary key,
+  incluido_por text,
+  incluido_em  timestamptz not null default now()
+);
+alter table public.logins_sac enable row level security;
+revoke all on public.logins_sac from anon;
+
+create or replace function public.e_sac()
+returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from public.logins_sac where email = lower(auth.jwt() ->> 'email')) $$;
+revoke all on function public.e_sac() from public, anon;
+grant execute on function public.e_sac() to authenticated;
+
+create or replace function public.meu_perfil_painel()
+returns text language sql stable security definer set search_path = public
+as $$ select case when public.e_sac() then 'sac' else 'logistica' end $$;
+revoke all on function public.meu_perfil_painel() from public, anon;
+grant execute on function public.meu_perfil_painel() to authenticated;
+
+-- a Logística (quem não é SAC) cuida da lista; o SAC não lê nada direto das tabelas
+drop policy if exists "logistica gerencia" on public.logins_sac;
+create policy "logistica gerencia" on public.logins_sac for all to authenticated
+  using (not public.e_sac()) with check (not public.e_sac());
+grant select, insert, delete on public.logins_sac to authenticated;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['base_pedidos','base_info','tratativas','intelipost_fechados','fechados_info',
+                           'ocorrencias_cadastradas','ocorrencias_info'] loop
+    execute format('drop policy if exists "logados leem" on public.%I', t);
+    execute format('create policy "logados leem" on public.%I for select to authenticated using (not public.e_sac())', t);
+  end loop;
+end $$;
+drop policy if exists "logados alteram" on public.tratativas;
+create policy "logados alteram" on public.tratativas for all to authenticated
+  using (not public.e_sac()) with check (not public.e_sac());
+
+-- o que o SAC vê: só pedidos em aberto e só estas colunas
+create or replace function public.consultar_sac()
+returns table (pedido text, nf text, canal text, transportadora text, micro_status text,
+               prometido date, nova_data date, observacao text, atualizado_em timestamptz, link_rastreio text)
+language sql stable security definer set search_path = public
+as $$
+  select b.pedido, b.nf, b.canal, b.transportadora, b.micro_status,
+         coalesce(b.prev_original, b.prev_atual), t.nova_data, t.observacao, t.atualizado_em, b.link_rastreio
+  from public.base_pedidos b
+  left join public.tratativas t on t.pedido = b.pedido
+  where auth.uid() is not null
+    and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+  order by b.pedido
+$$;
+revoke all on function public.consultar_sac() from public, anon;
+grant execute on function public.consultar_sac() to authenticated;
