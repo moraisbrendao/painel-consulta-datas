@@ -28,12 +28,14 @@
   let rangeSel = "";           // faixa de vencimento clicada na tabela de range
   const DIAS_PARADO = 7;       // parado no rastreio = mais de 7 dias sem atualização
   const RANGES = [
+    { id: "v30", nome: "Vencido há 30+ d", de: -Infinity, ate: -30, venc: true }, { id: "v10", nome: "Vencido há 10–29 d", de: -29, ate: -10, venc: true },
+    { id: "v1", nome: "Vencido há 1–9 d", de: -9, ate: -1, venc: true },
     { id: "hoje", nome: "Vence hoje", de: 0, ate: 0 }, { id: "1", nome: "Vence ≥ 1 dia", de: 1, ate: 1 },
     { id: "2", nome: "Vence ≥ 2 dias", de: 2, ate: 4 }, { id: "5", nome: "Vence ≥ 5 dias", de: 5, ate: 9 },
     { id: "10", nome: "Vence ≥ 10 dias", de: 10, ate: 19 }, { id: "20", nome: "Vence ≥ 20 dias", de: 20, ate: 29 },
     { id: "30", nome: "Vence ≥ 30 dias", de: 30, ate: Infinity },
   ];
-  const faixa = (d) => (d === null || d < 0 ? null : RANGES.find((r) => d >= r.de && d <= r.ate).id);
+  const faixa = (d) => (d === null ? null : RANGES.find((r) => d >= r.de && d <= r.ate).id);
   let filtrados = [];
   let vistos = [];             // base depois dos filtros do topo
   let pagina = 1;
@@ -321,11 +323,11 @@
       linhas.set(k, l);
     });
     const cel = (ms, id, n) => n
-      ? `<td class="num clic ${visao === "todos" && rangeSel === id && msSel === ms ? "sel" : ""}" data-ms="${esc(ms)}" data-faixa="${id}">${fmt(n)}</td>`
-      : `<td class="num vazio-c">·</td>`;
+      ? `<td class="num clic ${id[0] === "v" ? "venc" : ""} ${visao === "todos" && rangeSel === id && msSel === ms ? "sel" : ""}" data-ms="${esc(ms)}" data-faixa="${id}">${fmt(n)}</td>`
+      : `<td class="num vazio-c ${id[0] === "v" ? "venc" : ""}">·</td>`;
     $("range-linhas").innerHTML = [...linhas.entries()].sort((a, b) => b[1].total - a[1].total).map(([ms, l]) =>
       `<tr><td>${esc(ms)}</td>${RANGES.map((r) => cel(ms, r.id, l[r.id])).join("")}<td class="num tot clic" data-ms="${esc(ms)}" data-faixa="">${fmt(l.total)}</td></tr>`).join("")
-      || `<tr><td colspan="9" class="vazio">Sem pedidos a vencer.</td></tr>`;
+      || `<tr><td colspan="12" class="vazio">Sem pedidos com data prometida.</td></tr>`;
     document.querySelectorAll(".tabela-range th.clic").forEach((th) => th.classList.toggle("sel", visao === "todos" && !msSel && rangeSel === (th.dataset.faixa || "__avencer")));
     $("range-total").innerHTML = `<tr><td>Total geral</td>${RANGES.map((r) => `<td class="num clic" data-ms="" data-faixa="${r.id}">${fmt(tot[r.id] || 0)}</td>`).join("")}<td class="num clic" data-ms="" data-faixa="">${fmt(tot.total || 0)}</td></tr>`;
   }
@@ -343,7 +345,7 @@
     // ordem: mais urgente primeiro (vencido/vence antes), depois mais parado
     filtrados.sort((a, b) => (a._dias ?? 9999) - (b._dias ?? 9999) || (b._parado || 0) - (a._parado || 0));
     const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", todos: "Todos os pedidos" };
-    const rNome = rangeSel === "__avencer" ? " · a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
+    const rNome = rangeSel === "__avencer" ? " · vencidos e a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
     $("lista-titulo").textContent = `${buscando ? "Busca em todos os pedidos" : nomes[visao]}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
     if (!manterPagina) pagina = 1;
     desenharLista();
@@ -599,7 +601,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=11");
+        const w = new Worker("leitor-intelipost.js?v=12");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -656,8 +658,8 @@
   const semZero = (v) => String(v ?? "").trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "");
   function nfSerie(p) { const [n, sr] = String(p.nf || "").split("-"); return { nf: semZero(n), serie: semZero(sr) }; }
   let ocKeys = new Set(), ocSoNF = new Set(), ocInfo = null, ocOk = true;
-  // mesma base da tabela "Range de vencimento": só pedidos a vencer (hoje em diante)
-  const precisaOc = (p) => !!p._faixa && MS_OC.has(norm(p.micro_status));
+  // só pedidos a vencer (hoje em diante), as colunas "Vence" da tabela de range
+  const precisaOc = (p) => p._dias !== null && p._dias >= 0 && MS_OC.has(norm(p.micro_status));
   function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
   function marcaOc(p) {
     if (!precisaOc(p)) return "";

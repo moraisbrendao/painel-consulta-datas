@@ -211,3 +211,6 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 @media (max-width: 800px) { .filtros-sac { grid-template-columns: 1fr 1fr; } .filtros-sac .cresce { grid-column: 1 / -1; } }
 .aviso-perfil { margin: 0; padding: 10px 20px; background: #fdecea; color: #8a1c1c; font-size: 14px; border-bottom: 1px solid #f5c2c0; }
 .aviso-perfil[hidden] { display: none; }
+.tabela-range th.venc { color: var(--vermelho); }
+.tabela-range td.venc { background: #fdf3f2; font-weight: 600; }
+.tabela-range td:first-child { min-width: 190px; }

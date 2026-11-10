@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=11">
+  <link rel="stylesheet" href="styles.css?v=12">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -88,12 +88,12 @@
         <div class="cartao-topo">
           <div>
             <h2>Range de vencimento por micro status</h2>
-            <p class="sub">Pela data prometida ao cliente (Data Original Estimada da Entrega). Clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status.</p>
+            <p class="sub">Pela data prometida ao cliente (Data Original Estimada da Entrega). Inclui os que já venceram. Clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status.</p>
           </div>
         </div>
         <div class="tabela-wrap">
           <table class="tabela-range">
-            <thead><tr><th>Micro status</th><th class="num clic" data-faixa="hoje">Vence hoje</th><th class="num clic" data-faixa="1">Vence ≥ 1 dia</th><th class="num clic" data-faixa="2">Vence ≥ 2 dias</th>
+            <thead><tr><th>Micro status</th><th class="num clic venc" data-faixa="v30">Vencido 30+ d</th><th class="num clic venc" data-faixa="v10">Vencido 10–29 d</th><th class="num clic venc" data-faixa="v1">Vencido 1–9 d</th><th class="num clic" data-faixa="hoje">Vence hoje</th><th class="num clic" data-faixa="1">Vence ≥ 1 dia</th><th class="num clic" data-faixa="2">Vence ≥ 2 dias</th>
               <th class="num clic" data-faixa="5">Vence ≥ 5 dias</th><th class="num clic" data-faixa="10">Vence ≥ 10 dias</th><th class="num clic" data-faixa="20">Vence ≥ 20 dias</th><th class="num clic" data-faixa="30">Vence ≥ 30 dias</th><th class="num clic" data-faixa="">Total</th></tr></thead>
             <tbody id="range-linhas"></tbody>
             <tfoot id="range-total"></tfoot>
@@ -213,7 +213,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=11"></script>
-  <script src="app.js?v=11"></script>
+  <script src="config.js?v=12"></script>
+  <script src="app.js?v=12"></script>
 </body>
 </html>
