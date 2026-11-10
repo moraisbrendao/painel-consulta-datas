@@ -10,14 +10,17 @@ Site: https://moraisbrendao.github.io/painel-consulta-datas/
 1. **Enviar planilha** (botão amarelo no topo): escolha o arquivo exportado (aba *Export*, com as colunas
    *Pedido Intelipost*, *Micro Status Intelipost*, *Data Estimada da Entrega(Intelipost)* etc.).
    Ele substitui a base para todos. As tratativas já feitas continuam salvas.
-2. **O que está acontecendo, por micro status**: escolha a visão
+2. **Enviar Intelipost**: escolha o `transactions_....xlsx` da Intelipost. O site lê o arquivo (uns 20 segundos), guarda só o
+   número dos pedidos **entregues** e **cancelados** (Status Transportador) e tira esses pedidos do painel. Nome e endereço
+   do cliente não são enviados.
+3. **O que está acontecendo, por micro status**: escolha a visão
    - *Vencem em 5 dias*: data prometida ao cliente (Data Original Estimada da Entrega) entre hoje e daqui a 5 dias;
    - *Parados no rastreio*: mais de 7 dias sem atualização na Intelipost;
    - *Já vencidos* e *Todos*.
    Clique num micro status para ver só os pedidos dele.
-3. **Range de vencimento por micro status**: quantos pedidos vencem hoje, em 1, 2, 5, 10, 20 e 30+ dias, por micro status.
+4. **Range de vencimento por micro status**: quantos pedidos vencem hoje, em 1, 2, 5, 10, 20 e 30+ dias, por micro status.
    Clique num número para ver os pedidos.
-4. **Lista de pedidos**: em cada pedido escolha a **Tratativa**, a **Nova data** e escreva a **Observação**.
+5. **Lista de pedidos**: em cada pedido escolha a **Tratativa**, a **Nova data** e escreva a **Observação**.
    Salva sozinho e mostra quem alterou e quando. **Exportar (Excel)** baixa o que está na lista.
 
 ## Arquivos
@@ -25,6 +28,7 @@ Site: https://moraisbrendao.github.io/painel-consulta-datas/
 | Arquivo | Para que serve |
 |---|---|
 | `index.html`, `styles.css`, `app.js` | O site. |
+| `leitor-intelipost.js` | Lê o arquivo da Intelipost em segundo plano. |
 | `config.js` | Endereço e chave pública (anon) do Supabase. |
 | `supabase/schema.sql` | Cria as tabelas e a segurança no Supabase. |
 

@@ -120,3 +120,56 @@ do $$ begin
   alter publication supabase_realtime add table public.tratativas;
 exception when others then null;   -- já adicionada (ou rodando fora do Supabase)
 end $$;
+
+-- 7) Arquivo da Intelipost (transactions): guarda só o número do pedido
+--    dos ENTREGUES e CANCELADOS (status do transportador). Esses pedidos
+--    somem do painel. Nenhum dado de cliente é enviado.
+create table if not exists public.intelipost_fechados (
+  pedido text primary key,
+  status text
+);
+create table if not exists public.fechados_info (
+  id           integer primary key default 1 check (id = 1),
+  arquivo      text,
+  total_linhas integer,
+  fechados     integer,
+  enviado_por  text,
+  enviado_em   timestamptz not null default now()
+);
+alter table public.intelipost_fechados enable row level security;
+alter table public.fechados_info enable row level security;
+drop policy if exists "logados leem" on public.intelipost_fechados;
+drop policy if exists "logados leem" on public.fechados_info;
+create policy "logados leem" on public.intelipost_fechados for select to authenticated using (true);
+create policy "logados leem" on public.fechados_info for select to authenticated using (true);
+revoke all on public.intelipost_fechados, public.fechados_info from anon;
+grant select on public.intelipost_fechados, public.fechados_info to authenticated;
+
+-- pedidos da base que ainda estão em aberto (o painel lê daqui)
+create or replace view public.base_aberta with (security_invoker = true) as
+  select b.* from public.base_pedidos b
+  where not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido);
+revoke all on public.base_aberta from anon;
+grant select on public.base_aberta to authenticated;
+
+create or replace function public.importar_fechados(linhas jsonb, limpar boolean, arquivo text, total_linhas integer, fechados integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if limpar then
+    delete from public.intelipost_fechados where true;
+    insert into public.fechados_info (id, arquivo, total_linhas, fechados, enviado_por, enviado_em)
+    values (1, arquivo, total_linhas, fechados, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, total_linhas = excluded.total_linhas,
+      fechados = excluded.fechados, enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.intelipost_fechados (pedido, status)
+  select r.pedido, r.status from jsonb_to_recordset(linhas) as r(pedido text, status text)
+  where r.pedido is not null and r.pedido <> ''
+  on conflict (pedido) do update set status = excluded.status;
+  return (select count(*) from public.intelipost_fechados);
+end $$;
+revoke all on function public.importar_fechados(jsonb, boolean, text, integer, integer) from public, anon;
+grant execute on function public.importar_fechados(jsonb, boolean, text, integer, integer) to authenticated;

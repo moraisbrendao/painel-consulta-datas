@@ -20,6 +20,8 @@
   let base = [];               // pedidos da planilha
   let trat = new Map();        // pedido -> tratativa
   let info = null;
+  let infoFech = null;         // último arquivo da Intelipost enviado
+  let ocultos = 0;             // pedidos da base tirados por estarem entregues/cancelados
   let visao = "vencem";
   let msSel = "";              // micro status clicado
   let rangeSel = "";           // faixa de vencimento clicada na tabela de range
@@ -86,24 +88,31 @@
   async function carregar() {
     $("info-base").textContent = "Carregando…";
     try {
-      const [b, t, i] = await Promise.all([
-        buscarTudo("base_pedidos", "pedido"),
+      const [b, t, i, fi, tot] = await Promise.all([
+        buscarTudo("base_aberta", "pedido"),
         buscarTudo("tratativas", "pedido"),
         sb.from("base_info").select("*").limit(1),
+        sb.from("fechados_info").select("*").limit(1),
+        sb.from("base_pedidos").select("pedido", { count: "exact", head: true }),
       ]);
       base = b;
       trat = new Map(t.map((x) => [x.pedido, x]));
       info = i.data && i.data[0];
+      infoFech = fi.data && fi.data[0];
+      ocultos = Math.max(0, (tot.count || 0) - base.length);
     } catch (err) {
       $("info-base").textContent = "";
-      toast(/base_pedidos|tratativas|schema cache/.test(err.message)
+      toast(/base_|tratativas|fechados|schema cache/.test(err.message)
         ? "O banco ainda não foi preparado: rode o arquivo supabase/schema.sql no Supabase."
         : "Erro ao carregar: " + err.message, true);
       return;
     }
     $("info-base").textContent = info
       ? `Base: ${info.arquivo || "planilha"} · ${fmt(base.length)} pedidos · enviada em ${new Date(info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${info.enviado_por ? " por " + info.enviado_por : ""}`
-      : "Ainda não há base. Clique em \"Enviar planilha\" e escolha o arquivo exportado.";
+      : "Ainda não há base. Clique em \"Enviar base\" e escolha o arquivo exportado.";
+    $("info-intelipost").textContent = infoFech
+      ? `Intelipost: ${infoFech.arquivo || "arquivo"} de ${new Date(infoFech.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${fmt(ocultos)} pedido${ocultos === 1 ? "" : "s"} da base já entregue${ocultos === 1 ? "" : "s"} ou cancelado${ocultos === 1 ? "" : "s"} fora${ocultos === 1 ? "" : "m"} tirado${ocultos === 1 ? "" : "s"} do painel.`
+      : "Envie o arquivo da Intelipost (\"Enviar Intelipost\") para tirar do painel os pedidos entregues e cancelados.";
     montarOpcoes();
     redesenhar();
   }
@@ -425,6 +434,49 @@
     }
     carregando("");
     toast(`Base atualizada: ${fmt(linhas.length)} pedidos.`);
+    carregar();
+  });
+  // ---------------- arquivo da Intelipost (entregues e cancelados) ----------------
+  $("arquivo-intelipost").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = "";
+    if (!arq) return;
+    carregando("Lendo o arquivo da Intelipost… (pode levar uns 30 segundos)");
+    let res;
+    try {
+      const dados = await arq.arrayBuffer();
+      res = await new Promise((ok, falha) => {
+        const w = new Worker("leitor-intelipost.js?v=4");
+        w.onmessage = (m) => {
+          if (m.data.etapa) carregando(m.data.etapa);
+          else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
+        };
+        w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
+        w.postMessage(dados, [dados]);
+      });
+    } catch (err) {
+      carregando(""); toast(err.message, true); return;
+    }
+    carregando("");
+    const lista = res.fechados;
+    const naBase = new Set(lista.map((x) => x.pedido));
+    const sairao = base.filter((p) => naBase.has(p.pedido)).length;
+    const ent = lista.filter((x) => x.status === "Entregue").length;
+    if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(ent)} entregues e ${fmt(lista.length - ent)} cancelados.\n` +
+      `${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} que está${sairao === 1 ? "" : "ão"} no painel vai${sairao === 1 ? "" : "ão"} sair.\n\nEnviar?`)) return;
+    try {
+      const LOTE = 5000, qtd = lista.length;
+      if (!lista.length) lista.push({ pedido: "", status: null });
+      for (let i = 0; i < lista.length; i += LOTE) {
+        carregando(`Enviando… ${fmt(Math.min(i + LOTE, lista.length))} de ${fmt(lista.length)}`);
+        const { error } = await sb.rpc("importar_fechados", { linhas: lista.slice(i, i + LOTE), limpar: i === 0,
+          arquivo: arq.name, total_linhas: res.total, fechados: qtd });
+        if (error) throw error;
+      }
+    } catch (err) {
+      carregando(""); toast("Erro ao enviar: " + err.message, true); return;
+    }
+    carregando("");
+    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.`);
     carregar();
   });
 })();
