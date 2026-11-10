@@ -19,9 +19,9 @@ Site: https://moraisbrendao.github.io/painel-consulta-datas/
    - *Já vencidos* e *Todos*.
    Clique num micro status para ver só os pedidos dele.
 4. **Range de vencimento por micro status**: quantos pedidos vencem hoje, em 1, 2, 5, 10, 20 e 30+ dias, por micro status.
-   Clique num número para ver os pedidos.
-5. **Lista de pedidos**: em cada pedido escolha a **Tratativa**, a **Nova data** e escreva a **Observação**.
-   Salva sozinho e mostra quem alterou e quando. **Exportar (Excel)** baixa o que está na lista.
+   Clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status.
+5. **Lista de pedidos**: em cada pedido preencha a **Nova data** e a **Observação**. Salva sozinho, mostra quem alterou e
+   fica guardado até o pedido aparecer como entregue ou cancelado na Intelipost. Clique na linha para abrir o detalhe do pedido. **Exportar (Excel)** baixa o que está na lista.
 
 ## Arquivos
 

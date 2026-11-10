@@ -122,3 +122,31 @@ table { width: 100%; border-collapse: collapse; }
   .corpo { flex-direction: column; }
   .menu-lateral { width: 100%; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--borda); padding: 8px 16px; position: static; }
 }
+
+/* range: cabeçalho clicável */
+.tabela-range th.clic { cursor: pointer; }
+.tabela-range th.clic:hover { color: var(--marinho); text-decoration: underline; }
+.tabela-range th.sel { background: #fff3c4; color: var(--marinho); }
+
+/* linha clicável + detalhe do pedido */
+.tabela-pedidos tr.clicavel { cursor: pointer; }
+.tabela-pedidos tr.clicavel:hover td { background: #fffbea; }
+body.sem-rolagem { overflow: hidden; }
+.modal { position: fixed; inset: 0; background: rgba(13,34,64,.55); z-index: 20; display: flex; align-items: flex-start; justify-content: center; padding: 32px 16px; overflow: auto; }
+.modal-caixa { background: var(--fundo); width: 100%; max-width: 860px; border-radius: 14px; overflow: hidden; }
+.modal-topo { background: var(--marinho); color: #fff; display: flex; align-items: center; gap: 12px; padding: 14px 18px; border-bottom: 4px solid var(--amarelo); }
+.modal-topo h2 { color: #fff; margin: 0; flex: 1; font-size: 16px; overflow-wrap: anywhere; }
+.fechar { background: none; border: 0; color: #fff; font-size: 26px; line-height: 1; cursor: pointer; }
+.modal-corpo { padding: 16px 18px 20px; }
+.modal-corpo h3 { margin: 16px 0 8px; font-size: 13px; color: var(--marinho); text-transform: uppercase; letter-spacing: .03em; }
+.det-grade { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.det-item { background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.det-item span { font-size: 11px; color: var(--texto-2); }
+.det-item b { font-size: 13px; font-weight: 600; overflow-wrap: anywhere; }
+.det-item a { color: var(--azul); }
+.det-desc { margin: 8px 0 0; font-size: 12px; color: var(--texto-2); background: #fff; border: 1px dashed var(--borda); border-radius: 8px; padding: 8px 10px; }
+.det-form { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 12px; display: grid; grid-template-columns: 180px 1fr; gap: 10px; }
+.det-form textarea { font: inherit; padding: 8px; border: 1px solid var(--borda); border-radius: 8px; resize: vertical; width: 100%; }
+.det-acoes { grid-column: 1 / -1; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.det-form > p { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 640px) { .det-grade { grid-template-columns: 1fr 1fr; } .det-form { grid-template-columns: 1fr; } .modal { padding: 0; } .modal-caixa { border-radius: 0; } }

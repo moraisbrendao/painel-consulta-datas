@@ -1,7 +1,8 @@
 // Painel Preventivo da Logística
 // - login por e-mail e senha (Supabase)
 // - a Logística envia a planilha exportada (aba Export) e ela vira a base de todos
-// - cada pedido tem tratativa, nova data e observação, salvas na hora para todos
+// - cada pedido tem nova data e observação, salvas na hora para todos (ficam até o pedido
+//   aparecer como entregue ou cancelado no arquivo da Intelipost)
 (function () {
   const CFG = window.PAINEL_CONFIG;
   const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
@@ -12,8 +13,6 @@
   const br = (iso) => (iso ? iso.slice(0, 10).split("-").reverse().join("/") : "");
   const DIA = 86400000;
 
-  const SITUACOES = ["Cobrado da transportadora", "Aguardando retorno da transportadora", "Acionado SAC",
-    "Nova data informada", "Reentrega / reagendamento", "Resolvido"];
   const POR_PAGINA = 50;
 
   let usuarioId = null;
@@ -142,7 +141,7 @@
 
   function redesenharSemPerderFoco() {
     const el = document.activeElement;
-    if (el && el.closest && el.closest("#linhas")) { redesenhar._pendente = true; return; }
+    if ((el && el.closest && el.closest("#linhas")) || !$("modal").hidden) { redesenhar._pendente = true; return; }
     redesenhar(true);
   }
 
@@ -176,7 +175,7 @@
     preencher("f-transp", unicos((p) => p.transportadora), "Todas");
     preencher("f-canal", unicos((p) => p.canal), "Todos");
     preencher("f-ms", unicos((p) => p.micro_status), "Todos");
-    preencher("f-trat", [["__sem", "Sem tratativa"], ["__com", "Com tratativa"]].concat(SITUACOES.map((s) => [s, s])), "Todas");
+    preencher("f-trat", [["__com", "Com observação"], ["__sem", "Sem observação"]], "Todas");
   }
 
   function redesenhar(manterPagina) {
@@ -193,7 +192,7 @@
     daVisao.forEach((p) => {
       const k = p.micro_status || "(sem micro status)";
       const g = grupos.get(k) || { n: 0, soma: 0, cont: 0, trat: 0 };
-      g.n++; if (p._parado !== null) { g.soma += p._parado; g.cont++; } if (p._t && p._t.situacao) g.trat++;
+      g.n++; if (p._parado !== null) { g.soma += p._parado; g.cont++; } if (p._t && p._t.observacao) g.trat++;
       grupos.set(k, g);
     });
     const ord = [...grupos.entries()].sort((a, b) => b[1].n - a[1].n);
@@ -227,6 +226,7 @@
     $("range-linhas").innerHTML = [...linhas.entries()].sort((a, b) => b[1].total - a[1].total).map(([ms, l]) =>
       `<tr><td>${esc(ms)}</td>${RANGES.map((r) => cel(ms, r.id, l[r.id])).join("")}<td class="num tot clic" data-ms="${esc(ms)}" data-faixa="">${fmt(l.total)}</td></tr>`).join("")
       || `<tr><td colspan="9" class="vazio">Sem pedidos a vencer.</td></tr>`;
+    document.querySelectorAll(".tabela-range th.clic").forEach((th) => th.classList.toggle("sel", visao === "todos" && !msSel && rangeSel === (th.dataset.faixa || "__avencer")));
     $("range-total").innerHTML = `<tr><td>Total geral</td>${RANGES.map((r) => `<td class="num clic" data-ms="" data-faixa="${r.id}">${fmt(tot[r.id] || 0)}</td>`).join("")}<td class="num clic" data-ms="" data-faixa="">${fmt(tot.total || 0)}</td></tr>`;
   }
 
@@ -240,10 +240,9 @@
       if (cn && p.canal !== cn) return false;
       if (ms && (p.micro_status || "(sem micro status)") !== ms) return false;
       if (rangeSel === "__avencer" ? !p._faixa : rangeSel && p._faixa !== rangeSel) return false;
-      const s = p._t && p._t.situacao;
+      const s = p._t && p._t.observacao;
       if (tr === "__sem" && s) return false;
       if (tr === "__com" && !s) return false;
-      if (tr && !tr.startsWith("__") && s !== tr) return false;
       return true;
     });
     // ordem: mais urgente primeiro (vencido/vence antes), depois mais parado
@@ -269,16 +268,15 @@
     $("linhas").innerHTML = fatia.map((p) => {
       const t = p._t || {};
       const quem = t.atualizado_por ? `${esc(t.atualizado_por.split("@")[0])} · ${new Date(t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "";
-      return `<tr data-pedido="${esc(p.pedido)}" class="${t.situacao ? "editado" : ""}">
+      return `<tr data-pedido="${esc(p.pedido)}" class="clicavel ${t.observacao ? "editado" : ""}" title="Clique para ver o detalhe do pedido">
         <td><div class="p">${esc(p.pedido)}</div><div class="s">NF ${esc(p.nf || "—")} · ${esc(p.canal || "")}</div>
           ${p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : ""}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div></td>
         <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}</td>
-        <td><select data-campo="situacao"><option value="">— sem tratativa —</option>${SITUACOES.map((s) => `<option ${s === t.situacao ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
-          <div class="s quem">${quem}</div></td>
         <td><input type="date" data-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
-        <td class="col-obs"><input data-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="500">
+        <td class="col-obs"><input data-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
+          <div class="s quem">${quem}</div>
           ${p.comentario_360 ? `<div class="c360" title="Comentário 360">360: ${esc(p.comentario_360)}</div>` : ""}</td>
         <td>${/^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Rastreio ↗</a>` : ""}</td>
       </tr>`;
@@ -303,8 +301,8 @@
   });
   // clique na tabela de range: abre os pedidos daquela linha/coluna
   document.querySelector(".tabela-range").addEventListener("click", (e) => {
-    const td = e.target.closest("td.clic"); if (!td) return;
-    const ms = td.dataset.ms, fx = td.dataset.faixa || "__avencer";
+    const td = e.target.closest("td.clic, th.clic"); if (!td) return;
+    const ms = td.dataset.ms || "", fx = td.dataset.faixa || "__avencer";
     if (msSel === ms && rangeSel === fx && visao === "todos") { msSel = ""; rangeSel = ""; } else { msSel = ms; rangeSel = fx; }
     visao = "todos"; $("f-ms").value = "";
     redesenhar(); $("lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -317,25 +315,88 @@
     pagina += Number(b.dataset.p); desenharLista(); $("lista-titulo").scrollIntoView({ block: "start" });
   });
 
-  // salvar tratativa (na hora)
-  async function salvar(el) {
-    const tr = el.closest("tr[data-pedido]"); const ped = tr.dataset.pedido;
+  // salvar observação / nova data (na hora). Fica guardado até o pedido sair como entregue/cancelado.
+  async function gravar(ped, campo, valor, elQuem) {
     const atual = trat.get(ped) || {};
+    valor = (valor || "").trim() || null;
+    if ((atual[campo] || null) === valor) return;
     const novo = { pedido: ped, situacao: atual.situacao || null, nova_data: atual.nova_data || null, observacao: atual.observacao || null };
-    novo[el.dataset.campo] = el.value.trim() || null;
-    if (el.dataset.campo === "nova_data" && novo.nova_data && !novo.situacao) {
-      novo.situacao = "Nova data informada";
-      tr.querySelector('[data-campo="situacao"]').value = novo.situacao;
-    }
-    if ((atual[el.dataset.campo] || null) === novo[el.dataset.campo] && novo.situacao === (atual.situacao || null)) return;
-    const quem = tr.querySelector(".quem"); quem.textContent = "salvando…";
+    novo[campo] = valor;
+    if (elQuem) elQuem.textContent = "salvando…";
     const { data, error } = await sb.from("tratativas").upsert(novo).select().single();
-    if (error) { quem.textContent = ""; toast("Não salvou: " + error.message, true); return; }
+    if (error) { if (elQuem) elQuem.textContent = ""; toast("Não salvou: " + error.message, true); return; }
     trat.set(ped, data);
-    tr.classList.toggle("editado", !!data.situacao);
-    quem.innerHTML = `<span class="salvo">✓ salvo</span> ${esc(data.atualizado_por ? data.atualizado_por.split("@")[0] : "")}`;
-    if (el.dataset.campo === "nova_data") { preparar(base.find((p) => p.pedido === ped)); }
+    const p = base.find((x) => x.pedido === ped); if (p) preparar(p);
+    if (elQuem) elQuem.innerHTML = `<span class="salvo">✓ salvo</span> ${esc(data.atualizado_por ? data.atualizado_por.split("@")[0] : "")}`;
+    const tr = document.querySelector(`#linhas tr[data-pedido="${CSS.escape(ped)}"]`);
+    if (tr) {
+      tr.classList.toggle("editado", !!data.observacao);
+      const inp = tr.querySelector(`[data-campo="${campo}"]`); if (inp && inp.value !== (valor || "")) inp.value = valor || "";
+      if (elQuem && !tr.contains(elQuem)) tr.querySelector(".quem").innerHTML = elQuem.innerHTML;
+    }
+    return data;
   }
+  function salvar(el) {
+    const tr = el.closest("tr[data-pedido]");
+    return gravar(tr.dataset.pedido, el.dataset.campo, el.value, tr.querySelector(".quem"));
+  }
+
+  // ---------------- detalhe do pedido ----------------
+  function abrirDetalhe(ped) {
+    const p = base.find((x) => x.pedido === ped); if (!p) return;
+    const t = p._t || {};
+    const dh = (v) => (v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "—");
+    const item = (rot, val) => `<div class="det-item"><span>${rot}</span><b>${val || "—"}</b></div>`;
+    $("modal-titulo").textContent = "Pedido " + p.pedido;
+    $("modal-corpo").innerHTML = `
+      <div class="det-grade">
+        ${item("NF", esc(p.nf))}${item("Canal", esc(p.canal))}${item("Origem", esc(p.origem))}
+        ${item("Transportadora", esc(p.transportadora))}${item("Destino", esc([p.cidade, p.uf].filter(Boolean).join(" / ")))}
+        ${item("Rastreio", /^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Abrir rastreio ↗</a>` : "")}
+      </div>
+      <h3>Prazos</h3>
+      <div class="det-grade">
+        ${item("Prometido ao cliente", `${br(p.prev_original) || "—"} ${chipPrazo(p)}`)}${item("Previsão Intelipost atual", br(p.prev_atual))}
+        ${item("Previsão 360", br(p.prev_360))}${item("Expedição", br(p.data_expedicao))}
+      </div>
+      <h3>Rastreio</h3>
+      <div class="det-grade">
+        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>`)}${item("Status Intelipost", esc(p.status_intelipost))}
+        ${item("Última atualização", `${dh(p.ultima_atualizacao)}${p._parado !== null ? ` <span class="s">(${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento)</span>` : ""}`)}
+        ${item("Ocorrência", esc(p.ocorrencia))}
+      </div>
+      ${p.descricao ? `<p class="det-desc">${esc(p.descricao)}</p>` : ""}
+      ${p.qtd_tickets || p.comentario_360 ? `<h3>SAC</h3><div class="det-grade">
+        ${item("Tickets", p.qtd_tickets ? esc(String(p.qtd_tickets)) : "")}${item("Motivo do 1º ticket", esc(p.motivo_ticket))}
+        ${item("Comentário 360", esc(p.comentario_360))}</div>` : ""}
+      <h3>Logística</h3>
+      <div class="det-form" data-pedido="${esc(p.pedido)}">
+        <label>Nova data<input type="date" id="det-nova" value="${esc(t.nova_data || "")}"></label>
+        <label class="cresce">Observação<textarea id="det-obs" rows="4" maxlength="1000" placeholder="O que foi feito com a transportadora / SAC…">${esc(t.observacao || "")}</textarea></label>
+        <div class="det-acoes"><span class="s" id="det-quem">${t.atualizado_por ? `Última alteração: ${esc(t.atualizado_por.split("@")[0])} · ${dh(t.atualizado_em)}` : ""}</span>
+          <button class="btn primario" id="det-salvar">Salvar</button></div>
+        <p class="s">A observação fica salva até o pedido aparecer como entregue ou cancelado no arquivo da Intelipost.</p>
+      </div>`;
+    $("modal").hidden = false;
+    document.body.classList.add("sem-rolagem");
+  }
+  function fecharDetalhe() { $("modal").hidden = true; document.body.classList.remove("sem-rolagem"); if (redesenhar._pendente) { redesenhar._pendente = false; redesenhar(true); } }
+  $("modal-fechar").addEventListener("click", fecharDetalhe);
+  $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") fecharDetalhe(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("modal").hidden) fecharDetalhe(); });
+  $("modal-corpo").addEventListener("click", async (e) => {
+    if (!e.target.closest("#det-salvar")) return;
+    const ped = $("modal-corpo").querySelector(".det-form").dataset.pedido;
+    const quem = $("det-quem");
+    await gravar(ped, "nova_data", $("det-nova").value, quem);
+    await gravar(ped, "observacao", $("det-obs").value, quem);
+    if (!quem.textContent.startsWith("✓")) quem.innerHTML = `<span class="salvo">✓ salvo</span>`;
+  });
+  $("linhas").addEventListener("click", (e) => {
+    if (e.target.closest("input, select, textarea, a, button")) return;
+    const tr = e.target.closest("tr[data-pedido]"); if (tr) abrirDetalhe(tr.dataset.pedido);
+  });
+
   $("linhas").addEventListener("change", (e) => { if (e.target.dataset.campo) salvar(e.target); });
   $("linhas").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.dataset.campo === "observacao") e.target.blur(); });
   $("linhas").addEventListener("focusout", () => {
@@ -347,9 +408,9 @@
   // exportar o que está na lista
   $("btn-exportar").addEventListener("click", () => {
     const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Dias sem movimento", "Prometido ao cliente",
-      "Previsão Intelipost atual", "Dias para vencer", "Tratativa", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
+      "Previsão Intelipost atual", "Dias para vencer", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
     const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, p._parado,
-      br(p.prev_original), br(p.prev_atual), p._dias, t.situacao, br(t.nova_data), t.observacao, t.atualizado_por,
+      br(p.prev_original), br(p.prev_atual), p._dias, br(t.nova_data), t.observacao, t.atualizado_por,
       t.atualizado_em ? new Date(t.atualizado_em).toLocaleString("pt-BR") : "", p.comentario_360, p.qtd_tickets, p.link_rastreio]; });
     const ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
     ws["!cols"] = cab.map((c, i) => ({ wch: [32, 12, 14, 20][i] || 16 }));
@@ -422,7 +483,7 @@
       carregando(""); toast(err.message, true); return;
     }
     carregando("");
-    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\n\nEssa planilha vai substituir a base atual para todos.\nAs tratativas já feitas continuam salvas.\n\nEnviar?`)) return;
+    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
     try {
       for (let i = 0; i < linhas.length; i += 2000) {
         carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
@@ -445,7 +506,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=4");
+        const w = new Worker("leitor-intelipost.js?v=5");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }

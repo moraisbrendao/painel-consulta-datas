@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=5">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -64,7 +64,7 @@
         </div>
         <div class="tabela-ms-wrap">
           <table class="tabela-ms">
-            <thead><tr><th>Micro status</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com tratativa</th></tr></thead>
+            <thead><tr><th>Micro status</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com observação</th></tr></thead>
             <tbody id="ms-linhas"></tbody>
           </table>
         </div>
@@ -76,13 +76,13 @@
         <div class="cartao-topo">
           <div>
             <h2>Range de vencimento por micro status</h2>
-            <p class="sub">Pela data prometida ao cliente (Data Original Estimada da Entrega). Clique num número para ver os pedidos.</p>
+            <p class="sub">Pela data prometida ao cliente (Data Original Estimada da Entrega). Clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status.</p>
           </div>
         </div>
         <div class="tabela-wrap">
           <table class="tabela-range">
-            <thead><tr><th>Micro status</th><th class="num">Vence hoje</th><th class="num">Vence ≥ 1 dia</th><th class="num">Vence ≥ 2 dias</th>
-              <th class="num">Vence ≥ 5 dias</th><th class="num">Vence ≥ 10 dias</th><th class="num">Vence ≥ 20 dias</th><th class="num">Vence ≥ 30 dias</th><th class="num">Total</th></tr></thead>
+            <thead><tr><th>Micro status</th><th class="num clic" data-faixa="hoje">Vence hoje</th><th class="num clic" data-faixa="1">Vence ≥ 1 dia</th><th class="num clic" data-faixa="2">Vence ≥ 2 dias</th>
+              <th class="num clic" data-faixa="5">Vence ≥ 5 dias</th><th class="num clic" data-faixa="10">Vence ≥ 10 dias</th><th class="num clic" data-faixa="20">Vence ≥ 20 dias</th><th class="num clic" data-faixa="30">Vence ≥ 30 dias</th><th class="num clic" data-faixa="">Total</th></tr></thead>
             <tbody id="range-linhas"></tbody>
             <tfoot id="range-total"></tfoot>
           </table>
@@ -103,13 +103,13 @@
           <label>Transportadora<select id="f-transp"></select></label>
           <label>Canal<select id="f-canal"></select></label>
           <label>Micro status<select id="f-ms"></select></label>
-          <label>Tratativa<select id="f-trat"></select></label>
+          <label>Observação<select id="f-trat"></select></label>
         </div>
         <div class="tabela-wrap">
           <table class="tabela-pedidos">
             <thead><tr>
               <th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Prometido ao cliente</th>
-              <th>Tratativa</th><th>Nova data</th><th class="col-obs">Observação</th><th></th>
+              <th>Nova data</th><th class="col-obs">Observação</th><th></th>
             </tr></thead>
             <tbody id="linhas"></tbody>
           </table>
@@ -121,12 +121,20 @@
     </div>
   </div>
 
+  <!-- detalhe do pedido -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <header class="modal-topo"><h2 id="modal-titulo">Pedido</h2><button id="modal-fechar" class="fechar" aria-label="Fechar">×</button></header>
+      <div id="modal-corpo" class="modal-corpo"></div>
+    </div>
+  </div>
+
   <div id="carregando" class="carregando" hidden><div class="caixa"><div class="giro"></div><p id="carregando-texto">Carregando…</p></div></div>
   <div id="toast" class="toast" role="status" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=4"></script>
-  <script src="app.js?v=4"></script>
+  <script src="config.js?v=5"></script>
+  <script src="app.js?v=5"></script>
 </body>
 </html>
