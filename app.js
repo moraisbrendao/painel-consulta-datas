@@ -331,7 +331,9 @@
   }
 
   function filtrar(manterPagina, daVisao) {
-    daVisao = daVisao || vistos.filter(naVisao[visao]);
+    // com algo digitado em Buscar, procura em TODOS os pedidos (inclusive vencidos), não só na visão escolhida
+    const buscando = !!$("f-busca").value.trim();
+    daVisao = buscando ? vistos : daVisao || vistos.filter(naVisao[visao]);
     const ms = msSel;   // micro status clicado numa das tabelas
     filtrados = daVisao.filter((p) => {
       if (ms && (p.micro_status || "(sem micro status)") !== ms) return false;
@@ -342,7 +344,7 @@
     filtrados.sort((a, b) => (a._dias ?? 9999) - (b._dias ?? 9999) || (b._parado || 0) - (a._parado || 0));
     const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", todos: "Todos os pedidos" };
     const rNome = rangeSel === "__avencer" ? " · a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
-    $("lista-titulo").textContent = `${nomes[visao]}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
+    $("lista-titulo").textContent = `${buscando ? "Busca em todos os pedidos" : nomes[visao]}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
     if (!manterPagina) pagina = 1;
     desenharLista();
   }
@@ -597,7 +599,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=10");
+        const w = new Worker("leitor-intelipost.js?v=11");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
