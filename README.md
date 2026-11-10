@@ -1,107 +1,93 @@
 # Painel de Consulta de Novas Datas de Entrega
 
 Site com login (e-mail e senha) onde outro setor consulta as **novas datas de entrega** que as
-transportadoras informam à Logística. O painel mostra **somente os pedidos marcados como "Novo retorno"**
-na aba Retornos (coluna "Situação semanal"); os detalhes do pedido vêm da aba Pedidos.
-Pedidos que já estão **Entregues ou Cancelados** no "Status Transportador" da aba **Intelipost** ficam de fora. Os usuários do outro setor **só consultam**. Quem cadastra
-os logins e atualiza os dados é a Logística.
+transportadoras informam à Logística. Não depende de planilha com macro: a Logística envia dois
+arquivos simples pelo próprio site.
+
+- **Outro setor** (perfil "Consulta"): só consulta os pedidos, a nova data e o histórico de retornos.
+- **Logística** (perfil "Logística"): envia os arquivos, padroniza os retornos e cadastra os logins.
 
 ```
-Planilha Retorno_atrasos.xlsm
-   │  botão "Exportar para o painel"  → gera painel_entregas.csv
-   ▼
-Painel (site no GitHub Pages)  ── Logística entra e clica em "Enviar planilha"
-   │
-   ▼
-Supabase (guarda logins e pedidos, com segurança)  ◄── outro setor entra e consulta
+Logística envia no site:
+  1. Lista de pedidos em cobrança  (modelo multimoveis-atrasados-em-aberto)
+  2. Retorno da transportadora     (modelo Retorno_atrasos_tp)
+        │
+        ▼
+Supabase guarda: pedidos em cobrança + histórico de TODOS os retornos + regras de padronização
+        │
+        ▼
+Consulta: nova data informada, situação padronizada e histórico de cada pedido
 ```
 
 ## O que tem em cada arquivo
 
 | Arquivo | Para que serve |
 |---|---|
-| `index.html`, `styles.css`, `app.js` | O site (tela de login e painel). Não precisa mexer. |
+| `index.html`, `styles.css`, `app.js` | O site (login, consulta, envio de arquivos e padronização). |
+| `padronizacao.js` | Como o site acha a data no texto e aplica as regras de padronização. |
 | `config.js` | **Único arquivo que você edita**: endereço e chave do Supabase. |
-| `supabase/schema.sql` | Cria as tabelas e as regras de segurança no Supabase (roda uma vez). |
-| `planilha/ExportarPainel.bas` | Macro para colocar na planilha. Gera o arquivo que vai para o painel. |
-| `assets/logo.png` | Logo da Multimóveis usado no topo do site. |
+| `supabase/schema.sql` | Cria as tabelas e as regras de segurança no Supabase. |
+| `assets/logo.png` | Logo da Multimóveis. |
+
+## Como a Logística usa
+
+### Aba "Enviar arquivos"
+
+1. **Pedidos que estou cobrando**: escolha o arquivo `multimoveis-atrasados-em-aberto` (aba *Pedidos*).
+   O site mostra uma prévia (quantos pedidos entram e quantos saem da cobrança) e você clica em **Salvar**.
+   A lista nova substitui a anterior. Quem saiu da lista some da consulta, mas o histórico fica guardado.
+2. **Retorno da transportadora**: confira a **data do retorno** (vem com a data de hoje) e anexe o arquivo
+   no modelo `Retorno_atrasos_tp` (colunas *Pedido Intelipost*, *Nota-Série*, *Transportadora*,
+   *Retorno Transportadora*). Se o pedido estiver vazio, o site procura pela nota (ou pela nova NF de reposição).
+   Na prévia aparece, para cada linha, a data encontrada e a categoria. Clique em **Salvar**.
+3. Em **Últimos envios** dá para apagar um envio feito por engano e mandar de novo.
+
+### Aba "Padronização"
+
+- **Considerar como** = a categoria (ex.: *Em rota de entrega*).
+- **quando o retorno tiver** = palavras separadas por vírgula (ex.: *EM ROTA, SAIDA PARA ENTREGA*).
+  Maiúsculas e acentos não importam. Basta o retorno *conter* a palavra.
+- A ordem importa: o retorno vai para a **primeira** categoria (de cima para baixo) que encontrar.
+- **Retornos sem padronização** mostra os textos que ainda não caíram em nenhuma regra. Clique em um para
+  usá-lo numa regra nova.
+- Quando a transportadora manda uma data (ex.: *Previsão 20/11*), a data vira a **nova data informada**.
+  Sem ano, o site usa o ano mais próximo do dia do retorno. Se tiver duas datas ("entre 06/11 e 09/11"), vale a última.
+- As regras valem na hora para **todos** os retornos, inclusive os antigos.
+- **voltar para as regras de fábrica** apaga as regras criadas e volta para a lista inicial.
+
+### Situação que o outro setor vê
+
+| Situação | Quando |
+|---|---|
+| Nova data informada | A transportadora deu uma data que ainda não chegou. |
+| Vence hoje | A nova data é hoje. |
+| Nova data vencida | A nova data já passou. |
+| *Categoria* (ex.: Em rota de entrega) | O retorno caiu numa regra de padronização. |
+| Não padronizado | O retorno não tem data e não caiu em nenhuma regra. |
+| Sem retorno | A transportadora ainda não respondeu sobre esse pedido. |
+
+Clicando em **histórico** aparece tudo o que a transportadora já respondeu sobre o pedido, com as datas.
 
 ---
 
-## Parte 1: Supabase (login e dados), uma vez só
+## Instalação (já feita em 10/11/2026)
 
-1. Acesse **https://supabase.com**, clique em **Start your project** e entre com a sua conta do GitHub.
-2. Clique em **New project**. Dê um nome (ex.: `painel-datas`), crie uma senha para o banco
-   (guarde-a) e escolha a região **South America (São Paulo)**. Clique em **Create new project** e espere uns 2 minutos.
-3. No menu da esquerda, abra **SQL Editor** → **New query**. Abra o arquivo `supabase/schema.sql`,
-   copie **tudo**, cole lá e clique em **Run**. Deve aparecer "Success".
-4. Ainda no SQL Editor, numa nova query, cadastre você como Logística (troque o e-mail):
-   ```sql
-   insert into public.admins (email) values ('seu.email@empresa.com.br');
-   ```
-5. **Bloqueie o cadastro público** (importante para ninguém criar conta sozinho):
-   menu **Authentication** → **Sign In / Providers** → desligue **Allow new users to sign up** → **Save**.
-6. **Crie os logins** (o seu e os do outro setor): **Authentication** → **Users** → **Add user** →
-   **Create new user**. Digite e-mail e senha, deixe marcado **Auto Confirm User** e clique em **Create user**.
-   - Para trocar a senha de alguém: clique no usuário → **Send password recovery**, ou apague e crie de novo.
-   - Para tirar o acesso: clique nos três pontinhos do usuário → **Delete user**.
-7. Pegue as chaves: **Project Settings** (engrenagem) → **API**. Copie a **Project URL** e a chave
-   **anon public** e cole no arquivo `config.js`. *Nunca* use a chave `service_role` no site.
+### Supabase
+1. Criar o projeto em https://supabase.com (região São Paulo).
+2. **SQL Editor** → **New query** → colar todo o `supabase/schema.sql` → **Run**.
+   *Pode rodar de novo quando o arquivo mudar: retornos e regras salvos são mantidos.*
+3. Cadastrar quem é da Logística:
+   `insert into public.admins (email) values ('seu.email@empresa.com.br');`
+4. **Authentication** → **Sign In / Providers** → desligar **Allow new users to sign up**.
+5. Criar os logins em **Authentication** → **Users** → **Add user** → **Create new user**
+   (com **Auto Confirm User** marcado). Para tirar o acesso: três pontinhos → **Delete user**.
+6. Copiar **Project URL** e a chave **anon** (Project Settings → API) para o `config.js`.
+   *Nunca* use a chave `service_role` no site.
 
-## Parte 2: GitHub (onde o site fica publicado)
+### GitHub
+- **Repositório**: a "pasta" do projeto no GitHub. **Commit**: cada versão salva, com uma frase do que mudou.
+- O site é publicado pelo **GitHub Pages** (Settings → Pages → Deploy from a branch → `main` / root).
+- Para ver o histórico de mudanças: na página do repositório, clique em **Commits** (ícone de relógio).
+- Para editar um arquivo pelo navegador: abra o arquivo, clique no lápis ✏️, edite e clique em **Commit changes**.
 
-Algumas palavras que você vai ver:
-- **Repositório (repo)**: a "pasta" do projeto no GitHub, com todo o histórico de mudanças.
-- **Commit**: uma "versão salva" com uma frase dizendo o que mudou.
-- **Branch `main`**: a versão principal do projeto. É ela que vai para o ar.
-- **GitHub Pages**: serviço gratuito do GitHub que transforma o repositório em site.
-
-Passo a passo, tudo pelo navegador:
-
-1. Entre em **https://github.com**, clique no **+** (canto superior direito) → **New repository**.
-2. Nome: `painel-consulta-datas`. Marque **Public** (o GitHub Pages gratuito exige; o repositório só tem
-   o código, **nenhum dado de pedido fica aqui**). Clique em **Create repository**.
-3. Na página do repositório, clique em **uploading an existing file** (ou **Add file → Upload files**),
-   arraste **todos os arquivos e pastas** deste projeto (já com o `config.js` preenchido),
-   escreva em "Commit changes" algo como `Primeira versão do painel` e clique em **Commit changes**.
-4. Vá em **Settings** → **Pages**. Em **Source** escolha **Deploy from a branch**, em **Branch** escolha
-   **main** e **/ (root)**, e clique em **Save**.
-5. Espere 1 ou 2 minutos e atualize a página: vai aparecer o endereço do site, algo como
-   `https://SEU-USUARIO.github.io/painel-consulta-datas/`. Esse é o link que você manda para o outro setor.
-6. No Supabase, em **Authentication** → **URL Configuration**, coloque esse endereço em **Site URL** e salve.
-
-**Para mudar algo depois** (ex.: o texto de contato no `config.js`): abra o arquivo no GitHub, clique no
-lápis ✏️, edite, clique em **Commit changes**. Em 1 minuto o site atualiza sozinho.
-
-## Parte 3: Planilha (botão "Exportar para o painel"), uma vez só
-
-1. Abra `Retorno_atrasos.xlsm` e aperte **Alt + F11** (abre o editor de macros).
-2. Menu **Arquivo** → **Importar arquivo…** → escolha `planilha/ExportarPainel.bas`. Feche o editor.
-3. Se já tinha uma versão antiga da macro, antes de importar clique com o botão direito em **ExportarPainel**
-   (no editor, Alt + F11) → **Remover ExportarPainel** → **Não** (não precisa exportar).
-4. Na aba **Controle Retorno**, vá em **Desenvolvedor** → **Inserir** → **Botão**, desenhe o botão e escolha
-   a macro **ExportarParaPainel**. Escreva no botão "Exportar para o painel". Salve a planilha.
-   (Se não aparecer a guia Desenvolvedor: Arquivo → Opções → Personalizar Faixa de Opções → marque Desenvolvedor.)
-
-## Rotina semanal (Logística)
-
-1. Atualize a planilha como sempre (cole os retornos na aba **Retornos**).
-2. Baixe a base de transações da Intelipost (`transactions_....xlsx`) e cole por cima do conteúdo da aba **Intelipost**
-   (mesmas colunas, começando na A1). É ela que diz quais pedidos já foram entregues ou cancelados.
-3. Clique em **Exportar para o painel**. Só entram os pedidos com "Novo retorno". O arquivo `painel_entregas.csv` é salvo na mesma pasta da planilha.
-4. Abra o painel, entre com o seu login, clique em **Enviar planilha** e escolha `painel_entregas.csv`.
-5. Pronto: aparece "Pedidos atualizados" e o outro setor já vê as datas novas.
-
-## O que o outro setor vê
-
-- Busca por número do pedido (Intelipost ou do canal) ou da nota.
-- Filtros por transportadora, canal e situação; clique nos quadros do resumo para filtrar.
-- **Situação** de cada pedido:
-  - **Nova data informada**: a transportadora deu uma data que ainda não chegou.
-  - **Vence hoje**: a nova data é hoje.
-  - **Nova data vencida**: a data passou e o pedido ainda não consta como entregue.
-  - **Outros retornos**: retorno sem data (ex.: "Em rota de entrega", "Em processo de devolução").
-  - **Sem retorno**: a transportadora ainda não respondeu.
-- Botão **Baixar (Excel)** com o que está filtrado.
-
-Dados de cliente (nome, endereço, CPF) **não** são enviados ao painel.
+Dados de cliente (nome, endereço, telefone) **não** são enviados ao painel.

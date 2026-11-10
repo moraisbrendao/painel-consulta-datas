@@ -15,7 +15,7 @@
   <main id="tela-login" class="login" hidden>
     <div class="login-card">
       <div class="marca"><span class="logo"><img src="assets/logo.png" alt="Multimóveis"></span></div>
-      <svg class="caminhao" viewBox="0 0 64 40" aria-hidden="true"><path d="M2 8h34v22H2zM36 16h14l10 10v4H36z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="32" r="5" fill="var(--card)" stroke="currentColor" stroke-width="3"/><circle cx="48" cy="32" r="5" fill="var(--card)" stroke="currentColor" stroke-width="3"/></svg>
+      <svg class="caminhao" viewBox="0 0 64 40" aria-hidden="true"><path d="M2 8h34v22H2zM36 16h14l10 10v4H36z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="32" r="5" fill="#fff" stroke="currentColor" stroke-width="3"/><circle cx="48" cy="32" r="5" fill="#fff" stroke="currentColor" stroke-width="3"/></svg>
       <h1>Novas Datas de Entrega</h1>
       <p class="sub">Informe seu e-mail e senha para consultar as novas datas informadas pelas transportadoras.</p>
       <form id="form-login" autocomplete="on">
@@ -39,6 +39,11 @@
   <div id="tela-painel" class="painel" hidden>
     <header class="topo">
       <div class="marca"><span class="logo"><img src="assets/logo.png" alt="Multimóveis"></span></div>
+      <nav class="abas" id="abas" hidden>
+        <button class="aba ativa" data-aba="consulta">Consulta</button>
+        <button class="aba" data-aba="envios">Enviar arquivos</button>
+        <button class="aba" data-aba="regras">Padronização</button>
+      </nav>
       <div class="usuario">
         <span id="usuario-email"></span>
         <span id="usuario-perfil" class="perfil"></span>
@@ -46,21 +51,14 @@
       </div>
     </header>
 
-    <main class="conteudo">
+    <!-- ---------- CONSULTA (todos) ---------- -->
+    <main class="conteudo" id="aba-consulta">
       <section class="titulo">
         <div>
           <h1>Novas Datas de Entrega</h1>
-          <p class="sub">Consulte aqui as novas datas informadas pelas transportadoras.</p>
+          <p class="sub">Pedidos que a Logística está cobrando e o que cada transportadora respondeu.</p>
         </div>
-        <div class="atualizacao">
-          <span id="info-atualizacao">Carregando…</span>
-          <span id="area-admin" hidden>
-            <label class="btn primario">
-              Enviar planilha
-              <input id="arquivo-csv" type="file" accept=".csv,text/csv" hidden>
-            </label>
-          </span>
-        </div>
+        <div class="atualizacao"><span id="info-atualizacao">Carregando…</span></div>
       </section>
 
       <section class="resumo" id="resumo" aria-label="Resumo"></section>
@@ -90,7 +88,7 @@
               <th>Prev. original</th>
               <th>Nova data informada</th>
               <th>Situação</th>
-              <th>Observação da transportadora</th>
+              <th>Último retorno da transportadora</th>
               <th>Rastreio</th>
             </tr>
           </thead>
@@ -105,13 +103,104 @@
         <strong>Importante:</strong> <span id="contato"></span>
       </footer>
     </main>
+
+    <!-- ---------- ENVIAR ARQUIVOS (Logística) ---------- -->
+    <main class="conteudo" id="aba-envios" hidden>
+      <section class="titulo">
+        <div>
+          <h1>Enviar arquivos</h1>
+          <p class="sub">Atualize a lista de pedidos em cobrança e salve os retornos das transportadoras.</p>
+        </div>
+      </section>
+
+      <div class="duas-colunas">
+        <section class="cartao">
+          <h2>1. Pedidos que estou cobrando</h2>
+          <p class="sub">Arquivo no modelo <b>multimoveis-atrasados-em-aberto</b> (aba Pedidos). A lista nova substitui a anterior;
+            o histórico de retornos de cada pedido é mantido.</p>
+          <p id="info-cobranca" class="info"></p>
+          <label class="btn primario">
+            Escolher arquivo da cobrança
+            <input id="arq-cobranca" type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden>
+          </label>
+        </section>
+
+        <section class="cartao">
+          <h2>2. Retorno da transportadora</h2>
+          <p class="sub">Arquivo no modelo <b>Retorno_atrasos_tp</b>: Pedido Intelipost, Nota-Série, Transportadora e
+            Retorno Transportadora. Se o pedido estiver vazio, procuro pela nota.</p>
+          <label class="linha-campo">Data do retorno
+            <input id="data-retorno" type="date">
+          </label>
+          <label class="btn primario">
+            Anexar retorno da transportadora
+            <input id="arq-retorno" type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden>
+          </label>
+        </section>
+      </div>
+
+      <section class="cartao" id="previa" hidden>
+        <h2 id="previa-titulo">Conferir antes de salvar</h2>
+        <div id="previa-resumo" class="previa-resumo"></div>
+        <div class="tabela-wrap mini"><table><thead id="previa-cab"></thead><tbody id="previa-linhas"></tbody></table></div>
+        <div class="acoes">
+          <button id="previa-cancelar" class="btn fantasma">Cancelar</button>
+          <button id="previa-salvar" class="btn primario">Salvar</button>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <h2>Últimos envios de retorno</h2>
+        <p class="sub">Se mandou um arquivo errado, apague o envio e mande de novo.</p>
+        <div class="tabela-wrap mini">
+          <table>
+            <thead><tr><th>Enviado em</th><th>Arquivo</th><th>Data do retorno</th><th>Retornos</th><th>Por</th><th></th></tr></thead>
+            <tbody id="lista-envios"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- ---------- PADRONIZAÇÃO (Logística) ---------- -->
+    <main class="conteudo" id="aba-regras" hidden>
+      <section class="cartao">
+        <h2>Como padronizar o retorno</h2>
+        <p class="sub">Diga as palavras e para onde elas vão. Qualquer retorno que contenha uma delas vira essa categoria
+          (vale para texto; maiúsculas e acentos não importam). Quando a transportadora manda uma data, a data já é a resposta.</p>
+        <form id="form-regra" class="form-regra">
+          <label>Considerar como
+            <input id="regra-categoria" list="lista-categorias" required placeholder="Em rota de entrega">
+            <datalist id="lista-categorias"></datalist>
+          </label>
+          <label class="cresce">quando o retorno tiver <span class="dica">(separe por vírgula)</span>
+            <input id="regra-termos" required placeholder="EM ROTA DE ENTREGA, EM ENTREGA, SAIDA PARA ENTREGA">
+          </label>
+          <button class="btn primario" type="submit">+ Guardar regra</button>
+        </form>
+      </section>
+
+      <section class="cartao" id="cartao-sem-regra">
+        <h2>Retornos sem padronização <span id="qtd-sem-regra" class="contador"></span></h2>
+        <p class="sub">Últimos retornos dos pedidos em cobrança que não têm data nem caíram em nenhuma regra.
+          Clique em um para usar o texto numa regra.</p>
+        <div id="sem-regra" class="chips"></div>
+      </section>
+
+      <section class="cartao">
+        <h2 class="h-pequeno">Regras que estão valendo</h2>
+        <p class="sub">A ordem importa: o retorno vai para a primeira categoria (de cima para baixo) que encontrar.</p>
+        <div id="lista-regras"></div>
+        <button id="btn-fabrica" class="link sublinhado">voltar para as regras de fábrica</button>
+      </section>
+    </main>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
+  <script src="padronizacao.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

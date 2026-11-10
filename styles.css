@@ -84,7 +84,8 @@ input:focus, select:focus { outline: 2px solid var(--amarelo); outline-offset: -
 .card-resumo .rot { color: var(--texto-2); font-size: 12px; }
 
 .filtros { background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 14px;
-  display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 12px; align-items: end; }
+  display: grid; grid-template-columns: minmax(0,2fr) minmax(0,1fr) minmax(0,1fr) minmax(0,1fr) auto; gap: 12px; align-items: end; }
+.filtros select, .filtros input { width: 100%; }
 
 .tabela-wrap { background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
@@ -122,4 +123,57 @@ td a { color: var(--azul); }
 }
 @media (max-width: 520px) {
   .filtros { grid-template-columns: 1fr; }
+}
+
+/* ---------- v2: abas, cartões, padronização ---------- */
+h2 { margin: 0 0 4px; font-size: 17px; color: var(--marinho); }
+.abas { display: flex; gap: 4px; flex-wrap: wrap; }
+.aba { background: transparent; border: 0; color: rgba(255,255,255,.75); font: inherit; font-weight: 600; padding: 8px 14px;
+  border-radius: 8px; cursor: pointer; }
+.aba:hover { color: #fff; background: rgba(255,255,255,.08); }
+.aba.ativa { color: var(--marinho); background: var(--amarelo); }
+
+.cartao { background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 18px 20px;
+  display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
+.cartao > .tabela-wrap, .cartao > .previa-resumo, .cartao > #lista-regras, .cartao > .chips { align-self: stretch; }
+.duas-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.info { margin: 0; font-weight: 600; color: var(--marinho); }
+.linha-campo { flex-direction: row; align-items: center; gap: 10px; }
+.acoes { display: flex; gap: 10px; align-self: flex-end; }
+.previa-resumo { display: flex; flex-wrap: wrap; gap: 8px 18px; color: var(--texto-2); }
+.previa-resumo b { color: var(--texto); }
+.erro-texto, .erro-texto b { color: var(--vermelho) !important; }
+.tabela-wrap.mini { max-height: 420px; overflow: auto; }
+.tabela-wrap.mini td, .tabela-wrap.mini th { padding: 8px 12px; font-size: 13px; }
+
+.form-regra { display: flex; gap: 12px; align-items: flex-end; align-self: stretch; flex-wrap: wrap; }
+.form-regra label { min-width: 200px; }
+.form-regra .cresce { flex: 1; min-width: 260px; }
+.dica { font-weight: 400; }
+.h-pequeno { font-size: 14px; }
+.regra { display: grid; grid-template-columns: 260px 1fr; gap: 12px; padding: 12px 0; border-top: 1px solid var(--borda); }
+.regra:first-child { border-top: 0; }
+.regra-nome { font-weight: 600; font-size: 15px; color: var(--texto); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip-regra { display: inline-flex; align-items: center; gap: 4px; background: var(--cinza-bg); border: 1px solid var(--borda);
+  color: var(--texto); border-radius: 99px; padding: 3px 6px 3px 10px; font-size: 12px; font: inherit; font-size: 12px; }
+.chip-regra button { border: 0; background: none; color: var(--texto-2); cursor: pointer; font-size: 14px; line-height: 1; padding: 0 2px; }
+.chip-regra button:hover { color: var(--vermelho); }
+.chip-regra.clicavel { cursor: pointer; padding: 4px 10px; text-align: left; }
+.chip-regra.clicavel:hover { border-color: var(--amarelo-escuro); background: #fffbea; }
+.chip-regra.clicavel b { background: var(--marinho); color: #fff; border-radius: 99px; padding: 0 6px; font-size: 11px; }
+.contador { background: var(--ambar-bg); color: var(--ambar); border-radius: 99px; padding: 2px 8px; font-size: 12px; vertical-align: middle; }
+.link.sublinhado { text-decoration: underline; color: var(--texto-2); padding: 0; }
+.link.perigo { color: var(--vermelho); }
+td .link { padding: 0; font-size: 12px; }
+
+tr.historico td { background: #fafbfd; }
+.linha-tempo { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; }
+.linha-tempo li { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.linha-tempo .quando { font-weight: 600; font-variant-numeric: tabular-nums; min-width: 80px; }
+
+@media (max-width: 860px) {
+  .duas-colunas { grid-template-columns: 1fr; }
+  .regra { grid-template-columns: 1fr; gap: 6px; }
+  .topo { gap: 8px; }
 }
