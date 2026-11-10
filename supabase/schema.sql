@@ -282,3 +282,38 @@ as $$
 $$;
 revoke all on function public.consultar_sac() from public, anon;
 grant execute on function public.consultar_sac() to authenticated;
+
+-- 10) Responsáveis: cada micro status tem um dono. Micro status sem dono aparece
+--     como "Pendente de responsável". A Logística cuida disso na página Responsáveis.
+create table if not exists public.pessoas_responsaveis (
+  id    bigint generated always as identity primary key,
+  nome  text not null unique,
+  area  text
+);
+create table if not exists public.responsavel_por_ms (
+  micro_status   text primary key,   -- nome do micro status em maiúsculas, sem acento
+  responsavel_id bigint references public.pessoas_responsaveis(id) on delete cascade,
+  atualizado_por text,
+  atualizado_em  timestamptz not null default now()
+);
+alter table public.pessoas_responsaveis enable row level security;
+alter table public.responsavel_por_ms enable row level security;
+revoke all on public.pessoas_responsaveis, public.responsavel_por_ms from anon;
+grant select, insert, update, delete on public.pessoas_responsaveis, public.responsavel_por_ms to authenticated;
+drop policy if exists "logistica cuida" on public.pessoas_responsaveis;
+drop policy if exists "logistica cuida" on public.responsavel_por_ms;
+create policy "logistica cuida" on public.pessoas_responsaveis for all to authenticated
+  using (not public.e_sac()) with check (not public.e_sac());
+create policy "logistica cuida" on public.responsavel_por_ms for all to authenticated
+  using (not public.e_sac()) with check (not public.e_sac());
+
+create or replace function public._carimbo_responsavel()
+returns trigger language plpgsql as $$
+begin
+  new.atualizado_por := coalesce(auth.jwt() ->> 'email', new.atualizado_por);
+  new.atualizado_em := now();
+  return new;
+end $$;
+drop trigger if exists carimbo on public.responsavel_por_ms;
+create trigger carimbo before insert or update on public.responsavel_por_ms
+  for each row execute function public._carimbo_responsavel();

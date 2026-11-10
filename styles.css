@@ -153,7 +153,7 @@ body.sem-rolagem { overflow: hidden; }
 
 /* filtros no topo (fixos ao rolar) */
 .filtros-topo { position: sticky; top: 0; z-index: 15; background: var(--fundo); padding: 10px 0; margin-top: -6px;
-  display: grid; grid-template-columns: minmax(0,1.6fr) repeat(4, minmax(0,1fr)) auto; gap: 10px; align-items: end; border-bottom: 1px solid var(--borda); }
+  display: grid; grid-template-columns: minmax(0,1.5fr) repeat(5, minmax(0,1fr)) auto; gap: 10px; align-items: end; border-bottom: 1px solid var(--borda); }
 .multi { position: relative; display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .multi-rotulo { font-size: 12px; font-weight: 600; color: var(--texto-2); }
 .multi-botao { font: inherit; text-align: left; display: flex; align-items: center; gap: 6px; padding: 7px 9px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; color: var(--texto); cursor: pointer; min-width: 0; }
@@ -214,3 +214,8 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tabela-range th.venc { color: var(--vermelho); }
 .tabela-range td.venc { background: #fdf3f2; font-weight: 600; }
 .tabela-range td:first-child { min-width: 190px; }
+.pendente { color: var(--ambar); font-weight: 600; }
+.linha-pendente td:first-child { box-shadow: inset 3px 0 0 var(--ambar); }
+.tabela-resp select { min-width: 240px; }
+.resp-p { margin-top: 2px; }
+.tabela-resp td { vertical-align: middle; }

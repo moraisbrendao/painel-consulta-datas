@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=13">
+  <link rel="stylesheet" href="styles.css?v=14">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -45,6 +45,7 @@
     <nav class="menu-lateral" aria-label="Menu">
       <button class="menu-item ativo so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
+      <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
     </nav>
     <main class="conteudo" id="pagina-preventivo">
@@ -54,6 +55,7 @@
         <div class="multi" data-filtro="transp" data-rotulo="Transportadora" data-todos="Todas"></div>
         <div class="multi" data-filtro="canal" data-rotulo="Canal" data-todos="Todos"></div>
         <div class="multi" data-filtro="ms" data-rotulo="Micro status" data-todos="Todos"></div>
+        <div class="multi" data-filtro="resp" data-rotulo="Responsável" data-todos="Todos"></div>
         <div class="multi" data-filtro="obs" data-rotulo="Observação" data-todos="Todas"></div>
         <button id="f-limpar" class="btn" type="button" hidden>Limpar filtros</button>
       </section>
@@ -76,7 +78,7 @@
         </div>
         <div class="tabela-ms-wrap">
           <table class="tabela-ms">
-            <thead><tr><th>Micro status</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com observação</th></tr></thead>
+            <thead><tr><th>Micro status</th><th>Responsável</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com observação</th></tr></thead>
             <tbody id="ms-linhas"></tbody>
           </table>
         </div>
@@ -153,6 +155,36 @@
         <div id="oc-grupos"></div>
       </section>
     </main>
+    <!-- ============ RESPONSÁVEIS ============ -->
+    <main class="conteudo" id="pagina-responsaveis" hidden>
+      <section class="cartao">
+        <h2>Responsáveis</h2>
+        <p class="sub">Cadastre as pessoas (ou áreas) que cuidam dos micro status.</p>
+        <form id="form-resp" class="form-sac">
+          <label class="cresce">Nome<input id="resp-nome" required maxlength="80" placeholder="Nome da pessoa"></label>
+          <label class="cresce">Área (opcional)<input id="resp-area" maxlength="80" placeholder="Ex.: Transportes, SAC…"></label>
+          <button class="btn primario" type="submit">+ Adicionar responsável</button>
+        </form>
+        <div id="lista-resp" class="chips-sac"></div>
+      </section>
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Dono de cada micro status</h2>
+            <p class="sub">Escolha o responsável de cada micro status. Os <b>pendentes de responsável</b> aparecem primeiro.
+              Micro status novos que vierem na base entram como pendentes. Salva na hora para todos.</p>
+          </div>
+          <p id="resp-resumo" class="info-base"></p>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos tabela-resp">
+            <thead><tr><th>Micro status</th><th class="num">Pedidos em aberto</th><th>Responsável</th></tr></thead>
+            <tbody id="resp-linhas"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
     <!-- ============ CONSULTA SAC ============ -->
     <main class="conteudo" id="pagina-sac" hidden>
       <section class="cartao">
@@ -213,7 +245,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=13"></script>
-  <script src="app.js?v=13"></script>
+  <script src="config.js?v=14"></script>
+  <script src="app.js?v=14"></script>
 </body>
 </html>

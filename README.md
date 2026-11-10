@@ -41,6 +41,10 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
      adicione o e-mail no quadro **Logins do SAC**, no fim da página Consulta SAC. Esse login não envia arquivos,
      não altera nada e não vê as outras páginas.
 
+8. **Responsáveis** (menu da esquerda): cadastre as pessoas (nome e área) e escolha o dono de cada micro status.
+   Micro status sem dono aparecem como **Pendente de responsável** (o número no menu mostra quantos faltam). O
+   responsável aparece na tabela por micro status, na lista de pedidos, no detalhe, no Excel e no filtro **Responsável**.
+
 ## Arquivos
 
 | Arquivo | Para que serve |

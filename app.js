@@ -128,6 +128,7 @@
       infoFech = fi.data && fi.data[0];
       ocultos = Math.max(0, (tot.count || 0) - base.length);
       await carregarOcorrencias();
+      await carregarResponsaveis();
     } catch (err) {
       $("info-base").textContent = "";
       toast(/base_|tratativas|fechados|schema cache/.test(err.message)
@@ -145,6 +146,7 @@
     redesenhar();
     desenharOcorrencias();
     if (paginaAtual === "sac") desenharSacLogistica();
+    desenharResponsaveis();
   }
 
   // atualização das tratativas feitas por outras pessoas
@@ -200,9 +202,10 @@
     transp: (p) => p.transportadora || "(sem transportadora)",
     canal: (p) => p.canal || "(sem canal)",
     ms: (p) => p.micro_status || "(sem micro status)",
+    resp: (p) => { const r = respDe(p.micro_status); return r ? r.nome : PENDENTE; },
     obs: (p) => (p._t && p._t.observacao ? "Com observação" : "Sem observação"),
   };
-  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), obs: new Set() };
+  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), resp: new Set(), obs: new Set() };
   function passaFiltros(p) {
     const busca = norm($("f-busca").value);
     if (busca && !norm(p.pedido).includes(busca) && !norm(p.nf).includes(busca)) return false;
@@ -304,9 +307,9 @@
     if (msSel && !grupos.has(msSel)) msSel = "";
     $("ms-linhas").innerHTML = ord.length ? ord.map(([k, g]) => {
       const media = g.cont ? g.soma / g.cont : 0;
-      return `<tr data-ms="${esc(k)}" class="${k === msSel ? "sel" : ""}"><td>${esc(k)}</td><td class="num">${fmt(g.n)}</td>
+      return `<tr data-ms="${esc(k)}" class="${k === msSel ? "sel" : ""}"><td>${esc(k)}</td><td>${nomeResp(k)}</td><td class="num">${fmt(g.n)}</td>
         <td class="num ${media >= 10 ? "alto" : ""}">${media.toFixed(1).replace(".", ",")}</td><td class="num">${fmt(g.trat)}</td></tr>`;
-    }).join("") : `<tr><td colspan="4" class="vazio">Nenhum pedido nesta visão.</td></tr>`;
+    }).join("") : `<tr><td colspan="5" class="vazio">Nenhum pedido nesta visão.</td></tr>`;
 
     desenharRange();
     filtrar(manterPagina, daVisao);
@@ -369,7 +372,7 @@
         <td><div class="p">${esc(p.pedido)}</div><div class="s">NF ${esc(p.nf || "—")} · ${esc(p.canal || "")}</div>
           ${p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : ""}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
-        <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div>${marcaOc(p)}</td>
+        <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div><div class="s resp-p">👤 ${nomeResp(p.micro_status)}</div>${marcaOc(p)}</td>
         <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}</td>
         <td><input type="date" data-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
         <td class="col-obs"><input data-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
@@ -456,7 +459,7 @@
       </div>
       <h3>Rastreio</h3>
       <div class="det-grade">
-        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Status Intelipost", esc(p.status_intelipost))}
+        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${item("Status Intelipost", esc(p.status_intelipost))}
         ${item("Última atualização", `${dh(p.ultima_atualizacao)}${p._parado !== null ? ` <span class="s">(${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento)</span>` : ""}`)}
         ${item("Ocorrência", esc(p.ocorrencia))}
       </div>
@@ -502,9 +505,9 @@
 
   // exportar o que está na lista
   $("btn-exportar").addEventListener("click", () => {
-    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Dias sem movimento", "Prometido ao cliente",
+    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Responsável", "Dias sem movimento", "Prometido ao cliente",
       "Previsão Intelipost atual", "Dias para vencer", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
-    const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, p._parado,
+    const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, (respDe(p.micro_status) || { nome: PENDENTE }).nome, p._parado,
       br(p.prev_original), br(p.prev_atual), p._dias, br(t.nova_data), t.observacao, t.atualizado_por,
       t.atualizado_em ? new Date(t.atualizado_em).toLocaleString("pt-BR") : "", p.comentario_360, p.qtd_tickets, p.link_rastreio]; });
     const ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
@@ -601,7 +604,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=13");
+        const w = new Worker("leitor-intelipost.js?v=14");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -768,6 +771,68 @@
     const b = e.target.closest(".menu-item"); if (!b) return;
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
+  });
+
+  // ---------------- responsáveis por micro status ----------------
+  const PENDENTE = "Pendente de responsável";
+  let pessoas = [], respMs = new Map(), respOk = true;
+  function respDe(ms) { const id = respMs.get(norm(ms)); return id ? pessoas.find((x) => x.id === id) || null : null; }
+  function nomeResp(ms) { const r = respDe(ms); return r ? esc(r.nome) : `<span class="pendente">${PENDENTE}</span>`; }
+
+  async function carregarResponsaveis() {
+    try {
+      const [ps, rm] = await Promise.all([buscarTudo("pessoas_responsaveis", "nome"), buscarTudo("responsavel_por_ms", "micro_status")]);
+      pessoas = ps; respMs = new Map(rm.filter((x) => x.responsavel_id).map((x) => [x.micro_status, x.responsavel_id])); respOk = true;
+    } catch (_) { respOk = false; }
+  }
+
+  function desenharResponsaveis() {
+    if (!respOk) {
+      $("lista-resp").innerHTML = `<p class="s">Para usar esta página, rode de novo o supabase/schema.sql no Supabase.</p>`;
+      $("resp-linhas").innerHTML = ""; $("menu-resp").hidden = true; return;
+    }
+    $("lista-resp").innerHTML = pessoas.length
+      ? pessoas.map((x) => `<span>${esc(x.nome)}${x.area ? ` <em class="s">· ${esc(x.area)}</em>` : ""}<button type="button" data-tirar-resp="${x.id}" title="Remover">×</button></span>`).join("")
+      : `<p class="s">Nenhum responsável cadastrado ainda.</p>`;
+    const cont = new Map(), nomeMs = new Map();
+    base.forEach((p) => { const k = norm(p.micro_status || "(sem micro status)"); cont.set(k, (cont.get(k) || 0) + 1); if (!nomeMs.has(k)) nomeMs.set(k, p.micro_status || "(sem micro status)"); });
+    const chaves = [...new Set([...cont.keys(), ...respMs.keys()])];
+    chaves.sort((a, b) => (respMs.has(a) ? 1 : 0) - (respMs.has(b) ? 1 : 0) || (cont.get(b) || 0) - (cont.get(a) || 0) || a.localeCompare(b));
+    const pend = chaves.filter((k) => !respMs.has(k) && cont.get(k)).length;
+    $("menu-resp").hidden = !pend; $("menu-resp").textContent = fmt(pend);
+    $("resp-resumo").textContent = `${fmt(chaves.length)} micro status · ${fmt(pend)} pendente${pend === 1 ? "" : "s"} de responsável`;
+    const opcoes = (id) => `<option value="">${PENDENTE}</option>` + pessoas.map((x) => `<option value="${x.id}" ${x.id === id ? "selected" : ""}>${esc(x.nome)}${x.area ? " · " + esc(x.area) : ""}</option>`).join("");
+    $("resp-linhas").innerHTML = chaves.map((k) => `<tr class="${respMs.has(k) ? "" : "linha-pendente"}">
+        <td>${esc(nomeMs.get(k) || k)}</td><td class="num">${fmt(cont.get(k) || 0)}</td>
+        <td><select data-resp-ms="${esc(k)}">${opcoes(respMs.get(k))}</select></td></tr>`).join("")
+      || `<tr><td colspan="3" class="vazio">Envie a base para ver os micro status.</td></tr>`;
+  }
+
+  $("resp-linhas").addEventListener("change", async (e) => {
+    const s = e.target.closest("select[data-resp-ms]"); if (!s) return;
+    const ms = s.dataset.respMs, id = s.value ? Number(s.value) : null;
+    const { error } = id
+      ? await sb.from("responsavel_por_ms").upsert({ micro_status: ms, responsavel_id: id }, { onConflict: "micro_status" })
+      : await sb.from("responsavel_por_ms").delete().eq("micro_status", ms);
+    if (error) return toast("Não foi possível salvar: " + error.message, true);
+    if (id) respMs.set(ms, id); else respMs.delete(ms);
+    toast("Responsável salvo.");
+    montarOpcoes(); redesenhar(true); desenharResponsaveis();
+  });
+  $("form-resp").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const nome = $("resp-nome").value.trim(), area = $("resp-area").value.trim() || null; if (!nome) return;
+    const { error } = await sb.from("pessoas_responsaveis").insert({ nome, area });
+    if (error) return toast(/duplicate|unique/i.test(error.message) ? "Já existe um responsável com esse nome." : "Erro: " + error.message, true);
+    $("resp-nome").value = ""; $("resp-area").value = "";
+    await carregarResponsaveis(); desenharResponsaveis(); montarOpcoes();
+  });
+  $("lista-resp").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-tirar-resp]"); if (!b) return;
+    if (!confirm("Remover esse responsável? Os micro status dele voltam para \"Pendente de responsável\".")) return;
+    const { error } = await sb.from("pessoas_responsaveis").delete().eq("id", Number(b.dataset.tirarResp));
+    if (error) return toast("Erro: " + error.message, true);
+    await carregarResponsaveis(); desenharResponsaveis(); montarOpcoes(); redesenhar(true);
   });
 
   // ---------------- consulta SAC ----------------
