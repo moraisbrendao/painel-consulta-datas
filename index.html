@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Novas Datas de Entrega</title>
+  <meta name="robots" content="noindex, nofollow">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+  <!-- ============ TELA DE LOGIN ============ -->
+  <main id="tela-login" class="login" hidden>
+    <div class="login-card">
+      <div class="marca"><span class="logo" aria-hidden="true">M</span> <span class="js-empresa"></span></div>
+      <svg class="caminhao" viewBox="0 0 64 40" aria-hidden="true"><path d="M2 8h34v22H2zM36 16h14l10 10v4H36z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><circle cx="14" cy="32" r="5" fill="var(--card)" stroke="currentColor" stroke-width="3"/><circle cx="48" cy="32" r="5" fill="var(--card)" stroke="currentColor" stroke-width="3"/></svg>
+      <h1>Novas Datas de Entrega</h1>
+      <p class="sub">Informe seu e-mail e senha para consultar as novas datas informadas pelas transportadoras.</p>
+      <form id="form-login" autocomplete="on">
+        <label>E-mail corporativo
+          <input id="email" type="email" required autocomplete="username" placeholder="nome@empresa.com.br">
+        </label>
+        <label>Senha
+          <span class="senha">
+            <input id="senha" type="password" required autocomplete="current-password" placeholder="Sua senha">
+            <button type="button" id="ver-senha" class="link" aria-label="Mostrar senha">Mostrar</button>
+          </span>
+        </label>
+        <button id="btn-entrar" class="btn primario" type="submit">Entrar</button>
+        <p id="erro-login" class="erro" role="alert"></p>
+      </form>
+      <p class="ajuda">Não tem acesso ou esqueceu a senha? Fale com a Logística.</p>
+    </div>
+  </main>
+
+  <!-- ============ PAINEL ============ -->
+  <div id="tela-painel" class="painel" hidden>
+    <header class="topo">
+      <div class="marca"><span class="logo" aria-hidden="true">M</span> <span class="js-empresa"></span></div>
+      <div class="usuario">
+        <span id="usuario-email"></span>
+        <span id="usuario-perfil" class="perfil"></span>
+        <button id="btn-sair" class="btn fantasma">Sair</button>
+      </div>
+    </header>
+
+    <main class="conteudo">
+      <section class="titulo">
+        <div>
+          <h1>Novas Datas de Entrega</h1>
+          <p class="sub">Consulte aqui as novas datas informadas pelas transportadoras.</p>
+        </div>
+        <div class="atualizacao">
+          <span id="info-atualizacao">Carregando…</span>
+          <span id="area-admin" hidden>
+            <label class="btn primario">
+              Enviar planilha
+              <input id="arquivo-csv" type="file" accept=".csv,text/csv" hidden>
+            </label>
+          </span>
+        </div>
+      </section>
+
+      <section class="resumo" id="resumo" aria-label="Resumo"></section>
+
+      <section class="filtros">
+        <label class="busca">Pedido ou nota
+          <input id="f-busca" type="search" placeholder="Digite o nº do pedido ou da nota…">
+        </label>
+        <label>Transportadora
+          <select id="f-transp"><option value="">Todas</option></select>
+        </label>
+        <label>Canal
+          <select id="f-canal"><option value="">Todos</option></select>
+        </label>
+        <label>Situação
+          <select id="f-situacao"><option value="">Todas</option></select>
+        </label>
+        <button id="btn-baixar" class="btn fantasma" title="Baixar o que está filtrado">Baixar (Excel)</button>
+      </section>
+
+      <section class="tabela-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Pedido</th>
+              <th>Transportadora</th>
+              <th>Prev. original</th>
+              <th>Nova data informada</th>
+              <th>Situação</th>
+              <th>Observação da transportadora</th>
+              <th>Rastreio</th>
+            </tr>
+          </thead>
+          <tbody id="linhas"></tbody>
+        </table>
+        <p id="vazio" class="vazio" hidden>Nenhum pedido encontrado com esses filtros.</p>
+      </section>
+
+      <nav class="paginacao" id="paginacao" aria-label="Páginas"></nav>
+
+      <footer class="aviso">
+        <strong>Importante:</strong> <span id="contato"></span>
+      </footer>
+    </main>
+  </div>
+
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
