@@ -442,8 +442,16 @@ create or replace function public.is_sac()
 returns boolean
 language sql stable security definer set search_path = public
 as $$
-  select exists (select 1 from public.usuarios_sac where lower(email) = lower(auth.jwt() ->> 'email'))
-     and not public.is_admin();
+  select exists (select 1 from public.usuarios_sac where lower(email) = lower(auth.jwt() ->> 'email'));
+$$;
+
+-- Quem está na lista do SAC é SAC, mesmo que o e-mail também esteja em admins.
+create or replace function public.is_admin()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from public.admins where lower(email) = lower(auth.jwt() ->> 'email'))
+     and not exists (select 1 from public.usuarios_sac where lower(email) = lower(auth.jwt() ->> 'email'));
 $$;
 
 create or replace function public.meu_perfil()

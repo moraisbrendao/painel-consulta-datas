@@ -159,6 +159,8 @@
     e.preventDefault();
     const email = $("sac-email").value.trim().toLowerCase();
     if (!email) return;
+    if (email === $("usuario-email").textContent.trim().toLowerCase())
+      return P.toast("Esse é o seu próprio login. Se marcar, você perde o acesso da Logística.", true);
     const { error } = await sb.from("usuarios_sac").upsert({ email });
     if (error) return P.toast("Não foi possível salvar: " + error.message, true);
     $("sac-email").value = "";

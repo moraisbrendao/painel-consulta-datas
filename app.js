@@ -124,6 +124,9 @@
     $("tela-painel").hidden = false;
     $("usuario-email").textContent = user.email;
 
+    // esconde tudo até saber o perfil (o SAC não pode ver nem por um instante o resto)
+    document.querySelectorAll("#abas .aba").forEach((b) => (b.hidden = true));
+    document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = true));
     // perfil: 'logistica' | 'sac' | 'consulta' (decidido no banco)
     const { data: perfil, error: errPerfil } = await sb.rpc("meu_perfil");
     if (!errPerfil && perfil === "sac") {
