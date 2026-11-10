@@ -7,6 +7,9 @@ Site: https://moraisbrendao.github.io/painel-consulta-datas/
 
 ## Como usar
 
+**Filtros no topo** (Buscar, Transportadora, Canal, Micro status, Observação) ficam fixos ao rolar e valem para todas as
+tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar filtros** volta tudo.
+
 1. **Enviar planilha** (botão amarelo no topo): escolha o arquivo exportado (aba *Export*, com as colunas
    *Pedido Intelipost*, *Micro Status Intelipost*, *Data Estimada da Entrega(Intelipost)* etc.).
    Ele substitui a base para todos. As tratativas já feitas continuam salvas.

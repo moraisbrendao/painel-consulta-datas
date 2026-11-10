@@ -33,6 +33,7 @@
   ];
   const faixa = (d) => (d === null || d < 0 ? null : RANGES.find((r) => d >= r.de && d <= r.ate).id);
   let filtrados = [];
+  let vistos = [];             // base depois dos filtros do topo
   let pagina = 1;
 
   function hojeISO() { const d = new Date(); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); }
@@ -164,28 +165,99 @@
     todos: () => true,
   };
 
+  // ---------------- filtros do topo (valem para tudo; vários itens por filtro) ----------------
+  const FILTROS = {
+    transp: (p) => p.transportadora || "(sem transportadora)",
+    canal: (p) => p.canal || "(sem canal)",
+    ms: (p) => p.micro_status || "(sem micro status)",
+    obs: (p) => (p._t && p._t.observacao ? "Com observação" : "Sem observação"),
+  };
+  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), obs: new Set() };
+  function passaFiltros(p) {
+    const busca = norm($("f-busca").value);
+    if (busca && !norm(p.pedido).includes(busca) && !norm(p.nf).includes(busca)) return false;
+    for (const k in sel) if (sel[k].size && !sel[k].has(FILTROS[k](p))) return false;
+    return true;
+  }
+
   // ---------------- desenho ----------------
   function montarOpcoes() {
-    const preencher = (id, valores, todos) => {
-      const sel = $(id), atual = sel.value;
-      sel.innerHTML = `<option value="">${todos}</option>` + valores.map((v) => `<option value="${esc(v[0])}">${esc(v[1])}</option>`).join("");
-      if (valores.some((v) => v[0] === atual)) sel.value = atual;
-    };
-    const unicos = (f) => [...new Set(base.map(f).filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR")).map((v) => [v, v]);
-    preencher("f-transp", unicos((p) => p.transportadora), "Todas");
-    preencher("f-canal", unicos((p) => p.canal), "Todos");
-    preencher("f-ms", unicos((p) => p.micro_status), "Todos");
-    preencher("f-trat", [["__com", "Com observação"], ["__sem", "Sem observação"]], "Todas");
+    document.querySelectorAll("#filtros .multi").forEach((el) => {
+      const k = el.dataset.filtro, cont = new Map();
+      base.forEach((p) => { const v = FILTROS[k](p); cont.set(v, (cont.get(v) || 0) + 1); });
+      if (k === "obs") ["Com observação", "Sem observação"].forEach((v) => cont.has(v) || cont.set(v, 0));
+      const valores = k === "obs" ? ["Com observação", "Sem observação"] : [...cont.keys()].sort((a, b) => a.localeCompare(b, "pt-BR"));
+      [...sel[k]].forEach((v) => cont.has(v) || sel[k].delete(v));
+      const aberto = el.querySelector(".multi-painel:not([hidden])");
+      el.innerHTML = `<span class="multi-rotulo">${esc(el.dataset.rotulo)}</span>
+        <button type="button" class="multi-botao"><span class="multi-valor"></span><span class="seta">▾</span></button>
+        <div class="multi-painel" ${aberto ? "" : "hidden"}>
+          ${valores.length > 6 ? `<input class="multi-busca" type="search" placeholder="Procurar…">` : ""}
+          <div class="multi-lista">${valores.map((v) => `<label class="multi-op"><input type="checkbox" value="${esc(v)}" ${sel[k].has(v) ? "checked" : ""}>
+            <span>${esc(v)}</span><em>${fmt(cont.get(v))}</em></label>`).join("")}</div>
+          <div class="multi-acoes"><button type="button" class="link" data-acao="limpar">Limpar</button><button type="button" class="btn primario" data-acao="ok">OK</button></div>
+        </div>`;
+      rotuloMulti(el);
+    });
   }
+  function rotuloMulti(el) {
+    const k = el.dataset.filtro, n = sel[k].size;
+    el.querySelector(".multi-valor").textContent = n === 0 ? el.dataset.todos : n === 1 ? [...sel[k]][0] : `${n} selecionados`;
+    el.classList.toggle("ativo", n > 0);
+    $("f-limpar").hidden = !Object.values(sel).some((x) => x.size) && !$("f-busca").value;
+  }
+  function filtrosMudaram() {
+    msSel = ""; rangeSel = "";
+    document.querySelectorAll("#filtros .multi").forEach(rotuloMulti);
+    redesenhar();
+  }
+  $("filtros").addEventListener("click", (e) => {
+    const multi = e.target.closest(".multi");
+    if (e.target.closest(".multi-botao")) {
+      const painel = multi.querySelector(".multi-painel"), abrir = painel.hidden;
+      document.querySelectorAll("#filtros .multi-painel").forEach((x) => (x.hidden = true));
+      painel.hidden = !abrir;
+      if (abrir) { const b = painel.querySelector(".multi-busca"); if (b) b.focus(); }
+      return;
+    }
+    const acao = e.target.closest("[data-acao]");
+    if (acao) {
+      if (acao.dataset.acao === "limpar") {
+        sel[multi.dataset.filtro].clear();
+        multi.querySelectorAll("input[type=checkbox]").forEach((c) => (c.checked = false));
+        filtrosMudaram();
+      }
+      multi.querySelector(".multi-painel").hidden = true;
+    }
+  });
+  $("filtros").addEventListener("change", (e) => {
+    if (e.target.type !== "checkbox") return;
+    const k = e.target.closest(".multi").dataset.filtro;
+    e.target.checked ? sel[k].add(e.target.value) : sel[k].delete(e.target.value);
+    filtrosMudaram();
+  });
+  $("filtros").addEventListener("input", (e) => {
+    if (!e.target.classList.contains("multi-busca")) return;
+    const q = norm(e.target.value);
+    e.target.closest(".multi").querySelectorAll(".multi-op").forEach((op) => (op.hidden = q && !norm(op.textContent).includes(q)));
+  });
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".multi")) document.querySelectorAll("#filtros .multi-painel").forEach((x) => (x.hidden = true));
+  });
+  $("f-limpar").addEventListener("click", () => {
+    Object.values(sel).forEach((x) => x.clear()); $("f-busca").value = "";
+    montarOpcoes(); filtrosMudaram();
+  });
 
   function redesenhar(manterPagina) {
     base.forEach(preparar);
+    vistos = base.filter(passaFiltros);          // tudo já com os filtros do topo
     // contadores das visões
     document.querySelectorAll(".visao").forEach((b) => {
       b.classList.toggle("ativa", b.dataset.visao === visao);
-      b.querySelector("span").textContent = `(${fmt(base.filter(naVisao[b.dataset.visao]).length)})`;
+      b.querySelector("span").textContent = `(${fmt(vistos.filter(naVisao[b.dataset.visao]).length)})`;
     });
-    const daVisao = base.filter(naVisao[visao]);
+    const daVisao = vistos.filter(naVisao[visao]);
 
     // tabela por micro status
     const grupos = new Map();
@@ -212,7 +284,7 @@
 
   function desenharRange() {
     const linhas = new Map(), tot = {};
-    base.forEach((p) => {
+    vistos.forEach((p) => {
       if (!p._faixa) return;
       const k = p.micro_status || "(sem micro status)";
       const l = linhas.get(k) || { total: 0 };
@@ -231,18 +303,11 @@
   }
 
   function filtrar(manterPagina, daVisao) {
-    daVisao = daVisao || base.filter(naVisao[visao]);
-    const busca = norm($("f-busca").value);
-    const tp = $("f-transp").value, cn = $("f-canal").value, ms = $("f-ms").value || msSel, tr = $("f-trat").value;
+    daVisao = daVisao || vistos.filter(naVisao[visao]);
+    const ms = msSel;   // micro status clicado numa das tabelas
     filtrados = daVisao.filter((p) => {
-      if (busca && !norm(p.pedido).includes(busca) && !norm(p.nf).includes(busca)) return false;
-      if (tp && p.transportadora !== tp) return false;
-      if (cn && p.canal !== cn) return false;
       if (ms && (p.micro_status || "(sem micro status)") !== ms) return false;
       if (rangeSel === "__avencer" ? !p._faixa : rangeSel && p._faixa !== rangeSel) return false;
-      const s = p._t && p._t.observacao;
-      if (tr === "__sem" && s) return false;
-      if (tr === "__com" && !s) return false;
       return true;
     });
     // ordem: mais urgente primeiro (vencido/vence antes), depois mais parado
@@ -290,11 +355,11 @@
   // ---------------- eventos da tela ----------------
   $("visoes").addEventListener("click", (e) => {
     const b = e.target.closest(".visao"); if (!b) return;
-    visao = b.dataset.visao; msSel = ""; rangeSel = ""; $("f-ms").value = ""; redesenhar();
+    visao = b.dataset.visao; msSel = ""; rangeSel = ""; redesenhar();
   });
   $("ms-linhas").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-ms]"); if (!tr) return;
-    msSel = msSel === tr.dataset.ms ? "" : tr.dataset.ms; rangeSel = ""; $("f-ms").value = "";
+    msSel = msSel === tr.dataset.ms ? "" : tr.dataset.ms; rangeSel = "";
     document.querySelectorAll("#ms-linhas tr").forEach((r) => r.classList.toggle("sel", r.dataset.ms === msSel));
     filtrar();
     if (msSel) $("lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" });
@@ -304,12 +369,10 @@
     const td = e.target.closest("td.clic, th.clic"); if (!td) return;
     const ms = td.dataset.ms || "", fx = td.dataset.faixa || "__avencer";
     if (msSel === ms && rangeSel === fx && visao === "todos") { msSel = ""; rangeSel = ""; } else { msSel = ms; rangeSel = fx; }
-    visao = "todos"; $("f-ms").value = "";
+    visao = "todos";
     redesenhar(); $("lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" });
   });
-  ["f-transp", "f-canal", "f-trat"].forEach((id) => $(id).addEventListener("change", () => filtrar()));
-  $("f-ms").addEventListener("change", () => { msSel = ""; rangeSel = ""; redesenhar(); });
-  let espera; $("f-busca").addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(() => filtrar(), 200); });
+  let espera; $("f-busca").addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(filtrosMudaram, 250); });
   $("paginacao").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-p]"); if (!b) return;
     pagina += Number(b.dataset.p); desenharLista(); $("lista-titulo").scrollIntoView({ block: "start" });
@@ -506,7 +569,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=5");
+        const w = new Worker("leitor-intelipost.js?v=6");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }

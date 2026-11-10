@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="styles.css?v=6">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -45,6 +45,15 @@
       <button class="menu-item ativo" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
     </nav>
     <main class="conteudo" id="pagina-preventivo">
+      <!-- filtros: valem para todas as tabelas da página -->
+      <section class="filtros-topo" id="filtros" aria-label="Filtros">
+        <label class="cresce">Buscar<input id="f-busca" type="search" placeholder="Pedido ou NF…"></label>
+        <div class="multi" data-filtro="transp" data-rotulo="Transportadora" data-todos="Todas"></div>
+        <div class="multi" data-filtro="canal" data-rotulo="Canal" data-todos="Todos"></div>
+        <div class="multi" data-filtro="ms" data-rotulo="Micro status" data-todos="Todos"></div>
+        <div class="multi" data-filtro="obs" data-rotulo="Observação" data-todos="Todas"></div>
+        <button id="f-limpar" class="btn" type="button" hidden>Limpar filtros</button>
+      </section>
       <p id="info-base" class="info-base">Carregando…</p>
       <p id="info-intelipost" class="info-base"></p>
 
@@ -98,13 +107,6 @@
           </div>
           <button id="btn-exportar" class="btn">Exportar (Excel)</button>
         </div>
-        <div class="filtros">
-          <label class="cresce">Buscar<input id="f-busca" type="search" placeholder="Pedido ou NF…"></label>
-          <label>Transportadora<select id="f-transp"></select></label>
-          <label>Canal<select id="f-canal"></select></label>
-          <label>Micro status<select id="f-ms"></select></label>
-          <label>Observação<select id="f-trat"></select></label>
-        </div>
         <div class="tabela-wrap">
           <table class="tabela-pedidos">
             <thead><tr>
@@ -134,7 +136,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=5"></script>
-  <script src="app.js?v=5"></script>
+  <script src="config.js?v=6"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
