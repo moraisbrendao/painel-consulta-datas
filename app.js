@@ -601,7 +601,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=12");
+        const w = new Worker("leitor-intelipost.js?v=13");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -658,8 +658,8 @@
   const semZero = (v) => String(v ?? "").trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "");
   function nfSerie(p) { const [n, sr] = String(p.nf || "").split("-"); return { nf: semZero(n), serie: semZero(sr) }; }
   let ocKeys = new Set(), ocSoNF = new Set(), ocInfo = null, ocOk = true;
-  // só pedidos a vencer (hoje em diante), as colunas "Vence" da tabela de range
-  const precisaOc = (p) => p._dias !== null && p._dias >= 0 && MS_OC.has(norm(p.micro_status));
+  // mesmos pedidos da tabela de range: vencidos e a vencer (com data prometida)
+  const precisaOc = (p) => !!p._faixa && MS_OC.has(norm(p.micro_status));
   function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
   function marcaOc(p) {
     if (!precisaOc(p)) return "";
