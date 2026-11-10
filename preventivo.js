@@ -256,8 +256,41 @@
     abrirLista(nome, baseAtual.filter((p) => (p.micro_status || "(sem micro status)") === nome));
   });
 
+  // ---------------- anotação rápida direto na tabela ----------------
+  function celulaNota(p) {
+    const ult = p._notas[0];
+    const quando = ult ? new Date(ult.criado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }) : "";
+    const texto = ult ? `<div class="nota-ult" title="${esc(ult.texto)}">📝 ${esc(ult.texto)}
+        <span class="secundario">${quando}${p._notas.length > 1 ? ` · +${p._notas.length - 1}` : ""}</span></div>` : "";
+    if (!P.ehAdmin) return texto || `<span class="secundario">—</span>`;
+    return `${texto}<input class="nota-rapida" data-nota-ped="${esc(p.pedido)}" maxlength="500"
+      placeholder="${ult ? "Nova anotação" : "Anotar"} + Enter" aria-label="Anotação do pedido ${esc(p.pedido)}">`;
+  }
+  async function salvarNotaRapida(input) {
+    const texto = input.value.trim();
+    if (!texto || input.disabled) return;
+    const ped = input.dataset.notaPed;
+    input.disabled = true;
+    const { data, error } = await sb.from("notas").insert({ pedido: ped, texto }).select().single();
+    input.disabled = false;
+    if (error) { toast("Erro ao salvar: " + error.message, true); input.focus(); return; }
+    notas.set(ped, [data].concat(notas.get(ped) || []));
+    const p = pedidos.find((x) => x.pedido === ped);
+    if (p) p._notas = notas.get(ped);
+    const td = input.closest("td");
+    if (td && p) td.innerHTML = celulaNota(p);
+    toast("Anotação salva.");
+    desenharMicro(baseAtual);
+  }
+  $("pv-linhas").addEventListener("keydown", (e) => {
+    const input = e.target.closest("input.nota-rapida");
+    if (!input) return;
+    if (e.key === "Enter") { e.preventDefault(); salvarNotaRapida(input); }
+    if (e.key === "Escape") { input.value = ""; input.blur(); }
+  });
+
   $("pv-linhas").addEventListener("click", (e) => {
-    if (e.target.closest("a")) return;
+    if (e.target.closest("a, input")) return;
     const tr = e.target.closest("tr[data-pedido]");
     if (!tr) return;
     const p = pedidos.find((x) => x.pedido === tr.dataset.pedido);
@@ -447,7 +480,8 @@
         <td><span class="chip-ms" style="--cor:${corResp(r)}">${esc(p.micro_status || "—")}</span>
             ${p.data_ultimo_status ? `<div class="secundario">desde ${br(p.data_ultimo_status)}</div>` : ""}</td>
         <td><span class="resp"><span class="ponto" style="background:${corResp(r)}"></span>
-            <span>${r ? esc(r.nome) : `<span class="pendente">${PENDENTE}</span>`}${r && r.area ? `<span class="secundario"> ${esc(r.area)}</span>` : ""}</span></span></td>
+            <span>${r ? esc(r.nome) : `<span class="pendente" title="${PENDENTE}">Pendente</span>`}${r && r.area ? `<span class="secundario"> ${esc(r.area)}</span>` : ""}</span></span></td>
+        <td class="col-nota">${celulaNota(p)}</td>
         <td class="obs">${sit}</td>
         <td>${/^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Acompanhar ↗</a>` : "—"}</td>
       </tr>`;
