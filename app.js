@@ -604,7 +604,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=14");
+        const w = new Worker("leitor-intelipost.js?v=15");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -651,6 +651,11 @@
     "Reunidas", "SAJOB", "VM TRANSPORTES", "Termaco", "Tradicional Log", "Trans Sua Log", "TRANSCAI TRANSPORTES", "Transiga",
     "Transito Brasil", "Translaguna", "Translovato", "Transportadora BLZ", "Transvanio", "Trilog Express", "TSL Transportes",
     "Zafer Standard", "Zelog Transportes"];
+  // como escolher no portal (definido pela Logística em 10/11/2026)
+  const NOME_NO_PORTAL = { "VM TRANSPORTES": "VM TRANSPORTES (a 1ª da lista)", "Atual Cargas": "Atual Cargas Standard",
+    "Transiga": "TRANSIGA", "Petrymar": "Petrymar Transportes", "TRANSCAI TRANSPORTES": "Transcai" };
+  const MOTIVO_PORTAL = { "CARGA RECUSADA PELO DESTINATARIO": "Recusa", "AGUARDANDO INSTRUCAO": "Confirmação de dados" };
+  const motivoPortal = (ms) => MOTIVO_PORTAL[norm(ms)] || ms;
   function transpPortal(nome) {
     const n = norm(nome); if (!n) return "(sem transportadora)";
     const igual = TRANSP_PORTAL.find((t) => norm(t) === n); if (igual) return igual;
@@ -696,11 +701,11 @@
       const grupos = new Map();
       doMs.forEach((p) => { const k = transpPortal(p.transportadora); (grupos.get(k) || grupos.set(k, []).get(k)).push(p); });
       const linhas = [...grupos.entries()].sort((a, b) => b[1].length - a[1].length).map(([tp, ps]) => `
-        <tr><td><b>${esc(tp)}</b>${norm(tp) !== norm(ps[0].transportadora) ? `<div class="s">na base: ${esc(ps[0].transportadora || "—")}</div>` : ""}</td>
+        <tr><td><b>${esc(NOME_NO_PORTAL[tp] || tp)}</b>${norm(tp) !== norm(ps[0].transportadora) ? `<div class="s">na base: ${esc(ps[0].transportadora || "—")}</div>` : ""}</td>
           <td class="num">${fmt(ps.length)}</td>
           <td><details><summary>ver notas</summary><div class="s">${ps.map((p) => esc(p.nf)).join(", ")}</div></details></td>
           <td class="dir"><button class="btn" data-template="${esc(ms)}|${esc(tp)}">⬇ Baixar template</button></td></tr>`).join("");
-      return `<div class="oc-grupo"><h3>${esc(ms)} <span class="s">· motivo em massa: ${esc(ms)} · ${fmt(doMs.length)} nota${doMs.length === 1 ? "" : "s"}</span></h3>
+      return `<div class="oc-grupo"><h3>${esc(ms)} <span class="s">· motivo em massa no portal: <b>${esc(motivoPortal(ms))}</b> · ${fmt(doMs.length)} nota${doMs.length === 1 ? "" : "s"}</span></h3>
         <table class="tabela-oc"><thead><tr><th>Transportadora no portal</th><th class="num">Notas</th><th></th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`;
     }).join("");
   }
