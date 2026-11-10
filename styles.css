@@ -209,3 +209,5 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .chips-sac span { display: inline-flex; align-items: center; gap: 6px; background: var(--cinza-bg); border-radius: 99px; padding: 4px 6px 4px 12px; font-size: 13px; }
 .chips-sac button { border: 0; background: none; cursor: pointer; font-size: 15px; color: var(--texto-2); }
 @media (max-width: 800px) { .filtros-sac { grid-template-columns: 1fr 1fr; } .filtros-sac .cresce { grid-column: 1 / -1; } }
+.aviso-perfil { margin: 0; padding: 10px 20px; background: #fdecea; color: #8a1c1c; font-size: 14px; border-bottom: 1px solid #f5c2c0; }
+.aviso-perfil[hidden] { display: none; }

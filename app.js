@@ -79,8 +79,13 @@
   async function entrar() {
     carregando("Entrando…");
     let r = { data: "logistica" };
-    try { r = await sb.rpc("meu_perfil_painel"); } catch (_) { /* banco antigo: trata como Logística */ }
+    try { r = await sb.rpc("meu_perfil_painel"); } catch (err) { r = { error: err }; }
     carregando("");
+    if (!r || r.error) {
+      // banco ainda sem a parte do SAC: avisa (sem isso, o login do SAC veria tudo)
+      $("aviso-perfil").hidden = false;
+      r = { data: "logistica" };
+    }
     perfil = r && r.data === "sac" ? "sac" : "logistica";
     document.body.dataset.perfil = perfil;
     $("tela-painel").hidden = false;
@@ -592,7 +597,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=9");
+        const w = new Worker("leitor-intelipost.js?v=10");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
