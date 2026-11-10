@@ -31,6 +31,13 @@ para agir antes do atraso.
 - **Tabela**: NF, Pedido Intelipost, Transportadora, Previsão original, Nova data informada, Micro status, Responsável,
   Situação do último retorno da transportadora e link de rastreio.
 
+- **Por micro status**: pedidos, dias parados (média de dias desde a última atualização na Intelipost), vencidos e
+  quantos têm anotação.
+- **Clique para abrir**: cards, linhas do range, responsáveis e micro status abrem a lista dos pedidos; clicando num pedido
+  (na lista ou na tabela) abre o detalhe com as previsões, o último evento, os retornos da transportadora e as anotações.
+- **Anotações**: a Logística escreve o que já foi feito em cada pedido. Elas ficam gravadas e aparecem enquanto o pedido
+  estiver em aberto; quando ele é entregue ou cancelado na Intelipost, sai da base e as anotações deixam de aparecer.
+
 Como a Logística atualiza:
 1. **Enviar arquivos → 3. Base da Intelipost**: escolha o `transactions_....xlsx` exportado da Intelipost. O site lê o arquivo
    (uns 20 a 30 segundos para 67 mil linhas), mostra quantos pedidos entram e substitui a base anterior.

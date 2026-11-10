@@ -68,7 +68,8 @@
       <div class="pv-paineis">
         <section class="cartao">
           <h2>Range de vencimento</h2>
-          <p class="sub">Pela nova data informada pela transportadora; sem ela, pela previsão atual da Intelipost.</p>
+          <p class="sub">Pela nova data informada pela transportadora; sem ela, pela previsão atual da Intelipost.
+            Clique numa linha para abrir os pedidos.</p>
           <div class="tabela-wrap mini"><table class="tabela-range">
             <thead><tr><th>Range</th><th>Pedidos</th><th>%</th><th></th></tr></thead>
             <tbody id="pv-range"></tbody>
@@ -76,10 +77,22 @@
         </section>
         <section class="cartao">
           <h2>Micro status por responsável</h2>
-          <p class="sub">Clique para ver os pedidos de cada um.</p>
+          <p class="sub">Clique para abrir os pedidos de cada um.</p>
           <ul id="pv-resp" class="lista-resp"></ul>
         </section>
       </div>
+
+      <section class="cartao">
+        <h2>Por micro status</h2>
+        <p class="sub">Dias parados = dias desde a última atualização do micro status na Intelipost. Clique numa linha para abrir os pedidos.</p>
+        <div class="tabela-wrap mini">
+          <table class="tabela-ms">
+            <thead><tr><th>Micro status</th><th>Responsável</th><th class="dir">Pedidos</th><th class="dir">Dias parados (média)</th>
+              <th class="dir">Já vencidos</th><th class="dir">Com anotação</th></tr></thead>
+            <tbody id="pv-ms"></tbody>
+          </table>
+        </div>
+      </section>
 
       <section class="filtros filtros-pv">
         <label class="busca">Buscar
@@ -302,6 +315,18 @@
         </div>
       </section>
     </main>
+  </div>
+
+  <!-- janela para abrir listas de pedidos e o detalhe de um pedido -->
+  <div id="modal" class="modal" hidden>
+    <div class="modal-caixa" role="dialog" aria-modal="true" aria-labelledby="modal-titulo">
+      <header class="modal-topo">
+        <button id="modal-voltar" class="btn fantasma" hidden>‹ Voltar</button>
+        <h2 id="modal-titulo"></h2>
+        <button id="modal-fechar" class="fechar" aria-label="Fechar">×</button>
+      </header>
+      <div id="modal-corpo" class="modal-corpo"></div>
+    </div>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>

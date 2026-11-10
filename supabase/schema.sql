@@ -401,3 +401,23 @@ select public.chave_ms(n), n from unnest(array[
   'MERCADORIA EM DEVOLUCAO EM OUTRA OPERACAO','PRONTO PARA RETIRADA','FALHA NA ENTREGA','DEVOLUCAO - SAIDA FILIAL'
 ]) as n
 on conflict (chave) do nothing;
+
+-- =====================================================================
+-- ANOTAÇÕES por pedido (Logística escreve, todos leem).
+-- Só aparecem enquanto o pedido está em aberto na base da Intelipost:
+-- quando ele é entregue ou cancelado, sai da base e as anotações somem do painel.
+-- =====================================================================
+create table if not exists public.notas (
+  id         bigint generated always as identity primary key,
+  pedido     text not null,
+  texto      text not null check (length(trim(texto)) > 0),
+  autor      text not null default (auth.jwt() ->> 'email'),
+  criado_em  timestamptz not null default now()
+);
+create index if not exists notas_pedido_idx on public.notas (pedido, criado_em desc);
+alter table public.notas enable row level security;
+drop policy if exists "logados consultam" on public.notas;
+drop policy if exists "admin altera" on public.notas;
+create policy "logados consultam" on public.notas for select to authenticated using (true);
+create policy "admin altera" on public.notas for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());

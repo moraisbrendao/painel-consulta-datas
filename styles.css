@@ -226,3 +226,49 @@ table.compacta .chip-ms { font-size: 10px; padding: 3px 6px; }
 table.compacta td.obs { max-width: 220px; }
 #tabela-micro td { vertical-align: middle; padding: 6px 12px; }
 #tabela-micro select { padding: 6px 10px; }
+
+/* ---------- v4: janela de pedidos, anotações, tabela por micro status ---------- */
+tr.clicavel { cursor: pointer; }
+tbody tr.clicavel:hover td { background: #fffbea; }
+th.dir, td.dir { text-align: right; }
+.tabela-ms td { vertical-align: middle; padding: 8px 12px; }
+.txt-vermelho { color: var(--vermelho); font-weight: 700; }
+.txt-ambar { color: var(--ambar); font-weight: 700; }
+.tag-nota { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 600; color: var(--marinho);
+  background: var(--ambar-bg); border-radius: 99px; padding: 1px 8px; }
+
+body.sem-rolagem { overflow: hidden; }
+.modal { position: fixed; inset: 0; background: rgba(13, 34, 64, .55); z-index: 20; display: flex;
+  align-items: flex-start; justify-content: center; padding: 32px 16px; }
+.modal-caixa { background: var(--fundo); width: 100%; max-width: 1200px; max-height: calc(100vh - 64px); border-radius: 14px;
+  display: flex; flex-direction: column; box-shadow: 0 24px 60px rgba(0,0,0,.3); overflow: hidden; }
+.modal-topo { background: var(--marinho); color: #fff; display: flex; align-items: center; gap: 12px; padding: 14px 18px;
+  border-bottom: 4px solid var(--amarelo); }
+.modal-topo h2 { color: #fff; margin: 0; flex: 1; font-size: 17px; overflow-wrap: anywhere; }
+.modal-topo .btn.fantasma { color: #fff; border-color: rgba(255,255,255,.3); padding: 6px 12px; }
+.fechar { background: none; border: 0; color: #fff; font-size: 28px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.modal-corpo { overflow: auto; padding: 18px; display: flex; flex-direction: column; gap: 14px; }
+.modal-acoes { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; color: var(--texto-2); }
+
+.detalhe-grade { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px;
+  background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px; }
+.campo { display: flex; flex-direction: column; gap: 3px; }
+.campo .rot { font-size: 11px; font-weight: 600; color: var(--texto-2); text-transform: uppercase; letter-spacing: .02em; }
+.campo .val { font-size: 14px; }
+.ultimo-evento { margin: 0; background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 12px 16px; }
+.detalhe-colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.detalhe-colunas > section { background: var(--card); border: 1px solid var(--borda); border-radius: var(--raio); padding: 16px;
+  display: flex; flex-direction: column; gap: 10px; }
+h3 { margin: 0; font-size: 15px; color: var(--marinho); }
+.form-nota { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+.form-nota textarea { width: 100%; font: inherit; font-size: 14px; padding: 10px 12px; border-radius: 8px; border: 1px solid var(--borda); resize: vertical; }
+.form-nota textarea:focus { outline: 2px solid var(--amarelo); outline-offset: -1px; }
+.lista-notas { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.lista-notas li { border-left: 3px solid var(--amarelo); background: #fffdf3; padding: 8px 12px; border-radius: 0 8px 8px 0; }
+.lista-notas li.secundario { border: 0; background: none; padding: 0; }
+.nota-texto { white-space: pre-wrap; }
+@media (max-width: 860px) {
+  .detalhe-colunas { grid-template-columns: 1fr; }
+  .modal { padding: 0; }
+  .modal-caixa { max-height: 100vh; border-radius: 0; }
+}

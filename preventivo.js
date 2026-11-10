@@ -14,6 +14,8 @@
   let micro = new Map();     // chave -> {chave, nome, responsavel_id}
   let resps = [];            // [{id, nome, area}]
   let info = null;           // intelipost_info
+  let notas = new Map();     // pedido -> [anotações, mais nova primeiro]
+  let baseAtual = [];        // pedidos com os filtros de cima (sem o de vencimento)
   let filtrados = [];
   let pagina = 1;
 
@@ -44,12 +46,15 @@
     carregando = (async () => {
       $("pv-info").textContent = "Carregando…";
       try {
-        const [ps, ms, rs, inf] = await Promise.all([
+        const [ps, ms, rs, inf, ns] = await Promise.all([
           P.buscarTudo("intelipost", "*", (q) => q.order("pedido")),
           P.buscarTudo("micro_status", "*", (q) => q.order("nome")),
           P.buscarTudo("responsaveis", "*", (q) => q.order("nome")),
           sb.from("intelipost_info").select("*").limit(1),
+          P.buscarTudo("notas", "*", (q) => q.order("criado_em", { ascending: false })),
         ]);
+        notas = new Map();
+        ns.forEach((n) => { if (!notas.has(n.pedido)) notas.set(n.pedido, []); notas.get(n.pedido).push(n); });
         pedidos = ps;
         micro = new Map(ms.map((m) => [m.chave, m]));
         resps = rs;
@@ -85,6 +90,8 @@
       else if (p.prev_cliente && p.prev_cliente_original && p.prev_cliente !== p.prev_cliente_original) {
         p._nova = p.prev_cliente; p._novaFonte = "Intelipost";
       } else { p._nova = null; p._novaFonte = null; }
+      p._notas = notas.get(p.pedido) || [];
+      p._parado = p.data_ultimo_status ? Math.max(0, diasEntre(hoje, p.data_ultimo_status)) : null;
       const ref = p._nova || p.prev_cliente || p.prev_cliente_original;
       p._dias = ref ? diasEntre(hoje, ref) : null;
       p._range = ref ? RANGES.find((r) => r.teste(p._dias)) : RANGES[RANGES.length - 1];
@@ -136,7 +143,9 @@
     desenharCards(base);
     desenharResp(base);
     const comResp = base.filter((p) => !rf || (rf === "__pend" ? !p._resp : p._resp && String(p._resp.id) === rf));
+    baseAtual = comResp;
     desenharRange(comResp, rg);
+    desenharMicro(comResp);
     filtrados = comResp.filter((p) => !rg ||
       (rg === "__risco" ? ["hoje", "risco"].includes(p._range.id)
         : rg === "__vencido" ? p._range.id.startsWith("vencido") : p._range.id === rg));
@@ -167,9 +176,11 @@
     const b = e.target.closest("[data-pv]");
     if (!b) return;
     const v = b.dataset.pv;
-    $("pv-respf").value = v === "__pend" ? "__pend" : "";
-    $("pv-rangef").value = v === "__pend" ? "" : v;
-    filtrar();
+    const lista = v === "__pend" ? baseAtual.filter((p) => !p._resp)
+      : v === "__risco" ? baseAtual.filter((p) => ["hoje", "risco"].includes(p._range.id))
+      : v === "__vencido" ? baseAtual.filter((p) => p._range.id.startsWith("vencido")) : baseAtual;
+    const rot = b.querySelector(".rot").textContent.split("·")[0].trim();
+    abrirLista(rot, lista);
   });
 
   function desenharRange(base, ativo) {
@@ -186,8 +197,8 @@
   $("pv-range").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-range]");
     if (!tr) return;
-    $("pv-rangef").value = $("pv-rangef").value === tr.dataset.range ? "" : tr.dataset.range;
-    filtrar();
+    const r = RANGES.find((x) => x.id === tr.dataset.range);
+    abrirLista(r.nome, baseAtual.filter((p) => p._range.id === r.id));
   });
 
   function desenharResp(base) {
@@ -207,9 +218,204 @@
   $("pv-resp").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-resp]");
     if (!b) return;
-    $("pv-respf").value = $("pv-respf").value === b.dataset.resp ? "" : b.dataset.resp;
-    filtrar();
+    const id = b.dataset.resp;
+    const lista = baseAtual.filter((p) => (id === "__pend" ? !p._resp : p._resp && String(p._resp.id) === id));
+    abrirLista(b.querySelector(".nome").textContent, lista);
   });
+
+
+  // ---------------- tabela por micro status ----------------
+  function desenharMicro(base) {
+    const g = new Map();
+    base.forEach((p) => {
+      const k = p.micro_status || "(sem micro status)";
+      if (!g.has(k)) g.set(k, { nome: k, resp: p._resp, n: 0, soma: 0, comData: 0, venc: 0, nota: 0 });
+      const x = g.get(k);
+      x.n++;
+      if (p._parado !== null) { x.soma += p._parado; x.comData++; }
+      if (p._range.id.startsWith("vencido")) x.venc++;
+      if (p._notas.length) x.nota++;
+    });
+    const linhas = [...g.values()].sort((a, b) => b.n - a.n);
+    $("pv-ms").innerHTML = linhas.map((x) => {
+      const media = x.comData ? x.soma / x.comData : null;
+      const alerta = media !== null && media >= 15 ? "vermelho" : media !== null && media >= 7 ? "ambar" : "";
+      return `<tr class="clicavel" data-ms-nome="${esc(x.nome)}">
+        <td>${esc(x.nome)}</td>
+        <td><span class="resp"><span class="ponto" style="background:${corResp(x.resp)}"></span>${x.resp ? esc(x.resp.nome) : `<span class="pendente">${PENDENTE}</span>`}</span></td>
+        <td class="dir"><b>${fmt(x.n)}</b></td>
+        <td class="dir"><span class="${alerta ? "txt-" + alerta : ""}">${media === null ? "—" : media.toLocaleString("pt-BR", { maximumFractionDigits: 1 })}</span></td>
+        <td class="dir">${x.venc ? fmt(x.venc) : "—"}</td>
+        <td class="dir">${x.nota ? fmt(x.nota) : "—"}</td></tr>`;
+    }).join("") || `<tr><td colspan="6" class="secundario">Nenhum pedido.</td></tr>`;
+  }
+  $("pv-ms").addEventListener("click", (e) => {
+    const tr = e.target.closest("tr[data-ms-nome]");
+    if (!tr) return;
+    const nome = tr.dataset.msNome;
+    abrirLista(nome, baseAtual.filter((p) => (p.micro_status || "(sem micro status)") === nome));
+  });
+
+  $("pv-linhas").addEventListener("click", (e) => {
+    if (e.target.closest("a")) return;
+    const tr = e.target.closest("tr[data-pedido]");
+    if (!tr) return;
+    const p = pedidos.find((x) => x.pedido === tr.dataset.pedido);
+    if (p) abrirPedido(p, null);
+  });
+
+  // =================================================================
+  // Janela: lista de pedidos e detalhe do pedido (com anotações)
+  // =================================================================
+  const LIMITE_LISTA = 500;
+  let listaAberta = null;   // {titulo, lista} para o botão "Voltar"
+
+  function abrirModal(titulo, html, comVoltar) {
+    $("modal-titulo").textContent = titulo;
+    $("modal-corpo").innerHTML = html;
+    $("modal-voltar").hidden = !comVoltar;
+    $("modal").hidden = false;
+    document.body.classList.add("sem-rolagem");
+    $("modal-corpo").scrollTop = 0;
+  }
+  function fecharModal() {
+    $("modal").hidden = true;
+    document.body.classList.remove("sem-rolagem");
+    listaAberta = null;
+  }
+  $("modal-fechar").addEventListener("click", fecharModal);
+  $("modal").addEventListener("click", (e) => { if (e.target.id === "modal") fecharModal(); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("modal").hidden) fecharModal(); });
+  $("modal-voltar").addEventListener("click", () => { if (listaAberta) abrirLista(listaAberta.titulo, listaAberta.lista); });
+
+  function textoVencimento(p) {
+    return p._dias === null ? "sem previsão" : p._dias > 0 ? `vencido há ${p._dias} dia${p._dias > 1 ? "s" : ""}`
+      : p._dias === 0 ? "vence hoje" : `vence em ${-p._dias} dia${p._dias < -1 ? "s" : ""}`;
+  }
+
+  function abrirLista(titulo, lista) {
+    const ordenada = [...lista].sort((a, b) => (b._dias ?? -9999) - (a._dias ?? -9999) || a.pedido.localeCompare(b.pedido));
+    listaAberta = { titulo, lista: ordenada };
+    const mostra = ordenada.slice(0, LIMITE_LISTA);
+    const html = `
+      <div class="modal-acoes"><span><b>${fmt(ordenada.length)}</b> pedidos · clique num pedido para abrir</span>
+        <button class="btn fantasma" id="modal-baixar">Baixar (Excel)</button></div>
+      <div class="tabela-wrap"><table class="compacta">
+        <thead><tr><th>NF</th><th>Pedido Intelipost</th><th>Transportadora</th><th>Previsão original</th><th>Nova data</th>
+          <th>Micro status</th><th class="dir">Dias parado</th><th>Responsável</th><th>Anotação mais recente</th></tr></thead>
+        <tbody>${mostra.map((p) => `<tr class="clicavel" data-pedido="${esc(p.pedido)}">
+          <td class="num-data"><b>${esc(p.nf || "—")}</b></td>
+          <td>${esc(p.pedido)}</td>
+          <td>${esc(p.transportadora || "—")}</td>
+          <td class="num-data">${br(p.prev_cliente_original) || "—"}<div class="secundario">${textoVencimento(p)}</div></td>
+          <td class="num-data">${p._nova ? `<span class="chip ${p._range.cor}">${br(p._nova)}</span>` : "—"}</td>
+          <td><span class="chip-ms" style="--cor:${corResp(p._resp)}">${esc(p.micro_status || "—")}</span></td>
+          <td class="dir">${p._parado ?? "—"}</td>
+          <td>${p._resp ? esc(p._resp.nome) : `<span class="pendente">${PENDENTE}</span>`}</td>
+          <td class="obs">${p._notas.length ? `📝 ${esc(p._notas[0].texto)}` : `<span class="secundario">—</span>`}</td>
+        </tr>`).join("")}</tbody></table></div>
+      ${ordenada.length > LIMITE_LISTA ? `<p class="secundario">Mostrando os primeiros ${LIMITE_LISTA} (dos mais atrasados para os menos). Use "Baixar (Excel)" para ver todos.</p>` : ""}`;
+    abrirModal(titulo, html, false);
+    $("modal-baixar").addEventListener("click", () => baixar(ordenada, "pedidos"));
+  }
+
+  $("modal-corpo").addEventListener("click", async (e) => {
+    if (e.target.closest("a")) return;
+    const tr = e.target.closest("tr[data-pedido]");
+    if (tr) {
+      const p = pedidos.find((x) => x.pedido === tr.dataset.pedido);
+      if (p) abrirPedido(p, listaAberta);
+      return;
+    }
+    const del = e.target.closest("button[data-del-nota]");
+    if (del) {
+      if (!confirm("Apagar essa anotação?")) return;
+      const { error } = await sb.from("notas").delete().eq("id", Number(del.dataset.delNota));
+      if (error) { toast("Erro: " + error.message, true); return; }
+      const ped = del.dataset.pedido;
+      notas.set(ped, (notas.get(ped) || []).filter((n) => n.id !== Number(del.dataset.delNota)));
+      const p = pedidos.find((x) => x.pedido === ped);
+      p._notas = notas.get(ped);
+      abrirPedido(p, listaAberta, true);
+      filtrar();
+    }
+  });
+
+  async function abrirPedido(p, voltarPara, manterRolagem) {
+    if (voltarPara !== undefined) listaAberta = voltarPara;
+    const r = p._resp;
+    const campo = (rot, val) => `<div class="campo"><span class="rot">${rot}</span><span class="val">${val || "—"}</span></div>`;
+    const html = `
+      <div class="detalhe-grade">
+        ${campo("NF", `<b>${esc(p.nf)}</b>`)}
+        ${campo("Pedido de venda", esc(p.pedido_venda))}
+        ${campo("Canal", esc(p.canal))}
+        ${campo("Transportadora", esc(p.transportadora))}
+        ${campo("Destino", esc([p.cidade, p.uf].filter(Boolean).join(" / ")))}
+        ${campo("Despacho", br(p.data_despacho))}
+        ${campo("Previsão original", br(p.prev_cliente_original))}
+        ${campo("Previsão atual (Intelipost)", br(p.prev_cliente))}
+        ${campo("Nova data informada", p._nova ? `<span class="chip ${p._range.cor}">${br(p._nova)}</span> <span class="secundario">${p._novaFonte === "Intelipost" ? "Intelipost" : "transportadora"}</span>` : "")}
+        ${campo("Vencimento", `<span class="chip ${p._range.cor}">${esc(p._range.nome)}</span> <span class="secundario">${textoVencimento(p)}</span>`)}
+        ${campo("Micro status", `<span class="chip-ms" style="--cor:${corResp(r)}">${esc(p.micro_status)}</span>`)}
+        ${campo("Parado há", p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} <span class="secundario">(desde ${br(p.data_ultimo_status)})</span>` : "")}
+        ${campo("Responsável", r ? esc(nomeResp(r)) : `<span class="pendente">${PENDENTE}</span>`)}
+        ${campo("Status transportador", esc(p.status_transp))}
+        ${campo("Rastreio", /^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Acompanhar na Intelipost ↗</a>` : "")}
+      </div>
+      ${p.descricao ? `<p class="ultimo-evento"><b>Último evento da transportadora:</b> ${esc(p.descricao)}</p>` : ""}
+
+      <div class="detalhe-colunas">
+        <section>
+          <h3>Anotações da Logística</h3>
+          ${P.ehAdmin ? `<form id="form-nota" class="form-nota">
+              <textarea id="nota-texto" rows="3" required placeholder="Ex.: Cobrado a transportadora por e-mail, aguardando retorno."></textarea>
+              <button class="btn primario" type="submit">Salvar anotação</button>
+            </form>` : ""}
+          <ul class="lista-notas">${p._notas.length ? p._notas.map((n) => `<li>
+              <div class="nota-texto">${esc(n.texto)}</div>
+              <div class="secundario">${new Date(n.criado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${esc(n.autor)}
+                ${P.ehAdmin ? ` · <button class="link perigo" data-del-nota="${n.id}" data-pedido="${esc(p.pedido)}">apagar</button>` : ""}</div>
+            </li>`).join("") : `<li class="secundario">Nenhuma anotação ainda.</li>`}</ul>
+          <p class="secundario">As anotações ficam aqui até o pedido ser entregue ou cancelado na Intelipost.</p>
+        </section>
+        <section>
+          <h3>Retornos da transportadora</h3>
+          <ol class="linha-tempo" id="det-retornos"><li class="secundario">Carregando…</li></ol>
+        </section>
+      </div>`;
+    const rol = $("modal-corpo").scrollTop;
+    abrirModal(`Pedido ${p.pedido}`, html, !!listaAberta);
+    if (manterRolagem) $("modal-corpo").scrollTop = rol;
+
+    const form = document.getElementById("form-nota");
+    if (form) form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const texto = document.getElementById("nota-texto").value.trim();
+      if (!texto) return;
+      const btn = form.querySelector("button"); btn.disabled = true;
+      const { data, error } = await sb.from("notas").insert({ pedido: p.pedido, texto }).select().single();
+      btn.disabled = false;
+      if (error) { toast("Erro ao salvar: " + error.message, true); return; }
+      notas.set(p.pedido, [data].concat(notas.get(p.pedido) || []));
+      p._notas = notas.get(p.pedido);
+      toast("Anotação salva.");
+      abrirPedido(p, listaAberta);
+      filtrar();
+    });
+
+    const { data, error } = await sb.from("retornos").select("texto,nova_data,data_retorno")
+      .eq("pedido", p.pedido).order("data_retorno", { ascending: false }).order("id", { ascending: false });
+    const alvo = document.getElementById("det-retornos");
+    if (!alvo) return;
+    if (error) { alvo.innerHTML = `<li>Erro: ${esc(error.message)}</li>`; return; }
+    alvo.innerHTML = data.length ? data.map((x) => {
+      const cat = PAD.categorizar(x.texto, P.grupos);
+      return `<li><span class="quando">${br(x.data_retorno)}</span><span>${esc(x.texto)}</span>
+        ${x.nova_data ? `<span class="chip cinza">data: ${br(x.nova_data)}</span>` : ""}
+        ${cat ? `<span class="chip azul">${esc(cat)}</span>` : ""}</li>`;
+    }).join("") : `<li class="secundario">Nenhum retorno recebido para esse pedido.</li>`;
+  }
 
   let timer;
   $("pv-busca").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(filtrar, 200); });
@@ -231,9 +437,10 @@
         ? `${p._sitCat ? `<span class="chip azul">${esc(p._sitRet)}</span>` : esc(p._sitRet)}
            <div class="secundario">retorno de ${br(p._ult.data_retorno)}</div>`
         : `<span class="secundario">Sem retorno</span>`;
-      return `<tr>
+      return `<tr class="clicavel" data-pedido="${esc(p.pedido)}">
         <td class="num-data"><b>${esc(p.nf || "—")}</b></td>
-        <td><div class="principal">${esc(p.pedido)}</div><div class="secundario">${esc(p.canal || "")}</div></td>
+        <td><div class="principal">${esc(p.pedido)}</div><div class="secundario">${esc(p.canal || "")}</div>
+            ${p._notas.length ? `<div class="tag-nota">📝 ${p._notas.length} anotaç${p._notas.length > 1 ? "ões" : "ão"}</div>` : ""}</td>
         <td>${esc(p.transportadora || "—")}<div class="secundario">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td class="num-data">${br(p.prev_cliente_original) || "—"}<div class="secundario">${dias}</div></td>
         <td class="num-data">${nova}</td>
@@ -260,20 +467,21 @@
     window.scrollTo({ top: $("pv-linhas").closest("section").offsetTop - 10, behavior: "smooth" });
   });
 
-  $("pv-baixar").addEventListener("click", () => {
+  $("pv-baixar").addEventListener("click", () => baixar(filtrados, "preventivo"));
+  function baixar(lista, nomeArq) {
     const cab = ["NF", "Pedido Intelipost", "Pedido de venda", "Canal", "Transportadora", "Previsão original", "Nova data informada",
-      "Origem da nova data", "Vencimento", "Micro status", "Responsável", "Situação último retorno", "Data do retorno", "Cidade", "UF", "Rastreio"];
+      "Origem da nova data", "Vencimento", "Micro status", "Dias parado", "Responsável", "Situação último retorno", "Data do retorno", "Anotação mais recente", "Cidade", "UF", "Rastreio"];
     const q = (v) => `"${String(v ?? "").replace(/"/g, '""')}"`;
-    const linhas = filtrados.map((p) => [p.nf, p.pedido, p.pedido_venda, p.canal, p.transportadora, br(p.prev_cliente_original),
-      br(p._nova), p._novaFonte, p._range.nome, p.micro_status, nomeResp(p._resp), p._sitRet,
-      br(p._ult && p._ult.data_retorno), p.cidade, p.uf, p.link_rastreio].map(q).join(";"));
+    const linhas = lista.map((p) => [p.nf, p.pedido, p.pedido_venda, p.canal, p.transportadora, br(p.prev_cliente_original),
+      br(p._nova), p._novaFonte, p._range.nome, p.micro_status, p._parado, nomeResp(p._resp), p._sitRet,
+      br(p._ult && p._ult.data_retorno), p._notas[0] && p._notas[0].texto, p.cidade, p.uf, p.link_rastreio].map(q).join(";"));
     const blob = new Blob(["﻿" + [cab.map(q).join(";")].concat(linhas).join("\r\n")], { type: "text/csv;charset=utf-8" });
     const a = document.createElement("a");
     a.href = URL.createObjectURL(blob);
-    a.download = `preventivo_${P.hojeISO()}.csv`;
+    a.download = `${nomeArq}_${P.hojeISO()}.csv`;
     a.click();
     setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
+  }
 
   // =================================================================
   // Envio da base da Intelipost (Logística)
