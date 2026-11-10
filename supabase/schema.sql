@@ -266,3 +266,138 @@ begin
     perform public._carregar_regras_padrao();
   end if;
 end $$;
+
+-- =====================================================================
+-- PREVENTIVO (Intelipost): base de pedidos em aberto, responsáveis e
+-- micro status. Pode rodar de novo sem perder nada.
+-- =====================================================================
+
+-- Chave do micro status: maiúsculo, sem acento e sem espaços sobrando
+create or replace function public.chave_ms(t text)
+returns text language sql immutable as $$
+  select upper(regexp_replace(trim(translate(coalesce(t, ''),
+    'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ',
+    'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')), '\s+', ' ', 'g'));
+$$;
+
+-- Pessoas/áreas responsáveis
+create table if not exists public.responsaveis (
+  id     bigint generated always as identity primary key,
+  nome   text not null,
+  area   text,
+  unique (nome)
+);
+
+-- Cada micro status tem (ou não) um responsável. Sem responsável = "Pendente de responsável"
+create table if not exists public.micro_status (
+  chave           text primary key,
+  nome            text not null,
+  responsavel_id  bigint references public.responsaveis(id) on delete set null,
+  criado_em       timestamptz not null default now()
+);
+
+-- Pedidos em aberto da última base da Intelipost (entregues e cancelados não entram)
+create table if not exists public.intelipost (
+  pedido                 text primary key,   -- coluna "Pedido" (= Pedido Intelipost)
+  nf                     text,               -- Nota Fiscal-Série
+  pedido_venda           text,
+  canal                  text,
+  transportadora         text,
+  status_transp          text,               -- Status Transportador
+  micro_status           text,
+  descricao              text,               -- Descrição Transportador (último evento)
+  data_ultimo_status     date,
+  data_despacho          date,
+  prev_cliente           date,               -- Previsão Entrega Cliente (atual)
+  prev_cliente_original  date,               -- Previsão Entrega Cliente Original
+  prev_transp            date,               -- Previsão Entrega Transp.
+  uf                     text,
+  cidade                 text,
+  link_rastreio          text
+);
+create index if not exists intelipost_nf_idx on public.intelipost (nf);
+
+-- Resumo da última base enviada (uma linha só)
+create table if not exists public.intelipost_info (
+  id            int primary key default 1 check (id = 1),
+  arquivo       text,
+  enviado_por   text,
+  enviado_em    timestamptz not null default now(),
+  resumo        jsonb
+);
+
+alter table public.responsaveis    enable row level security;
+alter table public.micro_status    enable row level security;
+alter table public.intelipost      enable row level security;
+alter table public.intelipost_info enable row level security;
+
+do $$
+declare t text;
+begin
+  foreach t in array array['responsaveis','micro_status','intelipost','intelipost_info'] loop
+    execute format('drop policy if exists "logados consultam" on public.%I', t);
+    execute format('drop policy if exists "admin altera" on public.%I', t);
+    execute format('create policy "logados consultam" on public.%I for select to authenticated using (true)', t);
+    execute format('create policy "admin altera" on public.%I for all to authenticated using (public.is_admin()) with check (public.is_admin())', t);
+  end loop;
+end $$;
+
+-- Recebe a base da Intelipost em partes. Na primeira parte (limpar = true) apaga a base anterior.
+-- Micro status que ainda não existem entram sem responsável.
+create or replace function public.importar_intelipost(linhas jsonb, limpar boolean, arquivo text, resumo jsonb)
+returns int
+language plpgsql security definer set search_path = public
+as $$
+declare n int;
+begin
+  if not public.is_admin() then
+    raise exception 'Somente a Logística pode enviar a base da Intelipost.';
+  end if;
+  if limpar then
+    delete from public.intelipost where true;
+    insert into public.intelipost_info (id, arquivo, enviado_por, enviado_em, resumo)
+    values (1, importar_intelipost.arquivo, auth.jwt() ->> 'email', now(), importar_intelipost.resumo)
+    on conflict (id) do update set arquivo = excluded.arquivo, enviado_por = excluded.enviado_por,
+      enviado_em = excluded.enviado_em, resumo = excluded.resumo;
+  end if;
+
+  insert into public.intelipost
+  select * from jsonb_populate_recordset(null::public.intelipost, linhas)
+  where coalesce(pedido, '') <> ''
+  on conflict (pedido) do update set
+    nf = excluded.nf, pedido_venda = excluded.pedido_venda, canal = excluded.canal,
+    transportadora = excluded.transportadora, status_transp = excluded.status_transp,
+    micro_status = excluded.micro_status, descricao = excluded.descricao,
+    data_ultimo_status = excluded.data_ultimo_status, data_despacho = excluded.data_despacho,
+    prev_cliente = excluded.prev_cliente, prev_cliente_original = excluded.prev_cliente_original,
+    prev_transp = excluded.prev_transp, uf = excluded.uf, cidade = excluded.cidade,
+    link_rastreio = excluded.link_rastreio;
+
+  insert into public.micro_status (chave, nome)
+  select distinct on (public.chave_ms(x->>'micro_status')) public.chave_ms(x->>'micro_status'), trim(x->>'micro_status')
+  from jsonb_array_elements(linhas) x
+  where coalesce(trim(x->>'micro_status'), '') <> ''
+  on conflict (chave) do nothing;
+
+  select count(*) into n from public.intelipost;
+  return n;
+end;
+$$;
+revoke all on function public.importar_intelipost(jsonb, boolean, text, jsonb) from public, anon;
+grant execute on function public.importar_intelipost(jsonb, boolean, text, jsonb) to authenticated;
+
+-- Lista inicial de micro status (todos começam como "Pendente de responsável")
+insert into public.micro_status (chave, nome)
+select public.chave_ms(n), n from unnest(array[
+  'CANCELADO','ENTREGUE NO DESTINO','SAIDA FILIAL','ENTRADA FILIAL','ENTREGUE','CLIENTE ALEGA FALTA DE MERCADORIA',
+  'SAIU PARA ENTREGA','AGUARDANDO AUTORIZACAO PARA REENTREGA','TROCA DE NOTAS','REENTREGA SOLICITADA',
+  'AGUARDANDO INSTRUÇÃO','EM TRÂNSITO','EMISSAO do CT-e / NFS-e','ENTRADA FILIAL DESTINO','DESTINATÁRIO AUSENTE',
+  'EM TRANSFERENCIA','EXTRAVIO CONFIRMADO','NÃO VISITADO','ENDEREÇO NÃO LOCALIZADO','BUSCA',
+  'CARGA RECUSADA PELO DESTINATARIO','EM ROTA DE ENTREGA','DEVOLUCAO - ENTRADA FILIAL','INDENIZACAO RECUSADA',
+  'DEVOLUCAO - ENTRADA FILIAL DESTINO','DESPACHADO','DIFICIL ACESSO','AVERIGUAR FALHA NA ENTREGA','CARGA ERRADA',
+  'Falha ao criar pedido com a transportadora','AUSÊNCIA DE ATUALIZAÇÃO','Pedido criado na transportadora com sucesso',
+  'ESTABELECIMENTO FECHADO','CARGA INCOMPLETA','CRIADO','PREVISAO DE ENTREGA ALTERADA','CARGA REDESPACHADA',
+  'ENTREGA AGENDADA','EM DEVOLUÇÃO','AVARIA CONFIRMADA','PROBLEMA OPERACIONAL','PARADO NA FISCALIZACAO','DEVOLVIDO',
+  'MERCADORIA EM DEVOLUCAO EM OUTRA OPERACAO','PRONTO PARA RETIRADA','FALHA NA ENTREGA','DEVOLUCAO - SAIDA FILIAL'
+]) as n
+on conflict (chave) do nothing;

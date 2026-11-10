@@ -19,12 +19,33 @@ Supabase guarda: pedidos em cobrança + histórico de TODOS os retornos + regras
 Consulta: nova data informada, situação padronizada e histórico de cada pedido
 ```
 
+## Painel Preventivo (Intelipost)
+
+Aba **Preventivo** (aberta para todos): mostra os pedidos **ainda não entregues nem cancelados** da última base da Intelipost,
+para agir antes do atraso.
+
+- **Cards**: pedidos em aberto, em risco (vence hoje até 3 dias), já vencidos, pendentes de responsável e entregues no prazo.
+- **Range de vencimento**: conta pela *nova data informada* pela transportadora (aba Retornos); sem ela, pela previsão atual
+  da Intelipost. Clique numa linha para filtrar.
+- **Micro status por responsável**: quantos pedidos cada pessoa tem. Clique para filtrar.
+- **Tabela**: NF, Pedido Intelipost, Transportadora, Previsão original, Nova data informada, Micro status, Responsável,
+  Situação do último retorno da transportadora e link de rastreio.
+
+Como a Logística atualiza:
+1. **Enviar arquivos → 3. Base da Intelipost**: escolha o `transactions_....xlsx` exportado da Intelipost. O site lê o arquivo
+   (uns 20 a 30 segundos para 67 mil linhas), mostra quantos pedidos entram e substitui a base anterior.
+2. **Responsáveis**: cadastre as pessoas/áreas e escolha o responsável de cada micro status. Micro status novos que aparecerem
+   na base entram sozinhos como **Pendente de responsável** (aparecem primeiro, em vermelho).
+3. Os retornos das transportadoras continuam sendo enviados como antes (**2. Retorno da transportadora**) e aparecem
+   na coluna "Situação último retorno".
+
 ## O que tem em cada arquivo
 
 | Arquivo | Para que serve |
 |---|---|
 | `index.html`, `styles.css`, `app.js` | O site (login, consulta, envio de arquivos e padronização). |
 | `padronizacao.js` | Como o site acha a data no texto e aplica as regras de padronização. |
+| `preventivo.js`, `leitor-intelipost.js` | Painel preventivo e leitura da base da Intelipost. |
 | `config.js` | **Único arquivo que você edita**: endereço e chave do Supabase. |
 | `supabase/schema.sql` | Cria as tabelas e as regras de segurança no Supabase. |
 | `assets/logo.png` | Logo da Multimóveis. |

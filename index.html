@@ -39,10 +39,12 @@
   <div id="tela-painel" class="painel" hidden>
     <header class="topo">
       <div class="marca"><span class="logo"><img src="assets/logo.png" alt="Multimóveis"></span></div>
-      <nav class="abas" id="abas" hidden>
-        <button class="aba ativa" data-aba="consulta">Consulta</button>
-        <button class="aba" data-aba="envios">Enviar arquivos</button>
-        <button class="aba" data-aba="regras">Padronização</button>
+      <nav class="abas" id="abas">
+        <button class="aba ativa" data-aba="preventivo">Preventivo</button>
+        <button class="aba" data-aba="consulta">Cobrança</button>
+        <button class="aba so-admin" data-aba="envios">Enviar arquivos</button>
+        <button class="aba so-admin" data-aba="regras">Padronização</button>
+        <button class="aba so-admin" data-aba="responsaveis">Responsáveis</button>
       </nav>
       <div class="usuario">
         <span id="usuario-email"></span>
@@ -51,8 +53,78 @@
       </div>
     </header>
 
-    <!-- ---------- CONSULTA (todos) ---------- -->
-    <main class="conteudo" id="aba-consulta">
+    <!-- ---------- PREVENTIVO (todos) ---------- -->
+    <main class="conteudo" id="aba-preventivo">
+      <section class="titulo">
+        <div>
+          <h1>Painel Preventivo – Intelipost</h1>
+          <p class="sub">Acompanhe, identifique e resolva os pedidos antes do atraso acontecer.</p>
+        </div>
+        <div class="atualizacao"><span id="pv-info">Carregando…</span></div>
+      </section>
+
+      <section class="resumo" id="pv-cards" aria-label="Resumo"></section>
+
+      <div class="pv-paineis">
+        <section class="cartao">
+          <h2>Range de vencimento</h2>
+          <p class="sub">Pela nova data informada pela transportadora; sem ela, pela previsão atual da Intelipost.</p>
+          <div class="tabela-wrap mini"><table class="tabela-range">
+            <thead><tr><th>Range</th><th>Pedidos</th><th>%</th><th></th></tr></thead>
+            <tbody id="pv-range"></tbody>
+          </table></div>
+        </section>
+        <section class="cartao">
+          <h2>Micro status por responsável</h2>
+          <p class="sub">Clique para ver os pedidos de cada um.</p>
+          <ul id="pv-resp" class="lista-resp"></ul>
+        </section>
+      </div>
+
+      <section class="filtros filtros-pv">
+        <label class="busca">Buscar
+          <input id="pv-busca" type="search" placeholder="NF, pedido Intelipost ou pedido de venda…">
+        </label>
+        <label>Transportadora<select id="pv-transp"></select></label>
+        <label>Micro status<select id="pv-micro"></select></label>
+        <label>Responsável<select id="pv-respf"></select></label>
+        <label>Vencimento<select id="pv-rangef"></select></label>
+        <button id="pv-baixar" class="btn fantasma" title="Baixar o que está filtrado">Baixar (Excel)</button>
+      </section>
+
+      <section class="tabela-wrap">
+        <table class="compacta">
+          <thead>
+            <tr>
+              <th>NF</th>
+              <th>Pedido Intelipost</th>
+              <th>Transportadora</th>
+              <th>Previsão original</th>
+              <th>Nova data informada</th>
+              <th>Micro status Intelipost</th>
+              <th>Responsável</th>
+              <th>Situação último retorno</th>
+              <th>Rastreio</th>
+            </tr>
+          </thead>
+          <tbody id="pv-linhas"></tbody>
+        </table>
+        <p id="pv-vazio" class="vazio" hidden>Nenhum pedido encontrado com esses filtros.</p>
+      </section>
+      <nav class="paginacao" id="pv-paginacao" aria-label="Páginas"></nav>
+
+      <section class="aviso como-funciona">
+        <strong>Como funciona?</strong>
+        <ul>
+          <li>Cada micro status da Intelipost tem um responsável (a Logística define na aba Responsáveis).</li>
+          <li>Pedidos entregues ou cancelados na Intelipost não aparecem aqui: só o que ainda pode atrasar.</li>
+          <li>Se aparecer um micro status novo, ele entra como <b>Pendente de responsável</b> até alguém dar um dono para ele.</li>
+        </ul>
+      </section>
+    </main>
+
+    <!-- ---------- COBRANÇA (todos) ---------- -->
+    <main class="conteudo" id="aba-consulta" hidden>
       <section class="titulo">
         <div>
           <h1>Novas Datas de Entrega</h1>
@@ -139,6 +211,18 @@
         </section>
       </div>
 
+      <section class="cartao">
+        <h2>3. Base da Intelipost (preventivo)</h2>
+        <p class="sub">Arquivo de transações exportado da Intelipost (<b>transactions_….xlsx</b>). Só os pedidos que ainda não
+          foram entregues nem cancelados entram no painel. Arquivos grandes levam uns 20 a 30 segundos para ler.</p>
+        <p id="info-intelipost" class="info"></p>
+        <label class="btn primario">
+          Escolher base da Intelipost
+          <input id="arq-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
+        </label>
+        <p id="progresso-intelipost" class="sub" hidden></p>
+      </section>
+
       <section class="cartao" id="previa" hidden>
         <h2 id="previa-titulo">Conferir antes de salvar</h2>
         <div id="previa-resumo" class="previa-resumo"></div>
@@ -193,6 +277,31 @@
         <button id="btn-fabrica" class="link sublinhado">voltar para as regras de fábrica</button>
       </section>
     </main>
+
+    <!-- ---------- RESPONSÁVEIS (Logística) ---------- -->
+    <main class="conteudo" id="aba-responsaveis" hidden>
+      <section class="cartao">
+        <h2>Responsáveis</h2>
+        <p class="sub">Pessoas ou áreas que cuidam de cada micro status.</p>
+        <form id="form-resp" class="form-regra">
+          <label>Nome<input id="resp-nome" required placeholder="Ana Paula"></label>
+          <label class="cresce">Área<input id="resp-area" placeholder="TPs"></label>
+          <button class="btn primario" type="submit">+ Adicionar responsável</button>
+        </form>
+        <div id="lista-resp" class="chips"></div>
+      </section>
+      <section class="cartao">
+        <h2>Quem cuida de cada micro status <span id="qtd-pendentes" class="contador"></span></h2>
+        <p class="sub">Escolha o responsável de cada micro status. Os <b>pendentes de responsável</b> aparecem primeiro.
+          A coluna "Pedidos" mostra quantos pedidos em aberto estão nesse micro status hoje.</p>
+        <div class="tabela-wrap mini alto">
+          <table>
+            <thead><tr><th>Micro status Intelipost</th><th>Pedidos</th><th>Responsável</th></tr></thead>
+            <tbody id="tabela-micro"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
   </div>
 
   <div id="toast" class="toast" role="status" hidden></div>
@@ -202,5 +311,6 @@
   <script src="config.js"></script>
   <script src="padronizacao.js"></script>
   <script src="app.js"></script>
+  <script src="preventivo.js"></script>
 </body>
 </html>

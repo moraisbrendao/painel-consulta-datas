@@ -23,6 +23,7 @@
 
   $("contato").textContent = CFG.CONTATO_LOGISTICA || "";
 
+
   // ---------------- utilidades ----------------
   function hojeISO() {
     const d = new Date();
@@ -58,6 +59,13 @@
     }
     return lista;
   }
+
+  // usado pelo preventivo.js
+  window.Painel = {
+    sb, PAD, $, esc, br, norm, toast, hojeISO, buscarTudo: (...a) => buscarTudo(...a),
+    get ultimos() { return ultimos; }, get grupos() { return grupos; }, get ehAdmin() { return ehAdmin; },
+    mostrarAba: (n) => mostrarAba(n),
+  };
 
   // ---------------- situação de cada pedido ----------------
   const G_NOVA = "Nova data informada", G_HOJE = "Vence hoje", G_VENCIDA = "Nova data vencida";
@@ -118,18 +126,20 @@
 
     const { data: adm } = await sb.from("admins").select("email").limit(1);
     ehAdmin = Array.isArray(adm) && adm.length > 0;
-    $("abas").hidden = !ehAdmin;
+    document.querySelectorAll(".so-admin").forEach((b) => (b.hidden = !ehAdmin));
     $("usuario-perfil").textContent = ehAdmin ? "Logística" : "Consulta";
-    mostrarAba("consulta");
     await carregar();
+    mostrarAba("preventivo");
   }
 
   // ---------------- abas ----------------
   function mostrarAba(nome) {
-    ["consulta", "envios", "regras"].forEach((a) => ($("aba-" + a).hidden = a !== nome));
+    ["preventivo", "consulta", "envios", "regras", "responsaveis"].forEach((a) => ($("aba-" + a).hidden = a !== nome));
     document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativa", b.dataset.aba === nome));
-    if (nome === "envios") carregarEnvios();
+    if (nome === "envios") { carregarEnvios(); window.Preventivo && window.Preventivo.infoEnvio(); }
     if (nome === "regras") desenharRegras();
+    if (nome === "preventivo" && window.Preventivo) window.Preventivo.mostrar();
+    if (nome === "responsaveis" && window.Preventivo) window.Preventivo.mostrarResponsaveis();
   }
   $("abas").addEventListener("click", (e) => {
     const b = e.target.closest(".aba");
@@ -164,6 +174,7 @@
     montarOpcoes();
     filtrar();
     if (ehAdmin && !$("aba-regras").hidden) desenharRegras();
+    if (window.Preventivo && !$("aba-preventivo").hidden) window.Preventivo.redesenhar();
     if (ehAdmin) $("info-cobranca").textContent = `Hoje há ${pedidos.length.toLocaleString("pt-BR")} pedidos em cobrança no painel.`;
   }
 
