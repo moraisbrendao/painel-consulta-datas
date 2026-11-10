@@ -5,6 +5,9 @@ Attribute VB_Name = "ExportarPainel"
 ' somente com os pedidos marcados como "Novo retorno" na aba Retornos
 ' (coluna "Situacao semanal"). Os detalhes do pedido (nota, canal,
 ' previsao original, rastreio) vem da aba Pedidos.
+' Pedidos com "Status Transportador" Entregue ou Cancelado na aba
+' Intelipost ficam de fora. Antes de exportar, cole na aba Intelipost
+' a base nova (transactions_....xlsx) baixada da Intelipost.
 ' Depois e so enviar esse arquivo no painel.
 '
 ' Como instalar (uma vez): Alt+F11 > Arquivo > Importar arquivo >
@@ -85,17 +88,41 @@ Public Sub ExportarParaPainel()
 proximo:
     Next i
 
-    ' ---- 3) Monta o CSV ----
+    ' ---- 3) Aba Intelipost: status do transportador de cada pedido ----
+    '      (pedidos Entregues ou Cancelados ficam fora do painel)
+    Dim wsI As Worksheet
+    Set wsI = ThisWorkbook.Worksheets("Intelipost")
+    Dim iPed&, iSt&, ultI As Long, vPed As Variant, vSt As Variant
+    iPed = AcharColuna(wsI, "Pedido", False)
+    iSt = AcharColuna(wsI, "Status Transportador", False)
+    ultI = wsI.Cells(wsI.Rows.Count, iPed).End(xlUp).Row
+    vPed = wsI.Range(wsI.Cells(1, iPed), wsI.Cells(ultI, iPed)).Value
+    vSt = wsI.Range(wsI.Cells(1, iSt), wsI.Cells(ultI, iSt)).Value
+    Dim stIntel As Object: Set stIntel = CreateObject("Scripting.Dictionary")
+    stIntel.CompareMode = vbTextCompare
+    For i = 2 To ultI
+        ped = Texto(vPed(i, 1))
+        If ped <> "" Then stIntel(ped) = Texto(vSt(i, 1))
+    Next i
+
+    ' ---- 4) Monta o CSV ----
     Dim partes() As String, n As Long, k As Variant, ir As Long, ip As Long
     ReDim partes(0 To escolhido.Count)
     partes(0) = "pedido;pedido_canal;nota;canal;transportadora;status;prev_original;prev_atual;data_entrega;" & _
                 "nova_data;retorno;retorno_texto;data_retorno;uf;cidade;link_rastreio"
 
     Dim padronizado As Variant, novaData As String, retorno As String
-    Dim canal As String, transp As String
+    Dim canal As String, transp As String, stTransp As String, foraEntregue As Long
     For Each k In escolhido.Keys
         ped = CStr(k)
         ir = escolhido(k)
+
+        stTransp = ""
+        If stIntel.Exists(ped) Then stTransp = stIntel(ped)
+        If StrComp(stTransp, "Entregue", vbTextCompare) = 0 Or StrComp(stTransp, "Cancelado", vbTextCompare) = 0 Then
+            foraEntregue = foraEntregue + 1
+            GoTo proximoPedido
+        End If
 
         padronizado = r(ir, rG)
         novaData = ParaISO(padronizado)
@@ -118,13 +145,14 @@ proximo:
 
         n = n + 1
         partes(n) = Q(ped) & ";" & Q(DoPedido(d, ip, cCanalPed)) & ";" & Q(DoPedido(d, ip, cNota)) & ";" & _
-                    Q(canal) & ";" & Q(transp) & ";" & Q(DoPedido(d, ip, cStatus)) & ";" & _
+                    Q(canal) & ";" & Q(transp) & ";" & Q(IIf(stTransp <> "", stTransp, DoPedido(d, ip, cStatus))) & ";" & _
                     DataDoPedido(d, ip, cPrevO) & ";" & DataDoPedido(d, ip, cPrevA) & ";" & DataDoPedido(d, ip, cEntrega) & ";" & _
                     novaData & ";" & Q(retorno) & ";" & Q(Texto(r(ir, rB))) & ";" & ParaISO(r(ir, rD)) & ";" & _
                     Q(DoPedido(d, ip, cUF)) & ";" & Q(DoPedido(d, ip, cCidade)) & ";" & Q(DoPedido(d, ip, cLink))
+proximoPedido:
     Next k
 
-    ' ---- 4) Salva em UTF-8 (para manter os acentos) ----
+    ' ---- 5) Salva em UTF-8 (para manter os acentos) ----
     Dim caminho As String
     caminho = ThisWorkbook.Path & Application.PathSeparator & "painel_entregas.csv"
     Dim st As Object: Set st = CreateObject("ADODB.Stream")
@@ -136,7 +164,8 @@ proximo:
 
     Application.StatusBar = False
     Application.ScreenUpdating = True
-    MsgBox n & " pedidos com novo retorno exportados." & vbCrLf & vbCrLf & _
+    MsgBox n & " pedidos com novo retorno exportados." & vbCrLf & _
+           foraEntregue & " ficaram de fora por estarem Entregues ou Cancelados na aba Intelipost." & vbCrLf & vbCrLf & _
            "Arquivo: " & caminho & vbCrLf & vbCrLf & _
            "Agora abra o painel, entre com o seu login e clique em ""Enviar planilha"".", _
            vbInformation, "Exportar para o painel"

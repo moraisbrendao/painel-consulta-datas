@@ -2,7 +2,8 @@
 
 Site com login (e-mail e senha) onde outro setor consulta as **novas datas de entrega** que as
 transportadoras informam à Logística. O painel mostra **somente os pedidos marcados como "Novo retorno"**
-na aba Retornos (coluna "Situação semanal"); os detalhes do pedido vêm da aba Pedidos. Os usuários do outro setor **só consultam**. Quem cadastra
+na aba Retornos (coluna "Situação semanal"); os detalhes do pedido vêm da aba Pedidos.
+Pedidos que já estão **Entregues ou Cancelados** no "Status Transportador" da aba **Intelipost** ficam de fora. Os usuários do outro setor **só consultam**. Quem cadastra
 os logins e atualiza os dados é a Logística.
 
 ```
@@ -85,9 +86,11 @@ lápis ✏️, edite, clique em **Commit changes**. Em 1 minuto o site atualiza 
 ## Rotina semanal (Logística)
 
 1. Atualize a planilha como sempre (cole os retornos na aba **Retornos**).
-2. Clique em **Exportar para o painel**. Só entram os pedidos com "Novo retorno". O arquivo `painel_entregas.csv` é salvo na mesma pasta da planilha.
-3. Abra o painel, entre com o seu login, clique em **Enviar planilha** e escolha `painel_entregas.csv`.
-4. Pronto: aparece "Pedidos atualizados" e o outro setor já vê as datas novas.
+2. Baixe a base de transações da Intelipost (`transactions_....xlsx`) e cole por cima do conteúdo da aba **Intelipost**
+   (mesmas colunas, começando na A1). É ela que diz quais pedidos já foram entregues ou cancelados.
+3. Clique em **Exportar para o painel**. Só entram os pedidos com "Novo retorno". O arquivo `painel_entregas.csv` é salvo na mesma pasta da planilha.
+4. Abra o painel, entre com o seu login, clique em **Enviar planilha** e escolha `painel_entregas.csv`.
+5. Pronto: aparece "Pedidos atualizados" e o outro setor já vê as datas novas.
 
 ## O que o outro setor vê
 
