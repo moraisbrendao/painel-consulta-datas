@@ -124,9 +124,20 @@
     $("tela-painel").hidden = false;
     $("usuario-email").textContent = user.email;
 
+    // perfil: 'logistica' | 'sac' | 'consulta' (decidido no banco)
+    const { data: perfil, error: errPerfil } = await sb.rpc("meu_perfil");
+    if (!errPerfil && perfil === "sac") {
+      ehAdmin = false;
+      document.querySelectorAll("#abas .aba").forEach((b) => (b.hidden = b.dataset.aba !== "sac"));
+      $("usuario-perfil").textContent = "SAC";
+      mostrarAba("sac");
+      return;
+    }
     const { data: adm } = await sb.from("admins").select("email").limit(1);
     ehAdmin = Array.isArray(adm) && adm.length > 0;
+    document.querySelectorAll("#abas .aba").forEach((b) => (b.hidden = false));
     document.querySelectorAll(".so-admin").forEach((b) => (b.hidden = !ehAdmin));
+    document.querySelectorAll(".so-sac").forEach((b) => (b.hidden = !ehAdmin || !!errPerfil));
     $("usuario-perfil").textContent = ehAdmin ? "Logística" : "Consulta";
     await carregar();
     mostrarAba("preventivo");
@@ -134,12 +145,14 @@
 
   // ---------------- abas ----------------
   function mostrarAba(nome) {
-    ["preventivo", "consulta", "envios", "regras", "responsaveis"].forEach((a) => ($("aba-" + a).hidden = a !== nome));
+    ["preventivo", "consulta", "envios", "regras", "responsaveis", "sac"].forEach((a) => ($("aba-" + a).hidden = a !== nome));
     document.querySelectorAll(".aba").forEach((b) => b.classList.toggle("ativa", b.dataset.aba === nome));
     if (nome === "envios") { carregarEnvios(); window.Preventivo && window.Preventivo.infoEnvio(); }
     if (nome === "regras") desenharRegras();
     if (nome === "preventivo" && window.Preventivo) window.Preventivo.mostrar();
     if (nome === "responsaveis" && window.Preventivo) window.Preventivo.mostrarResponsaveis();
+    if (nome === "responsaveis" && window.SAC) window.SAC.mostrarUsuarios();
+    if (nome === "sac" && window.SAC) window.SAC.mostrar();
   }
   $("abas").addEventListener("click", (e) => {
     const b = e.target.closest(".aba");

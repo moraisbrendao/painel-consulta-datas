@@ -421,3 +421,76 @@ drop policy if exists "admin altera" on public.notas;
 create policy "logados consultam" on public.notas for select to authenticated using (true);
 create policy "admin altera" on public.notas for all to authenticated
   using (public.is_admin()) with check (public.is_admin());
+
+-- =====================================================================
+-- PERFIL SAC: acesso limitado. Quem está nesta lista só enxerga a
+-- "consulta SAC" (NF, pedido, canal, transportadora, previsão, nova data,
+-- anotações e rastreio). O bloqueio é feito aqui no banco.
+-- =====================================================================
+create table if not exists public.usuarios_sac (
+  email text primary key
+);
+alter table public.usuarios_sac enable row level security;
+drop policy if exists "admin gerencia sac" on public.usuarios_sac;
+drop policy if exists "cada um ve se e sac" on public.usuarios_sac;
+create policy "admin gerencia sac" on public.usuarios_sac for all to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+create policy "cada um ve se e sac" on public.usuarios_sac for select to authenticated
+  using (lower(email) = lower(auth.jwt() ->> 'email'));
+
+create or replace function public.is_sac()
+returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (select 1 from public.usuarios_sac where lower(email) = lower(auth.jwt() ->> 'email'))
+     and not public.is_admin();
+$$;
+
+create or replace function public.meu_perfil()
+returns text
+language sql stable security definer set search_path = public
+as $$
+  select case when public.is_admin() then 'logistica' when public.is_sac() then 'sac' else 'consulta' end;
+$$;
+grant execute on function public.meu_perfil() to authenticated;
+
+-- SAC não lê as tabelas completas
+do $$
+declare t text;
+begin
+  foreach t in array array['pedidos','retornos','regras','responsaveis','micro_status','intelipost','intelipost_info','notas'] loop
+    if to_regclass('public.' || t) is not null then
+      execute format('drop policy if exists "logados consultam" on public.%I', t);
+      execute format('create policy "logados consultam" on public.%I for select to authenticated using (not public.is_sac())', t);
+    end if;
+  end loop;
+end $$;
+
+-- O que o SAC vê (função com as colunas liberadas)
+create or replace function public.consulta_sac()
+returns table (
+  nf text, pedido text, canal text, transportadora text,
+  previsao_entrega date, nova_data date, origem_nova_data text,
+  anotacoes jsonb, link_rastreio text
+)
+language sql stable security definer set search_path = public
+as $$
+  select i.nf, i.pedido, i.canal, i.transportadora,
+         i.prev_cliente_original,
+         coalesce(r.nova_data, case when i.prev_cliente is distinct from i.prev_cliente_original then i.prev_cliente end),
+         case when r.nova_data is not null then 'transportadora'
+              when i.prev_cliente is distinct from i.prev_cliente_original and i.prev_cliente is not null then 'Intelipost' end,
+         coalesce((select jsonb_agg(jsonb_build_object('texto', n.texto, 'criado_em', n.criado_em) order by n.criado_em desc)
+                   from public.notas n where n.pedido = i.pedido), '[]'::jsonb),
+         i.link_rastreio
+  from public.intelipost i
+  left join lateral (
+    select x.nova_data from public.retornos x
+    where x.pedido = i.pedido
+    order by x.data_retorno desc, x.id desc limit 1
+  ) r on true
+  where public.is_sac() or public.is_admin()
+  order by i.pedido;
+$$;
+revoke all on function public.consulta_sac() from public, anon;
+grant execute on function public.consulta_sac() to authenticated;

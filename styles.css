@@ -276,3 +276,11 @@ td.col-nota { min-width: 190px; max-width: 240px; }
 .nota-ult { font-size: 12px; margin-bottom: 4px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 input.nota-rapida { width: 100%; font-size: 12px; padding: 6px 8px; border-radius: 6px; background: #fffdf3; border-color: #f1dc8f; }
 input.nota-rapida:focus { background: #fff; }
+
+/* ---------- Consulta SAC ---------- */
+.filtros.filtros-sac { grid-template-columns: minmax(0,2fr) repeat(3, minmax(0,1fr)) auto; }
+@media (max-width: 900px) { .filtros.filtros-sac { grid-template-columns: 1fr 1fr; } .filtros.filtros-sac .busca { grid-column: 1 / -1; } }
+@media (max-width: 560px) { .filtros.filtros-sac { grid-template-columns: 1fr; } }
+.sac-nota { font-size: 12px; line-height: 1.35; margin-bottom: 2px; }
+.sac-mais summary { cursor: pointer; font-size: 11px; color: var(--azul); }
+.sac-mais .sac-nota { padding-left: 8px; border-left: 2px solid var(--borda); margin-top: 4px; }

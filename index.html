@@ -45,6 +45,7 @@
         <button class="aba so-admin" data-aba="envios">Enviar arquivos</button>
         <button class="aba so-admin" data-aba="regras">Padronização</button>
         <button class="aba so-admin" data-aba="responsaveis">Responsáveis</button>
+        <button class="aba so-sac" data-aba="sac" hidden>Consulta SAC</button>
       </nav>
       <div class="usuario">
         <span id="usuario-email"></span>
@@ -292,6 +293,52 @@
       </section>
     </main>
 
+    <!-- ---------- CONSULTA SAC (perfil SAC; a Logística também vê) ---------- -->
+    <main class="conteudo" id="aba-sac" hidden>
+      <section class="titulo">
+        <div>
+          <h1>Consulta de entregas</h1>
+          <p class="sub">Pedidos ainda não entregues nem cancelados, com a nova data informada e as anotações da Logística.</p>
+        </div>
+        <div class="atualizacao"><span id="sac-info">Carregando…</span></div>
+      </section>
+
+      <section class="filtros filtros-sac">
+        <label class="busca">Buscar
+          <input id="sac-busca" type="search" placeholder="NF ou pedido Intelipost…">
+        </label>
+        <label>Canal<select id="sac-canal"></select></label>
+        <label>Transportadora<select id="sac-transp"></select></label>
+        <label>Nova data<select id="sac-nova">
+          <option value="">Todas</option>
+          <option value="com">Com nova data</option>
+          <option value="sem">Sem nova data</option>
+          <option value="vencida">Data já passou</option>
+        </select></label>
+        <button id="sac-baixar" class="btn fantasma" title="Baixar o que está filtrado">Baixar (Excel)</button>
+      </section>
+
+      <section class="tabela-wrap">
+        <table class="compacta">
+          <thead>
+            <tr>
+              <th>Nota fiscal</th>
+              <th>Pedido Intelipost</th>
+              <th>Canal</th>
+              <th>Transportadora</th>
+              <th>Previsão de entrega</th>
+              <th>Nova data informada</th>
+              <th>Anotações</th>
+              <th>Rastreio</th>
+            </tr>
+          </thead>
+          <tbody id="sac-linhas"></tbody>
+        </table>
+        <p id="sac-vazio" class="vazio" hidden>Nenhum pedido encontrado com esses filtros.</p>
+      </section>
+      <nav class="paginacao" id="sac-paginacao" aria-label="Páginas"></nav>
+    </main>
+
     <!-- ---------- RESPONSÁVEIS (Logística) ---------- -->
     <main class="conteudo" id="aba-responsaveis" hidden>
       <section class="cartao">
@@ -314,6 +361,16 @@
             <tbody id="tabela-micro"></tbody>
           </table>
         </div>
+      </section>
+      <section class="cartao">
+        <h2>Usuários do SAC</h2>
+        <p class="sub">Quem estiver aqui entra no painel vendo <b>só</b> a Consulta SAC (NF, pedido, canal, transportadora,
+          previsão, nova data, anotações e rastreio). O login continua sendo criado no Supabase (Authentication → Users).</p>
+        <form id="form-sac" class="form-regra">
+          <label class="cresce">E-mail do login do SAC<input id="sac-email" type="email" required placeholder="sac@empresa.com.br"></label>
+          <button class="btn primario" type="submit">+ Marcar como SAC</button>
+        </form>
+        <div id="lista-sac" class="chips"></div>
       </section>
     </main>
   </div>
@@ -338,5 +395,6 @@
   <script src="padronizacao.js"></script>
   <script src="app.js"></script>
   <script src="preventivo.js"></script>
+  <script src="sac.js"></script>
 </body>
 </html>

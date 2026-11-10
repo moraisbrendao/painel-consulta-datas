@@ -46,6 +46,18 @@ Como a Logística atualiza:
 3. Os retornos das transportadoras continuam sendo enviados como antes (**2. Retorno da transportadora**) e aparecem
    na coluna "Situação último retorno".
 
+## Perfil SAC (acesso limitado)
+
+Quem é marcado como **SAC** entra e vê só a aba **Consulta SAC**: Nota fiscal, Pedido Intelipost, Canal, Transportadora,
+Previsão de entrega, Nova data informada, Anotações e link de rastreio, com filtros por canal, transportadora e nova data,
+busca por NF ou pedido e botão Baixar (Excel). O bloqueio é feito no banco: o SAC não consegue ler as outras informações
+nem pela internet.
+
+Para dar o perfil SAC a alguém:
+1. Crie o login no Supabase (**Authentication → Users → Add user**), como os outros.
+2. No painel, aba **Responsáveis → Usuários do SAC**, digite o e-mail e clique em **+ Marcar como SAC**.
+   Para tirar o perfil, clique no × ao lado do e-mail.
+
 ## O que tem em cada arquivo
 
 | Arquivo | Para que serve |
@@ -53,6 +65,7 @@ Como a Logística atualiza:
 | `index.html`, `styles.css`, `app.js` | O site (login, consulta, envio de arquivos e padronização). |
 | `padronizacao.js` | Como o site acha a data no texto e aplica as regras de padronização. |
 | `preventivo.js`, `leitor-intelipost.js` | Painel preventivo e leitura da base da Intelipost. |
+| `sac.js` | Consulta SAC (visão limitada) e cadastro dos usuários do SAC. |
 | `config.js` | **Único arquivo que você edita**: endereço e chave do Supabase. |
 | `supabase/schema.sql` | Cria as tabelas e as regras de segurança no Supabase. |
 | `assets/logo.png` | Logo da Multimóveis. |
