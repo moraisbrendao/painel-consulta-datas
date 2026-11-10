@@ -47,7 +47,7 @@
 
   // Situação de cada pedido (o que aparece na coluna "Situação")
   function situacao(p, hoje) {
-    if (p.data_entrega || norm(p.status) === "entregue") return { txt: "Entregue", cor: "verde", grupo: "Entregue" };
+    if (p.data_entrega || norm(p.status) === "entregue" || norm(p.retorno) === "entregue") return { txt: "Entregue", cor: "verde", grupo: "Entregue" };
     if (p.nova_data) {
       if (p.nova_data < hoje) return { txt: "Nova data vencida", cor: "vermelho", grupo: "Nova data vencida" };
       if (p.nova_data === hoje) return { txt: "Vence hoje", cor: "ambar", grupo: "Vence hoje" };
@@ -128,7 +128,7 @@
 
     const { data: at } = await sb.from("atualizacao").select("*").maybeSingle();
     $("info-atualizacao").textContent = at
-      ? `Atualizado em ${new Date(at.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${todos.length} pedidos`
+      ? `Novos retornos da semana · atualizado em ${new Date(at.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${todos.length} pedidos`
       : "Ainda não há dados. A logística precisa enviar a planilha.";
 
     montarOpcoes();

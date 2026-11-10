@@ -1,7 +1,8 @@
 # Painel de Consulta de Novas Datas de Entrega
 
 Site com login (e-mail e senha) onde outro setor consulta as **novas datas de entrega** que as
-transportadoras informam à Logística. Os usuários do outro setor **só consultam**. Quem cadastra
+transportadoras informam à Logística. O painel mostra **somente os pedidos marcados como "Novo retorno"**
+na aba Retornos (coluna "Situação semanal"); os detalhes do pedido vêm da aba Pedidos. Os usuários do outro setor **só consultam**. Quem cadastra
 os logins e atualiza os dados é a Logística.
 
 ```
@@ -22,6 +23,7 @@ Supabase (guarda logins e pedidos, com segurança)  ◄── outro setor entra 
 | `config.js` | **Único arquivo que você edita**: endereço e chave do Supabase. |
 | `supabase/schema.sql` | Cria as tabelas e as regras de segurança no Supabase (roda uma vez). |
 | `planilha/ExportarPainel.bas` | Macro para colocar na planilha. Gera o arquivo que vai para o painel. |
+| `assets/logo.png` | Logo da Multimóveis usado no topo do site. |
 
 ---
 
@@ -74,14 +76,16 @@ lápis ✏️, edite, clique em **Commit changes**. Em 1 minuto o site atualiza 
 
 1. Abra `Retorno_atrasos.xlsm` e aperte **Alt + F11** (abre o editor de macros).
 2. Menu **Arquivo** → **Importar arquivo…** → escolha `planilha/ExportarPainel.bas`. Feche o editor.
-3. Na aba **Controle Retorno**, vá em **Desenvolvedor** → **Inserir** → **Botão**, desenhe o botão e escolha
+3. Se já tinha uma versão antiga da macro, antes de importar clique com o botão direito em **ExportarPainel**
+   (no editor, Alt + F11) → **Remover ExportarPainel** → **Não** (não precisa exportar).
+4. Na aba **Controle Retorno**, vá em **Desenvolvedor** → **Inserir** → **Botão**, desenhe o botão e escolha
    a macro **ExportarParaPainel**. Escreva no botão "Exportar para o painel". Salve a planilha.
    (Se não aparecer a guia Desenvolvedor: Arquivo → Opções → Personalizar Faixa de Opções → marque Desenvolvedor.)
 
 ## Rotina semanal (Logística)
 
 1. Atualize a planilha como sempre (cole os retornos na aba **Retornos**).
-2. Clique em **Exportar para o painel**. O arquivo `painel_entregas.csv` é salvo na mesma pasta da planilha.
+2. Clique em **Exportar para o painel**. Só entram os pedidos com "Novo retorno". O arquivo `painel_entregas.csv` é salvo na mesma pasta da planilha.
 3. Abra o painel, entre com o seu login, clique em **Enviar planilha** e escolha `painel_entregas.csv`.
 4. Pronto: aparece "Pedidos atualizados" e o outro setor já vê as datas novas.
 
