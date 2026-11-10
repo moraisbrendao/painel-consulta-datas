@@ -22,6 +22,15 @@
   let info = null;
   let visao = "vencem";
   let msSel = "";              // micro status clicado
+  let rangeSel = "";           // faixa de vencimento clicada na tabela de range
+  const DIAS_PARADO = 7;       // parado no rastreio = mais de 7 dias sem atualização
+  const RANGES = [
+    { id: "hoje", nome: "Vence hoje", de: 0, ate: 0 }, { id: "1", nome: "Vence ≥ 1 dia", de: 1, ate: 1 },
+    { id: "2", nome: "Vence ≥ 2 dias", de: 2, ate: 4 }, { id: "5", nome: "Vence ≥ 5 dias", de: 5, ate: 9 },
+    { id: "10", nome: "Vence ≥ 10 dias", de: 10, ate: 19 }, { id: "20", nome: "Vence ≥ 20 dias", de: 20, ate: 29 },
+    { id: "30", nome: "Vence ≥ 30 dias", de: 30, ate: Infinity },
+  ];
+  const faixa = (d) => (d === null || d < 0 ? null : RANGES.find((r) => d >= r.de && d <= r.ate).id);
   let filtrados = [];
   let pagina = 1;
 
@@ -132,16 +141,17 @@
   function preparar(p) {
     const t = trat.get(p.pedido);
     const hoje = hojeISO();
-    const venc = (t && t.nova_data) || p.prev_atual || null;
+    const venc = p.prev_original || p.prev_atual || null;   // data prometida ao cliente
     p._venc = venc;
     p._dias = venc ? diasEntre(hoje, venc) : null;                 // >0 faltam dias, <0 vencido
     p._parado = p.ultima_atualizacao ? Math.max(0, Math.floor((Date.now() - Date.parse(p.ultima_atualizacao)) / DIA)) : null;
     p._t = t;
+    p._faixa = faixa(p._dias);
     return p;
   }
   const naVisao = {
     vencem: (p) => p._dias !== null && p._dias >= 0 && p._dias <= 5,
-    parados: (p) => p._parado !== null && p._parado >= Number($("dias-parado").value),
+    parados: (p) => p._parado !== null && p._parado > DIAS_PARADO,
     vencidos: (p) => p._dias !== null && p._dias < 0,
     todos: () => true,
   };
@@ -179,7 +189,7 @@
     });
     const ord = [...grupos.entries()].sort((a, b) => b[1].n - a[1].n);
     const somaP = daVisao.reduce((s, p) => s + (p._parado || 0), 0);
-    const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há ${$("dias-parado").value}+ dias`, vencidos: "já vencidos", todos: "em aberto" };
+    const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "já vencidos", todos: "em aberto" };
     $("ms-resumo").textContent = `${fmt(daVisao.length)} pedidos ${nomes[visao]} · em média ${(daVisao.length ? somaP / daVisao.length : 0).toFixed(1).replace(".", ",")} dias sem movimento no rastreio · clique para ver e exportar.`;
     if (msSel && !grupos.has(msSel)) msSel = "";
     $("ms-linhas").innerHTML = ord.length ? ord.map(([k, g]) => {
@@ -188,7 +198,27 @@
         <td class="num ${media >= 10 ? "alto" : ""}">${media.toFixed(1).replace(".", ",")}</td><td class="num">${fmt(g.trat)}</td></tr>`;
     }).join("") : `<tr><td colspan="4" class="vazio">Nenhum pedido nesta visão.</td></tr>`;
 
+    desenharRange();
     filtrar(manterPagina, daVisao);
+  }
+
+  function desenharRange() {
+    const linhas = new Map(), tot = {};
+    base.forEach((p) => {
+      if (!p._faixa) return;
+      const k = p.micro_status || "(sem micro status)";
+      const l = linhas.get(k) || { total: 0 };
+      l[p._faixa] = (l[p._faixa] || 0) + 1; l.total++;
+      tot[p._faixa] = (tot[p._faixa] || 0) + 1; tot.total = (tot.total || 0) + 1;
+      linhas.set(k, l);
+    });
+    const cel = (ms, id, n) => n
+      ? `<td class="num clic ${visao === "todos" && rangeSel === id && msSel === ms ? "sel" : ""}" data-ms="${esc(ms)}" data-faixa="${id}">${fmt(n)}</td>`
+      : `<td class="num vazio-c">·</td>`;
+    $("range-linhas").innerHTML = [...linhas.entries()].sort((a, b) => b[1].total - a[1].total).map(([ms, l]) =>
+      `<tr><td>${esc(ms)}</td>${RANGES.map((r) => cel(ms, r.id, l[r.id])).join("")}<td class="num tot clic" data-ms="${esc(ms)}" data-faixa="">${fmt(l.total)}</td></tr>`).join("")
+      || `<tr><td colspan="9" class="vazio">Sem pedidos a vencer.</td></tr>`;
+    $("range-total").innerHTML = `<tr><td>Total geral</td>${RANGES.map((r) => `<td class="num clic" data-ms="" data-faixa="${r.id}">${fmt(tot[r.id] || 0)}</td>`).join("")}<td class="num clic" data-ms="" data-faixa="">${fmt(tot.total || 0)}</td></tr>`;
   }
 
   function filtrar(manterPagina, daVisao) {
@@ -200,6 +230,7 @@
       if (tp && p.transportadora !== tp) return false;
       if (cn && p.canal !== cn) return false;
       if (ms && (p.micro_status || "(sem micro status)") !== ms) return false;
+      if (rangeSel === "__avencer" ? !p._faixa : rangeSel && p._faixa !== rangeSel) return false;
       const s = p._t && p._t.situacao;
       if (tr === "__sem" && s) return false;
       if (tr === "__com" && !s) return false;
@@ -209,7 +240,8 @@
     // ordem: mais urgente primeiro (vencido/vence antes), depois mais parado
     filtrados.sort((a, b) => (a._dias ?? 9999) - (b._dias ?? 9999) || (b._parado || 0) - (a._parado || 0));
     const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", todos: "Todos os pedidos" };
-    $("lista-titulo").textContent = `${nomes[visao]}${ms ? " · " + ms : ""} (${fmt(filtrados.length)})`;
+    const rNome = rangeSel === "__avencer" ? " · a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
+    $("lista-titulo").textContent = `${nomes[visao]}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
     if (!manterPagina) pagina = 1;
     desenharLista();
   }
@@ -233,7 +265,7 @@
           ${p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : ""}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div></td>
-        <td>${br(p.prev_atual) || "—"}<div>${chipPrazo(p)}</div>${p.prev_original && p.prev_original !== p.prev_atual ? `<div class="s">original ${br(p.prev_original)}</div>` : ""}</td>
+        <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}</td>
         <td><select data-campo="situacao"><option value="">— sem tratativa —</option>${SITUACOES.map((s) => `<option ${s === t.situacao ? "selected" : ""}>${esc(s)}</option>`).join("")}</select>
           <div class="s quem">${quem}</div></td>
         <td><input type="date" data-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
@@ -251,18 +283,25 @@
   // ---------------- eventos da tela ----------------
   $("visoes").addEventListener("click", (e) => {
     const b = e.target.closest(".visao"); if (!b) return;
-    visao = b.dataset.visao; msSel = ""; $("f-ms").value = ""; redesenhar();
+    visao = b.dataset.visao; msSel = ""; rangeSel = ""; $("f-ms").value = ""; redesenhar();
   });
   $("ms-linhas").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-ms]"); if (!tr) return;
-    msSel = msSel === tr.dataset.ms ? "" : tr.dataset.ms; $("f-ms").value = "";
+    msSel = msSel === tr.dataset.ms ? "" : tr.dataset.ms; rangeSel = ""; $("f-ms").value = "";
     document.querySelectorAll("#ms-linhas tr").forEach((r) => r.classList.toggle("sel", r.dataset.ms === msSel));
     filtrar();
     if (msSel) $("lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" });
   });
-  $("dias-parado").addEventListener("change", () => redesenhar());
+  // clique na tabela de range: abre os pedidos daquela linha/coluna
+  document.querySelector(".tabela-range").addEventListener("click", (e) => {
+    const td = e.target.closest("td.clic"); if (!td) return;
+    const ms = td.dataset.ms, fx = td.dataset.faixa || "__avencer";
+    if (msSel === ms && rangeSel === fx && visao === "todos") { msSel = ""; rangeSel = ""; } else { msSel = ms; rangeSel = fx; }
+    visao = "todos"; $("f-ms").value = "";
+    redesenhar(); $("lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" });
+  });
   ["f-transp", "f-canal", "f-trat"].forEach((id) => $(id).addEventListener("change", () => filtrar()));
-  $("f-ms").addEventListener("change", () => { msSel = ""; redesenhar(); });
+  $("f-ms").addEventListener("change", () => { msSel = ""; rangeSel = ""; redesenhar(); });
   let espera; $("f-busca").addEventListener("input", () => { clearTimeout(espera); espera = setTimeout(() => filtrar(), 200); });
   $("paginacao").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-p]"); if (!b) return;
@@ -298,8 +337,8 @@
 
   // exportar o que está na lista
   $("btn-exportar").addEventListener("click", () => {
-    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Dias sem movimento", "Previsão original",
-      "Previsão atual", "Dias para vencer", "Tratativa", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
+    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Dias sem movimento", "Prometido ao cliente",
+      "Previsão Intelipost atual", "Dias para vencer", "Tratativa", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
     const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, p._parado,
       br(p.prev_original), br(p.prev_atual), p._dias, t.situacao, br(t.nova_data), t.observacao, t.atualizado_por,
       t.atualizado_em ? new Date(t.atualizado_em).toLocaleString("pt-BR") : "", p.comentario_360, p.qtd_tickets, p.link_rastreio]; });

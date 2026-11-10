@@ -11,11 +11,13 @@ Site: https://moraisbrendao.github.io/painel-consulta-datas/
    *Pedido Intelipost*, *Micro Status Intelipost*, *Data Estimada da Entrega(Intelipost)* etc.).
    Ele substitui a base para todos. As tratativas já feitas continuam salvas.
 2. **O que está acontecendo, por micro status**: escolha a visão
-   - *Vencem em 5 dias*: previsão (ou nova data registrada) entre hoje e daqui a 5 dias;
-   - *Parados no rastreio*: sem atualização na Intelipost há X dias (você escolhe 3, 5, 7 ou 10);
+   - *Vencem em 5 dias*: data prometida ao cliente (Data Original Estimada da Entrega) entre hoje e daqui a 5 dias;
+   - *Parados no rastreio*: mais de 7 dias sem atualização na Intelipost;
    - *Já vencidos* e *Todos*.
    Clique num micro status para ver só os pedidos dele.
-3. **Lista de pedidos**: em cada pedido escolha a **Tratativa**, a **Nova data** e escreva a **Observação**.
+3. **Range de vencimento por micro status**: quantos pedidos vencem hoje, em 1, 2, 5, 10, 20 e 30+ dias, por micro status.
+   Clique num número para ver os pedidos.
+4. **Lista de pedidos**: em cada pedido escolha a **Tratativa**, a **Nova data** e escreva a **Observação**.
    Salva sozinho e mostra quem alterou e quando. **Exportar (Excel)** baixa o que está na lista.
 
 ## Arquivos

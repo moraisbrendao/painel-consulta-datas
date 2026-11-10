@@ -37,7 +37,11 @@
       </div>
     </header>
 
-    <main class="conteudo">
+    <div class="corpo">
+    <nav class="menu-lateral" aria-label="Menu">
+      <button class="menu-item ativo" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
+    </nav>
+    <main class="conteudo" id="pagina-preventivo">
       <p id="info-base" class="info-base">Carregando…</p>
 
       <!-- visões -->
@@ -60,9 +64,25 @@
             <tbody id="ms-linhas"></tbody>
           </table>
         </div>
-        <p class="dica">Parado = dias sem nenhuma atualização no rastreio da Intelipost. Considerar parado a partir de
-          <select id="dias-parado"><option>3</option><option selected>5</option><option>7</option><option>10</option></select> dias.
-          Clique num micro status para ver os pedidos.</p>
+        <p class="dica">Parado no rastreio = mais de 7 dias sem nenhuma atualização na Intelipost. Clique num micro status para ver os pedidos.</p>
+      </section>
+
+      <!-- range de vencimento por micro status -->
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Range de vencimento por micro status</h2>
+            <p class="sub">Pela data prometida ao cliente (Data Original Estimada da Entrega). Clique num número para ver os pedidos.</p>
+          </div>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-range">
+            <thead><tr><th>Micro status</th><th class="num">Vence hoje</th><th class="num">Vence ≥ 1 dia</th><th class="num">Vence ≥ 2 dias</th>
+              <th class="num">Vence ≥ 5 dias</th><th class="num">Vence ≥ 10 dias</th><th class="num">Vence ≥ 20 dias</th><th class="num">Vence ≥ 30 dias</th><th class="num">Total</th></tr></thead>
+            <tbody id="range-linhas"></tbody>
+            <tfoot id="range-total"></tfoot>
+          </table>
+        </div>
       </section>
 
       <!-- lista -->
@@ -84,7 +104,7 @@
         <div class="tabela-wrap">
           <table class="tabela-pedidos">
             <thead><tr>
-              <th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Previsão</th>
+              <th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Prometido ao cliente</th>
               <th>Tratativa</th><th>Nova data</th><th class="col-obs">Observação</th><th></th>
             </tr></thead>
             <tbody id="linhas"></tbody>
@@ -94,6 +114,7 @@
         <nav id="paginacao" class="paginacao"></nav>
       </section>
     </main>
+    </div>
   </div>
 
   <div id="carregando" class="carregando" hidden><div class="caixa"><div class="giro"></div><p id="carregando-texto">Carregando…</p></div></div>

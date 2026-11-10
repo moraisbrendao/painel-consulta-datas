@@ -36,7 +36,7 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-w
 .topo-direita { margin-left: auto; display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .usuario { font-size: 13px; opacity: .85; }
 
-.conteudo { max-width: 1400px; margin: 0 auto; padding: 16px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
+.conteudo { flex: 1; min-width: 0; max-width: 1400px; padding: 16px 24px 40px; display: flex; flex-direction: column; gap: 16px; }
 .info-base { margin: 0; color: var(--texto-2); font-size: 12px; }
 .cartao { background: var(--card); border: 1px solid var(--borda); border-radius: 12px; padding: 16px 18px; }
 .cartao-topo { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
@@ -98,3 +98,27 @@ table { width: 100%; border-collapse: collapse; }
 }
 @media (max-width: 520px) { .filtros { grid-template-columns: 1fr; } .topo-titulo { display: none; } }
 .tabela-ms th.num { text-align: right; }
+
+/* menu lateral */
+.corpo { display: flex; align-items: flex-start; min-height: calc(100vh - 64px); }
+.menu-lateral { width: 200px; flex-shrink: 0; background: #fff; border-right: 1px solid var(--borda); align-self: stretch; padding: 14px 10px; display: flex; flex-direction: column; gap: 4px; position: sticky; top: 0; }
+.menu-item { font: inherit; font-weight: 600; font-size: 14px; text-align: left; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 0; border-radius: 8px; background: transparent; color: var(--texto-2); cursor: pointer; }
+.menu-item:hover { background: var(--cinza-bg); color: var(--marinho); }
+.menu-item.ativo { background: var(--amarelo); color: var(--marinho); }
+.menu-icone { font-size: 16px; width: 18px; text-align: center; }
+
+/* range por micro status */
+.tabela-range th { background: #fff; color: var(--texto-2); font-size: 12px; text-align: left; padding: 6px 8px; border-bottom: 2px solid var(--texto-2); white-space: nowrap; }
+.tabela-range th.num { text-align: right; }
+.tabela-range td { padding: 6px 8px; border-bottom: 1px solid var(--borda); font-size: 13px; }
+.tabela-range td.num { color: var(--vermelho); }
+.tabela-range td.num.vazio-c { color: #c4c9d2; }
+.tabela-range td.num.tot { color: var(--texto); font-weight: 700; }
+.tabela-range td.clic { cursor: pointer; }
+.tabela-range td.clic:hover { background: #fff3c4; text-decoration: underline; }
+.tabela-range td.sel { background: #fff3c4; box-shadow: inset 0 0 0 2px var(--amarelo-escuro); }
+.tabela-range tfoot td { font-weight: 700; color: var(--texto); border-top: 2px solid var(--texto-2); background: #fafbfc; }
+@media (max-width: 900px) {
+  .corpo { flex-direction: column; }
+  .menu-lateral { width: 100%; flex-direction: row; border-right: 0; border-bottom: 1px solid var(--borda); padding: 8px 16px; position: static; }
+}
