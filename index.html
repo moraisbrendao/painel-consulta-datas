@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preventivo Logística · Multimóveis</title>
+  <link rel="icon" href="assets/logo.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- ============ LOGIN ============ -->
+  <main id="tela-login" class="login" hidden>
+    <form id="form-login" class="login-caixa">
+      <img src="assets/logo.png" alt="Multimóveis" class="login-logo">
+      <h1>Preventivo Logística</h1>
+      <p class="sub">Entre com seu e-mail e senha.</p>
+      <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
+      <label>Senha<input id="senha" type="password" autocomplete="current-password" required></label>
+      <button id="btn-entrar" class="btn primario" type="submit">Entrar</button>
+      <p id="erro-login" class="erro" role="alert"></p>
+    </form>
+  </main>
+
+  <!-- ============ PAINEL ============ -->
+  <div id="tela-painel" hidden>
+    <header class="topo">
+      <img src="assets/logo.png" alt="Multimóveis" class="topo-logo">
+      <div class="topo-titulo">Preventivo Logística</div>
+      <div class="topo-direita">
+        <label class="btn amarelo" title="Enviar a planilha exportada (Export)">
+          Enviar planilha<input id="arquivo" type="file" accept=".xlsx,.xlsm,.xls" hidden>
+        </label>
+        <span id="usuario" class="usuario"></span>
+        <button id="btn-sair" class="btn fantasma-claro">Sair</button>
+      </div>
+    </header>
+
+    <main class="conteudo">
+      <p id="info-base" class="info-base">Carregando…</p>
+
+      <!-- visões -->
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>O que está acontecendo, por micro status</h2>
+            <p id="ms-resumo" class="sub"></p>
+          </div>
+          <div class="visoes" id="visoes" role="tablist">
+            <button class="visao ativa" data-visao="vencem">Vencem em 5 dias <span></span></button>
+            <button class="visao" data-visao="parados">Parados no rastreio <span></span></button>
+            <button class="visao" data-visao="vencidos">Já vencidos <span></span></button>
+            <button class="visao" data-visao="todos">Todos <span></span></button>
+          </div>
+        </div>
+        <div class="tabela-ms-wrap">
+          <table class="tabela-ms">
+            <thead><tr><th>Micro status</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com tratativa</th></tr></thead>
+            <tbody id="ms-linhas"></tbody>
+          </table>
+        </div>
+        <p class="dica">Parado = dias sem nenhuma atualização no rastreio da Intelipost. Considerar parado a partir de
+          <select id="dias-parado"><option>3</option><option selected>5</option><option>7</option><option>10</option></select> dias.
+          Clique num micro status para ver os pedidos.</p>
+      </section>
+
+      <!-- lista -->
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2 id="lista-titulo">Pedidos</h2>
+            <p class="sub">As alterações são salvas na hora e aparecem para toda a Logística.</p>
+          </div>
+          <button id="btn-exportar" class="btn">Exportar (Excel)</button>
+        </div>
+        <div class="filtros">
+          <label class="cresce">Buscar<input id="f-busca" type="search" placeholder="Pedido ou NF…"></label>
+          <label>Transportadora<select id="f-transp"></select></label>
+          <label>Canal<select id="f-canal"></select></label>
+          <label>Micro status<select id="f-ms"></select></label>
+          <label>Tratativa<select id="f-trat"></select></label>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr>
+              <th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Previsão</th>
+              <th>Tratativa</th><th>Nova data</th><th class="col-obs">Observação</th><th></th>
+            </tr></thead>
+            <tbody id="linhas"></tbody>
+          </table>
+          <p id="vazio" class="vazio" hidden>Nenhum pedido com esses filtros.</p>
+        </div>
+        <nav id="paginacao" class="paginacao"></nav>
+      </section>
+    </main>
+  </div>
+
+  <div id="carregando" class="carregando" hidden><div class="caixa"><div class="giro"></div><p id="carregando-texto">Carregando…</p></div></div>
+  <div id="toast" class="toast" role="status" hidden></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
