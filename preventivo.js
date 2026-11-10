@@ -51,7 +51,11 @@
           P.buscarTudo("micro_status", "*", (q) => q.order("nome")),
           P.buscarTudo("responsaveis", "*", (q) => q.order("nome")),
           sb.from("intelipost_info").select("*").limit(1),
-          P.buscarTudo("notas", "*", (q) => q.order("criado_em", { ascending: false })),
+          // se a tabela de anotações ainda não existir, o painel abre mesmo assim
+          P.buscarTudo("notas", "*", (q) => q.order("criado_em", { ascending: false })).catch((err) => {
+            toast("As anotações não carregaram (" + err.message + "). Rode o schema.sql atualizado no Supabase.", true);
+            return [];
+          }),
         ]);
         notas = new Map();
         ns.forEach((n) => { if (!notas.has(n.pedido)) notas.set(n.pedido, []); notas.get(n.pedido).push(n); });
