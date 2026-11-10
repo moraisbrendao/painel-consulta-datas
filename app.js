@@ -131,6 +131,7 @@
       document.querySelectorAll("#abas .aba").forEach((b) => (b.hidden = b.dataset.aba !== "sac"));
       $("usuario-perfil").textContent = "SAC";
       mostrarAba("sac");
+      window.SAC && window.SAC.iniciar("sac");
       return;
     }
     const { data: adm } = await sb.from("admins").select("email").limit(1);
@@ -139,6 +140,7 @@
     document.querySelectorAll(".so-admin").forEach((b) => (b.hidden = !ehAdmin));
     document.querySelectorAll(".so-sac").forEach((b) => (b.hidden = !ehAdmin || !!errPerfil));
     $("usuario-perfil").textContent = ehAdmin ? "Logística" : "Consulta";
+    if (ehAdmin && !errPerfil && window.SAC) window.SAC.iniciar("logistica");
     await carregar();
     mostrarAba("preventivo");
   }

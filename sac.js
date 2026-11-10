@@ -105,6 +105,7 @@
         <td class="num-data">${nova}</td>
         <td class="obs">${celulaNotas(l)}</td>
         <td>${/^https?:\/\//i.test(l.link_rastreio || "") ? `<a href="${esc(l.link_rastreio)}" target="_blank" rel="noopener noreferrer">Acompanhar ↗</a>` : "—"}</td>
+        <td>${celulaUrg(l)}</td>
       </tr>`;
     }).join("");
     $("sac-vazio").hidden = total > 0;
@@ -174,5 +175,162 @@
     mostrarUsuarios();
   });
 
-  window.SAC = { mostrar: () => carregar(false), mostrarUsuarios };
+  // =================================================================
+  // Urgências: o SAC pede, a Logística vê o alerta e resolve
+  // =================================================================
+  const MOTIVOS = ["Cliente muito insatisfeito", "Reclamação em site de reclamação", "Procon / órgão de defesa",
+    "Cliente ameaça cancelar", "Prazo prometido ao cliente"];
+  let perfil = null;
+  let urgencias = [];
+  let abertas = new Map();      // pedido -> urgência aberta
+  let timer = null;
+  let chaveAntes = "";
+
+  const quando = (iso) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+  function haQuanto(iso) {
+    const min = Math.max(0, Math.round((Date.now() - new Date(iso)) / 60000));
+    if (min < 60) return `há ${min} min`;
+    const h = Math.round(min / 60);
+    return h < 24 ? `há ${h} h` : `há ${Math.round(h / 24)} dia${h >= 48 ? "s" : ""}`;
+  }
+
+  async function carregarUrg() {
+    const { data, error } = await sb.from("urgencias").select("*").order("criado_em", { ascending: false }).limit(500);
+    if (error) return;   // schema ainda não rodado: sem urgências
+    urgencias = data || [];
+    abertas = new Map();
+    urgencias.filter((u) => !u.resolvida_em).forEach((u) => { if (!abertas.has(u.pedido)) abertas.set(u.pedido, u); });
+    desenharAlerta();
+    if (perfil === "sac") { desenharMinhas(); if (linhas.length) desenhar(); }
+    if (perfil === "logistica" && !$("aba-sac").hidden && linhas.length) desenhar();
+  }
+
+  function iniciar(p) {
+    perfil = p;
+    carregarUrg();
+    clearInterval(timer);
+    timer = setInterval(carregarUrg, 60000);
+  }
+
+  // ---- lado SAC ----
+  function celulaUrg(l) {
+    const u = abertas.get(l.pedido);
+    if (u) return `<span class="chip vermelho" title="${esc(u.motivo)}">Urgência pedida</span><div class="secundario">${haQuanto(u.criado_em)}</div>`;
+    if (perfil !== "sac") return `<span class="secundario">—</span>`;
+    return `<button class="btn-urg" data-urg="${esc(l.pedido)}">🚨 Pedir urgência</button>`;
+  }
+
+  function desenharMinhas() {
+    const recentes = urgencias.filter((u) => !u.resolvida_em || Date.now() - new Date(u.resolvida_em) < 7 * 864e5);
+    $("sac-urg").hidden = !recentes.length;
+    if (!recentes.length) return;
+    const n = recentes.filter((u) => !u.resolvida_em).length;
+    $("sac-urg").innerHTML = `<h2>Urgências pedidas</h2>
+      <p class="sub">${n ? `${n} aguardando a Logística.` : "Nenhuma aguardando."} As resolvidas ficam aqui por 7 dias.</p>
+      <div class="lista-urg">${recentes.map((u) => `
+        <div class="item-urg ${u.resolvida_em ? "ok" : ""}">
+          <div><b>${esc(u.pedido)}</b>${u.nf ? ` · NF ${esc(u.nf)}` : ""} · <span class="secundario">${quando(u.criado_em)} por ${esc(u.pedido_por)}</span></div>
+          <div>${esc(u.motivo)}</div>
+          ${u.resolvida_em
+            ? `<div class="resposta-urg">✔ Resolvida em ${quando(u.resolvida_em)}${u.resposta ? `: ${esc(u.resposta)}` : ""}</div>`
+            : `<div><span class="chip vermelho">Aguardando Logística</span></div>`}
+        </div>`).join("")}</div>`;
+  }
+
+  $("sac-linhas").addEventListener("click", (e) => {
+    const b = e.target.closest("button[data-urg]");
+    if (!b) return;
+    const l = linhas.find((x) => x.pedido === b.dataset.urg);
+    if (!l) return;
+    window.Preventivo.abrirModal(`Pedir urgência · ${l.pedido}`, `
+      <section class="cartao form-urg">
+        <p><b>NF ${esc(l.nf || "—")}</b> · ${esc(l.transportadora || "")} · ${esc(l.canal || "")}</p>
+        <p class="sub">A Logística vai ver um alerta no painel. Escolha o motivo e, se precisar, explique.</p>
+        <div class="chips">${MOTIVOS.map((m) => `<button type="button" class="chip-regra clicavel" data-motivo="${esc(m)}">${esc(m)}</button>`).join("")}</div>
+        <label>O que está acontecendo?<textarea id="urg-texto" rows="4" maxlength="1000" placeholder="Ex.: cliente já ligou 3 vezes, precisa receber até sexta"></textarea></label>
+        <div class="modal-acoes"><span></span><button class="btn primario" id="urg-enviar" data-pedido="${esc(l.pedido)}">Enviar urgência</button></div>
+      </section>`, false);
+  });
+
+  $("modal-corpo").addEventListener("click", async (e) => {
+    const m = e.target.closest("button[data-motivo]");
+    if (m) {
+      const t = $("urg-texto");
+      t.value = t.value.trim() ? `${m.dataset.motivo}. ${t.value.trim()}` : m.dataset.motivo + ". ";
+      t.focus();
+      return;
+    }
+    const env = e.target.closest("#urg-enviar");
+    if (env) {
+      const motivo = $("urg-texto").value.trim();
+      if (!motivo) return P.toast("Escolha um motivo ou escreva o que está acontecendo.", true);
+      const l = linhas.find((x) => x.pedido === env.dataset.pedido);
+      env.disabled = true;
+      const { error } = await sb.from("urgencias").insert({ pedido: l.pedido, nf: l.nf, motivo });
+      env.disabled = false;
+      if (error) return P.toast("Não foi possível enviar: " + error.message, true);
+      window.Preventivo.fecharModal();
+      P.toast("Urgência enviada para a Logística.");
+      carregarUrg();
+      return;
+    }
+    const res = e.target.closest("button[data-resolver]");
+    if (res) {
+      const id = Number(res.dataset.resolver);
+      const resposta = ($("resp-urg-" + id).value || "").trim() || null;
+      res.disabled = true;
+      const { error } = await sb.from("urgencias").update({
+        resolvida_em: new Date().toISOString(), resolvida_por: $("usuario-email").textContent, resposta,
+      }).eq("id", id);
+      if (error) { res.disabled = false; return P.toast("Erro: " + error.message, true); }
+      P.toast("Urgência resolvida. O SAC vai ver a resposta.");
+      await carregarUrg();
+      abertas.size ? abrirUrgencias() : window.Preventivo.fecharModal();
+      return;
+    }
+    const ab = e.target.closest("button[data-abrir-ped]");
+    if (ab && !window.Preventivo.abrirPedidoPorNumero(ab.dataset.abrirPed))
+      P.toast("Esse pedido não está na base atual da Intelipost (pode já ter sido entregue ou cancelado).", true);
+  });
+
+  // ---- lado Logística ----
+  function desenharAlerta() {
+    const n = abertas.size;
+    const ver = perfil === "logistica" && n > 0;
+    $("btn-urgencias").hidden = !ver;
+    $("qtd-urg").textContent = `${n} urgência${n > 1 ? "s" : ""} do SAC`;
+    $("pv-urg").hidden = !ver;
+    if (ver) {
+      const ult = [...abertas.values()][0];
+      $("pv-urg").innerHTML = `<span class="sino">🚨</span>
+        <div class="cresce"><b>O SAC está solicitando urgência em ${n} pedido${n > 1 ? "s" : ""}.</b>
+          <div>Mais recente: ${esc(ult.pedido)} · ${esc(ult.motivo)} (${haQuanto(ult.criado_em)})</div></div>
+        <button class="btn primario" id="pv-urg-ver">Ver urgências</button>`;
+    }
+    const chave = [...abertas.keys()].sort().join(",");
+    if (chave !== chaveAntes) {   // só redesenha a tabela quando mudar algo (para não perder página/filtros)
+      chaveAntes = chave;
+      if (perfil === "logistica" && window.Preventivo && !$("aba-preventivo").hidden) window.Preventivo.redesenhar();
+    }
+  }
+
+  function abrirUrgencias() {
+    const lista = [...abertas.values()].sort((a, b) => a.criado_em.localeCompare(b.criado_em));
+    window.Preventivo.abrirModal(`Urgências do SAC (${lista.length})`, `
+      <p class="sub">Da mais antiga para a mais nova. Ao resolver, escreva o que foi feito: o SAC vê a resposta na tela dele.</p>
+      <div class="lista-urg">${lista.map((u) => `
+        <div class="item-urg">
+          <div><b>${esc(u.pedido)}</b>${u.nf ? ` · NF ${esc(u.nf)}` : ""} · <span class="secundario">pedido por ${esc(u.pedido_por)} ${haQuanto(u.criado_em)} (${quando(u.criado_em)})</span></div>
+          <div class="motivo-urg">${esc(u.motivo)}</div>
+          <div class="acoes-urg">
+            <input id="resp-urg-${u.id}" placeholder="Resposta para o SAC (opcional)" maxlength="500">
+            <button class="btn primario" data-resolver="${u.id}">Marcar como resolvida</button>
+            <button class="btn fantasma" data-abrir-ped="${esc(u.pedido)}">Abrir pedido</button>
+          </div>
+        </div>`).join("")}</div>`, false);
+  }
+  $("btn-urgencias").addEventListener("click", abrirUrgencias);
+  $("pv-urg").addEventListener("click", (e) => { if (e.target.closest("#pv-urg-ver")) abrirUrgencias(); });
+
+  window.SAC = { mostrar: () => carregar(false), mostrarUsuarios, iniciar, urgente: (ped) => abertas.has(ped) };
 })();

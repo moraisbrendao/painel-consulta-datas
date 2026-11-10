@@ -58,6 +58,14 @@ Para dar o perfil SAC a alguém:
 2. No painel, aba **Responsáveis → Usuários do SAC**, digite o e-mail e clique em **+ Marcar como SAC**.
    Para tirar o perfil, clique no × ao lado do e-mail.
 
+### Urgências do SAC
+
+- Na Consulta SAC, cada pedido tem o botão **🚨 Pedir urgência**. O SAC escolhe o motivo (ou escreve) e envia.
+- A Logística vê na hora (atualiza sozinho a cada minuto) um **alerta vermelho** no topo do painel e no Preventivo,
+  e o pedido ganha a marca "urgência SAC" na tabela.
+- Em **Ver urgências**, a Logística escreve a resposta e clica em **Marcar como resolvida**. O SAC vê a resposta
+  no quadro "Urgências pedidas" por 7 dias.
+
 ## O que tem em cada arquivo
 
 | Arquivo | Para que serve |

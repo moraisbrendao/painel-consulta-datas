@@ -284,3 +284,31 @@ input.nota-rapida:focus { background: #fff; }
 .sac-nota { font-size: 12px; line-height: 1.35; margin-bottom: 2px; }
 .sac-mais summary { cursor: pointer; font-size: 11px; color: var(--azul); }
 .sac-mais .sac-nota { padding-left: 8px; border-left: 2px solid var(--borda); margin-top: 4px; }
+
+/* ---------- Urgências do SAC ---------- */
+.btn-urg { border: 1px solid var(--vermelho); color: var(--vermelho); background: #fff; border-radius: 8px; padding: 5px 9px;
+  font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; white-space: nowrap; }
+.btn-urg:hover { background: var(--vermelho-bg); }
+.alerta-urg { background: #d92d20; color: #fff; border: 0; border-radius: 99px; padding: 6px 12px; font: inherit; font-size: 12px;
+  font-weight: 700; cursor: pointer; animation: pulso-urg 2s infinite; }
+@keyframes pulso-urg { 0%,100% { box-shadow: 0 0 0 0 rgba(217,45,32,.6); } 50% { box-shadow: 0 0 0 6px rgba(217,45,32,0); } }
+.faixa-urg { display: flex; align-items: center; gap: 14px; background: var(--vermelho-bg); border: 1px solid var(--vermelho);
+  border-left: 6px solid var(--vermelho); border-radius: var(--raio); padding: 12px 16px; color: var(--texto); }
+.faixa-urg[hidden] { display: none; }
+.faixa-urg .sino { font-size: 26px; }
+.faixa-urg .cresce { flex: 1; min-width: 0; }
+.faixa-urg b { color: var(--vermelho); }
+.tag-urg { display: inline-block; margin-top: 4px; font-size: 11px; font-weight: 700; color: var(--vermelho);
+  background: var(--vermelho-bg); border-radius: 6px; padding: 2px 6px; }
+.lista-urg { display: flex; flex-direction: column; gap: 10px; }
+.item-urg { background: var(--card); border: 1px solid var(--borda); border-left: 4px solid var(--vermelho); border-radius: 10px;
+  padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.item-urg.ok { border-left-color: var(--verde); }
+.motivo-urg { font-size: 14px; }
+.resposta-urg { color: var(--verde); font-weight: 600; }
+.acoes-urg { display: flex; gap: 8px; flex-wrap: wrap; }
+.acoes-urg input { flex: 1; min-width: 200px; }
+.form-urg { display: flex; flex-direction: column; gap: 12px; }
+.form-urg textarea { width: 100%; font: inherit; padding: 10px; border: 1px solid var(--borda); border-radius: 8px; resize: vertical; }
+@media (max-width: 560px) { .faixa-urg { flex-wrap: wrap; } }
+.form-urg label { display: flex; flex-direction: column; gap: 6px; width: 100%; }

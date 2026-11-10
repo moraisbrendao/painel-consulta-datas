@@ -48,6 +48,7 @@
         <button class="aba so-sac" data-aba="sac" hidden>Consulta SAC</button>
       </nav>
       <div class="usuario">
+        <button id="btn-urgencias" class="alerta-urg" hidden>🚨 <span id="qtd-urg">0</span></button>
         <span id="usuario-email"></span>
         <span id="usuario-perfil" class="perfil"></span>
         <button id="btn-sair" class="btn fantasma">Sair</button>
@@ -63,6 +64,8 @@
         </div>
         <div class="atualizacao"><span id="pv-info">Carregando…</span></div>
       </section>
+
+      <section id="pv-urg" class="faixa-urg" hidden></section>
 
       <section class="resumo" id="pv-cards" aria-label="Resumo"></section>
 
@@ -303,6 +306,8 @@
         <div class="atualizacao"><span id="sac-info">Carregando…</span></div>
       </section>
 
+      <section id="sac-urg" class="cartao" hidden></section>
+
       <section class="filtros filtros-sac">
         <label class="busca">Buscar
           <input id="sac-busca" type="search" placeholder="NF ou pedido Intelipost…">
@@ -330,6 +335,7 @@
               <th>Nova data informada</th>
               <th>Anotações</th>
               <th>Rastreio</th>
+              <th>Urgência</th>
             </tr>
           </thead>
           <tbody id="sac-linhas"></tbody>

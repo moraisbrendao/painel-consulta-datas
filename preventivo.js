@@ -477,6 +477,7 @@
       return `<tr class="clicavel" data-pedido="${esc(p.pedido)}">
         <td class="num-data"><b>${esc(p.nf || "—")}</b></td>
         <td><div class="principal">${esc(p.pedido)}</div><div class="secundario">${esc(p.canal || "")}</div>
+            ${window.SAC && window.SAC.urgente(p.pedido) ? `<div class="tag-urg">🚨 urgência SAC</div>` : ""}
             ${p._notas.length ? `<div class="tag-nota">📝 ${p._notas.length} anotaç${p._notas.length > 1 ? "ões" : "ão"}</div>` : ""}</td>
         <td>${esc(p.transportadora || "—")}<div class="secundario">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td class="num-data">${br(p.prev_cliente_original) || "—"}<div class="secundario">${dias}</div></td>
@@ -641,5 +642,6 @@
     desenharResponsaveis();
   });
 
-  window.Preventivo = { mostrar, redesenhar, infoEnvio, mostrarResponsaveis };
+  window.Preventivo = { mostrar, redesenhar, infoEnvio, mostrarResponsaveis, abrirModal, fecharModal,
+    abrirPedidoPorNumero: (ped) => { const p = pedidos.find((x) => x.pedido === ped); if (p) abrirPedido(p, null); return !!p; } };
 })();

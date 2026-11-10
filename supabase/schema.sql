@@ -494,3 +494,36 @@ as $$
 $$;
 revoke all on function public.consulta_sac() from public, anon;
 grant execute on function public.consulta_sac() to authenticated;
+
+-- =====================================================================
+-- URGÊNCIAS DO SAC: o SAC pede urgência num pedido e a Logística vê
+-- um alerta no painel até marcar como resolvida.
+-- =====================================================================
+create table if not exists public.urgencias (
+  id            bigint generated always as identity primary key,
+  pedido        text not null,
+  nf            text,
+  motivo        text not null check (length(trim(motivo)) > 0),
+  pedido_por    text not null default (auth.jwt() ->> 'email'),
+  criado_em     timestamptz not null default now(),
+  resolvida_em  timestamptz,
+  resolvida_por text,
+  resposta      text
+);
+create index if not exists urgencias_abertas_idx on public.urgencias (criado_em desc) where resolvida_em is null;
+alter table public.urgencias enable row level security;
+drop policy if exists "sac e logistica veem" on public.urgencias;
+drop policy if exists "sac e logistica pedem" on public.urgencias;
+drop policy if exists "logistica resolve" on public.urgencias;
+drop policy if exists "logistica apaga" on public.urgencias;
+create policy "sac e logistica veem" on public.urgencias for select to authenticated
+  using (public.is_sac() or public.is_admin());
+create policy "sac e logistica pedem" on public.urgencias for insert to authenticated
+  with check ((public.is_sac() or public.is_admin())
+              and pedido_por = (auth.jwt() ->> 'email')
+              and resolvida_em is null and resolvida_por is null and resposta is null);
+create policy "logistica resolve" on public.urgencias for update to authenticated
+  using (public.is_admin()) with check (public.is_admin());
+create policy "logistica apaga" on public.urgencias for delete to authenticated
+  using (public.is_admin());
+grant select, insert, update, delete on public.urgencias to authenticated;
