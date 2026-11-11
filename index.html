@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=22">
+  <link rel="stylesheet" href="styles.css?v=23">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -34,9 +34,6 @@
         </label>
         <label class="btn amarelo so-log" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
           Enviar Intelipost<input id="arquivo-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
-        </label>
-        <label class="btn amarelo so-log" title="Modelo de retornos (Pedido Intelipost, NF, Transportadora, Retorno): grava nova data e observação em massa">
-          Enviar retornos<input id="arquivo-retornos" type="file" accept=".xlsx,.xls,.csv" hidden>
         </label>
         <label class="btn amarelo so-log" title="Planilha detalhamento_tickets360 (aba Tickets): mostra a fila do ticket de cada pedido">
           Enviar tickets<input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
@@ -122,6 +119,9 @@
           </div>
           <div class="acoes-robo">
             <button id="btn-modelo-retornos" class="btn" title="Baixa o modelo de retornos já com os pedidos desta lista">Modelo de retornos</button>
+            <label class="btn amarelo" title="Modelo de retornos (Pedido Intelipost, NF, Transportadora, Retorno): grava nova data e observação em massa">
+              Enviar retornos<input id="arquivo-retornos" type="file" accept=".xlsx,.xls,.csv" hidden>
+            </label>
             <button id="btn-exportar" class="btn">Exportar (Excel)</button>
           </div>
         </div>
@@ -280,7 +280,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=22"></script>
-  <script src="app.js?v=22"></script>
+  <script src="config.js?v=23"></script>
+  <script src="app.js?v=23"></script>
 </body>
 </html>

@@ -57,7 +57,7 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
     painel mostra, embaixo do número, a **fila** do ticket aberto (pela coluna *Nota ticket*) ou **Sem ticket**. Tem também
     o filtro **Ticket (fila)** no topo, a fila no detalhe e no Excel. Cada envio substitui o anterior.
 
-11. **Enviar retornos** (botão no topo): sobe em massa o modelo de retornos (*Pedido Intelipost*, *NF*, *Transportadora*,
+11. **Enviar retornos** (botão amarelo na lista de pedidos, ao lado de Modelo de retornos): sobe em massa o modelo de retornos (*Pedido Intelipost*, *NF*, *Transportadora*,
     *Retorno*). Se o Retorno for uma **data**, vira a **Nova data** do pedido; se for **texto**, vira a **Observação**
     (há também a coluna opcional *Observação*). O botão **Modelo de retornos**, na lista, baixa o modelo já com os pedidos
     filtrados. Fica salvo até o pedido aparecer como entregue ou cancelado.
