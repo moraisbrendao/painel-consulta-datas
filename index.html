@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=20">
+  <link rel="stylesheet" href="styles.css?v=21">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -35,6 +35,9 @@
         <label class="btn amarelo so-log" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
           Enviar Intelipost<input id="arquivo-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
         </label>
+        <label class="btn amarelo so-log" title="Planilha detalhamento_tickets360 (aba Tickets): mostra a fila do ticket de cada pedido">
+          Enviar tickets<input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
+        </label>
         <span id="usuario" class="usuario"></span>
         <button id="btn-sair" class="btn fantasma-claro">Sair</button>
       </div>
@@ -56,11 +59,13 @@
         <div class="multi" data-filtro="canal" data-rotulo="Canal" data-todos="Todos"></div>
         <div class="multi" data-filtro="ms" data-rotulo="Micro status" data-todos="Todos"></div>
         <div class="multi" data-filtro="resp" data-rotulo="Responsável" data-todos="Todos"></div>
+        <div class="multi" data-filtro="tk" data-rotulo="Ticket (fila)" data-todos="Todos"></div>
         <div class="multi" data-filtro="obs" data-rotulo="Observação" data-todos="Todas"></div>
         <button id="f-limpar" class="btn" type="button" hidden>Limpar filtros</button>
       </section>
       <p id="info-base" class="info-base">Carregando…</p>
       <p id="info-intelipost" class="info-base"></p>
+      <p id="info-tickets" class="info-base"></p>
 
       <!-- visões -->
       <section class="cartao">
@@ -269,7 +274,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=20"></script>
-  <script src="app.js?v=20"></script>
+  <script src="config.js?v=21"></script>
+  <script src="app.js?v=21"></script>
 </body>
 </html>

@@ -53,6 +53,10 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
    Precisa de 4 segredos no GitHub (*Settings › Secrets and variables › Actions*): `PORTAL_EMAIL`, `PORTAL_SENHA`,
    `ROBO_EMAIL` e `ROBO_SENHA` (login do robô no painel, criado no Supabase).
 
+10. **Enviar tickets** (botão no topo): escolha a planilha `detalhamento_tickets360` (aba *Tickets*). Para cada pedido o
+    painel mostra, embaixo do número, a **fila** do ticket aberto (pela coluna *Nota ticket*) ou **Sem ticket**. Tem também
+    o filtro **Ticket (fila)** no topo, a fila no detalhe e no Excel. Cada envio substitui o anterior.
+
 ## Arquivos
 
 | Arquivo | Para que serve |

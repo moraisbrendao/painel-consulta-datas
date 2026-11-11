@@ -130,6 +130,7 @@
       await carregarOcorrencias();
       await carregarResponsaveis();
       await carregarFila();
+      await carregarTickets();
     } catch (err) {
       $("info-base").textContent = "";
       toast(/base_|tratativas|fechados|schema cache/.test(err.message)
@@ -143,6 +144,9 @@
     $("info-intelipost").textContent = infoFech
       ? `Intelipost: ${infoFech.arquivo || "arquivo"} de ${new Date(infoFech.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${fmt(ocultos)} pedido${ocultos === 1 ? "" : "s"} da base já entregue${ocultos === 1 ? "" : "s"} ou cancelado${ocultos === 1 ? "" : "s"} fora${ocultos === 1 ? "" : "m"} tirado${ocultos === 1 ? "" : "s"} do painel.`
       : "Envie o arquivo da Intelipost (\"Enviar Intelipost\") para tirar do painel os pedidos entregues e cancelados.";
+    $("info-tickets").textContent = !ticketsOk ? "" : ticketsInfo
+      ? `Tickets: ${ticketsInfo.arquivo || "planilha"} de ${new Date(ticketsInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${ticketsInfo.enviado_por ? " por " + ticketsInfo.enviado_por : ""} · ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel com ticket aberto.`
+      : "Envie a planilha de tickets (\"Enviar tickets\") para ver em que fila está o ticket de cada pedido.";
     montarOpcoes();
     redesenhar();
     desenharOcorrencias();
@@ -210,9 +214,10 @@
     canal: (p) => p.canal || "(sem canal)",
     ms: (p) => p.micro_status || "(sem micro status)",
     resp: (p) => { const r = respDe(p.micro_status); return r ? r.nome : PENDENTE; },
+    tk: (p) => { if (!ticketsInfo) return "(planilha de tickets não enviada)"; const t = ticketDe(p); return t ? t.fila || "(ticket sem fila)" : "Sem ticket"; },
     obs: (p) => (p._t && p._t.observacao ? "Com observação" : "Sem observação"),
   };
-  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), resp: new Set(), obs: new Set() };
+  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), resp: new Set(), tk: new Set(), obs: new Set() };
   function passaFiltros(p) {
     const busca = norm($("f-busca").value);
     if (busca && !norm(p.pedido).includes(busca) && !norm(p.nf).includes(busca)) return false;
@@ -378,7 +383,7 @@
       const quem = t.atualizado_por ? `${esc(t.atualizado_por.split("@")[0])} · ${new Date(t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "";
       return `<tr data-pedido="${esc(p.pedido)}" class="clicavel ${t.observacao ? "editado" : ""}" title="Clique para ver o detalhe do pedido">
         <td><div class="p">${esc(p.pedido)}</div><div class="s">NF ${esc(p.nf || "—")} · ${esc(p.canal || "")}</div>
-          ${p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : ""}</td>
+          ${marcaTicket(p)}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div><div class="s resp-p">👤 ${nomeResp(p.micro_status)}</div>${marcaOc(p)}</td>
         <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}</td>
@@ -467,7 +472,7 @@
       </div>
       <h3>Rastreio</h3>
       <div class="det-grade">
-        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${item("Status Intelipost", esc(p.status_intelipost))}
+        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${ticketsInfo ? item("Ticket", (() => { const t = ticketDe(p); return t ? `${esc(t.fila || "")}<div class="s">${esc([t.tipo, t.motivo, t.id_ticket ? "nº " + t.id_ticket : "", t.qtd > 1 ? t.qtd + " tickets" : ""].filter(Boolean).join(" · "))}</div>` : "Sem ticket"; })()) : ""}${item("Status Intelipost", esc(p.status_intelipost))}
         ${item("Última atualização", `${dh(p.ultima_atualizacao)}${p._parado !== null ? ` <span class="s">(${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento)</span>` : ""}`)}
         ${item("Ocorrência", esc(p.ocorrencia))}
       </div>
@@ -513,9 +518,9 @@
 
   // exportar o que está na lista
   $("btn-exportar").addEventListener("click", () => {
-    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Responsável", "Dias sem movimento", "Prometido ao cliente",
+    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Responsável", "Fila do ticket", "Dias sem movimento", "Prometido ao cliente",
       "Previsão Intelipost atual", "Dias para vencer", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
-    const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, (respDe(p.micro_status) || { nome: PENDENTE }).nome, p._parado,
+    const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, (respDe(p.micro_status) || { nome: PENDENTE }).nome, FILTROS.tk(p), p._parado,
       br(p.prev_original), br(p.prev_atual), p._dias, br(t.nova_data), t.observacao, t.atualizado_por,
       t.atualizado_em ? new Date(t.atualizado_em).toLocaleString("pt-BR") : "", p.comentario_360, p.qtd_tickets, p.link_rastreio]; });
     const ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
@@ -612,7 +617,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=20");
+        const w = new Worker("leitor-intelipost.js?v=21");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -862,6 +867,70 @@
     const b = e.target.closest(".menu-item"); if (!b) return;
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
+  });
+
+  // ---------------- tickets abertos (planilha detalhamento_tickets360, aba Tickets) ----------------
+  let tickets = new Map(), ticketsInfo = null, ticketsOk = true;
+  const chaveNF = (v) => String(v ?? "").trim().split("-").map((x) => x.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-");
+  const ticketDe = (p) => tickets.get(chaveNF(p.nf)) || null;
+  function marcaTicket(p) {
+    if (!ticketsInfo) return p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : "";
+    const t = ticketDe(p);
+    return t ? `<div class="s tk" title="${esc([t.tipo, t.motivo].filter(Boolean).join(" · "))}">🎫 Fila: ${esc(t.fila || "—")}${t.qtd > 1 ? ` (${t.qtd} tickets)` : ""}</div>`
+      : `<div class="s sem-tk">Sem ticket</div>`;
+  }
+  async function carregarTickets() {
+    try {
+      const [lista, inf] = await Promise.all([buscarTudo("tickets_abertos", "nf"), sb.from("tickets_info").select("*").limit(1)]);
+      tickets = new Map(lista.map((t) => [chaveNF(t.nf), t]));
+      ticketsInfo = (inf.data && inf.data[0]) || null; ticketsOk = true;
+    } catch (_) { ticketsOk = false; ticketsInfo = null; }
+  }
+  $("arquivo-tickets").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = "";
+    if (!arq) return;
+    if (!ticketsOk) return toast("Rode de novo o supabase/schema.sql no Supabase para usar os tickets.", true);
+    carregando("Lendo a planilha de tickets…");
+    await new Promise((r) => setTimeout(r, 50));
+    let linhas, total = 0;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
+      const nomeAba = wb.SheetNames.find((n) => norm(n) === "TICKETS") || wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "FILA"));
+      if (iCab < 0) throw new Error('Não achei a coluna "Fila" na aba Tickets.');
+      const cab = rows[iCab].map(norm), col = (nome) => cab.indexOf(nome);
+      const cNf = col("NOTA TICKET"), cFila = col("FILA"), cTipo = col("TIPO DE TICKET"), cMot = col("MOTIVO TICKET"),
+        cId = col("ID TICKET"), cData = col("DATA CRIACAO TICKET");
+      if (cNf < 0) throw new Error('Não achei a coluna "Nota ticket" na aba Tickets.');
+      const porNF = new Map();
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r || r[cNf] == null || r[cNf] === "") return;
+        total++;
+        const nf = chaveNF(r[cNf]); if (!nf) return;
+        let d = cData >= 0 ? r[cData] : null;
+        d = d instanceof Date ? d.toISOString() : d ? String(d).replace(" ", "T") : null;
+        const novo = { nf, fila: cFila >= 0 && r[cFila] != null ? String(r[cFila]).trim() : null, tipo: cTipo >= 0 && r[cTipo] != null ? String(r[cTipo]).trim() : null,
+          motivo: cMot >= 0 && r[cMot] != null ? String(r[cMot]).trim() : null, id_ticket: cId >= 0 && r[cId] != null ? String(r[cId]).trim() : null, criado_em: d, qtd: 1 };
+        const ant = porNF.get(nf);
+        if (!ant) porNF.set(nf, novo);
+        else { novo.qtd = ant.qtd + 1; porNF.set(nf, String(novo.criado_em || "") >= String(ant.criado_em || "") ? novo : { ...ant, qtd: novo.qtd }); }
+      });
+      linhas = [...porNF.values()];
+      if (!linhas.length) throw new Error("A aba Tickets não tem notas.");
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    if (!confirm(`${arq.name}\n\n${fmt(total)} tickets abertos, em ${fmt(linhas.length)} notas.\nSubstitui a planilha de tickets anterior para todos.\n\nEnviar?`)) return;
+    try {
+      for (let i = 0; i < linhas.length; i += 2000) {
+        carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
+        const { error } = await sb.rpc("importar_tickets", { linhas: linhas.slice(i, i + 2000), limpar: i === 0, arquivo: arq.name, total });
+        if (error) throw error;
+      }
+    } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
+    carregando("");
+    await carregar();
+    toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto.`);
   });
 
   // ---------------- responsáveis por micro status ----------------
