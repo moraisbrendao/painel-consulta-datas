@@ -617,7 +617,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=21");
+        const w = new Worker("leitor-intelipost.js?v=22");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -867,6 +867,70 @@
     const b = e.target.closest(".menu-item"); if (!b) return;
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
+  });
+
+  // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Retorno [, Observação]) ----------------
+  // Retorno com data -> Nova data; Retorno com texto -> Observação. Fica salvo até o pedido sair como entregue/cancelado.
+  $("btn-modelo-retornos").addEventListener("click", () => {
+    const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Retorno", "Observação"]]
+      .concat(filtrados.map((p) => [p.pedido, p.nf, p.transportadora, null, null]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 40 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Planilha1");
+    XLSX.writeFile(wb, `template_retornos_${hojeISO()}.xlsx`);
+  });
+  $("arquivo-retornos").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = "";
+    if (!arq) return;
+    carregando("Lendo o modelo de retornos…");
+    await new Promise((r) => setTimeout(r, 50));
+    const mudancas = new Map(); let lidas = 0, naoAchados = [];
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "RETORNO" || norm(c).startsWith("NOVA DATA")));
+      if (iCab < 0) throw new Error('Não achei a coluna "Retorno" no modelo.');
+      const cab = rows[iCab].map(norm);
+      const cPed = cab.findIndex((c) => c.includes("PEDIDO")), cNf = cab.findIndex((c) => c === "NF" || c === "NOTA" || c.startsWith("NOTA FISCAL") || c === "NOTA-SERIE");
+      const cRet = cab.findIndex((c) => c === "RETORNO"), cData = cab.findIndex((c) => c.startsWith("NOVA DATA")), cObs = cab.findIndex((c) => c.startsWith("OBSERVA"));
+      const porPed = new Map(base.map((p) => [norm(p.pedido), p])), porNf = new Map(base.map((p) => [chaveNF(p.nf), p]));
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r) return;
+        const ret = cRet >= 0 ? r[cRet] : null, dat = cData >= 0 ? r[cData] : null, obs = cObs >= 0 ? r[cObs] : null;
+        if ([ret, dat, obs].every((v) => v == null || String(v).trim() === "")) return;
+        lidas++;
+        const p = (cPed >= 0 && r[cPed] != null && porPed.get(norm(r[cPed]))) || (cNf >= 0 && r[cNf] != null && porNf.get(chaveNF(r[cNf])));
+        if (!p) { naoAchados.push(String((cPed >= 0 && r[cPed]) || (cNf >= 0 && r[cNf]) || "?")); return; }
+        const m = mudancas.get(p.pedido) || {};
+        for (const v of [dat, ret]) {
+          if (v == null || String(v).trim() === "") continue;
+          const d = dataCelula(v);
+          if (d) m.nova_data = d; else m.observacao = String(v).trim().slice(0, 1000);
+        }
+        if (obs != null && String(obs).trim()) m.observacao = String(obs).trim().slice(0, 1000);
+        mudancas.set(p.pedido, m);
+      });
+      if (!lidas) throw new Error("O modelo não tem nenhum retorno preenchido.");
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    const nDatas = [...mudancas.values()].filter((m) => m.nova_data).length, nObs = [...mudancas.values()].filter((m) => m.observacao).length;
+    if (!confirm(`${arq.name}\n\n${fmt(mudancas.size)} pedidos encontrados no painel: ${fmt(nDatas)} com nova data e ${fmt(nObs)} com observação.`
+      + (naoAchados.length ? `\n${fmt(naoAchados.length)} linha(s) não estão no painel (já entregues, canceladas ou fora da base) e serão ignoradas.` : "")
+      + `\n\nGravar para todos?`)) return;
+    const linhas = [...mudancas.entries()].map(([ped, m]) => {
+      const a = trat.get(ped) || {};
+      return { pedido: ped, situacao: a.situacao || null, nova_data: m.nova_data || a.nova_data || null, observacao: m.observacao || a.observacao || null };
+    });
+    try {
+      for (let i = 0; i < linhas.length; i += 500) {
+        carregando(`Gravando… ${fmt(Math.min(i + 500, linhas.length))} de ${fmt(linhas.length)}`);
+        const { data, error } = await sb.from("tratativas").upsert(linhas.slice(i, i + 500)).select();
+        if (error) throw error;
+        (data || []).forEach((t) => trat.set(t.pedido, t));
+      }
+    } catch (err) { carregando(""); toast("Erro ao gravar: " + err.message, true); return; }
+    carregando("");
+    redesenhar(true);
+    toast(`Retornos gravados em ${fmt(linhas.length)} pedidos.` + (naoAchados.length ? ` ${fmt(naoAchados.length)} não estavam no painel.` : ""));
   });
 
   // ---------------- tickets abertos (planilha detalhamento_tickets360, aba Tickets) ----------------
