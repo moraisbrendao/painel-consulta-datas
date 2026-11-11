@@ -221,3 +221,7 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tabela-resp td { vertical-align: middle; }
 .acoes-robo { display: flex; gap: 8px; flex-wrap: wrap; }
 .erro-txt { color: var(--vermelho); cursor: pointer; font-weight: 600; }
+.visoes-sac { margin-bottom: 12px; }
+.visao-sac { font: inherit; font-size: 13px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--borda); background: #fff; color: var(--texto); cursor: pointer; }
+.visao-sac.ativa { background: var(--marinho); color: #fff; border-color: var(--marinho); }
+.visao-sac span { opacity: .8; font-weight: 500; }

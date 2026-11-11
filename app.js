@@ -605,7 +605,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=18");
+        const w = new Worker("leitor-intelipost.js?v=19");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -922,7 +922,7 @@
   // ---------------- consulta SAC ----------------
   // O SAC recebe só as colunas liberadas (função consultar_sac do banco).
   // A Logística vê a mesma consulta montada com os dados que já carregou.
-  let sacLinhas = [], sacFiltrados = [], sacPagina = 1, sacCarregadoEm = 0;
+  let sacLinhas = [], sacFiltrados = [], sacPagina = 1, sacCarregadoEm = 0, sacVisao = "todos";
 
   async function carregarSac() {
     $("sac-info").textContent = "Carregando…";
@@ -975,10 +975,19 @@
   function filtrarSac(manter) {
     const busca = norm($("sac-busca").value).replace(/\s/g, "");
     const canal = $("sac-canal").value, transp = $("sac-transp").value, nova = $("sac-nova").value;
-    sacFiltrados = sacLinhas.filter((l) =>
+    const hoje = hojeISO(), amanha = limiteSac();
+    const dia = (l) => String(l.prometido || "").slice(0, 10);
+    const naSv = { todos: () => true, vencidos: (l) => dia(l) < hoje, hoje: (l) => dia(l) === hoje, amanha: (l) => dia(l) === amanha };
+    const passa = (l) =>
       (!busca || [l.nf, l.pedido].some((v) => norm(v).replace(/\s/g, "").includes(busca))) &&
       (!canal || l.canal === canal) && (!transp || l.transportadora === transp) &&
-      (!nova || (nova === "com" && l.nova_data) || (nova === "sem" && !l.nova_data) || (nova === "obs" && l.observacao)));
+      (!nova || (nova === "com" && l.nova_data) || (nova === "sem" && !l.nova_data) || (nova === "obs" && l.observacao));
+    const base1 = sacLinhas.filter(passa);
+    document.querySelectorAll("#sac-visoes .visao-sac").forEach((b) => {
+      b.classList.toggle("ativa", b.dataset.sv === sacVisao);
+      b.querySelector("span").textContent = `(${fmt(base1.filter(naSv[b.dataset.sv]).length)})`;
+    });
+    sacFiltrados = base1.filter(naSv[sacVisao]);
     sacFiltrados.sort((a, b) => String(a.prometido || "9999").localeCompare(String(b.prometido || "9999")));
     if (!manter) sacPagina = 1;
     desenharSac();
@@ -1008,6 +1017,10 @@
   }
 
   let esperaSac; $("sac-busca").addEventListener("input", () => { clearTimeout(esperaSac); esperaSac = setTimeout(() => filtrarSac(), 250); });
+  $("sac-visoes").addEventListener("click", (e) => {
+    const b = e.target.closest(".visao-sac"); if (!b) return;
+    sacVisao = b.dataset.sv; filtrarSac();
+  });
   ["sac-canal", "sac-transp", "sac-nova"].forEach((id) => $(id).addEventListener("change", () => filtrarSac()));
   $("sac-paginacao").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-p]"); if (!b) return;
@@ -1018,7 +1031,7 @@
       .concat(sacFiltrados.map((l) => [l.nf, l.pedido, l.canal, l.transportadora, l.micro_status, br(l.prometido), br(l.nova_data), l.observacao || "", l.link_rastreio || ""]));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Consulta");
-    XLSX.writeFile(wb, `consulta_sac_${hojeISO()}.xlsx`);
+    XLSX.writeFile(wb, `consulta_sac_${sacVisao}_${hojeISO()}.xlsx`);
   });
 
   // lista de logins do SAC (só a Logística mexe)
