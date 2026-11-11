@@ -605,7 +605,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=16");
+        const w = new Worker("leitor-intelipost.js?v=17");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -655,7 +655,8 @@
   // como escolher no portal (definido pela Logística em 10/11/2026)
   const NOME_NO_PORTAL = { "VM TRANSPORTES": "VM TRANSPORTES (a 1ª da lista)", "Atual Cargas": "Atual Cargas Standard",
     "Transiga": "TRANSIGA", "Petrymar": "Petrymar Transportes", "TRANSCAI TRANSPORTES": "Transcai" };
-  const MOTIVO_PORTAL = { "CARGA RECUSADA PELO DESTINATARIO": "Recusa", "AGUARDANDO INSTRUCAO": "Confirmação de dados" };
+  const MOTIVO_PORTAL = { "CARGA RECUSADA PELO DESTINATARIO": "Recusa", "AGUARDANDO INSTRUCAO": "Confirmação de dados",
+    "ESTABELECIMENTO FECHADO": "Destinatário ausente", "DESTINATARIO MUDOU-SE": "Mudança de endereço" };
   const motivoPortal = (ms) => MOTIVO_PORTAL[norm(ms)] || ms;
   function transpPortal(nome) {
     const n = norm(nome); if (!n) return "(sem transportadora)";
@@ -715,7 +716,8 @@
   // ---------------- robô do portal (fila no banco; o robô roda no GitHub) ----------------
   // motivo e transportadora exatamente como aparecem no portal (definido pela Logística em 10/11/2026)
   const MOTIVO_ROBO = { "DESTINATARIO AUSENTE": "Destinatário ausente", "ENDERECO NAO LOCALIZADO": "Endereço não localizado",
-    "AGUARDANDO INSTRUCAO": "Confirmação de dados", "CARGA RECUSADA PELO DESTINATARIO": "Recusa" };
+    "AGUARDANDO INSTRUCAO": "Confirmação de dados", "CARGA RECUSADA PELO DESTINATARIO": "Recusa",
+    "ESTABELECIMENTO FECHADO": "Destinatário ausente", "DESTINATARIO MUDOU-SE": "Mudança de endereço" };
   const TRANSP_ROBO = { "VM TRANSPORTES": "VM TRANSPORTES", "Atual Cargas": "Atual Cargas Standard", "Transiga": "TRANSIGA",
     "Petrymar": "Petrymar Transportes", "TRANSCAI TRANSPORTES": "Transcai" };   // VM: sempre a 1ª da lista (posicao 0)
   let fila = [], filaOk = true;
