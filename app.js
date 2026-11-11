@@ -617,7 +617,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=23");
+        const w = new Worker("leitor-intelipost.js?v=24");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -869,10 +869,10 @@
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
   });
 
-  // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Retorno [, Observação]) ----------------
-  // Retorno com data -> Nova data; Retorno com texto -> Observação. Fica salvo até o pedido sair como entregue/cancelado.
+  // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------
+  // Coluna Nova Data: só data -> Nova data. Coluna Observação: texto -> Observação. Fica salvo até o pedido sair como entregue/cancelado.
   $("btn-modelo-retornos").addEventListener("click", () => {
-    const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Retorno", "Observação"]]
+    const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Nova Data", "Observação"]]
       .concat(filtrados.map((p) => [p.pedido, p.nf, p.transportadora, null, null]));
     const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 14 }, { wch: 40 }];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Planilha1");
@@ -883,12 +883,12 @@
     if (!arq) return;
     carregando("Lendo o modelo de retornos…");
     await new Promise((r) => setTimeout(r, 50));
-    const mudancas = new Map(); let lidas = 0, naoAchados = [];
+    const mudancas = new Map(); let lidas = 0, naoAchados = [], datasInvalidas = 0;
     try {
       const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
-      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "RETORNO" || norm(c).startsWith("NOVA DATA")));
-      if (iCab < 0) throw new Error('Não achei a coluna "Retorno" no modelo.');
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "RETORNO" || norm(c).startsWith("NOVA DATA") || norm(c).startsWith("OBSERVA")));
+      if (iCab < 0) throw new Error('Não achei as colunas "Nova Data" e "Observação" no modelo.');
       const cab = rows[iCab].map(norm);
       const cPed = cab.findIndex((c) => c.includes("PEDIDO")), cNf = cab.findIndex((c) => c === "NF" || c === "NOTA" || c.startsWith("NOTA FISCAL") || c === "NOTA-SERIE");
       const cRet = cab.findIndex((c) => c === "RETORNO"), cData = cab.findIndex((c) => c.startsWith("NOVA DATA")), cObs = cab.findIndex((c) => c.startsWith("OBSERVA"));
@@ -901,12 +901,13 @@
         const p = (cPed >= 0 && r[cPed] != null && porPed.get(norm(r[cPed]))) || (cNf >= 0 && r[cNf] != null && porNf.get(chaveNF(r[cNf])));
         if (!p) { naoAchados.push(String((cPed >= 0 && r[cPed]) || (cNf >= 0 && r[cNf]) || "?")); return; }
         const m = mudancas.get(p.pedido) || {};
-        for (const v of [dat, ret]) {
-          if (v == null || String(v).trim() === "") continue;
-          const d = dataCelula(v);
-          if (d) m.nova_data = d; else m.observacao = String(v).trim().slice(0, 1000);
-        }
-        if (obs != null && String(obs).trim()) m.observacao = String(obs).trim().slice(0, 1000);
+        // coluna antiga "Retorno": data vira nova data, texto vira observação
+        if (ret != null && String(ret).trim() !== "") { const d = dataCelula(ret); if (d) m.nova_data = d; else m.observacao = String(ret).trim().slice(0, 1000); }
+        // Nova Data: só data (o que não for data é ignorado e avisado)
+        if (dat != null && String(dat).trim() !== "") { const d = dataCelula(dat); if (d) m.nova_data = d; else datasInvalidas++; }
+        // Observação: sempre texto
+        if (obs != null && String(obs).trim() !== "") m.observacao = String(obs).trim().slice(0, 1000);
+        if (!m.nova_data && !m.observacao) return;
         mudancas.set(p.pedido, m);
       });
       if (!lidas) throw new Error("O modelo não tem nenhum retorno preenchido.");
@@ -914,6 +915,7 @@
     carregando("");
     const nDatas = [...mudancas.values()].filter((m) => m.nova_data).length, nObs = [...mudancas.values()].filter((m) => m.observacao).length;
     if (!confirm(`${arq.name}\n\n${fmt(mudancas.size)} pedidos encontrados no painel: ${fmt(nDatas)} com nova data e ${fmt(nObs)} com observação.`
+      + (datasInvalidas ? `\n⚠ ${fmt(datasInvalidas)} linha(s) com algo que não é data na coluna Nova Data: essas datas serão ignoradas.` : "")
       + (naoAchados.length ? `\n${fmt(naoAchados.length)} linha(s) não estão no painel (já entregues, canceladas ou fora da base) e serão ignoradas.` : "")
       + `\n\nGravar para todos?`)) return;
     const linhas = [...mudancas.entries()].map(([ped, m]) => {
