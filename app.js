@@ -131,7 +131,6 @@
       await carregarResponsaveis();
       await carregarFila();
       await carregarTickets();
-      await carregarReposicoes();
     } catch (err) {
       $("info-base").textContent = "";
       toast(/base_|tratativas|fechados|schema cache/.test(err.message)
@@ -152,7 +151,6 @@
     redesenhar();
     desenharOcorrencias();
     if (paginaAtual === "sac") desenharSacLogistica();
-    montarReposicao();
     desenharResponsaveis();
   }
 
@@ -619,7 +617,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=26");
+        const w = new Worker("leitor-intelipost.js?v=27");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -960,7 +958,7 @@
     if (!ticketsOk) return toast("Rode de novo o supabase/schema.sql no Supabase para usar os tickets.", true);
     carregando("Lendo a planilha de tickets…");
     await new Promise((r) => setTimeout(r, 50));
-    let linhas, total = 0, repLinhas = null;
+    let linhas, total = 0;
     try {
       const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
       const nomeAba = wb.SheetNames.find((n) => norm(n) === "TICKETS") || wb.SheetNames[0];
@@ -986,131 +984,19 @@
       });
       linhas = [...porNF.values()];
       if (!linhas.length) throw new Error("A aba Tickets não tem notas.");
-      repLinhas = lerReposicoes(wb);
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    if (!confirm(`${arq.name}\n\n${fmt(total)} tickets abertos, em ${fmt(linhas.length)} notas.${repLinhas ? `\n${fmt(repLinhas.length)} reposições (aba Reposições).` : ""}\nSubstitui a planilha de tickets anterior para todos.\n\nEnviar?`)) return;
+    if (!confirm(`${arq.name}\n\n${fmt(total)} tickets abertos, em ${fmt(linhas.length)} notas.\nSubstitui a planilha de tickets anterior para todos.\n\nEnviar?`)) return;
     try {
       for (let i = 0; i < linhas.length; i += 2000) {
         carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
         const { error } = await sb.rpc("importar_tickets", { linhas: linhas.slice(i, i + 2000), limpar: i === 0, arquivo: arq.name, total });
         if (error) throw error;
       }
-      if (repLinhas) {
-        carregando("Enviando as reposições…");
-        for (let i = 0; i < repLinhas.length; i += 2000) {
-          const { error } = await sb.rpc("importar_reposicoes", { linhas: repLinhas.slice(i, i + 2000), limpar: i === 0 });
-          if (error) { toast("Os tickets foram enviados, mas as reposições não: rode de novo o supabase/schema.sql no Supabase.", true); break; }
-        }
-      }
     } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
     carregando("");
     await carregar();
     toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto.`);
-  });
-
-  // ---------------- reposição (aba Reposições da planilha de detalhamento) ----------------
-  let reps = [], repOk = true, repFiltradas = [], repPagina = 1, repVisao = "todas", repTranspSel = "";
-  const dataBR = (v) => { const d = dataCelula(v instanceof Date ? v.toISOString() : v); return d; };
-  function lerReposicoes(wb) {
-    const aba = wb.SheetNames.find((n) => norm(n).startsWith("REPOSI")); if (!aba) return null;
-    const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, raw: true, defval: null });
-    const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "ID TICKET")); if (iCab < 0) return null;
-    const cab = rows[iCab].map(norm), c = (n) => cab.indexOf(n), v = (r, i) => (i >= 0 && r[i] != null && String(r[i]).trim() !== "" ? String(r[i]).trim() : null);
-    const iId = c("ID TICKET"), iCri = c("DATA CRIACAO TICKET"), iPed = c("ID INTELIPOST"), iNota = c("NOTA TICKET"), iTipoT = c("TIPO DE TICKET"),
-      iFila = c("FILA ATUAL DO TICKET"), iTipoR = c("TIPO DE REPOSICAO"), iDef = c("TRANSPORTADOR DEFINIDO PARA ENVIO"), iPromob = c("PEDIDO_PROMOB"),
-      iNf = c("NF EMITIDA PROMOB"), iEmi = c("DATA EMISSAO PROMOB"), iSai = c("DATA SAIDA PROMOB"),
-      iTNota = cab.findIndex((x) => x.startsWith("TRANSP. NOTA REPOSICAO")), iTRed = cab.findIndex((x) => x.startsWith("TRANSP. REDESPACHO"));
-    const vistos = new Set(), out = [];
-    rows.slice(iCab + 1).forEach((r) => {
-      if (!r || !v(r, iId)) return;
-      const nota = v(r, iNota) || "", k = v(r, iId) + "|" + nota; if (vistos.has(k)) return; vistos.add(k);
-      const red = v(r, iTRed), tn = v(r, iTNota), df = v(r, iDef);
-      let cri = iCri >= 0 ? r[iCri] : null; cri = cri instanceof Date ? cri.toISOString() : cri ? String(cri).replace(" ", "T") : null;
-      out.push({ id_ticket: v(r, iId), nota_ticket: nota, criado_em: cri, pedido: v(r, iPed), tipo_ticket: v(r, iTipoT), fila: v(r, iFila),
-        tipo_reposicao: v(r, iTipoR), pedido_promob: v(r, iPromob), nf_reposicao: v(r, iNf),
-        emissao: iEmi >= 0 ? dataBR(r[iEmi]) : null, saida: iSai >= 0 ? dataBR(r[iSai]) : null,
-        transportadora: red || tn || df, origem_transp: red ? "redespacho" : tn ? "nota" : df ? "definida" : null });
-    });
-    return out;
-  }
-  async function carregarReposicoes() {
-    try { reps = await buscarTudo("reposicoes", "id_ticket"); repOk = true; } catch (_) { repOk = false; reps = []; }
-  }
-  const situacaoRep = (r) => (!r.nf_reposicao ? "semnf" : r.saida ? "saiu" : "emitida");
-  const NOME_SIT = { semnf: "Sem NF de reposição", emitida: "NF emitida, sem saída", saiu: "Já saiu" };
-  function montarReposicao() {
-    const preencher = (id, valores, rotulo) => {
-      const sel = $(id), atual = sel.value;
-      const unicos = [...new Set(valores.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
-      sel.innerHTML = `<option value="">${rotulo}</option>` + unicos.map((x) => `<option>${esc(x)}</option>`).join("");
-      if (unicos.includes(atual)) sel.value = atual;
-    };
-    preencher("rep-fila", reps.map((r) => r.fila), "Todas");
-    preencher("rep-transp", reps.map((r) => r.transportadora || "(sem transportadora)"), "Todas");
-    preencher("rep-tipo", reps.map((r) => [r.tipo_ticket, r.tipo_reposicao].filter(Boolean).join(" · ")), "Todos");
-    $("rep-info").textContent = !repOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase e envie a planilha de detalhamento em \"Enviar tickets\"."
-      : reps.length ? `${fmt(reps.length)} reposições${ticketsInfo ? ` · planilha ${ticketsInfo.arquivo || ""} de ${new Date(ticketsInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ""}`
-      : "Ainda não há reposições. Envie a planilha de detalhamento em \"Enviar tickets\" (no topo).";
-    filtrarRep(true);
-  }
-  function filtrarRep(manter) {
-    const busca = norm($("rep-busca").value).replace(/\s/g, ""), fila = $("rep-fila").value, transp = $("rep-transp").value, tipo = $("rep-tipo").value;
-    const base1 = reps.filter((r) =>
-      (!busca || [r.id_ticket, r.pedido, r.nota_ticket, r.nf_reposicao, r.pedido_promob].some((x) => norm(x).replace(/\s/g, "").includes(busca))) &&
-      (!fila || r.fila === fila) && (!transp || (r.transportadora || "(sem transportadora)") === transp) &&
-      (!tipo || [r.tipo_ticket, r.tipo_reposicao].filter(Boolean).join(" · ") === tipo));
-    document.querySelectorAll("#rep-visoes .visao-sac").forEach((b) => {
-      b.classList.toggle("ativa", b.dataset.rv === repVisao);
-      b.querySelector("span").textContent = `(${fmt(b.dataset.rv === "todas" ? base1.length : base1.filter((r) => situacaoRep(r) === b.dataset.rv).length)})`;
-    });
-    // tabela por transportadora (com os filtros, sem a situação)
-    const porT = new Map();
-    base1.forEach((r) => { const k = r.transportadora || "(sem transportadora)"; const t = porT.get(k) || { semnf: 0, emitida: 0, saiu: 0, total: 0 }; t[situacaoRep(r)]++; t.total++; porT.set(k, t); });
-    const cel = (n) => (n ? `<td class="num">${fmt(n)}</td>` : `<td class="num vazio-c">·</td>`);
-    $("rep-transp-linhas").innerHTML = [...porT.entries()].sort((a, b) => b[1].total - a[1].total).map(([k, t]) =>
-      `<tr data-rt="${esc(k)}" class="clicavel ${repTranspSel === k ? "sel" : ""}"><td>${esc(k)}</td>${cel(t.semnf)}${cel(t.emitida)}${cel(t.saiu)}<td class="num tot">${fmt(t.total)}</td></tr>`).join("")
-      || `<tr><td colspan="5" class="vazio">Sem reposições.</td></tr>`;
-    repFiltradas = base1.filter((r) => (repVisao === "todas" || situacaoRep(r) === repVisao) && (!repTranspSel || (r.transportadora || "(sem transportadora)") === repTranspSel));
-    repFiltradas.sort((a, b) => String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
-    $("rep-titulo").textContent = `${repVisao === "todas" ? "Reposições" : NOME_SIT[repVisao]}${repTranspSel ? " · " + repTranspSel : ""} (${fmt(repFiltradas.length)})`;
-    if (!manter) repPagina = 1;
-    desenharRep();
-  }
-  function desenharRep() {
-    const total = repFiltradas.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
-    repPagina = Math.min(repPagina, paginas);
-    const porNfBase = new Map(base.map((p) => [chaveNF(p.nf), p]));
-    const hoje = hojeISO();
-    $("rep-linhas").innerHTML = repFiltradas.slice((repPagina - 1) * POR_PAGINA, repPagina * POR_PAGINA).map((r) => {
-      const sit = situacaoRep(r), pb = r.nf_reposicao ? porNfBase.get(chaveNF(r.nf_reposicao)) : null;
-      const dias = r.saida ? diasEntre(r.saida, hoje) : r.criado_em ? diasEntre(String(r.criado_em).slice(0, 10), hoje) : null;
-      const chip = sit === "saiu" ? `<span class="chip verde">saiu há ${dias} d</span>` : sit === "emitida" ? `<span class="chip ambar">emitida, sem saída</span>` : `<span class="chip vermelho">sem NF · ticket há ${dias ?? "?"} d</span>`;
-      return `<tr>
-        <td><b>${esc(r.id_ticket)}</b><div class="s">${r.criado_em ? new Date(r.criado_em).toLocaleDateString("pt-BR") : ""}</div><div class="s">${esc([r.tipo_ticket, r.tipo_reposicao].filter(Boolean).join(" · "))}</div></td>
-        <td>${esc(r.pedido || "—")}<div class="s">NF original ${esc(r.nota_ticket || "—")}</div></td>
-        <td>${esc(r.fila || "—")}</td>
-        <td>${r.nf_reposicao ? `<b>${esc(r.nf_reposicao)}</b>` : '<span class="s">—</span>'}<div class="s">${[r.emissao ? "emitida " + br(r.emissao) : "", r.saida ? "saída " + br(r.saida) : ""].filter(Boolean).join(" · ")}</div>
-          ${pb ? `<div class="s">Intelipost: <span class="ms">${esc(pb.micro_status || "")}</span></div>` : ""}</td>
-        <td>${esc(r.transportadora || "—")}${r.origem_transp === "redespacho" ? ' <span class="chip cinza">redespacho</span>' : r.origem_transp === "definida" ? ' <span class="chip cinza">definida no ticket</span>' : ""}</td>
-        <td>${chip}</td></tr>`;
-    }).join("");
-    $("rep-vazio").hidden = total > 0;
-    $("rep-paginacao").innerHTML = total > POR_PAGINA
-      ? `<button class="btn" data-p="-1" ${repPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${repPagina} de ${paginas}</span>
-         <button class="btn" data-p="1" ${repPagina === paginas ? "disabled" : ""}>Próxima ›</button>` : "";
-  }
-  $("rep-visoes").addEventListener("click", (e) => { const b = e.target.closest(".visao-sac"); if (!b) return; repVisao = b.dataset.rv; filtrarRep(); });
-  $("rep-transp-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-rt]"); if (!tr) return; repTranspSel = repTranspSel === tr.dataset.rt ? "" : tr.dataset.rt; filtrarRep(); });
-  let esperaRep; $("rep-busca").addEventListener("input", () => { clearTimeout(esperaRep); esperaRep = setTimeout(() => filtrarRep(), 250); });
-  ["rep-fila", "rep-transp", "rep-tipo"].forEach((id) => $(id).addEventListener("change", () => filtrarRep()));
-  $("rep-paginacao").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; repPagina += Number(b.dataset.p); desenharRep(); $("rep-titulo").scrollIntoView({ block: "start" }); });
-  $("rep-exportar").addEventListener("click", () => {
-    const cab = ["Ticket", "Criado em", "Tipo de ticket", "Tipo de reposição", "Pedido Intelipost", "NF original", "Fila", "Pedido Promob", "NF de reposição", "Emissão", "Saída", "Transportadora", "Origem da transportadora", "Situação"];
-    const linhas = repFiltradas.map((r) => [r.id_ticket, r.criado_em ? new Date(r.criado_em).toLocaleString("pt-BR") : "", r.tipo_ticket, r.tipo_reposicao, r.pedido, r.nota_ticket, r.fila, r.pedido_promob,
-      r.nf_reposicao, br(r.emissao), br(r.saida), r.transportadora, r.origem_transp, NOME_SIT[situacaoRep(r)]]);
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab].concat(linhas)), "Reposições");
-    XLSX.writeFile(wb, `reposicoes_${hojeISO()}.xlsx`);
   });
 
   // ---------------- responsáveis por micro status ----------------

@@ -227,6 +227,3 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .visao-sac span { opacity: .8; font-weight: 500; }
 .tk { color: var(--azul, #1f4e8c); font-weight: 600; }
 .sem-tk { color: #9aa3b2; }
-.tabela-rep tr.clicavel { cursor: pointer; }
-.tabela-rep tr.clicavel:hover td { background: #fffbea; }
-.tabela-rep tr.sel td { background: #fff3c4; }

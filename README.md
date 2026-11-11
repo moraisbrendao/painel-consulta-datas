@@ -84,12 +84,3 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
 
 Todos os usuários com login têm o mesmo acesso. Nenhum dado de cliente (nome, telefone, endereço) é enviado:
 só pedido, NF, canal, transportadora, cidade/UF, datas, micro status e link de rastreio.
-
-## 12. Reposição
-
-A aba **Reposição** mostra as reposições da planilha de detalhamento (aba *Reposições*). Ela entra junto com o botão **Enviar tickets**, então basta enviar a mesma planilha de sempre.
-
-- A transportadora considerada é a de **redespacho** da NF de reposição quando houver; senão, a da nota de reposição; senão, a definida para envio.
-- Situações: *Sem NF de reposição*, *NF emitida, sem saída* e *Já saiu*.
-- O quadro **Por transportadora** é clicável e filtra a lista. Dá para exportar em Excel.
-- Precisa ter rodado o `schema.sql` atualizado (seção 14).
