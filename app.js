@@ -618,7 +618,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=29");
+        const w = new Worker("leitor-intelipost.js?v=30");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1001,13 +1001,13 @@
   });
 
   // ---------------- reposição (planilha TABELA DE ACOMPANHAMENTO, aba Export) ----------------
-  // Pré entrega = criado pelo CCP (coluna Via) e na fila "Atribuir transportador"; pós entrega = os outros tickets de reposição.
+  // Pré entrega = criado pelo CCP (coluna Via) e na fila "Atribuir transportador"; pós entrega = Tipo "Reposição Pós Entrega".
   // Transportadora = redespacho se houver, senão a final.
   let reps = [], repInfo = null, repOk = true, repVisao = "pre", repFiltradas = [];
   const FILA_PRE = "ATRIBUIR TRANSPORTADOR";
   const SEM_MOTIVO = "(sem motivo)", SEM_TRANSP = "(sem transportadora)";
   const ePre = (r) => norm(r.fila) === FILA_PRE && norm(r.via) === "CCP";
-  const ePos = (r) => !ePre(r) && norm(r.tipo).startsWith("REPOSICAO");
+  const ePos = (r) => !ePre(r) && norm(r.tipo) === "REPOSICAO POS ENTREGA";
   async function carregarReposicoes() {
     try {
       const [lista, inf] = await Promise.all([buscarTudo("reposicoes_tk", "ticket"), sb.from("reposicoes_tk_info").select("*").limit(1)]);
