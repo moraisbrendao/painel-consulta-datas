@@ -1,0 +1,51 @@
+# Robô do portal de ocorrências: a cada 10 minutos vê se a Logística mandou
+# notas pela aba Ocorrências do painel e, se sim, importa no portal ccp.360multi.com.
+# Segredos necessários (Settings > Secrets and variables > Actions):
+#   PORTAL_EMAIL, PORTAL_SENHA  -> login do portal da transportadora
+#   ROBO_EMAIL,   ROBO_SENHA    -> login do robô no painel (criado no Supabase)
+name: Robô do portal de ocorrências
+
+on:
+  schedule:
+    - cron: "*/10 * * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: robo-portal
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  robo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Tem pedido na fila?
+        id: fila
+        run: node robo/tem-pedido.mjs
+        env:
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+
+      - name: Preparar o navegador
+        if: steps.fila.outputs.tem == 'sim'
+        working-directory: robo
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+
+      - name: Importar no portal
+        if: steps.fila.outputs.tem == 'sim'
+        run: node robo/robo-portal.mjs
+        env:
+          PORTAL_EMAIL: ${{ secrets.PORTAL_EMAIL }}
+          PORTAL_SENHA: ${{ secrets.PORTAL_SENHA }}
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}

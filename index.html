@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=15">
+  <link rel="stylesheet" href="styles.css?v=16">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -144,6 +144,22 @@
       </section>
 
       <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>🤖 Robô do portal</h2>
+            <p class="sub">O robô entra no portal com o login guardado no GitHub e importa sozinho as notas pendentes, um arquivo por
+              micro status e transportadora. Ele passa a cada 10 minutos para ver se há pedido novo. As notas enviadas saem desta lista.</p>
+          </div>
+          <div class="acoes-robo">
+            <button id="robo-testar" class="btn" title="Faz tudo no portal menos clicar em Enviar Notas">Testar sem enviar</button>
+            <button id="robo-enviar" class="btn primario">Mandar pendentes para o robô</button>
+          </div>
+        </div>
+        <p id="robo-aviso" class="s"></p>
+        <div id="robo-fila"></div>
+      </section>
+
+      <section class="cartao">
         <h2>A cadastrar no portal</h2>
         <p class="sub">Um template por micro status e transportadora (já com o nome da transportadora como aparece no portal).</p>
         <ol class="passos">
@@ -245,7 +261,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=15"></script>
-  <script src="app.js?v=15"></script>
+  <script src="config.js?v=16"></script>
+  <script src="app.js?v=16"></script>
 </body>
 </html>

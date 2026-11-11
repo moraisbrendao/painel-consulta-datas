@@ -1,0 +1,39 @@
+// Acesso ao Supabase do painel com o login do robô (secrets ROBO_EMAIL / ROBO_SENHA).
+import { readFileSync, appendFileSync } from "node:fs";
+
+const cfg = readFileSync(new URL("../config.js", import.meta.url), "utf8");
+const URL_SB = process.env.SB_URL_TESTE || cfg.match(/SUPABASE_URL:\s*"([^"]+)"/)[1];
+const ANON = cfg.match(/SUPABASE_ANON_KEY:\s*"([^"]+)"/)[1];
+let token = null;
+
+export async function entrarSupabase() {
+  const { ROBO_EMAIL, ROBO_SENHA } = process.env;
+  if (!ROBO_EMAIL || !ROBO_SENHA) throw new Error("Faltam os segredos ROBO_EMAIL e ROBO_SENHA no GitHub.");
+  const r = await fetch(`${URL_SB}/auth/v1/token?grant_type=password`, {
+    method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: ROBO_EMAIL, password: ROBO_SENHA }),
+  });
+  if (!r.ok) throw new Error("O login do robô no painel (ROBO_EMAIL/ROBO_SENHA) não funcionou: " + r.status);
+  token = (await r.json()).access_token;
+}
+
+async function chamar(caminho, metodo = "GET", corpo) {
+  const r = await fetch(`${URL_SB}/rest/v1/${caminho}`, {
+    method: metodo,
+    headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    body: corpo === undefined ? undefined : JSON.stringify(corpo),
+  });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`Supabase ${metodo} ${caminho.split("?")[0]}: ${r.status} ${txt.slice(0, 200)}`);
+  return txt ? JSON.parse(txt) : null;
+}
+
+export const temPedido = async () => (await chamar("fila_portal?select=id&status=in.(pendente,processando)&limit=1")).length > 0;
+export const pegarPedido = async () => (await chamar("rpc/pegar_fila_portal", "POST", {}))[0] || null;
+export const atualizarPedido = (id, campos) => chamar(`fila_portal?id=eq.${id}`, "PATCH", campos);
+export const registrarCadastradas = (linhas) =>
+  chamar("rpc/importar_ocorrencias", "POST", { linhas, arquivo: "robô do portal", primeiro: false, total: linhas.length });
+
+export function saida(nome, valor) {
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${nome}=${valor}\n`);
+}

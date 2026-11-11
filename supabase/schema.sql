@@ -317,3 +317,53 @@ end $$;
 drop trigger if exists carimbo on public.responsavel_por_ms;
 create trigger carimbo before insert or update on public.responsavel_por_ms
   for each row execute function public._carimbo_responsavel();
+
+-- 11) Fila do robô do portal de ocorrências (ccp.360multi.com).
+--     O painel grava aqui os grupos pendentes; o robô (GitHub Actions) pega o pedido,
+--     importa no portal e grava o resultado. Só a Logística (e o login do robô) mexe.
+create table if not exists public.fila_portal (
+  id            bigint generated always as identity primary key,
+  criado_em     timestamptz not null default now(),
+  criado_por    text,
+  teste         boolean not null default false,   -- true = faz tudo menos "Enviar Notas"
+  status        text not null default 'pendente', -- pendente | processando | feito | erro
+  grupos        jsonb not null,                   -- [{ms, motivo, transportadora, posicao, notas:[{nf,serie}]}]
+  resultado     jsonb,
+  iniciado_em   timestamptz,
+  terminado_em  timestamptz
+);
+alter table public.fila_portal enable row level security;
+revoke all on public.fila_portal from anon;
+grant select, insert, update on public.fila_portal to authenticated;
+drop policy if exists "logistica cuida" on public.fila_portal;
+create policy "logistica cuida" on public.fila_portal for all to authenticated
+  using (not public.e_sac()) with check (not public.e_sac());
+
+create or replace function public._carimbo_fila()
+returns trigger language plpgsql as $$
+begin
+  if tg_op = 'INSERT' then new.criado_por := coalesce(auth.jwt() ->> 'email', new.criado_por); end if;
+  return new;
+end $$;
+drop trigger if exists carimbo on public.fila_portal;
+create trigger carimbo before insert on public.fila_portal
+  for each row execute function public._carimbo_fila();
+
+-- o robô pega o pedido mais antigo da fila (um de cada vez)
+create or replace function public.pegar_fila_portal()
+returns setof public.fila_portal
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  -- pedido travado há mais de 1 hora volta como erro (o robô caiu no meio)
+  update public.fila_portal set status = 'erro', terminado_em = now(),
+    resultado = coalesce(resultado, '[]'::jsonb) || '[{"status":"erro","msg":"O robô parou no meio. Confira no portal antes de mandar de novo."}]'::jsonb
+  where status = 'processando' and iniciado_em < now() - interval '1 hour';
+  return query
+  update public.fila_portal f set status = 'processando', iniciado_em = now()
+  where f.id = (select id from public.fila_portal where status = 'pendente' order by id limit 1 for update skip locked)
+  returning f.*;
+end $$;
+revoke all on function public.pegar_fila_portal() from public, anon;
+grant execute on function public.pegar_fila_portal() to authenticated;

@@ -1,0 +1,10 @@
+{
+  "name": "robo-portal-ocorrencias",
+  "private": true,
+  "type": "module",
+  "description": "Robô que importa no portal ccp.360multi.com as ocorrências pendentes do painel",
+  "dependencies": {
+    "playwright": "1.48.2",
+    "xlsx": "0.18.5"
+  }
+}

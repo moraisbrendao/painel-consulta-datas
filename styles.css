@@ -219,3 +219,5 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tabela-resp select { min-width: 240px; }
 .resp-p { margin-top: 2px; }
 .tabela-resp td { vertical-align: middle; }
+.acoes-robo { display: flex; gap: 8px; flex-wrap: wrap; }
+.erro-txt { color: var(--vermelho); cursor: pointer; font-weight: 600; }

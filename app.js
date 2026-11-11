@@ -129,6 +129,7 @@
       ocultos = Math.max(0, (tot.count || 0) - base.length);
       await carregarOcorrencias();
       await carregarResponsaveis();
+      await carregarFila();
     } catch (err) {
       $("info-base").textContent = "";
       toast(/base_|tratativas|fechados|schema cache/.test(err.message)
@@ -604,7 +605,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=15");
+        const w = new Worker("leitor-intelipost.js?v=16");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -684,6 +685,7 @@
   }
 
   function desenharOcorrencias() {
+    desenharRobo();
     const alvo = base.filter(precisaOc);
     const falta = alvo.filter((p) => !ocCadastrada(p));
     $("oc-info").textContent = !ocOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase."
@@ -709,6 +711,81 @@
         <table class="tabela-oc"><thead><tr><th>Transportadora no portal</th><th class="num">Notas</th><th></th><th></th></tr></thead><tbody>${linhas}</tbody></table></div>`;
     }).join("");
   }
+
+  // ---------------- robô do portal (fila no banco; o robô roda no GitHub) ----------------
+  // motivo e transportadora exatamente como aparecem no portal (definido pela Logística em 10/11/2026)
+  const MOTIVO_ROBO = { "DESTINATARIO AUSENTE": "Destinatário ausente", "ENDERECO NAO LOCALIZADO": "Endereço não localizado",
+    "AGUARDANDO INSTRUCAO": "Confirmação de dados", "CARGA RECUSADA PELO DESTINATARIO": "Recusa" };
+  const TRANSP_ROBO = { "VM TRANSPORTES": "VM TRANSPORTES", "Atual Cargas": "Atual Cargas Standard", "Transiga": "TRANSIGA",
+    "Petrymar": "Petrymar Transportes", "TRANSCAI TRANSPORTES": "Transcai" };   // VM: sempre a 1ª da lista (posicao 0)
+  let fila = [], filaOk = true;
+
+  function notasNaFila() {
+    const s = new Set();
+    fila.filter((f) => f.status === "pendente" || f.status === "processando")
+      .forEach((f) => (f.grupos || []).forEach((g) => g.notas.forEach((n) => s.add(n.nf + "-" + n.serie))));
+    return s;
+  }
+  function gruposParaRobo() {
+    const naFila = notasNaFila(), mapa = new Map(), semMotivo = new Set();
+    base.filter((p) => precisaOc(p) && !ocCadastrada(p)).forEach((p) => {
+      const { nf, serie } = nfSerie(p); if (!nf || naFila.has(nf + "-" + serie)) return;
+      const motivo = MOTIVO_ROBO[norm(p.micro_status)]; if (!motivo) { semMotivo.add(p.micro_status); return; }
+      const tp = transpPortal(p.transportadora), transportadora = TRANSP_ROBO[tp] || tp;
+      const k = motivo + "|" + transportadora;
+      if (!mapa.has(k)) mapa.set(k, { ms: p.micro_status, motivo, transportadora, posicao: 0, notas: [] });
+      mapa.get(k).notas.push({ nf, serie });
+    });
+    // no máximo 10 notas por arquivo (a tabela do portal mostra 10 por página)
+    const grupos = [];
+    mapa.forEach((g) => { for (let i = 0; i < g.notas.length; i += 10) grupos.push({ ...g, notas: g.notas.slice(i, i + 10) }); });
+    return { grupos, semMotivo: [...semMotivo] };
+  }
+
+  async function carregarFila() {
+    const { data, error } = await sb.from("fila_portal").select("*").order("id", { ascending: false }).limit(8);
+    if (error) { filaOk = false; return; }
+    filaOk = true; fila = data;
+  }
+  function desenharRobo() {
+    if (!filaOk) { $("robo-aviso").textContent = "Para usar o robô, rode de novo o supabase/schema.sql no Supabase."; $("robo-fila").innerHTML = ""; return; }
+    const { grupos, semMotivo } = gruposParaRobo();
+    const nNotas = grupos.reduce((s, g) => s + g.notas.length, 0);
+    const ocupado = fila.some((f) => f.status === "pendente" || f.status === "processando");
+    $("robo-enviar").disabled = !nNotas || ocupado; $("robo-testar").disabled = !nNotas || ocupado;
+    $("robo-aviso").innerHTML = (ocupado ? "⏳ O robô já tem um pedido na fila. Espere ele terminar. " : "")
+      + (nNotas ? `${fmt(nNotas)} nota${nNotas === 1 ? "" : "s"} pronta${nNotas === 1 ? "" : "s"} para o robô, em ${grupos.length} arquivo${grupos.length === 1 ? "" : "s"}.` : "Nenhuma nota pendente para o robô.")
+      + (semMotivo.length ? ` <b>Sem motivo definido no portal (o robô não envia):</b> ${semMotivo.map(esc).join(", ")}.` : "");
+    const nomeSt = { pendente: "⏳ Na fila", processando: "🤖 Trabalhando", feito: "✓ Terminado", erro: "⚠ Erro" };
+    const quando = (d) => (d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "");
+    $("robo-fila").innerHTML = fila.length ? `<table class="tabela-oc"><thead><tr><th>Pedido ao robô</th><th>Situação</th><th>Resultado</th></tr></thead><tbody>${fila.map((f) => {
+      const res = Array.isArray(f.resultado) ? f.resultado : [];
+      const ok = res.filter((r) => r.status === "ok"), er = res.filter((r) => r.status !== "ok");
+      const notasOk = ok.reduce((s, r) => s + (r.notas || 0), 0);
+      return `<tr><td>${quando(f.criado_em)}${f.teste ? ' <span class="chip cinza">teste</span>' : ""}<div class="s">${esc((f.criado_por || "").split("@")[0])} · ${(f.grupos || []).reduce((s, g) => s + g.notas.length, 0)} notas</div></td>
+        <td>${nomeSt[f.status] || esc(f.status)}<div class="s">${quando(f.terminado_em || f.iniciado_em)}</div></td>
+        <td>${res.length ? `${ok.length ? `✓ ${ok.length} arquivo${ok.length === 1 ? "" : "s"} ${f.teste ? "conferido" + (ok.length === 1 ? "" : "s") : "enviado" + (ok.length === 1 ? "" : "s") + ` (${notasOk} notas)`}` : ""}
+          ${er.length ? `<details><summary class="erro-txt">⚠ ${er.length} com problema</summary>${er.map((r) => `<div class="s">${esc([r.ms, r.transportadora].filter(Boolean).join(" · "))}: ${esc(r.msg || "")}</div>`).join("")}</details>` : ""}` : '<span class="s">—</span>'}</td></tr>`;
+    }).join("")}</tbody></table>` : "";
+  }
+  async function mandarRobo(teste) {
+    const { grupos } = gruposParaRobo(); if (!grupos.length) return;
+    const n = grupos.reduce((s, g) => s + g.notas.length, 0);
+    if (!confirm(teste ? `Testar o robô com ${n} notas? Ele entra no portal e prepara tudo, mas NÃO clica em Enviar Notas.`
+      : `Mandar ${n} notas (${grupos.length} arquivos) para o robô cadastrar no portal?`)) return;
+    const { error } = await sb.from("fila_portal").insert({ grupos, teste });
+    if (error) return toast("Não foi possível: " + error.message, true);
+    toast("Pedido enviado ao robô. Ele começa em até 10 minutos.");
+    await carregarFila(); desenharRobo();
+  }
+  $("robo-enviar").addEventListener("click", () => mandarRobo(false));
+  $("robo-testar").addEventListener("click", () => mandarRobo(true));
+  setInterval(async () => {
+    if (!usuarioId || perfil === "sac" || paginaAtual !== "ocorrencias" || document.hidden) return;
+    const antes = JSON.stringify(fila.map((f) => [f.id, f.status]));
+    await carregarFila();
+    if (antes !== JSON.stringify(fila.map((f) => [f.id, f.status]))) { await carregarOcorrencias(); desenharOcorrencias(); redesenhar(true); }
+  }, 30000);
 
   $("oc-grupos").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-template]"); if (!b) return;
