@@ -45,6 +45,12 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
    Micro status sem dono aparecem como **Pendente de responsável** (o número no menu mostra quantos faltam). O
    responsável aparece na tabela por micro status, na lista de pedidos, no detalhe, no Excel e no filtro **Responsável**.
 
+9. **Robô do portal** (aba Ocorrências): **Mandar pendentes para o robô** grava o pedido numa fila; a cada 10 minutos o
+   robô (GitHub Actions, arquivo `.github/workflows/robo-portal.yml`) entra no portal, importa um arquivo por micro status e
+   transportadora, escolhe motivo e transportadora e clica em *Enviar Notas*. **Testar sem enviar** faz tudo menos o envio.
+   Precisa de 4 segredos no GitHub (*Settings › Secrets and variables › Actions*): `PORTAL_EMAIL`, `PORTAL_SENHA`,
+   `ROBO_EMAIL` e `ROBO_SENHA` (login do robô no painel, criado no Supabase).
+
 ## Arquivos
 
 | Arquivo | Para que serve |
