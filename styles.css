@@ -227,3 +227,12 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .visao-sac span { opacity: .8; font-weight: 500; }
 .tk { color: var(--azul, #1f4e8c); font-weight: 600; }
 .sem-tk { color: #9aa3b2; }
+.filtros-rep { grid-template-columns: repeat(4, minmax(0,1fr)) auto; margin-top: 10px; }
+.filtros-rep label > span { font-size: 12px; }
+.tabela-rep td.num, .tabela-rep th { text-align: right; }
+.tabela-rep th:first-child, .tabela-rep td:first-child { text-align: left; }
+.tabela-rep td.num { color: var(--texto); }
+.tabela-rep td.num.vazio-c { color: #c4c9d2; }
+.tabela-rep td.tot, .tabela-rep tfoot td { font-weight: 700; }
+.tabela-rep tfoot td { border-top: 2px solid var(--texto-2); }
+@media (max-width: 800px) { .filtros-rep { grid-template-columns: 1fr 1fr; } }

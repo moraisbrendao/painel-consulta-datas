@@ -84,3 +84,14 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
 
 Todos os usuários com login têm o mesmo acesso. Nenhum dado de cliente (nome, telefone, endereço) é enviado:
 só pedido, NF, canal, transportadora, cidade/UF, datas, micro status e link de rastreio.
+
+## 12. Reposição
+
+Na página **Reposição**, clique em **Enviar tabela de acompanhamento** e escolha a planilha *TABELA DE ACOMPANHAMENTO* (aba Export).
+
+- **Pré entrega**: ticket criado pelo **CCP** (coluna Via) que foi para a fila **Atribuir transportador**.
+- **Pós entrega**: os outros tickets do tipo Reposição.
+- A transportadora é a de **redespacho** quando houver; senão, a transportadora final.
+- Quadro de casos por transportadora × motivo, com filtros de data (de/até), mês e transportadora, e exportação em Excel.
+- Cada envio acrescenta os tickets novos e atualiza os que já existiam (o histórico fica guardado).
+- Precisa ter rodado o `schema.sql` atualizado (seção 14).

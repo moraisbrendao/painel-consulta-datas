@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=27">
+  <link rel="stylesheet" href="styles.css?v=29">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -218,9 +218,45 @@
     <!-- ============ REPOSIÇÃO ============ -->
     <main class="conteudo" id="pagina-reposicao" hidden>
       <section class="cartao">
-        <h2>Reposição</h2>
-        <p class="sub">Página em construção.</p>
+        <div class="cartao-topo">
+          <div>
+            <h2>Reposição</h2>
+            <p class="sub"><b>Pré entrega</b> = ticket criado pelo <b>CCP</b> (coluna Via) que foi para a fila <b>Atribuir transportador</b>.
+              <b>Pós entrega</b> = os outros tickets de reposição. A transportadora é a de <b>redespacho</b> quando houver.</p>
+            <p id="rep-info" class="info-base">Carregando…</p>
+          </div>
+          <div class="acoes-robo">
+            <label class="btn amarelo" title="Planilha TABELA DE ACOMPANHAMENTO (aba Export)">Enviar tabela de acompanhamento<input id="arquivo-rep" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
+            <button id="rep-exportar" class="btn">Exportar (Excel)</button>
+          </div>
+        </div>
+        <div class="visoes visoes-sac" id="rep-visoes" role="tablist">
+          <button class="visao-sac ativa" data-rv="pre">Pré entrega <span></span></button>
+          <button class="visao-sac" data-rv="pos">Pós entrega <span></span></button>
+          <button class="visao-sac" data-rv="todas">Todas <span></span></button>
+        </div>
+        <div class="filtros-sac filtros-rep">
+          <label>De<input id="rep-de" type="date"></label>
+          <label>Até<input id="rep-ate" type="date"></label>
+          <label>Mês<select id="rep-mes"></select></label>
+          <label>Transportadora<select id="rep-transp"></select></label>
+          <label><span>&nbsp;</span><button id="rep-limpar" class="btn" type="button">Limpar filtros</button></label>
+        </div>
       </section>
+
+      <section class="cartao">
+        <h2 id="rep-titulo">Casos por transportadora e motivo</h2>
+        <p class="sub">Quantidade de tickets solicitados (pela data de criação do ticket).</p>
+        <div class="tabela-wrap">
+          <table class="tabela-range tabela-rep">
+            <thead id="rep-cab"></thead>
+            <tbody id="rep-linhas"></tbody>
+            <tfoot id="rep-rodape"></tfoot>
+          </table>
+          <p id="rep-vazio" class="vazio" hidden>Nenhuma reposição nesse filtro.</p>
+        </div>
+      </section>
+
     </main>
 
     <!-- ============ CONSULTA SAC ============ -->
@@ -289,7 +325,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=27"></script>
-  <script src="app.js?v=27"></script>
+  <script src="config.js?v=29"></script>
+  <script src="app.js?v=29"></script>
 </body>
 </html>

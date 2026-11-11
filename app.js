@@ -131,6 +131,7 @@
       await carregarResponsaveis();
       await carregarFila();
       await carregarTickets();
+      if (perfil !== "sac") carregarReposicoes();
     } catch (err) {
       $("info-base").textContent = "";
       toast(/base_|tratativas|fechados|schema cache/.test(err.message)
@@ -617,7 +618,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=27");
+        const w = new Worker("leitor-intelipost.js?v=29");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -997,6 +998,121 @@
     carregando("");
     await carregar();
     toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto.`);
+  });
+
+  // ---------------- reposição (planilha TABELA DE ACOMPANHAMENTO, aba Export) ----------------
+  // Pré entrega = criado pelo CCP (coluna Via) e na fila "Atribuir transportador"; pós entrega = os outros tickets de reposição.
+  // Transportadora = redespacho se houver, senão a final.
+  let reps = [], repInfo = null, repOk = true, repVisao = "pre", repFiltradas = [];
+  const FILA_PRE = "ATRIBUIR TRANSPORTADOR";
+  const SEM_MOTIVO = "(sem motivo)", SEM_TRANSP = "(sem transportadora)";
+  const ePre = (r) => norm(r.fila) === FILA_PRE && norm(r.via) === "CCP";
+  const ePos = (r) => !ePre(r) && norm(r.tipo).startsWith("REPOSICAO");
+  async function carregarReposicoes() {
+    try {
+      const [lista, inf] = await Promise.all([buscarTudo("reposicoes_tk", "ticket"), sb.from("reposicoes_tk_info").select("*").limit(1)]);
+      if (inf.error) throw inf.error;
+      reps = lista; repInfo = (inf.data && inf.data[0]) || null; repOk = true;
+    } catch (_) { repOk = false; reps = []; repInfo = null; }
+    montarReposicao();
+  }
+  function montarReposicao() {
+    $("rep-info").textContent = !repOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase."
+      : repInfo ? `Tabela: ${repInfo.arquivo || "planilha"} enviada em ${new Date(repInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${repInfo.enviado_por ? " por " + repInfo.enviado_por : ""} · ${fmt(reps.length)} tickets guardados`
+      : 'Ainda não há tabela. Clique em "Enviar tabela de acompanhamento".';
+    const mesSel = $("rep-mes").value, trSel = $("rep-transp").value;
+    const meses = [...new Set(reps.map((r) => String(r.criado_em || "").slice(0, 7)).filter(Boolean))].sort().reverse();
+    const NOME_MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    $("rep-mes").innerHTML = `<option value="">Todos</option>` + meses.map((m) => `<option value="${m}">${NOME_MES[+m.slice(5) - 1]}/${m.slice(0, 4)}</option>`).join("");
+    $("rep-mes").value = meses.includes(mesSel) ? mesSel : "";
+    const trs = [...new Set(reps.filter((r) => ePre(r) || ePos(r)).map((r) => r.transportadora || SEM_TRANSP))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    $("rep-transp").innerHTML = `<option value="">Todas</option>` + trs.map((t) => `<option>${esc(t)}</option>`).join("");
+    $("rep-transp").value = trs.includes(trSel) ? trSel : "";
+    filtrarRep();
+  }
+  function filtrarRep() {
+    const de = $("rep-de").value, ate = $("rep-ate").value, mes = $("rep-mes").value, tr = $("rep-transp").value;
+    const base0 = reps.filter((r) => {
+      const d = String(r.criado_em || "").slice(0, 10);
+      if (de && (!d || d < de)) return false;
+      if (ate && (!d || d > ate)) return false;
+      if (mes && d.slice(0, 7) !== mes) return false;
+      if (tr && (r.transportadora || SEM_TRANSP) !== tr) return false;
+      return true;
+    });
+    const pre = base0.filter(ePre), pos = base0.filter(ePos);
+    const cont = { pre: pre.length, pos: pos.length, todas: pre.length + pos.length };
+    document.querySelectorAll("#rep-visoes .visao-sac").forEach((b) => { b.classList.toggle("ativa", b.dataset.rv === repVisao); b.querySelector("span").textContent = `(${fmt(cont[b.dataset.rv])})`; });
+    repFiltradas = repVisao === "pre" ? pre : repVisao === "pos" ? pos : pre.concat(pos);
+    $("rep-titulo").textContent = `Casos por transportadora e motivo · ${{ pre: "Pré entrega", pos: "Pós entrega", todas: "Pré e pós entrega" }[repVisao]} (${fmt(repFiltradas.length)})`;
+    const porMot = new Map(), porTr = new Map();
+    repFiltradas.forEach((r) => {
+      const m = r.motivo || SEM_MOTIVO, t = r.transportadora || SEM_TRANSP;
+      porMot.set(m, (porMot.get(m) || 0) + 1);
+      const x = porTr.get(t) || { total: 0, m: new Map() }; x.total++; x.m.set(m, (x.m.get(m) || 0) + 1); porTr.set(t, x);
+    });
+    const mots = [...porMot.entries()].sort((a, b) => b[1] - a[1]).map((x) => x[0]);
+    const cel = (n) => `<td class="num ${n ? "" : "vazio-c"}">${n ? fmt(n) : "·"}</td>`;
+    $("rep-vazio").hidden = repFiltradas.length > 0;
+    $("rep-cab").innerHTML = repFiltradas.length ? `<tr><th>Transportadora</th>${mots.map((m) => `<th>${esc(m)}</th>`).join("")}<th>Total</th></tr>` : "";
+    $("rep-linhas").innerHTML = [...porTr.entries()].sort((a, b) => b[1].total - a[1].total || a[0].localeCompare(b[0], "pt-BR"))
+      .map(([t, x]) => `<tr><td>${esc(t)}</td>${mots.map((m) => cel(x.m.get(m) || 0)).join("")}<td class="num tot">${fmt(x.total)}</td></tr>`).join("");
+    $("rep-rodape").innerHTML = repFiltradas.length ? `<tr><td>Total</td>${mots.map((m) => `<td class="num">${fmt(porMot.get(m))}</td>`).join("")}<td class="num">${fmt(repFiltradas.length)}</td></tr>` : "";
+  }
+  $("rep-visoes").addEventListener("click", (e) => { const b = e.target.closest(".visao-sac"); if (!b) return; repVisao = b.dataset.rv; filtrarRep(); });
+  ["rep-de", "rep-ate", "rep-mes", "rep-transp"].forEach((id) => $(id).addEventListener("change", filtrarRep));
+  $("rep-limpar").addEventListener("click", () => { ["rep-de", "rep-ate", "rep-mes", "rep-transp"].forEach((id) => ($(id).value = "")); filtrarRep(); });
+  $("rep-exportar").addEventListener("click", () => {
+    if (!repFiltradas.length) return toast("Nada para exportar nesse filtro.", true);
+    const linhas = [["Ticket", "Criado em", "Pré/Pós", "Transportadora", "Motivo", "Tipo", "Fila", "Status", "Nota fiscal", "Criado por", "Via"]]
+      .concat(repFiltradas.map((r) => [r.ticket, r.criado_em ? br(r.criado_em) : "", ePre(r) ? "Pré entrega" : "Pós entrega", r.transportadora || "", r.motivo || "", r.tipo || "", r.fila || "", r.status || "", r.nf || "", r.criado_por || "", r.via || ""]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 34 }, { wch: 26 }, { wch: 22 }, { wch: 30 }, { wch: 14 }, { wch: 14 }, { wch: 22 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Reposições");
+    XLSX.writeFile(wb, `reposicoes_${repVisao}_${hojeISO()}.xlsx`);
+  });
+  $("arquivo-rep").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = "";
+    if (!arq) return;
+    if (!repOk) return toast("Rode de novo o supabase/schema.sql no Supabase para usar a Reposição.", true);
+    carregando("Lendo a tabela de acompanhamento…");
+    await new Promise((r) => setTimeout(r, 50));
+    let linhas, total = 0;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const nomeAba = wb.SheetNames.find((n) => norm(n) === "EXPORT") || wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "FILA") && r.some((c) => norm(c) === "TICKET"));
+      if (iCab < 0) throw new Error('Não achei as colunas "Ticket" e "Fila" na aba Export.');
+      const cab = rows[iCab].map(norm), col = (n) => cab.indexOf(n);
+      const c = { ticket: col("TICKET"), via: col("VIA"), data: col("DATA DE CRIACAO"), por: col("TICKET CRIADO POR"), fila: col("FILA"), tipo: col("TIPO"), motivo: col("MOTIVO"),
+        status: col("STATUS"), redesp: col("TRANSPORTADORA REDESPACHO"), final: col("TRANSPORTADORA FINAL"), nf: col("NOTA FISCAL") };
+      if (c.via < 0 || c.tipo < 0) throw new Error('Não achei as colunas "Via" e "Tipo".');
+      const txt = (r, i) => (i >= 0 && r[i] != null && String(r[i]).trim() !== "" ? String(r[i]).trim() : null);
+      const porTk = new Map();
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r || txt(r, c.ticket) == null) return;
+        total++;
+        const fila = txt(r, c.fila), tipo = txt(r, c.tipo);
+        if (norm(fila) !== FILA_PRE && !norm(tipo).startsWith("REPOSICAO")) return;
+        porTk.set(txt(r, c.ticket), { ticket: txt(r, c.ticket), criado_em: c.data >= 0 ? dataCelula(r[c.data], true) : null, criado_por: txt(r, c.por), via: txt(r, c.via),
+          fila, tipo, motivo: txt(r, c.motivo), status: txt(r, c.status), transportadora: txt(r, c.redesp) || txt(r, c.final), nf: txt(r, c.nf) });
+      });
+      linhas = [...porTk.values()];
+      if (!linhas.length) throw new Error("A planilha não tem tickets de reposição.");
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    const nPre = linhas.filter(ePre).length;
+    if (!confirm(`${arq.name}\n\n${fmt(total)} tickets na planilha, ${fmt(linhas.length)} de reposição (${fmt(nPre)} pré entrega, ${fmt(linhas.filter(ePos).length)} pós entrega).\nTickets já guardados são atualizados; os novos são acrescentados.\n\nEnviar?`)) return;
+    try {
+      for (let i = 0; i < linhas.length; i += 2000) {
+        carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
+        const { error } = await sb.rpc("importar_reposicoes_tk", { linhas: linhas.slice(i, i + 2000), primeiro: i === 0, arquivo: arq.name, total });
+        if (error) throw error;
+      }
+    } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
+    await carregarReposicoes();
+    carregando("");
+    toast(`Reposições atualizadas: ${fmt(reps.length)} tickets guardados.`);
   });
 
   // ---------------- responsáveis por micro status ----------------

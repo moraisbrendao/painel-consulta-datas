@@ -449,3 +449,64 @@ end $$;
 drop trigger if exists chamar_robo on public.fila_portal;
 create trigger chamar_robo after insert on public.fila_portal
   for each row execute function public._chamar_robo();
+
+-- 14) Reposições (planilha "TABELA DE ACOMPANHAMENTO", aba Export, enviada na página Reposição).
+--     Guarda só os tickets de reposição (e os da fila "Atribuir transportador").
+--     Cada envio acrescenta/atualiza pelo número do ticket (o histórico não se perde).
+--     Pré entrega = criado pelo CCP (coluna Via) e na fila "Atribuir transportador".
+drop function if exists public.importar_reposicoes(jsonb, boolean);
+drop table if exists public.reposicoes;
+create table if not exists public.reposicoes_tk (
+  ticket          text primary key,
+  criado_em       timestamp,      -- hora de Brasília, como vem na planilha
+  criado_por      text,
+  via             text,           -- por onde foi criado (ccp, 360app)
+  fila            text,
+  tipo            text,
+  motivo          text,
+  status          text,
+  transportadora  text,           -- redespacho, se houver; senão a final
+  nf              text
+);
+alter table public.reposicoes_tk add column if not exists via text;
+create table if not exists public.reposicoes_tk_info (
+  id          integer primary key default 1 check (id = 1),
+  arquivo     text,
+  linhas      integer,
+  enviado_por text,
+  enviado_em  timestamptz not null default now()
+);
+alter table public.reposicoes_tk enable row level security;
+alter table public.reposicoes_tk_info enable row level security;
+revoke all on public.reposicoes_tk, public.reposicoes_tk_info from anon;
+grant select on public.reposicoes_tk, public.reposicoes_tk_info to authenticated;
+drop policy if exists "logados leem" on public.reposicoes_tk;
+drop policy if exists "logados leem" on public.reposicoes_tk_info;
+create policy "logados leem" on public.reposicoes_tk for select to authenticated using (not public.e_sac());
+create policy "logados leem" on public.reposicoes_tk_info for select to authenticated using (not public.e_sac());
+
+create or replace function public.importar_reposicoes_tk(linhas jsonb, primeiro boolean, arquivo text, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if primeiro then
+    insert into public.reposicoes_tk_info (id, arquivo, linhas, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.reposicoes_tk (ticket, criado_em, criado_por, via, fila, tipo, motivo, status, transportadora, nf)
+  select r.ticket, r.criado_em, r.criado_por, r.via, r.fila, r.tipo, r.motivo, r.status, r.transportadora, r.nf
+  from jsonb_to_recordset(linhas) as r(ticket text, criado_em timestamp, criado_por text, via text, fila text, tipo text,
+                                       motivo text, status text, transportadora text, nf text)
+  where r.ticket is not null and r.ticket <> ''
+  on conflict (ticket) do update set criado_em = excluded.criado_em, criado_por = excluded.criado_por, via = excluded.via,
+    fila = excluded.fila, tipo = excluded.tipo, motivo = excluded.motivo, status = excluded.status,
+    transportadora = excluded.transportadora, nf = excluded.nf;
+  return (select count(*) from public.reposicoes_tk);
+end $$;
+revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
