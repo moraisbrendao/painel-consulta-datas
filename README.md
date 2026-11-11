@@ -17,9 +17,11 @@ tabelas e para a lista. Em cada filtro dá para marcar vários itens. **Limpar f
    número dos pedidos **entregues** e **cancelados** (Status Transportador) e tira esses pedidos do painel. Nome e endereço
    do cliente não são enviados.
 3. **O que está acontecendo, por micro status**: escolha a visão
-   - *Vencem em 5 dias*: data prometida ao cliente (Data Original Estimada da Entrega) entre hoje e daqui a 5 dias;
+   - *Já vencidos*, *Vencem hoje*, *Vencem amanhã* e *Vencem em 5 dias*: pela **nova data** informada pela Logística, ou,
+     se não houver, pela data prometida ao cliente (Data Original Estimada da Entrega). Assim, um pedido com nova data
+     volta como "Vencem amanhã" um dia antes dela;
    - *Parados no rastreio*: mais de 7 dias sem atualização na Intelipost;
-   - *Já vencidos* e *Todos*.
+   - *Todos*.
    Clique num micro status para ver só os pedidos dele.
 4. **Range de vencimento por micro status**: quantos pedidos vencem hoje, em 1, 2, 5, 10, 20 e 30+ dias, por micro status.
    Clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status.

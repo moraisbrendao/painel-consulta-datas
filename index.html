@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=19">
+  <link rel="stylesheet" href="styles.css?v=20">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -70,9 +70,11 @@
             <p id="ms-resumo" class="sub"></p>
           </div>
           <div class="visoes" id="visoes" role="tablist">
+            <button class="visao" data-visao="vencidos">Já vencidos <span></span></button>
+            <button class="visao" data-visao="hoje">Vencem hoje <span></span></button>
+            <button class="visao" data-visao="amanha">Vencem amanhã <span></span></button>
             <button class="visao ativa" data-visao="vencem">Vencem em 5 dias <span></span></button>
             <button class="visao" data-visao="parados">Parados no rastreio <span></span></button>
-            <button class="visao" data-visao="vencidos">Já vencidos <span></span></button>
             <button class="visao" data-visao="todos">Todos <span></span></button>
           </div>
         </div>
@@ -267,7 +269,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=19"></script>
-  <script src="app.js?v=19"></script>
+  <script src="config.js?v=20"></script>
+  <script src="app.js?v=20"></script>
 </body>
 </html>

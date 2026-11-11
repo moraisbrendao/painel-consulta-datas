@@ -279,7 +279,8 @@ as $$
   where auth.uid() is not null
     and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
     -- SAC vê só os vencidos, os que vencem hoje e os que vencem amanhã
-    and coalesce(b.prev_original, b.prev_atual) <= (now() at time zone 'America/Sao_Paulo')::date + 1
+    and (coalesce(b.prev_original, b.prev_atual) <= (now() at time zone 'America/Sao_Paulo')::date + 1
+         or t.nova_data <= (now() at time zone 'America/Sao_Paulo')::date + 1)
   order by b.pedido
 $$;
 revoke all on function public.consultar_sac() from public, anon;

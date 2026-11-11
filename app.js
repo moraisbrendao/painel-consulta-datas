@@ -186,15 +186,21 @@
     const venc = p.prev_original || p.prev_atual || null;   // data prometida ao cliente
     p._venc = venc;
     p._dias = venc ? diasEntre(hoje, venc) : null;                 // >0 faltam dias, <0 vencido
+    // vencimento para tratar: a nova data informada pela Logística (se houver), senão a data prometida
+    const ef = (t && t.nova_data) || venc;
+    p._diasEf = ef ? diasEntre(hoje, ef) : null;
+    p._pelaNova = !!(t && t.nova_data);
     p._parado = p.ultima_atualizacao ? Math.max(0, Math.floor((Date.now() - Date.parse(p.ultima_atualizacao)) / DIA)) : null;
     p._t = t;
     p._faixa = faixa(p._dias);
     return p;
   }
   const naVisao = {
-    vencem: (p) => p._dias !== null && p._dias >= 0 && p._dias <= 5,
+    vencidos: (p) => p._diasEf !== null && p._diasEf < 0,
+    hoje: (p) => p._diasEf === 0,
+    amanha: (p) => p._diasEf === 1,
+    vencem: (p) => p._diasEf !== null && p._diasEf >= 0 && p._diasEf <= 5,
     parados: (p) => p._parado !== null && p._parado > DIAS_PARADO,
-    vencidos: (p) => p._dias !== null && p._dias < 0,
     todos: () => true,
   };
 
@@ -303,7 +309,7 @@
     });
     const ord = [...grupos.entries()].sort((a, b) => b[1].n - a[1].n);
     const somaP = daVisao.reduce((s, p) => s + (p._parado || 0), 0);
-    const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "já vencidos", todos: "em aberto" };
+    const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "já vencidos", hoje: "que vencem hoje", amanha: "que vencem amanhã", todos: "em aberto" };
     $("ms-resumo").textContent = `${fmt(daVisao.length)} pedidos ${nomes[visao]} · em média ${(daVisao.length ? somaP / daVisao.length : 0).toFixed(1).replace(".", ",")} dias sem movimento no rastreio · clique para ver e exportar.`;
     if (msSel && !grupos.has(msSel)) msSel = "";
     $("ms-linhas").innerHTML = ord.length ? ord.map(([k, g]) => {
@@ -347,8 +353,8 @@
       return true;
     });
     // ordem: mais urgente primeiro (vencido/vence antes), depois mais parado
-    filtrados.sort((a, b) => (a._dias ?? 9999) - (b._dias ?? 9999) || (b._parado || 0) - (a._parado || 0));
-    const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", todos: "Todos os pedidos" };
+    filtrados.sort((a, b) => (a._diasEf ?? 9999) - (b._diasEf ?? 9999) || (b._parado || 0) - (a._parado || 0));
+    const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", todos: "Todos os pedidos" };
     const rNome = rangeSel === "__avencer" ? " · vencidos e a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
     $("lista-titulo").textContent = `${buscando ? "Busca em todos os pedidos" : nomes[visao]}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
     if (!manterPagina) pagina = 1;
@@ -356,10 +362,11 @@
   }
 
   function chipPrazo(p) {
-    if (p._dias === null) return `<span class="chip cinza">sem previsão</span>`;
-    if (p._dias < 0) return `<span class="chip vermelho">vencido há ${-p._dias} d</span>`;
-    if (p._dias === 0) return `<span class="chip ambar">vence hoje</span>`;
-    return `<span class="chip ${p._dias <= 5 ? "ambar" : "verde"}">vence em ${p._dias} d</span>`;
+    const d = p._diasEf, extra = p._pelaNova ? " (nova data)" : "";
+    if (d === null) return `<span class="chip cinza">sem previsão</span>`;
+    if (d < 0) return `<span class="chip vermelho">vencido há ${-d} d${extra}</span>`;
+    if (d === 0) return `<span class="chip ambar">vence hoje${extra}</span>`;
+    return `<span class="chip ${d <= 5 ? "ambar" : "verde"}">${d === 1 ? "vence amanhã" : `vence em ${d} d`}${extra}</span>`;
   }
 
   function desenharLista() {
@@ -605,7 +612,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=19");
+        const w = new Worker("leitor-intelipost.js?v=20");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -958,7 +965,7 @@
   const limiteSac = () => { const d = new Date(Date.parse(hojeISO()) + DIA); return d.toISOString().slice(0, 10); };
   function montarSac(lista) {
     const lim = limiteSac();
-    lista = lista.filter((l) => l.prometido && String(l.prometido).slice(0, 10) <= lim);
+    lista = lista.filter((l) => (l.prometido && String(l.prometido).slice(0, 10) <= lim) || (l.nova_data && String(l.nova_data).slice(0, 10) <= lim));
     sacLinhas = lista;
     $("sac-info").textContent = `${fmt(lista.length)} pedidos vencidos ou que vencem hoje ou amanhã · atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
     const preencher = (id, valores, rotulo) => {
@@ -976,7 +983,7 @@
     const busca = norm($("sac-busca").value).replace(/\s/g, "");
     const canal = $("sac-canal").value, transp = $("sac-transp").value, nova = $("sac-nova").value;
     const hoje = hojeISO(), amanha = limiteSac();
-    const dia = (l) => String(l.prometido || "").slice(0, 10);
+    const dia = (l) => String(l.nova_data || l.prometido || "").slice(0, 10);   // nova data vale como vencimento
     const naSv = { todos: () => true, vencidos: (l) => dia(l) < hoje, hoje: (l) => dia(l) === hoje, amanha: (l) => dia(l) === amanha };
     const passa = (l) =>
       (!busca || [l.nf, l.pedido].some((v) => norm(v).replace(/\s/g, "").includes(busca))) &&
