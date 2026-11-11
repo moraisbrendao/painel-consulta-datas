@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=25">
+  <link rel="stylesheet" href="styles.css?v=26">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -218,8 +218,50 @@
     <!-- ============ REPOSIÇÃO ============ -->
     <main class="conteudo" id="pagina-reposicao" hidden>
       <section class="cartao">
-        <h2>Reposição</h2>
-        <p class="sub">Página em construção.</p>
+        <div class="cartao-topo">
+          <div>
+            <h2>Reposição</h2>
+            <p class="sub">Reposições da planilha de detalhamento (aba <b>Reposições</b>), que entra pelo botão <b>Enviar tickets</b>.
+              A transportadora é a de <b>redespacho</b> da NF de reposição, quando houver.</p>
+            <p id="rep-info" class="info-base"></p>
+          </div>
+          <button id="rep-exportar" class="btn">Exportar (Excel)</button>
+        </div>
+        <div class="visoes visoes-sac" id="rep-visoes">
+          <button class="visao-sac ativa" data-rv="todas">Todas <span></span></button>
+          <button class="visao-sac" data-rv="semnf">Sem NF de reposição <span></span></button>
+          <button class="visao-sac" data-rv="emitida">NF emitida, sem saída <span></span></button>
+          <button class="visao-sac" data-rv="saiu">Já saiu <span></span></button>
+        </div>
+        <div class="filtros-sac">
+          <label class="cresce">Buscar<input id="rep-busca" type="search" placeholder="Ticket, pedido, NF original ou NF de reposição…"></label>
+          <label>Fila<select id="rep-fila"></select></label>
+          <label>Transportadora<select id="rep-transp"></select></label>
+          <label>Tipo<select id="rep-tipo"></select></label>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <h2>Por transportadora</h2>
+        <p class="sub">Clique numa transportadora para ver só as reposições dela.</p>
+        <div class="tabela-wrap">
+          <table class="tabela-range tabela-rep">
+            <thead><tr><th>Transportadora</th><th class="num">Sem NF de reposição</th><th class="num">NF emitida, sem saída</th><th class="num">Já saiu</th><th class="num">Total</th></tr></thead>
+            <tbody id="rep-transp-linhas"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <h2 id="rep-titulo">Reposições</h2>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos tabela-sac">
+            <thead><tr><th>Ticket</th><th>Pedido / NF original</th><th>Fila</th><th>NF de reposição</th><th>Transportadora</th><th>Situação</th></tr></thead>
+            <tbody id="rep-linhas"></tbody>
+          </table>
+          <p id="rep-vazio" class="vazio" hidden>Nenhuma reposição com esses filtros.</p>
+        </div>
+        <nav id="rep-paginacao" class="paginacao"></nav>
       </section>
     </main>
 
@@ -289,7 +331,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=25"></script>
-  <script src="app.js?v=25"></script>
+  <script src="config.js?v=26"></script>
+  <script src="app.js?v=26"></script>
 </body>
 </html>

@@ -449,3 +449,49 @@ end $$;
 drop trigger if exists chamar_robo on public.fila_portal;
 create trigger chamar_robo after insert on public.fila_portal
   for each row execute function public._chamar_robo();
+
+-- 14) Reposições (aba "Reposições" da planilha detalhamento_tickets360, enviada pelo
+--     mesmo botão "Enviar tickets"). Cada envio substitui o anterior.
+--     transportadora = a de REDESPACHO da nota de reposição, quando houver; senão a da nota
+--     de reposição (Promob); senão a definida para envio no ticket.
+create table if not exists public.reposicoes (
+  id_ticket       text not null,
+  nota_ticket     text not null default '',
+  criado_em       timestamptz,
+  pedido          text,
+  tipo_ticket     text,
+  fila            text,
+  tipo_reposicao  text,
+  pedido_promob   text,
+  nf_reposicao    text,
+  emissao         date,
+  saida           date,
+  transportadora  text,
+  origem_transp   text,   -- redespacho | nota | definida
+  primary key (id_ticket, nota_ticket)
+);
+alter table public.reposicoes enable row level security;
+revoke all on public.reposicoes from anon;
+grant select on public.reposicoes to authenticated;
+drop policy if exists "logados leem" on public.reposicoes;
+create policy "logados leem" on public.reposicoes for select to authenticated using (not public.e_sac());
+
+create or replace function public.importar_reposicoes(linhas jsonb, limpar boolean)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if limpar then delete from public.reposicoes where true; end if;
+  insert into public.reposicoes
+  select * from jsonb_populate_recordset(null::public.reposicoes, linhas) r
+  where r.id_ticket is not null and r.id_ticket <> ''
+  on conflict (id_ticket, nota_ticket) do update set criado_em = excluded.criado_em, pedido = excluded.pedido,
+    tipo_ticket = excluded.tipo_ticket, fila = excluded.fila, tipo_reposicao = excluded.tipo_reposicao,
+    pedido_promob = excluded.pedido_promob, nf_reposicao = excluded.nf_reposicao, emissao = excluded.emissao,
+    saida = excluded.saida, transportadora = excluded.transportadora, origem_transp = excluded.origem_transp;
+  return (select count(*) from public.reposicoes);
+end $$;
+revoke all on function public.importar_reposicoes(jsonb, boolean) from public, anon;
+grant execute on function public.importar_reposicoes(jsonb, boolean) to authenticated;
