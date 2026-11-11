@@ -605,7 +605,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=17");
+        const w = new Worker("leitor-intelipost.js?v=18");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -954,9 +954,13 @@
     carregarLoginsSac();
   }
 
+  // SAC vê só os vencidos, os que vencem hoje e os que vencem amanhã
+  const limiteSac = () => { const d = new Date(Date.parse(hojeISO()) + DIA); return d.toISOString().slice(0, 10); };
   function montarSac(lista) {
+    const lim = limiteSac();
+    lista = lista.filter((l) => l.prometido && String(l.prometido).slice(0, 10) <= lim);
     sacLinhas = lista;
-    $("sac-info").textContent = `${fmt(lista.length)} pedidos em aberto · atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+    $("sac-info").textContent = `${fmt(lista.length)} pedidos vencidos ou que vencem hoje ou amanhã · atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
     const preencher = (id, valores, rotulo) => {
       const sel = $(id), atual = sel.value;
       const unicos = [...new Set(valores.filter(Boolean))].sort((a, b) => a.localeCompare(b, "pt-BR"));
