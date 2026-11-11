@@ -423,3 +423,29 @@ begin
 end $$;
 revoke all on function public.importar_tickets(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_tickets(jsonb, boolean, text, integer) to authenticated;
+
+-- 13) Chamar o robô na hora: quando entra um pedido na fila do robô, o Supabase avisa o
+--     GitHub para rodar o robô (sem esperar o agendamento de 10 minutos, que às vezes atrasa).
+--     Só funciona depois de guardar o token do GitHub no cofre do Supabase (passo do README).
+do $$ begin create extension if not exists pg_net; exception when others then null; end $$;
+create or replace function public._chamar_robo()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare tk text;
+begin
+  begin
+    select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null;
+  end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-portal.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main"}'::jsonb);
+  end if;
+  return new;
+end $$;
+drop trigger if exists chamar_robo on public.fila_portal;
+create trigger chamar_robo after insert on public.fila_portal
+  for each row execute function public._chamar_robo();
