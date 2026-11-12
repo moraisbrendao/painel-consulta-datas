@@ -330,10 +330,31 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
 async function diagCep() {   // por que a simulação volta vazia: refaz a da última troca com erro, mostrando cada passo
   const t = await ultimaTrocaComErro();
   if (!t) { log("Nenhuma troca com erro."); return; }
+  // CEP na Busca por Lote (linha do pedido) — compara com o do quadro Destinatário, sem mostrar
+  await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
+  const cx = pagina.getByPlaceholder(/digite seus pedidos/i).first(); await cx.waitFor({ timeout: 45000 });
+  await pagina.locator("select").first().selectOption({ label: "Pedido" }).catch(() => {});
+  await cx.fill(t.pedido); await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
+  await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 });
+  const lote = await pagina.evaluate(() => {
+    const th = [...document.querySelectorAll("table thead th")].map((x) => x.innerText.trim());
+    const tr = document.querySelector("table tbody tr"); const td = tr ? [...tr.querySelectorAll("td")].map((x) => x.innerText.trim()) : [];
+    const i = th.findIndex((x) => /cep/i.test(x));
+    const ceps = td.join(" ").match(/\d{5}-?\d{3}/g) || [];
+    return { th, cep: i >= 0 ? (td[i] || "").replace(/\D/g, "") : "", qtd: ceps.length, todos: ceps.map((c) => c.replace(/\D/g, "")) };
+  });
+  log("Busca por Lote · colunas:", lote.th.join(" / "), `· coluna CEP ${lote.cep ? "com valor" : "não achei"} · CEPs na linha: ${lote.qtd}`);
   const { tela, aba } = await abrirPedido(t.pedido, false, true);
   const info = await tela.evaluate(() => { const txt = document.body.innerText; const m = txt.match(/Destinat[aá]rio[\s\S]{0,2000}?CEP:\s*([^\n]{0,20})/i); return { bruto: m ? m[1] : "", uf: (txt.match(/Destinat[aá]rio[\s\S]{0,2500}?Estado:\s*([A-Z]{2})/i) || [])[1] || "?" }; });
   if (aba) await aba.close();
   const cep = info.bruto.replace(/\D/g, "");
+  log(`CEP do Destinatário ${lote.todos.includes(info.bruto.replace(/\D/g, "")) || lote.cep === info.bruto.replace(/\D/g, "") ? "IGUAL" : "DIFERENTE"} ao da Busca por Lote`);
+  const cepLote = lote.cep || lote.todos.find((c) => c !== info.bruto.replace(/\D/g, "") && c[0] !== "9");
+  if (cepLote && cepLote !== info.bruto.replace(/\D/g, "")) {
+    process.env.VOL_SIMULACAO = "1,1,1,1,1";
+    try { log(`== com o CEP da Busca por Lote: prazo ${await simularPrazo(cepLote, t.robo_metodo, true)}`); } catch (e) { log("== com o CEP da Busca por Lote:", e.message.split("\n")[0]); }
+    delete process.env.VOL_SIMULACAO; return;
+  }
   log(`CEP: texto com ${info.bruto.length} letras, ${cep.length} dígitos, começa com ${cep.slice(0, 1)} · UF ${info.uf} · método ${t.robo_metodo}`);
   for (const [peso, ign] of [["25,0.11,0.01,0.01,0.01", "sim"], ["0.01,0.01,0.01,0.01,0.01", "sim"], ["1,0.01,0.01,0.01,0.01", "sim"]]) {
     process.env.VOL_SIMULACAO = peso; process.env.IGNORAR_REGRAS = ign;
