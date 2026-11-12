@@ -218,9 +218,23 @@ async function simularPrazo(cep, metodo, olhar) {
   await passo("marcar a tabela Vigente", async () => {
     await p.locator("text=/^\\s*Tabelas\\s*$/ >> visible=true").last().click();
     await p.waitForTimeout(1500);
-    const vig = p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first();
-    await vig.click({ force: true });
-    if (olhar) log("  tabelas vigentes/rascunho na lista:", await p.locator("xpath=//*[normalize-space(text())='Vigente' or normalize-space(text())='Rascunho']").count());
+    // marca TODAS as tabelas da seção "Vigente" do método (algumas transportadoras têm uma tabela por região)
+    const marcar = await p.evaluate(() => {
+      const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+      const titulos = [...document.querySelectorAll("body *")].filter((e) => vis(e) && e.children.length === 0 && /^(Vigente|Rascunho|Vencid[ao]s?|Futur[ao]s?|Inativ[ao]s?)$/i.test((e.textContent || "").trim()));
+      const caixas = [...document.querySelectorAll("input[type=checkbox]")].filter(vis);
+      const lista = [];
+      caixas.forEach((c, i) => {
+        let sec = null;
+        for (const t of titulos) if (t.compareDocumentPosition(c) & Node.DOCUMENT_POSITION_FOLLOWING) sec = t.textContent.trim();
+        if (sec && /^vigente$/i.test(sec)) lista.push(i);
+      });
+      return { lista, titulos: titulos.map((t) => t.textContent.trim()) };
+    });
+    if (olhar) log("  seções na lista de tabelas:", marcar.titulos.join(" / "), "· vigentes:", marcar.lista.length);
+    if (!marcar.lista.length) throw new Error("o método não tem tabela Vigente");
+    const caixasVis = p.locator("input[type=checkbox]:visible");
+    for (const i of marcar.lista) { const c = caixasVis.nth(i); if (!(await c.isChecked())) await c.click({ force: true }); }
     const fechar = p.getByRole("button", { name: /^\s*Fechar\s*$/i }).last();
     if (await fechar.count()) await fechar.click();
   });
@@ -235,7 +249,6 @@ async function simularPrazo(cep, metodo, olhar) {
     if (olhar) {
       const v = await p.evaluate(() => [...document.querySelectorAll("input[type=text]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.value).filter((x) => !/\d{5}/.test(x)).join(" | "));
       log("  valores dos campos de volume:", v);
-      log("  tabela vigente marcada:", await p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first().isChecked().catch(() => "não achei"));
     }
     // a resposta da cotação vem do graphql (quoteFreightVolume): lê o prazo direto dela
     const resp = p.waitForResponse(async (r) => /graphql\.intelipost/i.test(r.url()) && (await r.text().catch(() => "")).includes("quoteFreightVolume"), { timeout: 60000 });
