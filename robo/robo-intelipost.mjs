@@ -48,8 +48,9 @@ async function entrar() {
     catch { await esqueleto("Depois do e-mail (não apareceu a senha)"); throw new Error("Não apareceu o campo de senha da Intelipost."); }
   }
   await senha.fill(INTELIPOST_SENHA);
-  const botao = pagina.locator("button[type=submit], input[type=submit]").or(pagina.getByRole("button", { name: /entrar|acessar|login/i })).first();
-  await botao.click();
+  if (MODO === "diag") await esqueleto("Tela de login");
+  const botao = pagina.locator("button[type=submit]:visible, input[type=submit]:visible").first();
+  if (await botao.count()) await botao.click(); else await senha.press("Enter");
   try { await senha.waitFor({ state: "detached", timeout: 45000 }); }
   catch {
     await gravarEstado("intelipost", { tipo: "erro", falhou: impressao, titulo: "A Intelipost recusou o login do robô.",
