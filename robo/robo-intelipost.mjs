@@ -191,7 +191,10 @@ async function simularPrazo(cep, metodo, olhar) {
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await passo("abrir a aba Simulação de cotação", async () => { await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(2000); });
   await passo("marcar Sim em ignorar regras", async () => {
-    const caixa = p.locator("xpath=//*[contains(normalize-space(.),'ignorar regras')]/ancestor-or-self::*[.//input[@type='checkbox']][1]//input[@type='checkbox']").first();
+    const i = await p.evaluate(() => [...document.querySelectorAll("input[type=checkbox]")].filter((e) => e.getBoundingClientRect().width > 0)
+      .findIndex((e) => { let a = e.parentElement; while (a && (a.innerText || "").trim().length < 25) a = a.parentElement; return a && /ignorar regras/i.test(a.innerText); }));
+    if (i < 0) throw new Error("não achei a chave");
+    const caixa = p.locator("input[type=checkbox]:visible").nth(i);
     if (!(await caixa.isChecked())) await caixa.click({ force: true });
     await p.waitForTimeout(800);
     if (!(await caixa.isChecked())) throw new Error("continua Não");
@@ -200,13 +203,11 @@ async function simularPrazo(cep, metodo, olhar) {
   if (!cep) cep = await p.getByText(/^\s*Cep Origem/i).first().locator("xpath=following::input[1]").inputValue();   // teste: usa o CEP da própria loja
   await passo("preencher o CEP de destino", async () => { await destino.fill(String(cep).replace(/\D/g, "")); await destino.press("Tab"); });
   await passo("escolher o método de entrega", async () => {
-    const caixa = p.getByText(/selecione um método de entrega/i).first();
-    await caixa.click();
-    await p.keyboard.type(metodo, { delay: 30 });
-    await p.waitForTimeout(1500);
-    const op = p.locator("[role=option], [class*=option]:visible, li:visible").filter({ hasText: new RegExp("^\\s*" + metodo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$", "i") }).first();
-    if (olhar) log("  opções que apareceram:", await p.locator("[role=option]:visible, [class*=option]:visible").count());
-    if (await op.count()) await op.click(); else await p.keyboard.press("Enter");
+    const sel = p.locator("select:visible").filter({ has: p.locator("option", { hasText: /selecione um método/i }) }).first();
+    const nomes = await sel.locator("option").allInnerTexts();
+    const certo = nomes.map((x) => x.trim()).find((x) => x.toLowerCase() === metodo.toLowerCase());
+    if (!certo) throw new Error("o método não está na lista da Intelipost");
+    await sel.selectOption({ label: certo });
     await p.waitForTimeout(800);
   });
   await passo("clicar em Adicionar", async () => { await p.getByRole("button", { name: /^\s*Adicionar\s*$/i }).first().click(); await p.waitForTimeout(2000); });
