@@ -182,6 +182,71 @@ async function alterar(pedido, iso) {
   } finally { if (aba) await aba.close().catch(() => {}); }
 }
 
+// Cotação > Cotação de frete > aba "Simulação de cotação": ignorar regras = Sim, CEP destino, método,
+// Adicionar + tabela Vigente, volume com 1 em tudo, Calcular -> "Prazo de entrega" (em dias). Só consulta, não altera pedido.
+async function simularPrazo(cep, metodo, olhar) {
+  const p = pagina;
+  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}".`); } };
+  await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
+  await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  await passo("abrir a aba Simulação de cotação", async () => { await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(2000); });
+  await passo("marcar Sim em ignorar regras", async () => {
+    const caixa = p.locator("xpath=//*[contains(normalize-space(.),'ignorar regras')]/ancestor-or-self::*[.//input[@type='checkbox']][1]//input[@type='checkbox']").first();
+    if (!(await caixa.isChecked())) await caixa.click({ force: true });
+    await p.waitForTimeout(800);
+    if (!(await caixa.isChecked())) throw new Error("continua Não");
+  });
+  const destino = p.getByPlaceholder(/cep de destino/i).first();
+  if (!cep) cep = await p.getByText(/^\s*Cep Origem/i).first().locator("xpath=following::input[1]").inputValue();   // teste: usa o CEP da própria loja
+  await passo("preencher o CEP de destino", async () => { await destino.fill(String(cep).replace(/\D/g, "")); await destino.press("Tab"); });
+  await passo("escolher o método de entrega", async () => {
+    const caixa = p.getByText(/selecione um método de entrega/i).first();
+    await caixa.click();
+    await p.keyboard.type(metodo, { delay: 30 });
+    await p.waitForTimeout(1500);
+    const op = p.locator("[role=option], [class*=option]:visible, li:visible").filter({ hasText: new RegExp("^\\s*" + metodo.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$", "i") }).first();
+    if (olhar) log("  opções que apareceram:", await p.locator("[role=option]:visible, [class*=option]:visible").count());
+    if (await op.count()) await op.click(); else await p.keyboard.press("Enter");
+    await p.waitForTimeout(800);
+  });
+  await passo("clicar em Adicionar", async () => { await p.getByRole("button", { name: /^\s*Adicionar\s*$/i }).first().click(); await p.waitForTimeout(2000); });
+  await passo("marcar a tabela Vigente", async () => {
+    await p.getByText(/^\s*Tabelas\s*$/i).last().click();
+    await p.waitForTimeout(1500);
+    const vig = p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1]").first();
+    await vig.click({ force: true });
+    if (olhar) log("  tabelas vigentes/rascunho na lista:", await p.locator("xpath=//*[normalize-space(text())='Vigente' or normalize-space(text())='Rascunho']").count());
+    const fechar = p.getByRole("button", { name: /^\s*Fechar\s*$/i }).last();
+    if (await fechar.count()) await fechar.click();
+  });
+  await passo("pôr 1 no peso, altura, comprimento, largura e valor", async () => {
+    for (const r of ["Peso", "Altura", "Comprimento", "Largura", "Valor Nota Fiscal"]) {
+      const c = p.getByText(new RegExp("^\\s*" + r + "\\*?\\s*$", "i")).last().locator("xpath=following::input[1]");
+      await c.click(); await c.fill(""); await p.keyboard.type("1");
+    }
+  });
+  let prazo = null;
+  await passo("Calcular e ler o prazo", async () => {
+    await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
+    await p.getByText(/Opções de Envio/i).first().waitFor({ timeout: 45000 });
+    await p.waitForTimeout(1500);
+    const r = await p.evaluate(() => {
+      const t = [...document.querySelectorAll("table")].find((x) => /prazo de entrega/i.test(x.innerText));
+      if (!t) return null;
+      const cab = [...t.querySelectorAll("th")].map((x) => x.innerText.trim());
+      const i = cab.findIndex((x) => /prazo de entrega/i.test(x)), m = cab.findIndex((x) => /m[eé]todos? de entrega/i.test(x));
+      return [...t.querySelectorAll("tbody tr")].map((tr) => { const td = [...tr.querySelectorAll("td")]; return { metodo: td[m] ? td[m].innerText.trim() : "", prazo: td[i] ? td[i].innerText.trim() : "" }; });
+    });
+    if (!r || !r.length) throw new Error("sem linha em Opções de Envio");
+    if (olhar) r.forEach((x) => log("  opção de envio:", x.metodo, "->", x.prazo));
+    const linha = r.find((x) => x.metodo.toLowerCase() === metodo.toLowerCase()) || r[0];
+    const n = linha.prazo.match(/\d+/);
+    if (!n) throw new Error("prazo sem número");
+    prazo = Number(n[0]);
+  });
+  return prazo;
+}
+
 // ---- diagnóstico da troca de notas: só abre e fecha, nunca clica em Salvar/Atualizar/Confirmar ----
 const PROIBIDO = /^\s*(salvar|atualizar|confirmar|alterar|gravar|enviar|executar|aplicar|ok|sim)\s*$/i;
 async function mapaTela(tela, titulo) {
@@ -237,21 +302,10 @@ async function diagTroca() {
   const links = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("a[href]")].map((a) => `${(a.innerText || a.title || "").trim().replace(/\s+/g, " ").slice(0, 40)} -> ${a.getAttribute("href").slice(0, 80)}`))]
     .filter((t) => /cota|simul|frete|alterar|volume|transport|quote/i.test(t)).slice(0, 40));
   log("== Menu (links de cotação/simulação/alterar):"); links.forEach((l) => log("  link:", l));
-  for (const caminho of ["/quote/freight-quote"]) {   // Cotação > Cotação de frete (é a "simulação" do passo a passo)
-    try {
-      await pagina.goto(caminho.startsWith("http") ? caminho : BASE + (caminho.startsWith("/") ? caminho : "/" + caminho), { waitUntil: "domcontentloaded" });
-      await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-      await pagina.waitForTimeout(3000);
-      await esqueleto("Cotação/Simulação (" + caminho.replace(/^https?:\/\/[^/]+/, "").slice(0, 60) + ")");
-      await mapaTela(pagina, "Cotação/Simulação · ng-click");
-      await camposDetalhe(pagina, "Cotação/Simulação");
-      const cks = pagina.locator("input[type=checkbox]:visible");
-      for (let i = 0; i < await cks.count(); i++) {
-        const txt = await cks.nth(i).evaluate((e) => (e.parentElement.innerText || e.parentElement.parentElement.innerText || "").trim());
-        if (/ignor|regra/i.test(txt)) { await abrirEFechar(pagina, cks.nth(i), "Cotação · marquei '" + txt.slice(0, 30) + "'", true); break; }
-      }
-    } catch (e) { log("Simulação:", e.message.split("\n")[0]); }
-  }
+  try {
+    const prazo = await simularPrazo(null, process.env.METODO_TESTE || "Transiga Standard", true);
+    log(`Simulação de teste: prazo = ${prazo} dia(s) úteis`);
+  } catch (e) { log("Simulação:", e.message.split("\n")[0]); }
   // 2) tela do pedido: transportadora e volumes (abre a caixinha e fecha sem salvar)
   const alvo = await umPedidoParaOlhar();
   if (!alvo) { log("Não achei pedido para olhar (nem na troca de notas, nem alterado na fila)."); return; }
