@@ -413,9 +413,8 @@ async function escolherOpcao(sel, alvo) {
   if (!certo) return null;
   await sel.selectOption({ label: certo }); return certo;
 }
-async function salvarNoModal(tela) {
-  const modal = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
-  const bt = modal.locator("button").filter({ hasText: /^\s*atualizar\s*$/i }).first();
+async function salvarNoModal(tela, campo) {   // o "Atualizar" logo depois do último campo preenchido
+  const bt = campo.locator("xpath=following::button[normalize-space()='Atualizar'][1]");
   const resp = tela.waitForResponse(SALVOU, { timeout: 45000 });
   await bt.click();
   const r = await resp;
@@ -466,15 +465,14 @@ async function fazerTroca(job) {
     // 1) transportadora e método de entrega
     etapa = "trocar a transportadora";
     await tela.bringToFront();
-    await tela.locator("a[ng-click^='edit_logistic_provider_modal']").first().click();
-    const modal = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
-    await modal.locator("select").first().waitFor({ timeout: 20000 });
-    const selTransp = modal.locator("select").first();
+    await tela.locator("a[ng-click^='edit_logistic_provider_modal']:visible").first().click();
+    const selMet = tela.locator("select[ng-model='delivery_method_id']:visible").first();
+    await selMet.waitFor({ timeout: 20000 });
+    const selTransp = selMet.locator("xpath=preceding::select[1]");
     if (!(await escolherOpcao(selTransp, job.robo_transp))) throw new Error(`A transportadora "${job.robo_transp}" não aparece na caixinha da Intelipost.`);
     await tela.waitForTimeout(2000);
-    const selMet = modal.locator("select[ng-model='delivery_method_id']").first();
     if (!(await escolherOpcao(selMet, job.robo_metodo))) throw new Error(`O método "${job.robo_metodo}" não aparece para essa transportadora na Intelipost.`);
-    if (real) await salvarNoModal(tela); else await fecharModal(tela);
+    if (real) await salvarNoModal(tela, selMet);
     passos[1] = true;
     if (!real) await recarregar(tela);
 
@@ -499,19 +497,18 @@ async function fazerTroca(job) {
     for (let i = 0; i < n2; i++) {
       etapa = `editar o volume ${i + 1} de ${n2}`;
       await tela.locator("[ng-click^='edit_volume_modal']").nth(i).click();
-      const m = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
       const campos = [["current_volume.client_tracking_code", num], ["current_volume.invoice.invoice_number", num], ["current_volume.invoice.invoice_series", serie],
         ["current_volume.invoice.invoice_key", String(job.chave).replace(/\D/g, "")], ["current_volume.invoice.invoice_date_iso", brData(job.data_emissao)]];
       for (const [ng, v] of campos) {
-        const c = m.locator(`input[ng-model='${ng}']`).first();
+        const c = tela.locator(`input[ng-model='${ng}']:visible`).first();
         await c.waitFor({ timeout: 20000 });
         await c.fill(v);
         if (ng.endsWith("date_iso")) { await c.press("Tab").catch(() => {}); }
         const lido = (await c.inputValue()).replace(/\D/g, "");
         if (lido !== v.replace(/\D/g, "")) throw new Error(`o campo ${ng.split(".").pop()} não aceitou o valor`);
       }
-      if (real) await salvarNoModal(tela); else await fecharModal(tela);
-      await recarregar(tela);
+      if (real) await salvarNoModal(tela, tela.locator("input[ng-model='current_volume.invoice.invoice_date_iso']:visible").first());
+      await recarregar(tela);   // no teste, recarregar descarta o que foi preenchido
     }
     passos[4] = true;
 
