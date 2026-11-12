@@ -188,12 +188,14 @@ async function alterar(pedido, iso) {
 async function simularPrazo(cep, metodo, olhar) {
   const p = pagina;
   const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}".`); } };
+  await p.bringToFront();
   await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await passo("abrir a aba Simulação de cotação", async () => { await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(2000); });
   await passo("marcar Sim em ignorar regras", async () => {
-    const i = await p.evaluate(() => [...document.querySelectorAll("input[type=checkbox]")].filter((e) => e.getBoundingClientRect().width > 0)
-      .findIndex((e) => { let a = e.parentElement; while (a && (a.innerText || "").trim().length < 25) a = a.parentElement; return a && /ignorar regras/i.test(a.innerText); }));
+    let i = -1;
+    for (let k = 0; k < 15 && i < 0; k++) { if (k) await p.waitForTimeout(1000); i = await p.evaluate(() => [...document.querySelectorAll("input[type=checkbox]")].filter((e) => e.getBoundingClientRect().width > 0)
+      .findIndex((e) => { let a = e.parentElement; while (a && (a.innerText || "").trim().length < 25) a = a.parentElement; return a && /ignorar regras/i.test(a.innerText); })); }
     if (i < 0) throw new Error("não achei a chave");
     const caixa = p.locator("input[type=checkbox]:visible").nth(i);
     if (!(await caixa.isChecked())) await caixa.click({ force: true });
