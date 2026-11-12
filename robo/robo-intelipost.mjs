@@ -110,15 +110,31 @@ async function abrirPedido(pedido, olhar) {
   tela.setDefaultTimeout(30000);
   // pedido já entregue/cancelado não deixa mudar a previsão: avisa em vez de tentar
   await tela.getByText(/Pedido:/).first().waitFor({ timeout: 60000 }).catch(() => {});
-  const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^\n(]*\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
+  const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
   if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
   // "Entrega prev.:" é um link (ng-click edit_estimated_delivery_date) que abre a edição da previsão do cliente
   const link = tela.locator("a[ng-click^='edit_estimated_delivery_date']").first();
   try { await link.waitFor({ timeout: 60000 }); }
   catch { if (olhar) await camposDeData(tela); if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o link da previsão de entrega."); }
+  const assinatura = () => tela.evaluate(() => [...document.querySelectorAll("input, select, textarea, button, [contenteditable=true]")]
+    .filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; })
+    .map((e) => `${e.tagName.toLowerCase()} | ${e.type || ""} | id=${e.id} | name=${e.name || ""} | ng-model=${e.getAttribute("ng-model") || ""} | class=${String(e.className).slice(0, 50)} | ${(e.innerText || "").trim().slice(0, 25)}`));
+  const antes = olhar ? new Set(await assinatura()) : null;
+  const novaAba = ctx.waitForEvent("page", { timeout: 5000 }).catch(() => null);
   await link.click();
-  await tela.waitForTimeout(2000);
+  await tela.waitForTimeout(3000);
   if (olhar) {
+    const outra = await novaAba;
+    log(outra ? "O clique abriu outra aba." : "O clique não abriu outra aba.");
+    const depois = await assinatura();
+    const novos = depois.filter((x) => !antes.has(x));
+    log(`Elementos que apareceram depois do clique: ${novos.length}`);
+    novos.slice(0, 30).forEach((x) => log("  novo:", x));
+    const ocultos = await tela.evaluate(() => [...document.querySelectorAll("[id*=formated i], [name*=formated i], input[type=datetime-local], [ng-model*=estimated i], .modal, [uib-modal-window], [modal-window]")]
+      .slice(0, 20).map((e) => `${e.tagName.toLowerCase()} | id=${e.id} | ng-model=${e.getAttribute("ng-model") || ""} | class=${String(e.className).slice(0, 50)} | ${e.getBoundingClientRect().width > 0 ? "visível" : "escondido"}`));
+    ocultos.forEach((x) => log("  formated/modal:", x));
+  }
+  if (false) {
     log("Cliquei na previsão de entrega (nada é salvo no diagnóstico).");
     const m = await tela.evaluate(() => {
       const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
