@@ -187,12 +187,23 @@ try {
         await esqueleto(nome);
       } catch (e) { log(nome + ":", e.message.split("\n")[0]); }
     }
-    const fila = await pegarIntelipost(1);
-    if (fila[0]) {
-      try { const { tela, aba } = await abrirPedido(fila[0].pedido, true); const p0 = pagina; pagina = tela; await esqueleto("Tela do pedido"); pagina = p0; if (aba) await aba.close(); }
-      catch (e) { log("Tela do pedido:", e.message.split("\n")[0]); }
-      await resultadoIntelipost(fila[0].pedido, "pendente");   // diagnóstico não mexe no pedido
-    } else log("Fila vazia: não abri nenhum pedido.");
+    const fila = await pegarIntelipost(5);
+    for (const item of fila) {
+      try {
+        const { tela, campo, aba } = await abrirPedido(item.pedido, true);
+        log("Achei o campo da previsão.");
+        await campo.click();
+        const dt = tela.locator("input[type=datetime-local]").first();
+        const apareceu = await dt.waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
+        log(apareceu ? "Depois de clicar, apareceu o campo de data e hora (datetime-local)." : "Depois de clicar, NÃO apareceu o campo datetime-local.");
+        const salvar = await tela.locator("button:visible, a:visible, [role=button]:visible").filter({ hasText: /^\s*salvar\s*$/i }).count();
+        log(`Botões Salvar visíveis: ${salvar}. Saio sem salvar.`);
+        if (aba) await aba.close();
+        break;
+      } catch (e) { log("Pedido da fila:", e.message.split("\n")[0]); }
+    }
+    for (const item of fila) await resultadoIntelipost(item.pedido, "pendente");   // diagnóstico não mexe nos pedidos
+    if (!fila.length) log("Fila vazia: não abri nenhum pedido.");
   } else {
     const fila = await pegarIntelipost(LIMITE);
     log(`${fila.length} pedido(s) na passagem (${MODO}).`);
