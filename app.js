@@ -210,7 +210,10 @@
     vencem: (p) => p._diasEf !== null && p._diasEf >= 0 && p._diasEf <= 5,
     parados: (p) => p._parado !== null && p._parado > DIAS_PARADO,
     todos: () => true,
-  };
+  };  const filtroVisao = (v) => { const ks = v.split("+"); return (p) => ks.some((k) => naVisao[k](p)); };
+  const NOMES_VISAO = { vencem: "Vencem em até 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", todos: "Pedidos em aberto" };
+  const nomeVisao = () => visao.split("+").map((k) => NOMES_VISAO[k]).join(" + ");
+
 
   // ---------------- filtros do topo (valem para tudo; vários itens por filtro) ----------------
   const FILTROS = {
@@ -303,12 +306,12 @@
     vistos = base.filter(passaFiltros);          // tudo já com os filtros do topo
     // contadores das visões
     document.querySelectorAll(".visao").forEach((b) => {
-      b.classList.toggle("ativa", b.dataset.visao === visao);
+      b.classList.toggle("ativa", visao.split("+").includes(b.dataset.visao));
       const n = vistos.filter(naVisao[b.dataset.visao]).length;
       if (b.classList.contains("kpi")) b.querySelector(".kpi-num").textContent = fmt(n);
       else b.querySelector("span").textContent = `(${fmt(n)})`;
     });
-    const daVisao = vistos.filter(naVisao[visao]);
+    const daVisao = vistos.filter(filtroVisao(visao));
     // aviso do topo: o que vence hoje/amanhã e ainda não tem nova data
     const semNova = (p) => !(p._t && p._t.nova_data);
     const urg = vistos.filter((p) => (naVisao.hoje(p) || naVisao.amanha(p)) && semNova(p)).length;
@@ -328,7 +331,7 @@
     const ord = [...grupos.entries()].sort((a, b) => b[1].n - a[1].n);
     const somaP = daVisao.reduce((s, p) => s + (p._parado || 0), 0);
     const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "já vencidos", hoje: "que vencem hoje", amanha: "que vencem amanhã", todos: "em aberto" };
-    $("ms-resumo").textContent = `${fmt(daVisao.length)} pedidos ${nomes[visao]} · em média ${(daVisao.length ? somaP / daVisao.length : 0).toFixed(1).replace(".", ",")} dias sem movimento no rastreio · clique para ver e exportar.`;
+    $("ms-resumo").textContent = `${fmt(daVisao.length)} pedidos ${visao.split("+").map((k) => nomes[k]).join(" ou ")} · em média ${(daVisao.length ? somaP / daVisao.length : 0).toFixed(1).replace(".", ",")} dias sem movimento no rastreio · clique para ver e exportar.`;
     if (msSel && !grupos.has(msSel)) msSel = "";
     $("ms-linhas").innerHTML = ord.length ? ord.map(([k, g]) => {
       const media = g.cont ? g.soma / g.cont : 0;
@@ -363,7 +366,7 @@
   function filtrar(manterPagina, daVisao) {
     // com algo digitado em Buscar, procura em TODOS os pedidos (inclusive vencidos), não só na visão escolhida
     const buscando = !!$("f-busca").value.trim();
-    daVisao = buscando ? vistos : daVisao || vistos.filter(naVisao[visao]);
+    daVisao = buscando ? vistos : daVisao || vistos.filter(filtroVisao(visao));
     const ms = msSel;   // micro status clicado numa das tabelas
     filtrados = daVisao.filter((p) => {
       if (ms && (p.micro_status || "(sem micro status)") !== ms) return false;
@@ -374,7 +377,7 @@
     filtrados.sort((a, b) => (a._diasEf ?? 9999) - (b._diasEf ?? 9999) || (b._parado || 0) - (a._parado || 0));
     const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", todos: "Todos os pedidos" };
     const rNome = rangeSel === "__avencer" ? " · vencidos e a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
-    $("lista-titulo").textContent = `${buscando ? "Busca em todos os pedidos" : nomes[visao]}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
+    $("lista-titulo").textContent = `${buscando ? "Busca em todos os pedidos" : nomeVisao()}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
     if (!manterPagina) pagina = 1;
     desenharLista();
   }
@@ -416,7 +419,11 @@
   // ---------------- eventos da tela ----------------
   $("visoes").addEventListener("click", (e) => {
     const b = e.target.closest(".visao"); if (!b) return;
-    visao = b.dataset.visao; msSel = ""; rangeSel = ""; redesenhar();
+    // vários cards ao mesmo tempo: clique liga/desliga; "Pedidos em aberto" volta a mostrar tudo
+    const k = b.dataset.visao, atuais = new Set(visao.split("+").filter((x) => x !== "todos"));
+    if (k === "todos") atuais.clear(); else atuais.has(k) ? atuais.delete(k) : atuais.add(k);
+    visao = atuais.size ? [...atuais].join("+") : "todos";
+    msSel = ""; rangeSel = ""; redesenhar();
   });
   $("ms-linhas").addEventListener("click", (e) => {
     const tr = e.target.closest("tr[data-ms]"); if (!tr) return;
@@ -539,7 +546,7 @@
     const ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
     ws["!cols"] = cab.map((c, i) => ({ wch: [32, 12, 14, 20][i] || 16 }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
-    XLSX.writeFile(wb, `preventivo_${visao}_${hojeISO()}.xlsx`);
+    XLSX.writeFile(wb, `preventivo_${visao.replace(/\+/g, "-")}_${hojeISO()}.xlsx`);
   });
 
   // ---------------- envio da planilha ----------------
@@ -630,7 +637,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=33");
+        const w = new Worker("leitor-intelipost.js?v=34");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1256,10 +1263,11 @@
       (!nova || (nova === "com" && l.nova_data) || (nova === "sem" && !l.nova_data) || (nova === "obs" && l.observacao));
     const base1 = sacLinhas.filter(passa);
     document.querySelectorAll("#sac-visoes .visao-sac").forEach((b) => {
-      b.classList.toggle("ativa", b.dataset.sv === sacVisao);
+      b.classList.toggle("ativa", sacVisao.split("+").includes(b.dataset.sv));
       b.querySelector(".kpi-num").textContent = fmt(base1.filter(naSv[b.dataset.sv]).length);
     });
-    sacFiltrados = base1.filter(naSv[sacVisao]);
+    const svs = sacVisao.split("+");
+    sacFiltrados = base1.filter((p) => svs.some((k) => naSv[k](p)));
     sacFiltrados.sort((a, b) => String(a.prometido || "9999").localeCompare(String(b.prometido || "9999")));
     if (!manter) sacPagina = 1;
     desenharSac();
@@ -1291,7 +1299,10 @@
   let esperaSac; $("sac-busca").addEventListener("input", () => { clearTimeout(esperaSac); esperaSac = setTimeout(() => filtrarSac(), 250); });
   $("sac-visoes").addEventListener("click", (e) => {
     const b = e.target.closest(".visao-sac"); if (!b) return;
-    sacVisao = b.dataset.sv; filtrarSac();
+    const k = b.dataset.sv, atuais = new Set(sacVisao.split("+").filter((x) => x !== "todos"));
+    if (k === "todos") atuais.clear(); else atuais.has(k) ? atuais.delete(k) : atuais.add(k);
+    sacVisao = atuais.size ? [...atuais].join("+") : "todos";
+    filtrarSac();
   });
   ["sac-canal", "sac-transp", "sac-nova"].forEach((id) => $(id).addEventListener("change", () => filtrarSac()));
   $("sac-paginacao").addEventListener("click", (e) => {
@@ -1303,7 +1314,7 @@
       .concat(sacFiltrados.map((l) => [l.nf, l.pedido, l.canal, l.transportadora, l.micro_status, br(l.prometido), br(l.nova_data), l.observacao || "", l.link_rastreio || ""]));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Consulta");
-    XLSX.writeFile(wb, `consulta_sac_${sacVisao}_${hojeISO()}.xlsx`);
+    XLSX.writeFile(wb, `consulta_sac_${sacVisao.replace(/\+/g, "-")}_${hojeISO()}.xlsx`);
   });
 
   // lista de logins do SAC (só a Logística mexe)
