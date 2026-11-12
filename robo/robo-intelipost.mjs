@@ -328,8 +328,14 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
   await tela.waitForTimeout(1500);
 }
 async function diagCep() {   // por que a simulação volta vazia: refaz a da última troca com erro, mostrando cada passo
+  const controle = async (q) => { try { log(`== controle (CEP público SP, Transiga) ${q}: prazo ${await simularPrazo("01310100", "Transiga Standard", false)}`); } catch (e) { log(`== controle ${q}:`, e.message.split("\n")[0]); } };
+  const modo = await pagina.evaluate(() => { const t = document.body.innerText; const i = t.search(/\bLive\b/); return i >= 0 ? t.slice(i, i + 20).replace(/\s+/g, " ") : "não achei"; });
+  log("Topo (Live/Teste):", modo, "· chaves marcadas no topo:", await pagina.evaluate(() => [...document.querySelectorAll("header input[type=checkbox], nav input[type=checkbox]")].map((e) => e.checked).join(",")));
+  await controle("logo depois do login");
   const t = await ultimaTrocaComErro();
   if (!t) { log("Nenhuma troca com erro."); return; }
+  { const { aba } = await abrirPedido(t.pedido, false, true); if (aba) await aba.close(); }
+  await controle("depois de abrir um pedido");
   // CEP na Busca por Lote (linha do pedido) — compara com o do quadro Destinatário, sem mostrar
   await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
   const cx = pagina.getByPlaceholder(/digite seus pedidos/i).first(); await cx.waitFor({ timeout: 45000 });
@@ -356,7 +362,7 @@ async function diagCep() {   // por que a simulação volta vazia: refaz a da ú
     delete process.env.VOL_SIMULACAO; return;
   }
   log(`CEP: texto com ${info.bruto.length} letras, ${cep.length} dígitos, começa com ${cep.slice(0, 1)} · UF ${info.uf} · método ${t.robo_metodo}`);
-  for (const [peso, ign] of [["25,0.11,0.01,0.01,0.01", "sim"], ["0.01,0.01,0.01,0.01,0.01", "sim"], ["1,0.01,0.01,0.01,0.01", "sim"]]) {
+  for (const [peso, ign] of [["25,0.11,0.01,0.01,0.01", "sim"]]) {
     process.env.VOL_SIMULACAO = peso; process.env.IGNORAR_REGRAS = ign;
     try { log(`== ${t.robo_metodo} ${peso} kg, ignorar regras ${ign}: prazo ${await simularPrazo(cep, t.robo_metodo, true)}`); } catch (e) { log(`== ${t.robo_metodo} ${peso} kg, ignorar regras ${ign}:`, e.message.split("\n")[0]); }
   }
