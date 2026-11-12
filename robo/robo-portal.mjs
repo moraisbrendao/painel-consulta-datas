@@ -123,7 +123,9 @@ for (const g of grupos) {
     console.log(`Arquivo ${n}/${grupos.length}: ok (${g.notas.length} notas).`);
   } catch (e) {
     resultado.push({ ...base, status: "erro", msg: String(e.message || e).split("\n")[0].slice(0, 300) });
-    console.log(`Arquivo ${n}/${grupos.length}: problema.`);
+    // log público: só motivo, transportadora e o tipo do erro (números longos escondidos)
+    const msgLog = String(e.message || e).split("\n")[0].slice(0, 200).replace(/\d{5,}/g, "#");
+    console.log(`Arquivo ${n}/${grupos.length}: problema (${g.motivo} · ${g.transportadora}, ${g.notas.length} notas): ${msgLog}`);
   }
   await atualizarPedido(pedido.id, { resultado }).catch(() => {});
 }
