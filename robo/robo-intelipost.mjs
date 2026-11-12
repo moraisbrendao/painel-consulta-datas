@@ -228,8 +228,17 @@ async function simularPrazo(cep, metodo, olhar) {
   });
   let prazo = null;
   await passo("Calcular e ler o prazo", async () => {
+    if (olhar) {
+      const v = await p.evaluate(() => [...document.querySelectorAll("input[type=text]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.value).filter((x) => !/\d{5}/.test(x)).join(" | "));
+      log("  valores dos campos de volume:", v);
+      log("  tabela vigente marcada:", await p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first().isChecked().catch(() => "não achei"));
+    }
+    const resp = p.waitForResponse((r) => r.request().method() === "POST" && /quot|cota/i.test(r.url()), { timeout: 45000 }).catch(() => null);
     await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
-    await p.getByText(/Opções de Envio/i).first().waitFor({ timeout: 45000 });
+    const rr = await resp;
+    if (olhar) log("  resposta do Calcular:", rr ? `${rr.status()} ${new URL(rr.url()).pathname.replace(/\d+/g, "#")}` : "nenhuma");
+    if (olhar) { await p.waitForTimeout(3000); const avisos = await p.evaluate(() => [...document.querySelectorAll("[role=alert], .toast, [class*=toast], [class*=alert], [class*=error], .invalid-feedback, [class*=snack]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim().slice(0, 120)).filter(Boolean)); avisos.forEach((a) => log("  aviso na tela:", a)); }
+    await p.locator("text=/Opções de Envio/i >> visible=true").first().waitFor({ timeout: 45000 });
     await p.waitForTimeout(1500);
     const r = await p.evaluate(() => {
       const t = [...document.querySelectorAll("table")].find((x) => /prazo de entrega/i.test(x.innerText));
