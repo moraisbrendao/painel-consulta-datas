@@ -245,6 +245,8 @@ async function simularPrazo(cep, metodo, olhar) {
     const ms = (q && q.delivery_methods) || [];
     if (!ms.length) {
       const exc = (q && q.excluded_methods) || [];
+      if (!q) log("  resposta da simulação sem quoteFreightVolume:", JSON.stringify(corpo).replace(/\d{5,}/g, "#####").slice(0, 300));
+      else log("  simulação voltou vazia. Chaves:", Object.keys(q).join(", "));
       if (exc.length) log("  métodos excluídos na simulação:", JSON.stringify(exc).slice(0, 400));
       const msg = (corpo.errors && corpo.errors[0] && corpo.errors[0].message) || (exc[0] && (exc[0].reason || exc[0].message || exc[0].description)) || "sem opção de entrega";
       throw new Error(`a Intelipost não achou frete para esse CEP com ${metodo} (${msg.slice(0, 120)})`);
@@ -448,6 +450,7 @@ async function fazerTroca(job) {
     if (fechado) throw new Error(`O pedido está ${fechado.toLowerCase()} na Intelipost.`);
     const cep = await tela.evaluate(() => { const m = document.body.innerText.match(/Destinat[aá]rio[\s\S]{0,2000}?CEP:\s*([\d.\-]{8,10})/i); return m ? m[1].replace(/\D/g, "") : ""; });
     if (cep.length !== 8) throw new Error("Não achei o CEP do destinatário na tela do pedido.");
+    if (job.ticket === "diag") log(`CEP lido: ${cep.length} dígitos, começa com ${cep[0]} (a loja começa com 9) · CEPs na tela: ${await tela.evaluate(() => (document.body.innerText.match(/CEP:/gi) || []).length)}`);
     const nVol = await tela.locator("[ng-click^='edit_volume_modal']").count();
     if (!nVol) throw new Error("Não achei os volumes do pedido (botão Editar).");
 
