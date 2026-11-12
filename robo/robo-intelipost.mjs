@@ -75,7 +75,7 @@ async function esqueleto(titulo) {
   log(`== ${titulo} · ${new URL(pagina.url()).host}${new URL(pagina.url()).pathname}${new URL(pagina.url()).hash.replace(/[^#/a-z-]/gi, "")}`);
   info.campos.forEach((c) => log("  campo:", c));
   log("  botões:", info.botoes.join(" / "));
-  info.links.forEach((l) => log("  link:", l));
+  if (/inicial/i.test(titulo)) info.links.forEach((l) => log("  link:", l));
 }
 
 // abre o pedido. A página /ng#/order-number/ nunca "termina" de carregar: espera o CAMPO, não a página.
@@ -104,7 +104,14 @@ let ok = 0, erro = 0;
 try {
   await entrar();
   if (MODO === "diag") {
-    await esqueleto("Tela inicial");
+    for (const [nome, caminho] of [["Busca por Lote", "/order/transactions-batch"], ["Alterar Pedidos", "/order/change-order"]]) {
+      try {
+        await pagina.goto(BASE + caminho, { waitUntil: "domcontentloaded" });
+        await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+        await pagina.waitForTimeout(3000);
+        await esqueleto(nome);
+      } catch (e) { log(nome + ":", e.message.split("\n")[0]); }
+    }
     const fila = await pegarIntelipost(1);
     if (fila[0]) {
       try { await abrirPedido(fila[0].pedido); await esqueleto("Tela do pedido"); }
