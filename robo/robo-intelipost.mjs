@@ -233,10 +233,16 @@ async function simularPrazo(cep, metodo, olhar) {
       log("  valores dos campos de volume:", v);
       log("  tabela vigente marcada:", await p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first().isChecked().catch(() => "não achei"));
     }
-    const resp = p.waitForResponse((r) => r.request().method() === "POST" && /quot|cota/i.test(r.url()), { timeout: 45000 }).catch(() => null);
-    await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
-    const rr = await resp;
-    if (olhar) log("  resposta do Calcular:", rr ? `${rr.status()} ${new URL(rr.url()).pathname.replace(/\d+/g, "#")}` : "nenhuma");
+    const chamadas = [], erros = [];
+    const ouvir = (r) => { if (!/jserrors|newrelic|nr-data|hotjar|analytics|segment|intercom|sentry|google/i.test(r.url())) chamadas.push(`${r.request().method()} ${r.status()} ${new URL(r.url()).host} ${new URL(r.url()).pathname.replace(/\d+/g, "#")}`); };
+    const errou = (e) => erros.push(String(e.message || e).slice(0, 150));
+    p.on("response", ouvir); p.on("pageerror", errou);
+    const botaoCalc = p.getByRole("button", { name: /^\s*Calcular\s*$/i });
+    if (olhar) log("  botões Calcular:", await botaoCalc.count(), "| ativo:", await botaoCalc.first().isEnabled().catch(() => "?"));
+    await botaoCalc.first().click();
+    await p.waitForTimeout(8000);
+    p.off("response", ouvir); p.off("pageerror", errou);
+    if (olhar) { chamadas.slice(0, 15).forEach((c) => log("  chamada depois do Calcular:", c)); erros.forEach((e) => log("  erro de script:", e)); }
     if (olhar) { await p.waitForTimeout(3000); const avisos = await p.evaluate(() => [...document.querySelectorAll("[role=alert], .toast, [class*=toast], [class*=alert], [class*=error], .invalid-feedback, [class*=snack]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim().slice(0, 120)).filter(Boolean)); avisos.forEach((a) => log("  aviso na tela:", a)); }
     await p.locator("text=/Opções de Envio/i >> visible=true").first().waitFor({ timeout: 45000 });
     await p.waitForTimeout(1500);
