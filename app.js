@@ -630,7 +630,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=32");
+        const w = new Worker("leitor-intelipost.js?v=33");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -744,7 +744,8 @@
     "AGUARDANDO INSTRUCAO": "Confirmação de dados", "CARGA RECUSADA PELO DESTINATARIO": "Recusa",
     "ESTABELECIMENTO FECHADO": "Destinatário ausente", "DESTINATARIO MUDOU-SE": "Mudança de endereço" };
   const TRANSP_ROBO = { "VM TRANSPORTES": "VM TRANSPORTES", "Atual Cargas": "Atual Cargas Standard", "Transiga": "TRANSIGA",
-    "Petrymar": "Petrymar Transportes", "TRANSCAI TRANSPORTES": "Transcai" };   // VM: sempre a 1ª da lista (posicao 0)
+    "Petrymar": "Petrymar Transportes", "TRANSCAI TRANSPORTES": "Transcai", "Zelog Transportes": "Zelog Standard",
+    "PROLOG TRANSPORTES E LOGISTICA LTDA": "PROLOG TRANSPORTES", "Rapido Alem Paraiba": "RÁPIDO ALÉM PARAÍBA", "Trans Sua Log": "Trans Sua Log - Standard" };   // VM: sempre a 1ª da lista (posicao 0)
   let fila = [], filaOk = true;
 
   function notasNaFila() {
