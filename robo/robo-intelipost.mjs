@@ -242,9 +242,10 @@ async function simularPrazo(cep, metodo, olhar) {
   // o campo tem máscara de centavos: digitar "100" vira 1,00. Peso PESO_SIMULACAO kg (algumas tabelas recusam 0,01 kg).
   const PESO = String(process.env.PESO_SIMULACAO || "1");
   await passo("pôr peso, medidas e valor", async () => {
-    for (const [r, v] of [["Peso", PESO], ["Altura", "1"], ["Comprimento", "1"], ["Largura", "1"], ["Valor Nota Fiscal", "1"]]) {
+    const V = (process.env.VOL_SIMULACAO || `${PESO},1,1,1,1`).split(",");   // peso, altura, comprimento, largura, valor
+    for (const [i, r] of ["Peso", "Altura", "Comprimento", "Largura", "Valor Nota Fiscal"].entries()) {
       const c = p.locator(`xpath=//*[starts-with(normalize-space(text()),'${r}')]/following::input[1] >> visible=true`).last();
-      await c.click(); await c.fill(""); await p.keyboard.type(String(Math.round(Number(v) * 100)));
+      await c.click(); await c.fill(""); await p.keyboard.type(String(Math.round(Number(V[i]) * 100)));
     }
   });
   let prazo = null;
@@ -334,11 +335,11 @@ async function diagCep() {   // por que a simulação volta vazia: refaz a da ú
   if (aba) await aba.close();
   const cep = info.bruto.replace(/\D/g, "");
   log(`CEP: texto com ${info.bruto.length} letras, ${cep.length} dígitos, começa com ${cep.slice(0, 1)} · UF ${info.uf} · método ${t.robo_metodo}`);
-  for (const [peso, ign] of [["25", "sim"], ["25", "nao"], ["1", "nao"]]) {
-    process.env.PESO_SIMULACAO = peso; process.env.IGNORAR_REGRAS = ign;
+  for (const [peso, ign] of [["25,0.11,0.01,0.01,0.01", "sim"], ["0.01,0.01,0.01,0.01,0.01", "sim"], ["1,0.01,0.01,0.01,0.01", "sim"]]) {
+    process.env.VOL_SIMULACAO = peso; process.env.IGNORAR_REGRAS = ign;
     try { log(`== ${t.robo_metodo} ${peso} kg, ignorar regras ${ign}: prazo ${await simularPrazo(cep, t.robo_metodo, true)}`); } catch (e) { log(`== ${t.robo_metodo} ${peso} kg, ignorar regras ${ign}:`, e.message.split("\n")[0]); }
   }
-  delete process.env.PESO_SIMULACAO; delete process.env.IGNORAR_REGRAS;
+  delete process.env.VOL_SIMULACAO; delete process.env.IGNORAR_REGRAS;
 }
 async function diagTroca() {
   if (!process.env.MAPA) {   // teste completo da troca SEM salvar, com nota/chave fictícias, num pedido já alterado
