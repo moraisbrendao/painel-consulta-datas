@@ -46,20 +46,48 @@ try {
   await navegador.close(); await terminar("erro"); process.exit(0);
 }
 
+// nome "limpo" para comparar: sem acento, sem maiúsculas e sem palavras genéricas (LTDA, TRANSPORTES...)
+const GENERICAS = new Set(["LTDA", "ME", "EPP", "SA", "S", "A", "E", "DE", "DA", "DO", "EIRELI", "TRANSPORTE", "TRANSPORTES", "TRANSPORTADORA",
+  "LOGISTICA", "LOG", "CARGAS", "CARGA", "EXPRESS", "EXPRESSO", "STANDARD", "INTEGRADA", "SERVICOS"]);
+const limpa = (t) => String(t).normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/[^A-Z0-9]+/g, " ").trim();
+const palavras = (t) => limpa(t).split(" ").filter((w) => w && !GENERICAS.has(w));
+// procura a opção mais parecida: todas as palavras importantes do nome aparecem na opção (ou o contrário)
+function maisParecida(nome, textos) {
+  const pn = palavras(nome); if (!pn.length) return -1;
+  const notas = textos.map((t) => {
+    const po = palavras(t); if (!po.length) return 0;
+    const comuns = pn.filter((w) => po.some((x) => x === w || (w.length >= 4 && (x.startsWith(w) || w.startsWith(x))))).length;
+    return comuns / Math.max(pn.length, po.length) + (comuns === pn.length ? 0.5 : 0);
+  });
+  const melhor = Math.max(...notas);
+  if (melhor < 0.75) return -1;
+  const iguais = notas.filter((x) => x === melhor).length;
+  return iguais === 1 ? notas.indexOf(melhor) : -1;   // empate = não arrisca
+}
+
 async function escolher(gatilho, nome, posicao, oQue) {
   await gatilho.click();
   const lista = pagina.locator("[role=listbox][data-slot=select-content]");
   await lista.waitFor();
-  const opcoes = lista.locator("[role=option]").filter({ hasText: re(nome) });
+  await pagina.waitForTimeout(500);   // a lista às vezes demora a carregar todas as opções
+  let opcoes = lista.locator("[role=option]").filter({ hasText: re(nome) });
+  let alvo = nome;
   if ((await opcoes.count()) <= posicao) {
-    await pagina.keyboard.press("Escape");
-    throw new Error(`${oQue} "${nome}" não existe no portal.`);
+    const textos = (await lista.locator("[role=option]").allInnerTexts()).map((t) => t.trim());
+    const i = maisParecida(nome, textos);
+    if (i < 0) {
+      await pagina.keyboard.press("Escape");
+      throw new Error(`${oQue} "${nome}" não existe no portal. Parecidas: ${textos.filter((t) => palavras(t).some((w) => palavras(nome).includes(w))).slice(0, 5).join(" / ") || "nenhuma"}.`);
+    }
+    alvo = textos[i]; posicao = 0;
+    console.log(`${oQue}: "${nome}" não existe no portal; usei "${alvo}".`);
+    opcoes = lista.locator("[role=option]").filter({ hasText: re(alvo) });
   }
   const op = opcoes.nth(posicao);
   for (let i = 0; ; i++) {
     try { await op.click({ timeout: 1500 }); break; }
     catch (e) {
-      if (i > 60) throw new Error(`Não consegui escolher ${oQue.toLowerCase()} "${nome}".`);
+      if (i > 60) throw new Error(`Não consegui escolher ${oQue.toLowerCase()} "${alvo}".`);
       const desce = pagina.locator("[data-slot=select-scroll-down-button]");
       if (await desce.count()) await desce.first().hover();
       await pagina.waitForTimeout(400);
@@ -67,7 +95,8 @@ async function escolher(gatilho, nome, posicao, oQue) {
   }
   await pagina.waitForTimeout(300);
   const texto = (await gatilho.innerText()).trim();
-  if (!re(nome).test(texto)) throw new Error(`${oQue} ficou "${texto}" em vez de "${nome}".`);
+  if (!re(alvo).test(texto)) throw new Error(`${oQue} ficou "${texto}" em vez de "${alvo}".`);
+  return alvo;
 }
 
 async function importar(g, n) {
@@ -93,10 +122,10 @@ async function importar(g, n) {
   if (faltam.length) throw new Error(`${faltam.length} nota(s) não apareceram na tabela do portal.`);
 
   const gatilhos = modal.locator("button[role=combobox][data-slot=select-trigger]");
-  await escolher(gatilhos.nth(0), g.motivo, 0, "Motivo");
+  const motivoUsado = await escolher(gatilhos.nth(0), g.motivo, 0, "Motivo");
   await escolher(gatilhos.nth(1), g.transportadora, g.posicao || 0, "Transportadora");
   const motivos = (await linhasTab.locator("button[role=combobox]").allInnerTexts()).map((t) => t.trim());
-  if (motivos.length !== g.notas.length || motivos.some((t) => !re(g.motivo).test(t)))
+  if (motivos.length !== g.notas.length || motivos.some((t) => !re(motivoUsado).test(t)))
     throw new Error("O motivo em massa não foi aplicado em todas as notas.");
 
   if (pedido.teste) { await pagina.keyboard.press("Escape"); return; }
@@ -114,7 +143,14 @@ for (const g of grupos) {
   n++;
   const base = { ms: g.ms, motivo: g.motivo, transportadora: g.transportadora, notas: g.notas.length };
   try {
-    await importar(g, n);
+    try { await importar(g, n); }
+    catch (e1) {
+      // erro de tempo (portal lento): tenta mais uma vez; nome inexistente não adianta repetir
+      if (/não existe no portal|não confirmou o envio/.test(String(e1.message))) throw e1;
+      console.log(`Arquivo ${n}/${grupos.length}: tentando de novo.`);
+      await pagina.keyboard.press("Escape").catch(() => {});
+      await importar(g, n);
+    }
     resultado.push({ ...base, status: "ok" });
     if (!pedido.teste) {
       await registrarCadastradas(g.notas.map((x) => ({ nf: x.nf, serie: x.serie, motivo: g.motivo })))
