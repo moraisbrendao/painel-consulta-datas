@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=41">
+  <link rel="stylesheet" href="styles.css?v=42">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -29,6 +29,7 @@
       <div class="marca"><b>E-loggia 2.0</b><span>Multimóveis</span></div>
       <button class="menu-item so-log" data-pagina="gerencial"><span class="menu-icone">▦</span>Visão Gerencial</button>
       <button class="menu-item so-log" data-pagina="entregas"><span class="menu-icone">✓</span>Entregas e SLA</button>
+      <button class="menu-item so-log" data-pagina="uf"><span class="menu-icone">⌖</span>Atrasos por UF</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
@@ -233,6 +234,71 @@
           <p id="e-vazio" class="vazio" hidden>Nenhuma entrega.</p>
         </div>
         <nav id="e-paginacao" class="paginacao"></nav>
+      </section>
+    </main>
+
+    <main class="conteudo" id="pagina-uf" hidden>
+      <!-- o cartão de filtros da Visão Gerencial é colocado aqui quando esta página abre (mesmos filtros) -->
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Atrasos por UF</h1>
+          <p class="sub">Clique em um estado para ver as cidades, as transportadoras e as séries daquele estado.</p>
+          <p id="u-info" class="info-base">Carregando…</p>
+        </div>
+        <div class="seg seg-grande" id="u-modo"><button class="ativo" data-m="mapa">Mapa</button><button data-m="ranking">Ranking e tabela</button></div>
+      </div>
+
+      <section class="cartao" id="u-mapa-cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Mapa de atrasos</h2>
+            <p class="sub">Cada estado colorido pelo percentual de atraso sobre o que está em aberto. Clique num estado para ver quem atende e por quais séries.</p>
+          </div>
+          <div class="seg" id="u-forma"><button class="ativo" data-f="mapa">🗺 Mapa do Brasil</button><button data-f="quadrados">▦ Quadrados</button></div>
+        </div>
+        <div id="u-mapa" class="u-mapa"></div>
+        <p class="u-legenda"><span>% de atraso sobre o que está em aberto:</span>
+          <i class="f0"></i>sem atraso <i class="f1"></i>até 4% <i class="f2"></i>4 a 8% <i class="f3"></i>8 a 15% <i class="f4"></i>acima de 15% <i class="fv"></i>sem pedidos</p>
+      </section>
+
+      <section class="cartao" id="u-ranking-cartao" hidden>
+        <div class="cartao-topo">
+          <div>
+            <h2>Ranking de estados</h2>
+            <p class="sub">Do estado com mais atrasos para o com menos. Clique numa linha para ver o detalhe.</p>
+          </div>
+          <button id="u-ranking-exportar" class="btn contorno">Baixar Excel</button>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-sla">
+            <thead><tr><th>UF</th><th>Estado</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">% atraso</th><th>Transportadora com mais atrasos</th></tr></thead>
+            <tbody id="u-ranking"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="cartao" id="u-detalhe" hidden>
+        <div class="cartao-topo">
+          <div>
+            <h2 id="u-det-titulo"></h2>
+            <p class="sub" id="u-det-sub"></p>
+          </div>
+          <button id="u-det-exportar" class="btn contorno">Baixar atrasados do estado</button>
+        </div>
+        <div class="u-det-grade">
+          <div>
+            <h3>Quem atende e por quais séries</h3>
+            <div class="tabela-wrap"><table class="tabela-sla">
+              <thead><tr><th>Transportadora</th><th>Séries</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">% atraso</th></tr></thead>
+              <tbody id="u-det-transp"></tbody></table></div>
+          </div>
+          <div>
+            <h3>Cidades</h3>
+            <div class="tabela-wrap u-cidades"><table class="tabela-sla">
+              <thead><tr><th>Cidade</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">% atraso</th></tr></thead>
+              <tbody id="u-det-cidades"></tbody></table></div>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -527,7 +593,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=41"></script>
-  <script src="app.js?v=41"></script>
+  <script src="config.js?v=42"></script>
+  <script src="mapa-brasil.js?v=42"></script>
+  <script src="app.js?v=42"></script>
 </body>
 </html>

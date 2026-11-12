@@ -407,3 +407,33 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tabela-sla tr.clic { cursor: pointer; }
 .tabela-sla tr.clic:hover td { background: #fffbea; }
 .txt-verde { color: #16a34a; } .txt-vermelho { color: #dc2626; } .txt-laranja { color: #d97706; }
+
+/* Atrasos por UF */
+.seg-grande button { font-size: 13px; padding: 9px 16px; }
+.u-mapa { display: flex; justify-content: center; padding: 8px 0; }
+.u-svg { width: 100%; max-width: 560px; height: auto; overflow: visible; }
+.uf-forma { stroke: #fff; stroke-width: 1; cursor: pointer; transition: opacity .15s; }
+.uf-forma:hover { opacity: .8; }
+.uf-forma.sel { stroke: var(--marinho); stroke-width: 2.5; }
+.f0 { fill: #16a34a; background: #16a34a; } .f1 { fill: #84cc16; background: #84cc16; } .f2 { fill: #f59e0b; background: #f59e0b; }
+.f3 { fill: #dc2626; background: #dc2626; } .f4 { fill: #991b1b; background: #991b1b; } .fv { fill: #e8edf3; background: #e8edf3; }
+.uf-rot { font-size: 11px; font-weight: 700; fill: var(--marinho); pointer-events: none; }
+.uf-num { font-size: 9px; font-weight: 600; fill: var(--marinho); pointer-events: none; }
+.uf-rot.claro, .uf-num.claro { fill: #fff; }
+.uf-rot.fora { cursor: pointer; pointer-events: auto; }
+.uf-num-fora { fill: #b91c1c; font-size: 10px; }
+.uf-linha { stroke: #64748b; stroke-width: .8; }
+.u-legenda { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; font-size: 11px; color: #64748b; margin: 8px 0 0; }
+.u-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: -4px; }
+.u-quad { display: grid; grid-template-columns: repeat(6, 72px); grid-auto-rows: 64px; gap: 6px; }
+.uf-quad { border: 0; border-radius: 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--marinho); font: inherit; }
+.uf-quad b { font-size: 15px; } .uf-quad span { font-size: 13px; font-weight: 600; } .uf-quad small { font-size: 10px; opacity: .85; }
+.uf-quad.f0, .uf-quad.f3, .uf-quad.f4 { color: #fff; }
+.uf-quad.sel { outline: 3px solid var(--marinho); outline-offset: 2px; }
+.uf-bolinha { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.tabela-sla tr.sel td { background: #fff3c4; }
+.u-det-grade { display: grid; grid-template-columns: 1.3fr 1fr; gap: 20px; }
+.u-det-grade > div { min-width: 0; }
+.u-det-grade h3 { font-size: 14px; margin: 4px 0 8px; }
+.u-cidades { max-height: 420px; overflow: auto; }
+@media (max-width: 900px) { .u-det-grade { grid-template-columns: 1fr; } .u-quad { grid-template-columns: repeat(6, minmax(0, 1fr)); grid-auto-rows: 52px; gap: 4px; } }

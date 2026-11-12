@@ -112,3 +112,11 @@ Página no menu logo abaixo da Visão Gerencial. Usa a mesma base ("Enviar base"
 - Cards: SLA de entrega, Entregues, No prazo, Com atraso. Aviso de quantas entregas no prazo faltaram para a meta (a mesma meta da Visão Gerencial).
 - SLA por transportadora (clique na linha para ver as entregas com atraso dela) e lista com Baixar Excel.
 - Se a base enviada só tiver pedidos em aberto, a página avisa que não há entregues.
+
+## 15. Atrasos por UF
+
+Página no menu abaixo de Entregas e SLA. Mesma base e mesmos filtros da Visão Gerencial.
+- Mapa do Brasil (ou quadrados) com cada estado colorido pelo % de atraso sobre os pedidos em aberto: sem atraso, até 4%, 4 a 8%, 8 a 15%, acima de 15%. O número é a quantidade de atrasados.
+- Clique num estado: transportadoras que atendem, com as séries de cada uma, e as cidades, com em aberto / atrasados / %. Botão para baixar os atrasados do estado.
+- "Ranking e tabela": estados do que tem mais atrasos para o que tem menos, com a transportadora que mais atrasa em cada um, e Baixar Excel.
+- O desenho do mapa vem de @svg-maps/brazil (licença CC BY 4.0), salvo em `mapa-brasil.js`.

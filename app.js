@@ -173,7 +173,7 @@
     montarOpcoes();
     redesenhar();
     desenharOcorrencias();
-    if (paginaAtual === "gerencial" || paginaAtual === "entregas") montarGerencial();
+    if (G_PAGINAS.includes(paginaAtual)) montarGerencial();
     if (paginaAtual === "sac") desenharSacLogistica();
     desenharResponsaveis();
   }
@@ -660,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=41");
+        const w = new Worker("leitor-intelipost.js?v=42");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -919,11 +919,11 @@
   const somaDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
   // lê só as colunas que a Visão Gerencial usa, em páginas paralelas (não depende de função nova no banco)
-  const G_COLS = "pedido,nf,canal,uf,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao";
+  const G_COLS = "pedido,nf,canal,uf,cidade,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao";
   const G_COLS_NOVAS = ",data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao";
   async function carregarGerencial(forcar) {
     if (gCarregando || (gDados && gDados.length && !forcar)) return;
-    gCarregando = true; $("g-info").textContent = $("e-info").textContent = "Carregando os pedidos da base…";
+    gCarregando = true; $("g-info").textContent = $("e-info").textContent = $("u-info").textContent = "Carregando os pedidos da base…";
     try {
       let lista, semColunas = false;
       try { lista = await buscarTudo("base_pedidos", "pedido", G_COLS + G_COLS_NOVAS); }
@@ -931,14 +931,14 @@
       gAvisoColunas = semColunas;
       gDados = lista.map((b) => {
         const nf = String(b.nf || ""), m = nf.match(/^(.*?)-\s*(\w+)\s*$/);
-        return { pedido: b.pedido, nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: b.canal, uf: b.uf, transp: b.transportadora,
+        return { pedido: b.pedido, nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: b.canal, uf: b.uf, cidade: b.cidade || null, transp: b.transportadora,
           status: b.status_intelipost, micro: b.micro_status, origem: b.origem, criado: b.data_criacao || null, despacho: b.data_expedicao, entrega: b.data_entrega || null,
           prevOrig: b.prev_original, prev: b.prev_atual, ult: b.ultima_atualizacao ? String(b.ultima_atualizacao).slice(0, 10) : null,
           range: b.range_atrasos || null, diasAtr: b.dias_atraso ?? null, sprazo: b.status_prazo || null, semExp: b.sem_expedicao || null };
       });
     } catch (err) {
       gDados = null; gCarregando = false;
-      $("g-info").textContent = $("e-info").textContent = "Não consegui carregar a base: " + (err.message || err) + ". Atualize a página para tentar de novo.";
+      $("g-info").textContent = $("e-info").textContent = $("u-info").textContent = "Não consegui carregar a base: " + (err.message || err) + ". Atualize a página para tentar de novo.";
       return;
     }
     gCarregando = false;
@@ -1024,12 +1024,13 @@
     });
   }
   function montarGerencial() {
-    if (paginaAtual !== "gerencial" && paginaAtual !== "entregas") return;
+    if (!G_PAGINAS.includes(paginaAtual)) return;
     if (!gDados) { carregarGerencial(); return; }
     prepararG(); montarFiltrosG(); desenharGAtual();
   }
   // Visão Gerencial e Entregas e SLA usam os mesmos dados e os mesmos filtros
-  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else desenharGerencial(); }
+  const G_PAGINAS = ["gerencial", "entregas", "uf"];
+  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else desenharGerencial(); }
   function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
 
   function desenharGerencial() {
@@ -1312,6 +1313,112 @@
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Entregas");
     XLSX.writeFile(wb, `entregas_sla_${hojeISO()}.xlsx`);
   });
+
+  // ---------------- atrasos por UF ----------------
+  // Mesma base e mesmos filtros da Visão Gerencial. % de atraso = atrasados ÷ pedidos em aberto do estado.
+  let uForma = "mapa", uModo = "mapa", uUF = null, uDados = new Map(), uAtrasadosUF = [];
+  const UF_NOME = { AC: "Acre", AL: "Alagoas", AP: "Amapá", AM: "Amazonas", BA: "Bahia", CE: "Ceará", DF: "Distrito Federal", ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão",
+    MT: "Mato Grosso", MS: "Mato Grosso do Sul", MG: "Minas Gerais", PA: "Pará", PB: "Paraíba", PR: "Paraná", PE: "Pernambuco", PI: "Piauí", RJ: "Rio de Janeiro", RN: "Rio Grande do Norte",
+    RS: "Rio Grande do Sul", RO: "Rondônia", RR: "Roraima", SC: "Santa Catarina", SP: "São Paulo", SE: "Sergipe", TO: "Tocantins" };
+  // posição de cada estado na visão em quadrados [linha, coluna]
+  const UF_QUAD = { RR: [0, 1], AP: [0, 3], AM: [1, 1], PA: [1, 2], MA: [1, 3], CE: [1, 4], RN: [1, 5], AC: [2, 0], RO: [2, 1], TO: [2, 2], PI: [2, 3], PE: [2, 4], PB: [2, 5],
+    MT: [3, 1], GO: [3, 2], DF: [3, 3], BA: [3, 4], AL: [3, 5], MS: [4, 1], MG: [4, 2], ES: [4, 3], SE: [4, 4], SP: [5, 1], RJ: [5, 2], PR: [6, 1], SC: [7, 1], RS: [8, 1] };
+  const UF_PEQUENO = ["DF", "ES", "RJ", "SE", "AL", "PE", "PB", "RN"];
+  const faixaUF = (x) => (!x || !x.ab ? "fv" : !x.atr ? "f0" : x.pct <= 0.04 ? "f1" : x.pct <= 0.08 ? "f2" : x.pct <= 0.15 ? "f3" : "f4");
+  const ufDe = (r) => String(r.uf || "").trim().toUpperCase();
+  function agruparUF(L) {
+    const m = new Map();
+    L.forEach((r) => { if (r._fechado) return; const u = ufDe(r); if (!u) return; const x = m.get(u) || { uf: u, ab: 0, atr: 0, transp: new Map() }; x.ab++;
+      if (r._atraso) { x.atr++; const t = r.transp || "(sem transportadora)"; x.transp.set(t, (x.transp.get(t) || 0) + 1); } m.set(u, x); });
+    m.forEach((x) => { x.pct = x.ab ? x.atr / x.ab : 0; x.pior = [...x.transp.entries()].sort((a, b) => b[1] - a[1])[0] || null; });
+    return m;
+  }
+  function desenharUF() {
+    if (!gDados) return;
+    const L = gFiltrados(); uDados = agruparUF(L); uFiltrados = L;
+    const ab = [...uDados.values()].reduce((a, x) => a + x.ab, 0), atr = [...uDados.values()].reduce((a, x) => a + x.atr, 0);
+    $("u-info").textContent = !info ? 'Envie a base ("Enviar base") para montar esta página.'
+      : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(atr)} atrasados de ${fmt(ab)} pedidos em aberto em ${uDados.size} estados · o número em cada estado é a quantidade de atrasados`;
+    $("u-mapa-cartao").hidden = uModo !== "mapa"; $("u-ranking-cartao").hidden = uModo !== "ranking";
+    if (uModo === "mapa") (uForma === "mapa" ? desenharMapaBR : desenharQuadrados)();
+    else desenharRankingUF();
+    desenharDetalheUF(false);
+  }
+  let uFiltrados = [];
+  const dicaUF = (u, x) => `${UF_NOME[u] || u}: ${x ? `${fmt(x.atr)} atrasados de ${fmt(x.ab)} em aberto (${pctBR(x.pct)})` : "sem pedidos em aberto"}`;
+  function desenharMapaBR() {
+    const M = window.MAPA_BR; if (!M) { $("u-mapa").textContent = "Não consegui carregar o desenho do mapa."; return; }
+    let g = `<svg viewBox="${M.viewBox}" class="u-svg" role="img" aria-label="Mapa de atrasos por estado">`;
+    for (const [u, [, d]] of Object.entries(M.estados)) { const x = uDados.get(u);
+      g += `<path d="${d}" class="uf-forma ${faixaUF(x)}${uUF === u ? " sel" : ""}" data-uf="${u}"><title>${esc(dicaUF(u, x))}</title></path>`; }
+    g += `<g class="uf-rotulos"></g></svg>`;
+    $("u-mapa").innerHTML = g;
+    // rótulos: no meio do estado; os estados pequenos do litoral ganham rótulo do lado de fora, com uma linha
+    const svg = $("u-mapa").querySelector("svg"), rot = svg.querySelector(".uf-rotulos"); let h = "", fora = 0;
+    const ordem = ["RN", "PB", "PE", "AL", "SE", "ES", "RJ", "DF"];
+    svg.querySelectorAll("path[data-uf]").forEach((p) => {
+      const u = p.dataset.uf, b = p.getBBox(), x = uDados.get(u), n = x ? fmt(x.atr) : "", cx = b.x + b.width / 2, cy = b.y + b.height / 2;
+      const escuro = ["f3", "f4", "f0"].includes(faixaUF(x));
+      if (UF_PEQUENO.includes(u)) {
+        const i = ordem.indexOf(u), lx = u === "DF" ? cx + 18 : 600, ly = u === "DF" ? cy : u === "ES" || u === "RJ" ? cy + 4 : 175 + i * 22;
+        const tx = u === "RJ" ? cx + 12 : u === "ES" ? cx + 24 : lx; const ty = u === "RJ" ? cy + 26 : ly;
+        if (u !== "DF") h += `<line x1="${cx}" y1="${cy}" x2="${tx - 3}" y2="${ty - 4}" class="uf-linha"/>`;
+        h += `<text x="${tx}" y="${ty}" class="uf-rot fora" data-uf="${u}">${u} <tspan class="uf-num-fora">${n}</tspan></text>`; fora++;
+      } else {
+        h += `<text x="${cx}" y="${cy}" text-anchor="middle" class="uf-rot${escuro ? " claro" : ""}" data-uf="${u}">${u}</text>`;
+        if (n) h += `<text x="${cx}" y="${cy + 11}" text-anchor="middle" class="uf-num${escuro ? " claro" : ""}" data-uf="${u}">${n}</text>`;
+      }
+    });
+    rot.innerHTML = h;
+  }
+  function desenharQuadrados() {
+    $("u-mapa").innerHTML = `<div class="u-quad">${Object.entries(UF_QUAD).map(([u, [l, c]]) => { const x = uDados.get(u);
+      return `<button class="uf-quad ${faixaUF(x)}${uUF === u ? " sel" : ""}" data-uf="${u}" style="grid-row:${l + 1};grid-column:${c + 1}" title="${esc(dicaUF(u, x))}"><b>${u}</b><span>${x ? fmt(x.atr) : "—"}</span><small>${x && x.ab ? pctBR(x.pct) : ""}</small></button>`; }).join("")}</div>`;
+  }
+  function desenharRankingUF() {
+    const linhas = [...uDados.values()].sort((a, b) => b.atr - a.atr || b.pct - a.pct);
+    $("u-ranking").innerHTML = linhas.map((x) => `<tr class="clic${uUF === x.uf ? " sel" : ""}" data-uf="${x.uf}"><td><span class="uf-bolinha ${faixaUF(x)}"></span>${x.uf}</td><td>${esc(UF_NOME[x.uf] || x.uf)}</td>
+      <td class="num">${fmt(x.ab)}</td><td class="num txt-vermelho">${fmt(x.atr)}</td><td class="num">${pctBR(x.pct)}</td><td>${x.pior ? `${esc(x.pior[0])} <span class="s">(${fmt(x.pior[1])})</span>` : "—"}</td></tr>`).join("");
+  }
+  function desenharDetalheUF(rolar) {
+    const caixa = $("u-detalhe");
+    if (!uUF) { caixa.hidden = true; return; }
+    const L = uFiltrados.filter((r) => ufDe(r) === uUF && !r._fechado), x = uDados.get(uUF);
+    caixa.hidden = false;
+    $("u-det-titulo").textContent = `${UF_NOME[uUF] || uUF} (${uUF})`;
+    $("u-det-sub").textContent = x ? `${fmt(x.atr)} atrasados de ${fmt(x.ab)} pedidos em aberto · ${pctBR(x.pct)} de atraso` : "Nenhum pedido em aberto neste estado com esses filtros.";
+    const porT = new Map(), porC = new Map();
+    L.forEach((r) => {
+      const t = r.transp || "(sem transportadora)", a = porT.get(t) || { n: t, ab: 0, atr: 0, series: new Set() }; a.ab++; if (r._atraso) a.atr++; if (r.serie) a.series.add(r.serie); porT.set(t, a);
+      const c = r.cidade || "(sem cidade)", b = porC.get(c) || { n: c, ab: 0, atr: 0 }; b.ab++; if (r._atraso) b.atr++; porC.set(c, b);
+    });
+    const ord = (a, b) => b.atr - a.atr || b.ab - a.ab;
+    $("u-det-transp").innerHTML = [...porT.values()].sort(ord).map((a) => `<tr><td>${esc(a.n)}</td><td>${[...a.series].sort((p, q) => p.localeCompare(q, "pt-BR", { numeric: true })).map(esc).join(", ") || "—"}</td>
+      <td class="num">${fmt(a.ab)}</td><td class="num txt-vermelho">${fmt(a.atr)}</td><td class="num">${pctBR(a.atr / a.ab)}</td></tr>`).join("") || `<tr><td colspan="5" class="s">Nenhum pedido.</td></tr>`;
+    $("u-det-cidades").innerHTML = [...porC.values()].sort(ord).map((b) => `<tr><td>${esc(b.n)}</td><td class="num">${fmt(b.ab)}</td><td class="num txt-vermelho">${fmt(b.atr)}</td><td class="num">${pctBR(b.atr / b.ab)}</td></tr>`).join("") || `<tr><td colspan="4" class="s">Nenhum pedido.</td></tr>`;
+    uAtrasadosUF = L.filter((r) => r._atraso);
+    if (rolar) caixa.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  function escolherUF(u) { uUF = uUF === u ? null : u; if (uModo === "mapa") (uForma === "mapa" ? desenharMapaBR : desenharQuadrados)(); else desenharRankingUF(); desenharDetalheUF(!!uUF); }
+  $("u-mapa").addEventListener("click", (e) => { const el = e.target.closest("[data-uf]"); if (el) escolherUF(el.dataset.uf); });
+  $("u-ranking").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-uf]"); if (tr) escolherUF(tr.dataset.uf); });
+  $("u-forma").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (!b) return; uForma = b.dataset.f;
+    $("u-forma").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharUF(); });
+  $("u-modo").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; uModo = b.dataset.m;
+    $("u-modo").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharUF(); });
+  $("u-ranking-exportar").addEventListener("click", () => {
+    const linhas = [["UF", "Estado", "Em aberto", "Atrasados", "% atraso", "Transportadora com mais atrasos", "Atrasados dela"]]
+      .concat([...uDados.values()].sort((a, b) => b.atr - a.atr).map((x) => [x.uf, UF_NOME[x.uf] || x.uf, x.ab, x.atr, Math.round(x.pct * 1000) / 10 + "%", x.pior ? x.pior[0] : "", x.pior ? x.pior[1] : ""]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Atrasos por UF");
+    XLSX.writeFile(wb, `atrasos_por_uf_${hojeISO()}.xlsx`);
+  });
+  $("u-det-exportar").addEventListener("click", () => {
+    if (!uAtrasadosUF.length) return toast("Nenhum atrasado neste estado.", true);
+    const linhas = [["Pedido", "NF", "Série", "Canal", "Transportadora", "UF", "Cidade", "Micro status", "Criado", "Despacho", "Prometido", "Dias de atraso"]]
+      .concat(uAtrasadosUF.map((r) => [r.pedido, r.nf, r.serie, r.canal, r.transp, r.uf, r.cidade, r.micro, br(r.criado), br(r.despacho), br(r._prom), r._atraso]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Atrasados " + uUF);
+    XLSX.writeFile(wb, `atrasados_${uUF}_${hojeISO()}.xlsx`);
+  });
   $("e-transp-exportar").addEventListener("click", () => {
     if (!eLinhasTransp.length) return toast("Nada para exportar.", true);
     const linhas = [["Transportadora", "Entregues", "No prazo", "Com atraso", "SLA"]].concat(eLinhasTransp.map((x) => [x.t, x.ent, x.ok, x.atr, Math.round(x.sla * 1000) / 10 + "%"]));
@@ -1322,17 +1429,17 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
-    if (pag === "gerencial" || pag === "entregas") { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
+    if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
     window.scrollTo(0, 0);
   }
   document.querySelector(".menu-lateral").addEventListener("click", (e) => {
     const b = e.target.closest(".menu-item"); if (!b) return;
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
-    if (b.dataset.pagina === "gerencial" || b.dataset.pagina === "entregas") montarGerencial();
+    if (G_PAGINAS.includes(b.dataset.pagina)) montarGerencial();
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------
