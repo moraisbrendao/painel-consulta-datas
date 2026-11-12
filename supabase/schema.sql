@@ -714,19 +714,22 @@ alter table public.troca_notas add column if not exists robo_feito_em timestampt
 alter table public.troca_notas add column if not exists prazo_dias integer;
 alter table public.troca_notas add column if not exists nova_data date;
 
-create or replace function public.pedir_robo_troca(tk text, metodo text, transp text, modo text)
+alter table public.troca_notas add column if not exists robo_prazo_manual integer;   -- prazo digitado no painel: o robô pula a simulação
+drop function if exists public.pedir_robo_troca(text, text, text, text);
+create or replace function public.pedir_robo_troca(tk text, metodo text, transp text, modo text, prazo integer default null)
 returns void language plpgsql security definer set search_path = public as $$
 begin
+  if prazo is not null and (prazo < 1 or prazo > 60) then raise exception 'Prazo deve ser de 1 a 60 dias úteis.'; end if;
   if auth.uid() is null or public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
   if modo not in ('teste', 'real') then raise exception 'Modo inválido.'; end if;
   if coalesce(metodo, '') = '' or coalesce(transp, '') = '' then raise exception 'Sem método de entrega para este ticket.'; end if;
   update public.troca_notas set robo_status = 'pendente', robo_modo = modo, robo_metodo = metodo, robo_transp = transp,
-    robo_msg = null, robo_passos = null, robo_pedido_por = auth.jwt() ->> 'email', robo_pedido_em = now(), robo_feito_em = null
+    robo_msg = null, robo_passos = null, robo_prazo_manual = prazo, robo_pedido_por = auth.jwt() ->> 'email', robo_pedido_em = now(), robo_feito_em = null
   where ticket = tk and coalesce(robo_status, '') <> 'processando';
   if not found then raise exception 'O robô já está com este ticket (ou o ticket não existe).'; end if;
 end $$;
-revoke all on function public.pedir_robo_troca(text, text, text, text) from public, anon;
-grant execute on function public.pedir_robo_troca(text, text, text, text) to authenticated;
+revoke all on function public.pedir_robo_troca(text, text, text, text, integer) from public, anon;
+grant execute on function public.pedir_robo_troca(text, text, text, text, integer) to authenticated;
 
 create or replace function public.pegar_troca(limite integer default 20)
 returns setof public.troca_notas language plpgsql security definer set search_path = public as $$
