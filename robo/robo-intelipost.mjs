@@ -199,7 +199,7 @@ async function camposDetalhe(tela, titulo, filtroOpcao) {
   const r = await tela.evaluate((f) => {
     const re = f ? new RegExp(f, "i") : null;
     const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
-    const rot = (e) => { const l = (e.labels && e.labels[0]) || (e.id && document.querySelector(`label[for="${e.id}"]`)); if (l) return l.innerText.trim(); let g = e.parentElement; for (let i = 0; i < 3 && g; i++, g = g.parentElement) { const t = g.querySelector("label, .control-label"); if (t) return t.innerText.trim(); } return ""; };
+    const rot = (e) => { const l = (e.labels && e.labels[0]) || (e.id && document.querySelector(`label[for="${e.id}"]`)); if (l) return l.innerText.trim(); let g = e.parentElement; for (let i = 0; i < 3 && g; i++, g = g.parentElement) { const t = g.querySelector("label, .control-label"); if (t) return t.innerText.trim(); } return e.type === "checkbox" || e.type === "radio" ? "pai: " + (e.parentElement.innerText || e.parentElement.parentElement.innerText || "").trim().slice(0, 40) : ""; };
     return [...document.querySelectorAll("input,select,textarea")].filter(vis).slice(0, 50).map((e) => {
       let ops = "";
       if (e.tagName === "SELECT") { const o = [...e.options].map((o) => o.text.trim()); ops = ` | ${o.length} opções: ` + (re ? o.filter((t) => re.test(t)) : o).slice(0, 25).join(" / "); }
@@ -208,7 +208,7 @@ async function camposDetalhe(tela, titulo, filtroOpcao) {
   }, filtroOpcao || null);
   log(`== ${titulo} · campos`); r.forEach((x) => log("  campo:", x));
 }
-async function abrirEFechar(tela, alvo, titulo) {
+async function abrirEFechar(tela, alvo, titulo, semFechar) {
   const antes = new Set(await tela.evaluate(() => [...document.querySelectorAll("input,select,textarea,button")].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; }).map((e, i) => e.outerHTML.slice(0, 120))));
   await alvo.click();
   await tela.waitForTimeout(2500);
@@ -220,6 +220,7 @@ async function abrirEFechar(tela, alvo, titulo) {
   }, [...antes]);
   log(`== ${titulo}: ${novos.length} elemento(s) novos`);
   novos.slice(0, 40).forEach((x) => log("  novo:", x));
+  if (semFechar) return;
   // fecha sem salvar: Cancelar/Fechar/X ou Esc
   const fechar = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").locator("button, a").filter({ hasText: /^\s*(cancelar|fechar|voltar|×|x)\s*$/i }).first();
   if (await fechar.count()) {
@@ -244,6 +245,11 @@ async function diagTroca() {
       await esqueleto("Cotação/Simulação (" + caminho.replace(/^https?:\/\/[^/]+/, "").slice(0, 60) + ")");
       await mapaTela(pagina, "Cotação/Simulação · ng-click");
       await camposDetalhe(pagina, "Cotação/Simulação");
+      const cks = pagina.locator("input[type=checkbox]:visible");
+      for (let i = 0; i < await cks.count(); i++) {
+        const txt = await cks.nth(i).evaluate((e) => (e.parentElement.innerText || e.parentElement.parentElement.innerText || "").trim());
+        if (/ignor|regra/i.test(txt)) { await abrirEFechar(pagina, cks.nth(i), "Cotação · marquei '" + txt.slice(0, 30) + "'", true); break; }
+      }
     } catch (e) { log("Simulação:", e.message.split("\n")[0]); }
   }
   // 2) tela do pedido: transportadora e volumes (abre a caixinha e fecha sem salvar)
@@ -288,6 +294,18 @@ async function diagTroca() {
     await porSel.selectOption({ label: "Micro" }, { timeout: 10000 }).catch((e) => log("Alterar por Micro:", e.message.split("\n")[0]));
     await pagina.waitForTimeout(3000);
     await camposDetalhe(pagina, "Alterar Pedidos · Alterar por Micro", "^(12|920)\\b|tr[aâ]nsito|nova nota|equipe_?04|troca");
+    const selPor = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
+    const escolher = async (re, nome) => {
+      const sel = selPor(re);
+      const label = await sel.locator("option", { hasText: re }).first().innerText().catch(() => "");
+      if (!label) { log(`Não achei a opção ${nome}.`); return false; }
+      await sel.selectOption({ label: label.trim() }, { timeout: 10000 }).catch((e) => log(nome + ":", e.message.split("\n")[0]));
+      await pagina.waitForTimeout(2500); log(`Escolhi ${nome}: ${label.trim()}`); return true;
+    };
+    if (await escolher(/^\s*12\s*-/, "Macro 12")) {
+      await camposDetalhe(pagina, "Depois do Macro 12", "^\\s*920|nova nota");
+      if (await escolher(/^\s*920\b/, "Micro 920")) await camposDetalhe(pagina, "Depois do Micro 920", "equipe_?04|troca");
+    }
     const botoes = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("button, input[type=submit]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => (e.innerText || e.value || "").trim()).filter(Boolean))]);
     log("  botões:", botoes.join(" / "));
   } catch (e) { log("Alterar Pedidos:", e.message.split("\n")[0]); }
