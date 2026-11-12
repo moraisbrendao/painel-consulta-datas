@@ -108,8 +108,27 @@ async function abrirPedido(pedido, olhar) {
   const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), clicar.click()]);
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
-  await tela.waitForTimeout(3000);
-  if (olhar) await camposDeData(tela);
+  // "Entrega prev.:" é um link (ng-click edit_estimated_delivery_date) que abre a edição da previsão do cliente
+  const link = tela.locator("a[ng-click^='edit_estimated_delivery_date']").first();
+  try { await link.waitFor({ timeout: 60000 }); }
+  catch { if (olhar) await camposDeData(tela); if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o link da previsão de entrega."); }
+  await link.click();
+  await tela.waitForTimeout(2000);
+  if (olhar) {
+    log("Cliquei na previsão de entrega (nada é salvo no diagnóstico).");
+    const m = await tela.evaluate(() => {
+      const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+      const caixa = [...document.querySelectorAll(".modal, [role=dialog], .modal-dialog, .popover")].find(vis) || document.body;
+      return {
+        noModal: caixa !== document.body,
+        campos: [...caixa.querySelectorAll("input, select, textarea")].filter(vis).map((e) => `${e.tagName.toLowerCase()} | ${e.type} | id=${e.id} | name=${e.name} | ng-model=${e.getAttribute("ng-model") || ""}`).slice(0, 20),
+        botoes: [...caixa.querySelectorAll("button, a.btn, input[type=submit], input[type=button]")].filter(vis).map((e) => `${(e.innerText || e.value || "").trim().slice(0, 30)} | ng-click=${(e.getAttribute("ng-click") || "").slice(0, 50)}`).slice(0, 15),
+        textos: [...caixa.querySelectorAll("h1,h2,h3,h4,h5,label,.modal-title")].filter(vis).map((e) => e.innerText.trim()).filter((t) => t && t.length < 60).slice(0, 15),
+      };
+    });
+    log(`== Edição da previsão (${m.noModal ? "janela" : "na própria tela"})`);
+    m.textos.forEach((t) => log("  texto:", t)); m.campos.forEach((c) => log("  campo:", c)); m.botoes.forEach((b) => log("  botão:", b));
+  }
   const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
   try { await campo.waitFor({ state: "attached", timeout: 20000 }); }
   catch { if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
