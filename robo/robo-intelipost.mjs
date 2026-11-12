@@ -67,37 +67,56 @@ async function esqueleto(titulo) {
     const vis = (e) => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
     const campos = [...document.querySelectorAll("input, select, textarea")].filter(vis).slice(0, 60)
       .map((e) => [e.tagName.toLowerCase(), e.type || "", e.name || "", e.id || "", e.placeholder || "", (e.labels && e.labels[0] ? e.labels[0].innerText : "").slice(0, 40)].join(" | "));
+    const opcoes = [...document.querySelectorAll("select")].filter(vis).map((e) => [...e.options].map((o) => o.text.trim()).slice(0, 15).join(" / "));
     const botoes = [...document.querySelectorAll("button, a[role=button], input[type=submit]")].filter(vis).slice(0, 60)
       .map((e) => (e.innerText || e.value || e.title || "").trim().slice(0, 40)).filter(Boolean);
     const links = [...document.querySelectorAll("nav a, aside a, [class*=menu] a")].slice(0, 80).map((a) => `${(a.innerText || "").trim().slice(0, 40)} -> ${(a.getAttribute("href") || "").slice(0, 80)}`);
-    return { campos, botoes: [...new Set(botoes)], links: [...new Set(links)] };
+    return { campos, opcoes, botoes: [...new Set(botoes)], links: [...new Set(links)] };
   });
   log(`== ${titulo} · ${new URL(pagina.url()).host}${new URL(pagina.url()).pathname}${new URL(pagina.url()).hash.replace(/[^#/a-z-]/gi, "")}`);
   info.campos.forEach((c) => log("  campo:", c));
+  info.opcoes.forEach((o) => log("  opções:", o));
   log("  botões:", info.botoes.join(" / "));
   if (/inicial/i.test(titulo)) info.links.forEach((l) => log("  link:", l));
 }
 
-// abre o pedido. A página /ng#/order-number/ nunca "termina" de carregar: espera o CAMPO, não a página.
-async function abrirPedido(pedido) {
-  await pagina.goto(`${BASE}/ng#/order-number/${encodeURIComponent(pedido)}`, { waitUntil: "commit" });
-  const campo = pagina.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
-  try { await campo.waitFor({ timeout: 60000 }); } catch { throw new Error("Não achei o pedido na Intelipost (ou a tela não abriu)."); }
-  return campo;
+// abre o pedido pela "Busca por Lote" (a Gestão de Pedidos tem filtro de data e esconde pedido antigo).
+// Clicar no pedido da lista abre a tela dele em ABA NOVA. Essa tela (/ng#/order-number/) nunca "termina"
+// de carregar: espera o CAMPO aparecer, não a página.
+async function abrirPedido(pedido, olhar) {
+  await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
+  const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
+  await caixa.waitFor({ timeout: 45000 });
+  await caixa.fill(pedido);
+  await caixa.press("Enter").catch(() => {});
+  await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
+  const achado = pagina.getByText(pedido, { exact: true }).last();
+  try { await achado.waitFor({ timeout: 45000 }); }
+  catch { if (olhar) await esqueleto("Busca por Lote depois de buscar"); throw new Error("Não achei o pedido na Busca por Lote da Intelipost."); }
+  if (olhar) await esqueleto("Busca por Lote com o resultado");
+  const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), achado.click()]);
+  const tela = aba || pagina;
+  tela.setDefaultTimeout(30000);
+  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
+  try { await campo.waitFor({ timeout: 60000 }); }
+  catch { if (olhar) { const p0 = pagina; pagina = tela; await esqueleto("Tela do pedido (sem o campo de data)"); pagina = p0; } if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
+  return { tela, campo, aba };
 }
 
 async function alterar(pedido, iso) {
-  const campo = await abrirPedido(pedido);
-  await campo.click();   // o input datetime-local de verdade só aparece depois de clicar na caixa de cima
-  const dt = pagina.locator("input[type=datetime-local]").first();
-  await dt.waitFor({ timeout: 15000 });
-  await dt.fill(`${iso}T23:59`);
-  if (MODO !== "real") return "teste";
-  const resp = pagina.waitForResponse((r) => r.request().method() === "PUT" && /intelipost/i.test(r.url()), { timeout: 45000 });
-  await pagina.getByRole("button", { name: /salvar|atualizar|confirmar|gravar/i }).first().click();
-  const r = await resp;   // confirma pela resposta do servidor, não pela tela
-  if (r.status() >= 400) throw new Error(`A Intelipost recusou a alteração (código ${r.status()}).`);
-  return "ok";
+  const { tela, campo, aba } = await abrirPedido(pedido, false);
+  try {
+    await campo.click();   // o input datetime-local de verdade só aparece depois de clicar na caixa de cima
+    const dt = tela.locator("input[type=datetime-local]").first();
+    await dt.waitFor({ timeout: 15000 });
+    await dt.fill(`${iso}T23:59`);
+    if (MODO !== "real") return "teste";
+    const resp = tela.waitForResponse((r) => r.request().method() === "PUT" && /intelipost/i.test(r.url()), { timeout: 45000 });
+    await tela.getByRole("button", { name: /salvar|atualizar|confirmar|gravar/i }).first().click();
+    const r = await resp;   // confirma pela resposta do servidor, não pela tela
+    if (r.status() >= 400) throw new Error(`A Intelipost recusou a alteração (código ${r.status()}).`);
+    return "ok";
+  } finally { if (aba) await aba.close().catch(() => {}); }
 }
 
 let ok = 0, erro = 0;
@@ -114,8 +133,8 @@ try {
     }
     const fila = await pegarIntelipost(1);
     if (fila[0]) {
-      try { await abrirPedido(fila[0].pedido); await esqueleto("Tela do pedido"); }
-      catch (e) { log("Tela do pedido:", e.message); await esqueleto("Onde parou"); }
+      try { const { tela, aba } = await abrirPedido(fila[0].pedido, true); const p0 = pagina; pagina = tela; await esqueleto("Tela do pedido"); pagina = p0; if (aba) await aba.close(); }
+      catch (e) { log("Tela do pedido:", e.message.split("\n")[0]); }
       await resultadoIntelipost(fila[0].pedido, "pendente");   // diagnóstico não mexe no pedido
     } else log("Fila vazia: não abri nenhum pedido.");
   } else {
