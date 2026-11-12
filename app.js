@@ -104,22 +104,22 @@
 
   // ---------------- carregar ----------------
   // busca a tabela inteira em páginas de 1.000, várias ao mesmo tempo (bem mais rápido que uma por vez)
-  async function buscarTudo(tabela, ordem) {
+  async function buscarTudo(tabela, ordem, colunas = "*") {
     const PAG = 1000, JUNTAS = 8;
-    const prim = await sb.from(tabela).select("*", { count: "exact" }).order(ordem).range(0, PAG - 1);
+    const prim = await sb.from(tabela).select(colunas, { count: "exact" }).order(ordem).range(0, PAG - 1);
     if (prim.error) throw prim.error;
     let lista = prim.data;
     if (lista.length < PAG) return lista;
     if (prim.count == null) {   // sem contagem: segue página por página
       for (let de = PAG; ; de += PAG) {
-        const { data, error } = await sb.from(tabela).select("*").order(ordem).range(de, de + PAG - 1);
+        const { data, error } = await sb.from(tabela).select(colunas).order(ordem).range(de, de + PAG - 1);
         if (error) throw error; lista = lista.concat(data); if (data.length < PAG) return lista;
       }
     }
     const total = prim.count;
     const inicios = []; for (let de = PAG; de < total; de += PAG) inicios.push(de);
     for (let i = 0; i < inicios.length; i += JUNTAS) {
-      const partes = await Promise.all(inicios.slice(i, i + JUNTAS).map((de) => sb.from(tabela).select("*").order(ordem).range(de, de + PAG - 1)));
+      const partes = await Promise.all(inicios.slice(i, i + JUNTAS).map((de) => sb.from(tabela).select(colunas).order(ordem).range(de, de + PAG - 1)));
       for (const r of partes) { if (r.error) throw r.error; lista = lista.concat(r.data); }
     }
     return lista;
@@ -651,7 +651,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=38");
+        const w = new Worker("leitor-intelipost.js?v=39");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -909,21 +909,33 @@
   const ddmm = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "");
   const somaDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
 
+  // lê só as colunas que a Visão Gerencial usa, em páginas paralelas (não depende de função nova no banco)
+  const G_COLS = "pedido,nf,canal,uf,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao";
+  const G_COLS_NOVAS = ",data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao";
   async function carregarGerencial(forcar) {
-    if (gCarregando || (gDados && !forcar)) return;
+    if (gCarregando || (gDados && gDados.length && !forcar)) return;
     gCarregando = true; $("g-info").textContent = "Carregando os pedidos da base…";
     try {
-      const { data, error } = await sb.rpc("base_compacta");
-      if (error) throw error;
-      gDados = (data || []).map((a) => {
-        const nf = String(a[1] || ""), m = nf.match(/^(.*?)-\s*(\w+)\s*$/);
-        return { pedido: a[0], nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: a[2], uf: a[3], transp: a[4], status: a[5], micro: a[6], origem: a[7],
-          criado: a[8], despacho: a[9], entrega: a[10], prevOrig: a[11], prev: a[12], ult: a[13], range: a[14], diasAtr: a[15], sprazo: a[16], semExp: a[17] };
+      let lista, semColunas = false;
+      try { lista = await buscarTudo("base_pedidos", "pedido", G_COLS + G_COLS_NOVAS); }
+      catch (e1) { if (!/column|coluna|does not exist/i.test(e1.message || "")) throw e1; semColunas = true; lista = await buscarTudo("base_pedidos", "pedido", G_COLS); }
+      gAvisoColunas = semColunas;
+      gDados = lista.map((b) => {
+        const nf = String(b.nf || ""), m = nf.match(/^(.*?)-\s*(\w+)\s*$/);
+        return { pedido: b.pedido, nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: b.canal, uf: b.uf, transp: b.transportadora,
+          status: b.status_intelipost, micro: b.micro_status, origem: b.origem, criado: b.data_criacao || null, despacho: b.data_expedicao, entrega: b.data_entrega || null,
+          prevOrig: b.prev_original, prev: b.prev_atual, ult: b.ultima_atualizacao ? String(b.ultima_atualizacao).slice(0, 10) : null,
+          range: b.range_atrasos || null, diasAtr: b.dias_atraso ?? null, sprazo: b.status_prazo || null, semExp: b.sem_expedicao || null };
       });
-    } catch (err) { gDados = []; $("g-info").textContent = "Para usar a Visão Gerencial, rode de novo o supabase/schema.sql no Supabase e envie a base de novo."; gCarregando = false; return; }
+    } catch (err) {
+      gDados = null; gCarregando = false;
+      $("g-info").textContent = "Não consegui carregar a base: " + (err.message || err) + ". Atualize a página para tentar de novo.";
+      return;
+    }
     gCarregando = false;
     montarGerencial();
   }
+  let gAvisoColunas = false;
   function prepararG() {
     const hoje = hojeISO();
     gDados.forEach((r) => {
@@ -1030,6 +1042,7 @@
     $("g-perf-nota").innerHTML = `A <b>performance</b> está sendo calculada sobre <b>${sobre}</b> (${fmt(cont.atrasados)} atrasados ÷ ${fmt(denom)}). <button class="link" id="g-modo" type="button">${gTodos ? "Calcular só sobre os pedidos em aberto" : "Calcular sobre todos os pedidos"}</button> daria ${pct(outro ? 1 - cont.atrasados / outro : 1)}.`;
     $("g-info").textContent = info ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos · clique nos cards e nas barras dos gráficos para ver a lista e exportar`
       : 'Envie a base ("Enviar base") para montar a Visão Gerencial.';
+    if (gAvisoColunas) $("g-info").textContent += " · Para usar o Range de Atrasos e as datas de criação e entrega, rode de novo o supabase/schema.sql e envie a base de novo.";
 
     // de quem é o atraso
     const atr = L.filter(G_CARD.atrasados);
