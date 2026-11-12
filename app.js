@@ -140,11 +140,14 @@
       return;
     }
     $("info-base").textContent = info
-      ? `Base: ${info.arquivo || "planilha"} · ${fmt(base.length)} pedidos · enviada em ${new Date(info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${info.enviado_por ? " por " + info.enviado_por : ""}`
+      ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(base.length)} pedidos em aberto · clique nos cards e nos micro status para ver a lista e exportar · ${info.arquivo || "planilha"} enviada em ${new Date(info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${info.enviado_por ? " por " + info.enviado_por : ""}`
       : "Ainda não há base. Clique em \"Enviar base\" e escolha o arquivo exportado.";
     $("info-intelipost").textContent = infoFech
       ? `Intelipost: ${infoFech.arquivo || "arquivo"} de ${new Date(infoFech.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${fmt(ocultos)} pedido${ocultos === 1 ? "" : "s"} da base já entregue${ocultos === 1 ? "" : "s"} ou cancelado${ocultos === 1 ? "" : "s"} fora${ocultos === 1 ? "" : "m"} tirado${ocultos === 1 ? "" : "s"} do painel.`
       : "Envie o arquivo da Intelipost (\"Enviar Intelipost\") para tirar do painel os pedidos entregues e cancelados.";
+    $("topo-arquivos").innerHTML = [info && info.arquivo, ticketsInfo && ticketsInfo.arquivo].filter(Boolean)
+      .map((a, i) => `<span class="arq ${i ? "tk" : ""}">▤ ${esc(a)}</span>`).join("")
+      + (info ? `<span class="arq-data">base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>` : "");
     $("info-tickets").textContent = !ticketsOk ? "" : ticketsInfo
       ? `Tickets: ${ticketsInfo.arquivo || "planilha"} de ${new Date(ticketsInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${ticketsInfo.enviado_por ? " por " + ticketsInfo.enviado_por : ""} · ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel com ticket aberto.`
       : "Envie a planilha de tickets (\"Enviar tickets\") para ver em que fila está o ticket de cada pedido.";
@@ -301,9 +304,18 @@
     // contadores das visões
     document.querySelectorAll(".visao").forEach((b) => {
       b.classList.toggle("ativa", b.dataset.visao === visao);
-      b.querySelector("span").textContent = `(${fmt(vistos.filter(naVisao[b.dataset.visao]).length)})`;
+      const n = vistos.filter(naVisao[b.dataset.visao]).length;
+      if (b.classList.contains("kpi")) b.querySelector(".kpi-num").textContent = fmt(n);
+      else b.querySelector("span").textContent = `(${fmt(n)})`;
     });
     const daVisao = vistos.filter(naVisao[visao]);
+    // aviso do topo: o que vence hoje/amanhã e ainda não tem nova data
+    const semNova = (p) => !(p._t && p._t.nova_data);
+    const urg = vistos.filter((p) => (naVisao.hoje(p) || naVisao.amanha(p)) && semNova(p)).length;
+    const vencSem = vistos.filter((p) => naVisao.vencidos(p) && semNova(p)).length;
+    $("alerta-prev").hidden = !base.length;
+    $("alerta-titulo").textContent = urg ? `Para não virar atraso, faltam ${fmt(urg)} pedido${urg === 1 ? "" : "s"} para tratar hoje.` : "Nada vencendo hoje ou amanhã sem nova data.";
+    $("alerta-texto").innerHTML = `Vencem hoje ou amanhã e ainda <b>sem nova data</b>: ${fmt(urg)}. Já vencidos sem nova data: <b>${fmt(vencSem)}</b>.`;
 
     // tabela por micro status
     const grupos = new Map();
@@ -618,7 +630,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=30");
+        const w = new Worker("leitor-intelipost.js?v=31");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -860,6 +872,7 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
+    $("topo-pagina").textContent = { preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     window.scrollTo(0, 0);

@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=30">
+  <link rel="stylesheet" href="styles.css?v=31">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -25,63 +25,76 @@
 
   <!-- ============ PAINEL ============ -->
   <div id="tela-painel" hidden>
-    <header class="topo">
-      <img src="assets/logo.png" alt="Multimóveis" class="topo-logo">
-      <div class="topo-titulo">Preventivo Logística</div>
-      <div class="topo-direita">
-        <label class="btn amarelo so-log" title="Planilha exportada (aba Export) com os pedidos">
-          Enviar base<input id="arquivo" type="file" accept=".xlsx,.xlsm,.xls" hidden>
-        </label>
-        <label class="btn amarelo so-log" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
-          Enviar Intelipost<input id="arquivo-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
-        </label>
-        <label class="btn amarelo so-log" title="Planilha detalhamento_tickets360 (aba Tickets): mostra a fila do ticket de cada pedido">
-          Enviar tickets<input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
-        </label>
-        <span id="usuario" class="usuario"></span>
-        <button id="btn-sair" class="btn fantasma-claro">Sair</button>
-      </div>
-    </header>
-
-    <p id="aviso-perfil" class="aviso-perfil" hidden>⚠ O banco ainda não tem a parte do SAC: rode de novo o arquivo <b>supabase/schema.sql</b> no Supabase (SQL Editor › New query › Run). Até lá, o login do SAC vê o painel inteiro.</p>
-    <div class="corpo">
     <nav class="menu-lateral" aria-label="Menu">
+      <div class="marca"><b>Preventivo</b><span>Multimóveis</span></div>
       <button class="menu-item ativo so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
     </nav>
+    <div class="lado">
+    <header class="topo">
+      <img src="assets/logo.png" alt="Multimóveis" class="topo-logo">
+      <div class="topo-titulo">Preventivo Logística · <span id="topo-pagina">Preventivo</span></div>
+      <div class="topo-direita">
+        <span id="topo-arquivos" class="topo-arquivos so-log"></span>
+        <label class="btn amarelo so-log" title="Planilha exportada (aba Export) com os pedidos">
+          Enviar base<input id="arquivo" type="file" accept=".xlsx,.xlsm,.xls" hidden>
+        </label>
+        <label class="btn contorno so-log" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
+          Enviar Intelipost<input id="arquivo-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
+        </label>
+        <label class="btn lilas so-log" title="Planilha detalhamento_tickets360 (aba Tickets): mostra a fila do ticket de cada pedido">
+          Enviar tickets<input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
+        </label>
+        <span id="usuario" class="usuario"></span>
+        <button id="btn-sair" class="btn contorno">Sair</button>
+      </div>
+    </header>
+
+    <p id="aviso-perfil" class="aviso-perfil" hidden>⚠ O banco ainda não tem a parte do SAC: rode de novo o arquivo <b>supabase/schema.sql</b> no Supabase (SQL Editor › New query › Run). Até lá, o login do SAC vê o painel inteiro.</p>
     <main class="conteudo" id="pagina-preventivo">
       <!-- filtros: valem para todas as tabelas da página -->
       <section class="filtros-topo" id="filtros" aria-label="Filtros">
-        <label class="cresce">Buscar<input id="f-busca" type="search" placeholder="Pedido ou NF…"></label>
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label class="cresce">Pedido ou NF<input id="f-busca" type="search" placeholder="# um ou vários"></label>
         <div class="multi" data-filtro="transp" data-rotulo="Transportadora" data-todos="Todas"></div>
         <div class="multi" data-filtro="canal" data-rotulo="Canal" data-todos="Todos"></div>
         <div class="multi" data-filtro="ms" data-rotulo="Micro status" data-todos="Todos"></div>
         <div class="multi" data-filtro="resp" data-rotulo="Responsável" data-todos="Todos"></div>
         <div class="multi" data-filtro="tk" data-rotulo="Ticket (fila)" data-todos="Todos"></div>
         <div class="multi" data-filtro="obs" data-rotulo="Observação" data-todos="Todas"></div>
-        <button id="f-limpar" class="btn" type="button" hidden>Limpar filtros</button>
+        <button id="f-limpar" class="link limpar" type="button" hidden>Limpar filtros</button>
       </section>
-      <p id="info-base" class="info-base">Carregando…</p>
-      <p id="info-intelipost" class="info-base"></p>
-      <p id="info-tickets" class="info-base"></p>
 
-      <!-- visões -->
+      <div class="titulo-pagina">
+        <h1>Preventivo</h1>
+        <p id="info-base" class="sub">Carregando…</p>
+        <p id="info-intelipost" class="info-base"></p>
+        <p id="info-tickets" class="info-base"></p>
+      </div>
+
+      <section id="alerta-prev" class="alerta" hidden>
+        <span class="alerta-ic">◎</span>
+        <div><b id="alerta-titulo"></b><p id="alerta-texto"></p></div>
+      </section>
+
+      <!-- visões em cards -->
+      <section class="kpis" id="visoes" role="tablist">
+        <button class="visao kpi" data-visao="todos"><span class="kpi-rot">Pedidos em aberto</span><b class="kpi-num"></b><small>todos os pedidos da base</small><i>↗</i></button>
+        <button class="visao kpi vermelho" data-visao="vencidos"><span class="kpi-rot">Já vencidos</span><b class="kpi-num"></b><small>passou da data (ou da nova data)</small><i>↗</i></button>
+        <button class="visao kpi laranja" data-visao="hoje"><span class="kpi-rot">Vencem hoje</span><b class="kpi-num"></b><small>agir hoje com a transportadora</small><i>↗</i></button>
+        <button class="visao kpi laranja" data-visao="amanha"><span class="kpi-rot">Vencem amanhã</span><b class="kpi-num"></b><small>ação preventiva</small><i>↗</i></button>
+        <button class="visao kpi azul ativa" data-visao="vencem"><span class="kpi-rot">Vencem em até 5 dias</span><b class="kpi-num"></b><small>preventivo: dá para evitar o atraso</small><i>↗</i></button>
+        <button class="visao kpi roxo" data-visao="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>sem movimento &gt; 7 dias</small><i>↗</i></button>
+      </section>
+
       <section class="cartao">
         <div class="cartao-topo">
           <div>
             <h2>O que está acontecendo, por micro status</h2>
             <p id="ms-resumo" class="sub"></p>
-          </div>
-          <div class="visoes" id="visoes" role="tablist">
-            <button class="visao" data-visao="vencidos">Já vencidos <span></span></button>
-            <button class="visao" data-visao="hoje">Vencem hoje <span></span></button>
-            <button class="visao" data-visao="amanha">Vencem amanhã <span></span></button>
-            <button class="visao ativa" data-visao="vencem">Vencem em 5 dias <span></span></button>
-            <button class="visao" data-visao="parados">Parados no rastreio <span></span></button>
-            <button class="visao" data-visao="todos">Todos <span></span></button>
           </div>
         </div>
         <div class="tabela-ms-wrap">
@@ -90,7 +103,7 @@
             <tbody id="ms-linhas"></tbody>
           </table>
         </div>
-        <p class="dica">Parado no rastreio = mais de 7 dias sem nenhuma atualização na Intelipost. Clique num micro status para ver os pedidos.</p>
+        <p class="dica">Parado no rastreio = mais de 7 dias sem nenhuma atualização na Intelipost. Clique num card acima para mudar a visão, ou num micro status para ver os pedidos.</p>
       </section>
 
       <!-- range de vencimento por micro status -->
@@ -325,7 +338,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=30"></script>
-  <script src="app.js?v=30"></script>
+  <script src="config.js?v=31"></script>
+  <script src="app.js?v=31"></script>
 </body>
 </html>
