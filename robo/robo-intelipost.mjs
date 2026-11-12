@@ -87,14 +87,25 @@ async function abrirPedido(pedido, olhar) {
   await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
   const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
   await caixa.waitFor({ timeout: 45000 });
+  await pagina.locator("select").first().selectOption({ label: "Pedido" }).catch(() => {});   // buscar por "Pedido" (não por rastreio)
   await caixa.fill(pedido);
   await caixa.press("Enter").catch(() => {});
   await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
-  const achado = pagina.getByText(pedido, { exact: true }).last();
-  try { await achado.waitFor({ timeout: 45000 }); }
+  const linha = pagina.locator("table tbody tr").filter({ hasText: pedido }).first();
+  try { await linha.waitFor({ timeout: 45000 }); }
   catch { if (olhar) await esqueleto("Busca por Lote depois de buscar"); throw new Error("Não achei o pedido na Busca por Lote da Intelipost."); }
-  if (olhar) await esqueleto("Busca por Lote com o resultado");
-  const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), achado.click()]);
+  if (olhar) {
+    const t = await pagina.evaluate(() => ({
+      cab: [...document.querySelectorAll("table thead th")].map((x) => x.innerText.trim()).filter(Boolean).slice(0, 30),
+      clic: [...(document.querySelector("table tbody tr") || document.createElement("tr")).querySelectorAll("a, button, [role=button], [class*=link]")]
+        .map((x) => `${x.tagName.toLowerCase()}${x.getAttribute("href") ? " href=" + x.getAttribute("href").replace(/[^/#?=&a-z-]+/gi, "*") : ""}${x.getAttribute("target") ? " target=" + x.getAttribute("target") : ""} class=${(x.className || "").toString().slice(0, 40)}`).slice(0, 15),
+    }));
+    log("  colunas da lista:", t.cab.join(" / "));
+    t.clic.forEach((c) => log("  clicável na linha:", c));
+  }
+  const alvo = linha.locator("a").first();
+  const clicar = (await alvo.count()) ? alvo : linha.locator("td").filter({ hasText: pedido }).first();
+  const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), clicar.click()]);
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
   const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
