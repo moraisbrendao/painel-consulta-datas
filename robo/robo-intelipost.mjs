@@ -331,7 +331,7 @@ async function diagTroca() {
     .filter((t) => /cota|simul|frete|alterar|volume|transport|quote/i.test(t)).slice(0, 40));
   log("== Menu (links de cotação/simulação/alterar):"); links.forEach((l) => log("  link:", l));
   try {
-    const prazo = await simularPrazo(null, process.env.METODO_TESTE || "Transiga Standard", true);
+    const prazo = await simularPrazo(process.env.CEP_TESTE || "01310100", process.env.METODO_TESTE || "Transiga Standard", true);
     log(`Simulação de teste: prazo = ${prazo} dia(s) úteis`);
   } catch (e) { log("Simulação:", e.message.split("\n")[0]); }
   // 2) tela do pedido: transportadora e volumes (abre a caixinha e fecha sem salvar)
