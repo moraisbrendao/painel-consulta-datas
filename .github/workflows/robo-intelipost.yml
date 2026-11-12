@@ -1,0 +1,61 @@
+# Robô da Intelipost (aba "Alterar pedidos" do painel): muda a previsão de entrega dos pedidos da fila.
+# Agendado de 30 em 30 min, em dia útil, das 6h às 20h (horário de Brasília) — só roda de verdade
+# depois que a variável INTELIPOST_ATIVO = sim existir (Settings > Secrets and variables > Actions > Variables).
+# Segredos: INTELIPOST_EMAIL, INTELIPOST_SENHA (login da Intelipost) e ROBO_EMAIL, ROBO_SENHA (login do robô no painel).
+# Disparo manual: modo diag (só olha as telas), dryrun (preenche sem salvar) ou real.
+name: Robô da Intelipost
+
+on:
+  schedule:
+    - cron: "*/30 9-23 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "diag = só olhar as telas · dryrun = preencher sem salvar · real = alterar"
+        type: choice
+        options: [diag, dryrun, real]
+        default: diag
+
+concurrency:
+  group: robo-intelipost
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  robo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    if: github.event_name == 'workflow_dispatch' || vars.INTELIPOST_ATIVO == 'sim'
+    env:
+      MODO: ${{ github.event.inputs.modo || 'real' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Tem pedido na fila?
+        id: fila
+        run: node robo/tem-intelipost.mjs
+        env:
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+
+      - name: Preparar o navegador
+        if: steps.fila.outputs.tem == 'sim' || env.MODO == 'diag'
+        working-directory: robo
+        run: |
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          sudo apt-get install -y xvfb > /dev/null
+
+      - name: Alterar na Intelipost
+        if: steps.fila.outputs.tem == 'sim' || env.MODO == 'diag'
+        run: xvfb-run -a node robo/robo-intelipost.mjs
+        env:
+          INTELIPOST_EMAIL: ${{ secrets.INTELIPOST_EMAIL }}
+          INTELIPOST_SENHA: ${{ secrets.INTELIPOST_SENHA }}
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}

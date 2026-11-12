@@ -660,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=42");
+        const w = new Worker("leitor-intelipost.js?v=43");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1419,6 +1419,139 @@
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Atrasados " + uUF);
     XLSX.writeFile(wb, `atrasados_${uUF}_${hojeISO()}.xlsx`);
   });
+
+  // ---------------- alterar pedidos: nova previsão de entrega na Intelipost ----------------
+  // A tela confere a lista e grava na fila (fila_intelipost). O robô da Intelipost (GitHub Actions)
+  // altera a data (hora 23:59) e grava o resultado. Datas sempre lidas como dia/mês/ano.
+  let apFila = [], apMostrar = 200, apProntos = [], apCarregadoEm = 0;
+  const AP_ST = { pendente: ["Na fila", "cinza"], processando: ["Alterando…", "ambar"], alterado: ["Alterado", "verde"], erro: ["Não alterou", "vermelho"] };
+  function dataBR(txt) {
+    const t = String(txt || "").trim();
+    let m = t.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2}|\d{4})$/), d, me, a;
+    if (m) { d = +m[1]; me = +m[2]; a = +m[3]; if (a < 100) a += 2000; }
+    else if ((m = t.match(/^(\d{4})-(\d{2})-(\d{2})/))) { a = +m[1]; me = +m[2]; d = +m[3]; }
+    else return null;
+    const dt = new Date(Date.UTC(a, me - 1, d));
+    if (dt.getUTCFullYear() !== a || dt.getUTCMonth() !== me - 1 || dt.getUTCDate() !== d) return null;
+    return dt.toISOString().slice(0, 10);
+  }
+  // confere o texto: devolve os prontos e os problemas (com o motivo)
+  function conferirAlterar(texto) {
+    const hoje = hojeISO(), limite = somaDias(hoje, 180), porPedido = new Map(), problemas = [];
+    texto.split(/\r?\n/).forEach((linha, i) => {
+      const l = linha.trim(); if (!l) return;
+      const partes = l.split(/[\s;,]+/).filter(Boolean), pedido = partes[0];
+      const resto = partes.slice(1);
+      if (!resto.length) return problemas.push({ linha: i + 1, pedido, motivo: "sem data" });
+      const iso = dataBR(resto[resto.length - 1]);
+      if (!iso) return problemas.push({ linha: i + 1, pedido, motivo: `data "${resto[resto.length - 1]}" não dá para ler (use dia/mês/ano)` });
+      if (iso < hoje) return problemas.push({ linha: i + 1, pedido, motivo: `data ${br(iso)} já passou` });
+      if (iso > limite) return problemas.push({ linha: i + 1, pedido, motivo: `data ${br(iso)} está a mais de 6 meses (confira o ano)` });
+      const x = porPedido.get(pedido) || { pedido, datas: new Set(), linhas: [] }; x.datas.add(iso); x.linhas.push(i + 1); porPedido.set(pedido, x);
+    });
+    const prontos = [];
+    porPedido.forEach((x) => {
+      if (x.datas.size > 1) problemas.push({ linha: x.linhas.join(", "), pedido: x.pedido, motivo: `o mesmo pedido com ${x.datas.size} datas diferentes (${[...x.datas].map(br).join(" e ")})` });
+      else prontos.push({ pedido: x.pedido, nova_data: [...x.datas][0] });
+    });
+    return { prontos, problemas };
+  }
+  function mostrarConferencia() {
+    const { prontos, problemas } = conferirAlterar($("ap-texto").value);
+    apProntos = prontos;
+    const caixa = $("ap-conf");
+    caixa.hidden = !prontos.length && !problemas.length;
+    const naBase = new Set((gDados || []).map((r) => r.pedido));
+    const foraBase = naBase.size ? prontos.filter((p) => !naBase.has(p.pedido)).length : 0;
+    caixa.innerHTML = `<p><b class="txt-verde">${fmt(prontos.length)} pronto${prontos.length === 1 ? "" : "s"} para alterar</b>${problemas.length ? ` · <b class="txt-vermelho">${fmt(problemas.length)} fora (não vão para o robô)</b>` : ""}${foraBase ? ` · <span class="s">${fmt(foraBase)} não estão na base atual (vão mesmo assim)</span>` : ""}</p>`
+      + (problemas.length ? `<ul>${problemas.slice(0, 50).map((p) => `<li>Linha ${esc(String(p.linha))}: <b>${esc(p.pedido || "")}</b> — ${esc(p.motivo)}</li>`).join("")}${problemas.length > 50 ? `<li>… e mais ${fmt(problemas.length - 50)}</li>` : ""}</ul>` : "");
+    $("ap-enviar").disabled = !prontos.length;
+  }
+  let esperaAp; $("ap-texto").addEventListener("input", () => { clearTimeout(esperaAp); esperaAp = setTimeout(mostrarConferencia, 250); });
+  $("ap-enviar").addEventListener("click", async () => {
+    if (!apProntos.length) return;
+    if (!confirm(`${fmt(apProntos.length)} pedido${apProntos.length === 1 ? "" : "s"} vão para o robô alterar a previsão de entrega na Intelipost (hora 23:59).\n\nConfirmar?`)) return;
+    const bt = $("ap-enviar"); bt.disabled = true; bt.textContent = "Mandando…";
+    try {
+      for (let i = 0; i < apProntos.length; i += 500) {
+        const { error } = await sb.rpc("enfileirar_intelipost", { linhas: apProntos.slice(i, i + 500) });
+        if (error) throw error;
+      }
+      toast(`${fmt(apProntos.length)} pedido(s) na fila do robô.`);
+      $("ap-texto").value = ""; mostrarConferencia(); await carregarAlterar(true);
+    } catch (err) {
+      toast("Não consegui mandar: " + (err.message || err) + (/fila_intelipost|enfileirar/i.test(err.message || "") ? " (rode de novo o supabase/schema.sql)" : ""), true);
+    } finally { bt.textContent = "➤ Alterar na Intelipost"; bt.disabled = !apProntos.length; }
+  });
+  // planilha: colunas "Pedido" e "Nova data" (ou as duas primeiras). Vira texto na caixa para passar pela mesma conferência.
+  $("ap-arquivo").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", raw: true });
+      const linhas = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" });
+      if (!linhas.length) return toast("A planilha está vazia.", true);
+      const cab = linhas[0].map((c) => norm(c));
+      let iP = cab.findIndex((c) => c.startsWith("PEDIDO")), iD = cab.findIndex((c) => c.includes("DATA"));
+      let corpo = linhas.slice(1);
+      if (iP < 0 || iD < 0) { iP = 0; iD = 1; corpo = linhas; }
+      const txt = corpo.map((l) => {
+        const p = String(l[iP] ?? "").trim(), v = l[iD];
+        if (!p) return "";
+        let d = "";
+        if (typeof v === "number") { const c = XLSX.SSF.parse_date_code(v); if (c) d = `${String(c.d).padStart(2, "0")}/${String(c.m).padStart(2, "0")}/${c.y}`; }
+        else if (v instanceof Date) d = br(v.toISOString());
+        else d = String(v ?? "").trim();
+        return `${p} ${d}`.trim();
+      }).filter(Boolean).join("\n");
+      $("ap-texto").value = ($("ap-texto").value.trim() ? $("ap-texto").value.trim() + "\n" : "") + txt;
+      mostrarConferencia();
+      toast(`${arq.name}: ${fmt(txt.split("\n").filter(Boolean).length)} linha(s) lidas. Confira e clique em Alterar na Intelipost.`);
+    } catch (err) { toast("Não consegui ler a planilha: " + (err.message || err), true); }
+  });
+  $("ap-modelo").addEventListener("click", () => {
+    const ws = XLSX.utils.aoa_to_sheet([["Pedido", "Nova data"], ["MAGAZINE_LUIZA1234567890123456", "27/11/2026"]]);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Nova previsão"); XLSX.writeFile(wb, "modelo_nova_previsao.xlsx");
+  });
+  async function carregarAlterar(forcar) {
+    if (!forcar && Date.now() - apCarregadoEm < 20000) return desenharAlterar();
+    try {
+      const [lista, est] = await Promise.all([buscarTudo("fila_intelipost", "pedido"), sb.from("robo_estado").select("*").eq("nome", "intelipost").limit(1)]);
+      apFila = lista; apCarregadoEm = Date.now();
+      const e = est && est.data && est.data[0] && est.data[0].valor;
+      $("ap-robo-alerta").hidden = !(e && e.tipo === "erro");
+      if (e && e.tipo === "erro") { $("ap-robo-titulo").textContent = e.titulo || "O robô da Intelipost parou."; $("ap-robo-texto").textContent = (e.msg || "") + (est.data[0].atualizado_em ? ` (${new Date(est.data[0].atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""); }
+    } catch (err) {
+      $("ap-vazio").hidden = false;
+      $("ap-vazio").textContent = /fila_intelipost|robo_estado|does not exist|schema cache/i.test(err.message || "") ? "Para usar esta aba, rode de novo o supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
+      return;
+    }
+    desenharAlterar();
+  }
+  function desenharAlterar() {
+    const q = norm($("ap-busca").value);
+    const L = apFila.filter((r) => !q || norm(r.pedido).includes(q)).sort((a, b) => String(b.feito_em || b.pedido_em).localeCompare(String(a.feito_em || a.pedido_em)));
+    const cont = {}; apFila.forEach((r) => (cont[r.status] = (cont[r.status] || 0) + 1));
+    $("ap-resumo").innerHTML = Object.keys(AP_ST).filter((k) => cont[k]).map((k) => `<span class="chip ${AP_ST[k][1]}">${fmt(cont[k])} · ${AP_ST[k][0]}</span>`).join(" ");
+    const quando = (t) => (t ? new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
+    $("ap-linhas").innerHTML = L.slice(0, apMostrar).map((r) => { const [n, c] = AP_ST[r.status] || [r.status, "cinza"];
+      return `<tr><td class="mono">${esc(r.pedido)}</td><td>${br(r.nova_data)}</td><td><span class="chip ${c}">${esc(n)}</span>${r.motivo ? `<div class="s txt-vermelho">${esc(r.motivo)}</div>` : ""}</td>
+        <td class="s">${quando(r.pedido_em)}${r.pedido_por ? " · " + esc(r.pedido_por) : ""}</td><td class="s">${quando(r.feito_em) || "—"}</td></tr>`; }).join("");
+    $("ap-vazio").hidden = L.length > 0; if (!L.length) $("ap-vazio").textContent = apFila.length ? "Nenhum pedido com essa busca." : "Nenhum pedido mandado para o robô ainda.";
+    $("ap-mais").hidden = L.length <= apMostrar;
+  }
+  $("ap-busca").addEventListener("input", () => { apMostrar = 200; desenharAlterar(); });
+  $("ap-mais").addEventListener("click", () => { apMostrar += 200; desenharAlterar(); });
+  $("ap-baixar").addEventListener("click", () => {
+    if (!apFila.length) return toast("Nada para exportar.", true);
+    const linhas = [["Pedido", "Nova data", "Situação", "Motivo", "Pedido em", "Pedido por", "Feito em"]].concat(apFila.map((r) =>
+      [r.pedido, br(r.nova_data), (AP_ST[r.status] || [r.status])[0], r.motivo || "", r.pedido_em ? new Date(r.pedido_em).toLocaleString("pt-BR") : "", r.pedido_por || "", r.feito_em ? new Date(r.feito_em).toLocaleString("pt-BR") : ""]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Robô Intelipost");
+    XLSX.writeFile(wb, `alterar_pedidos_${hojeISO()}.xlsx`);
+  });
+  $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
+    $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; });
+  setInterval(() => { if (paginaAtual === "alterar" && !document.hidden) carregarAlterar(true); }, 60000);
   $("e-transp-exportar").addEventListener("click", () => {
     if (!eLinhasTransp.length) return toast("Nada para exportar.", true);
     const linhas = [["Transportadora", "Entregues", "No prazo", "Com atraso", "SLA"]].concat(eLinhasTransp.map((x) => [x.t, x.ent, x.ok, x.atr, Math.round(x.sla * 1000) / 10 + "%"]));
@@ -1429,7 +1562,7 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
@@ -1440,6 +1573,7 @@
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
     if (G_PAGINAS.includes(b.dataset.pagina)) montarGerencial();
+    if (b.dataset.pagina === "alterar") carregarAlterar();
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------

@@ -37,3 +37,15 @@ export const registrarCadastradas = (linhas) =>
 export function saida(nome, valor) {
   if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `${nome}=${valor}\n`);
 }
+
+// ---- robô da Intelipost (aba Alterar pedidos) ----
+export const contarIntelipost = async () => (await chamar("fila_intelipost?select=pedido&status=eq.pendente&limit=1")).length > 0;
+export const pegarIntelipost = async (limite = 100) => (await chamar("rpc/pegar_fila_intelipost", "POST", { limite })) || [];
+export const resultadoIntelipost = (p, st, mot = null) => chamar("rpc/resultado_intelipost", "POST", { p, st, mot });
+export async function lerEstado(nome) { const r = await chamar(`robo_estado?nome=eq.${encodeURIComponent(nome)}&select=valor`); return r && r[0] ? r[0].valor : null; }
+export const gravarEstado = (nome, valor) =>
+  fetch(`${URL_SB}/rest/v1/robo_estado?on_conflict=nome`, {
+    method: "POST",
+    headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+    body: JSON.stringify({ nome, valor, atualizado_em: new Date().toISOString() }),
+  }).then(async (r) => { if (!r.ok) throw new Error("Supabase robo_estado: " + r.status + " " + (await r.text()).slice(0, 200)); });

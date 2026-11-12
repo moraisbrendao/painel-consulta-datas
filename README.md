@@ -120,3 +120,16 @@ Página no menu abaixo de Entregas e SLA. Mesma base e mesmos filtros da Visão 
 - Clique num estado: transportadoras que atendem, com as séries de cada uma, e as cidades, com em aberto / atrasados / %. Botão para baixar os atrasados do estado.
 - "Ranking e tabela": estados do que tem mais atrasos para o que tem menos, com a transportadora que mais atrasa em cada um, e Baixar Excel.
 - O desenho do mapa vem de @svg-maps/brazil (licença CC BY 4.0), salvo em `mapa-brasil.js`.
+
+## 16. Alterar pedidos (nova previsão de entrega na Intelipost)
+
+Você diz o pedido e a nova data; o robô altera na Intelipost e o resultado aparece na tela.
+1. Cole na caixa uma linha por pedido: `PEDIDO 27/11/2026` (dia/mês/ano; a hora fica 23:59). Ou suba a planilha (modelo: Pedido, Nova data).
+2. A tela confere antes: fica de fora (com o motivo) pedido sem data, data que não dá para ler, data que já passou, data a mais de 6 meses e o mesmo pedido com duas datas.
+3. "Alterar na Intelipost" grava na fila (`fila_intelipost`). O robô (`.github/workflows/robo-intelipost.yml`) passa de 30 em 30 minutos, em dia útil, das 6h às 20h.
+
+Para o robô funcionar:
+- Rode de novo o `supabase/schema.sql` (seção 16).
+- No GitHub: Settings > Secrets and variables > Actions > **New repository secret**: `INTELIPOST_EMAIL` e `INTELIPOST_SENHA` (login da Intelipost usado pelo robô).
+- Primeiro roda em modo **diag** (só olha as telas, sem mexer em nada) para conferir os campos; depois **dryrun** (preenche sem salvar). Só então a variável `INTELIPOST_ATIVO = sim` liga o agendamento real.
+- Se o login falhar, o robô para de tentar com aquela senha (para não bloquear a conta) e a tela mostra um aviso vermelho. Trocou a senha no GitHub, ele volta sozinho.

@@ -537,3 +537,92 @@ as $$
 $$;
 revoke all on function public.base_compacta() from public, anon;
 grant execute on function public.base_compacta() to authenticated;
+
+-- 16) Alterar pedidos: nova previsão de entrega na Intelipost.
+--     A tela grava aqui (um registro por pedido, o pedido é a chave); o robô da Intelipost
+--     (GitHub Actions) pega os pendentes, altera a data (hora sempre 23:59) e grava o resultado.
+create table if not exists public.fila_intelipost (
+  pedido      text primary key,
+  nova_data   date not null,
+  status      text not null default 'pendente',   -- pendente | processando | alterado | erro
+  motivo      text,                               -- quando dá erro, o porquê (aparece na tela)
+  pedido_por  text,
+  pedido_em   timestamptz not null default now(),
+  feito_em    timestamptz,
+  tentativas  integer not null default 0,
+  iniciado_em timestamptz
+);
+alter table public.fila_intelipost add column if not exists iniciado_em timestamptz;
+alter table public.fila_intelipost enable row level security;
+revoke all on public.fila_intelipost from anon;
+grant select, delete on public.fila_intelipost to authenticated;
+drop policy if exists "logistica cuida" on public.fila_intelipost;
+create policy "logistica cuida" on public.fila_intelipost for all to authenticated
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- a tela manda a lista [{pedido, nova_data}]; pedido que já estava na fila volta para pendente com a data nova
+create or replace function public.enfileirar_intelipost(linhas jsonb)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  insert into public.fila_intelipost (pedido, nova_data, status, motivo, pedido_por, pedido_em, feito_em, tentativas)
+  select trim(x ->> 'pedido'), (x ->> 'nova_data')::date, 'pendente', null, auth.jwt() ->> 'email', now(), null, 0
+  from jsonb_array_elements(linhas) x
+  where coalesce(trim(x ->> 'pedido'), '') <> '' and x ->> 'nova_data' is not null
+  on conflict (pedido) do update set nova_data = excluded.nova_data, status = 'pendente', motivo = null,
+    pedido_por = excluded.pedido_por, pedido_em = excluded.pedido_em, feito_em = null, tentativas = 0;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.enfileirar_intelipost(jsonb) from public, anon;
+grant execute on function public.enfileirar_intelipost(jsonb) to authenticated;
+
+-- o robô pega até N pendentes (os mais antigos primeiro)
+create or replace function public.pegar_fila_intelipost(limite integer default 100)
+returns setof public.fila_intelipost
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.fila_intelipost set status = 'erro', feito_em = now(),
+    motivo = 'O robô parou no meio. Confira na Intelipost antes de mandar de novo.'
+  where status = 'processando' and iniciado_em < now() - interval '2 hours';
+  return query
+  update public.fila_intelipost f set status = 'processando', tentativas = f.tentativas + 1, iniciado_em = now()
+  where f.pedido in (select pedido from public.fila_intelipost where status = 'pendente'
+                     order by pedido_em, pedido limit greatest(1, least(limite, 200)) for update skip locked)
+  returning f.*;
+end $$;
+revoke all on function public.pegar_fila_intelipost(integer) from public, anon;
+grant execute on function public.pegar_fila_intelipost(integer) to authenticated;
+
+-- o robô grava o resultado de cada pedido
+create or replace function public.resultado_intelipost(p text, st text, mot text)
+returns void
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if st not in ('alterado', 'erro', 'pendente') then raise exception 'Status inválido.'; end if;
+  update public.fila_intelipost set status = st, motivo = mot, feito_em = case when st = 'pendente' then null else now() end
+  where pedido = p and status = 'processando';
+end $$;
+revoke all on function public.resultado_intelipost(text, text, text) from public, anon;
+grant execute on function public.resultado_intelipost(text, text, text) to authenticated;
+
+-- recados do robô para a tela (ex.: senha da Intelipost recusada). Nunca guarda senha:
+-- só uma "impressão" (16 letras de um sha256) para saber se a senha ainda é a mesma que falhou.
+create table if not exists public.robo_estado (
+  nome          text primary key,
+  valor         jsonb,
+  atualizado_em timestamptz not null default now()
+);
+alter table public.robo_estado enable row level security;
+revoke all on public.robo_estado from anon;
+grant select, insert, update on public.robo_estado to authenticated;
+drop policy if exists "logistica cuida" on public.robo_estado;
+create policy "logistica cuida" on public.robo_estado for all to authenticated
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));

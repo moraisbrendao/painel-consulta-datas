@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=42">
+  <link rel="stylesheet" href="styles.css?v=43">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -34,6 +34,7 @@
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
+      <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
     </nav>
     <div class="lado">
@@ -524,6 +525,71 @@
     </main>
 
     <!-- ============ CONSULTA SAC ============ -->
+    <main class="conteudo" id="pagina-alterar" hidden>
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Alterar pedidos</h1>
+          <p class="sub">Diga o pedido e a nova data. O robô altera na Intelipost e avisa aqui.</p>
+        </div>
+        <div class="acoes-titulo" id="ap-abas">
+          <button class="btn amarelo" data-ap="data">📅 Nova previsão de entrega</button>
+          <button class="btn contorno" data-ap="troca">⇄ Troca de notas</button>
+        </div>
+      </div>
+
+      <section id="ap-robo-alerta" class="alerta alerta-erro" hidden>
+        <span class="alerta-ic">⚠</span>
+        <div><b id="ap-robo-titulo"></b><p id="ap-robo-texto"></p></div>
+      </section>
+
+      <div id="ap-sec-data">
+        <section class="cartao ap-cartao">
+          <div class="ap-cab">
+            <span class="ap-ic">📅</span>
+            <div>
+              <h2>Nova previsão de entrega</h2>
+              <p class="sub">Uma linha por pedido: o pedido, um espaço e a data (dia/mês/ano). A hora fica sempre 23:59. Dá para colar direto do Excel.</p>
+            </div>
+          </div>
+          <textarea id="ap-texto" rows="5" spellcheck="false" placeholder="MAGAZINE_LUIZA1234567890123456 27/11/2026&#10;SHOPEE260911ABCDEF 29/11/2026"></textarea>
+          <div id="ap-conf" class="ap-conf" hidden></div>
+          <div class="ap-acoes">
+            <button id="ap-enviar" class="btn amarelo" disabled>➤ Alterar na Intelipost</button>
+            <span class="s">ou</span>
+            <label class="btn contorno">⇪ Subir planilha<input id="ap-arquivo" type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label>
+            <button id="ap-modelo" class="link" type="button">modelo da planilha</button>
+          </div>
+        </section>
+
+        <section class="cartao">
+          <div class="cartao-topo">
+            <div>
+              <h2>🤖 O que o robô fez</h2>
+              <p class="sub">Ele passa de meia em meia hora, em dia útil, das 6h às 20h. O resultado aparece aqui sozinho.</p>
+            </div>
+            <div class="ap-resumo" id="ap-resumo"></div>
+          </div>
+          <div class="ap-filtro-linha">
+            <input id="ap-busca" type="search" placeholder="Procurar pedido">
+            <button id="ap-baixar" class="btn contorno">Baixar Excel</button>
+          </div>
+          <div class="tabela-wrap ap-lista">
+            <table class="tabela-pedidos">
+              <thead><tr><th>Pedido</th><th>Nova data</th><th>Situação</th><th>Pedido em / por</th><th>Feito em</th></tr></thead>
+              <tbody id="ap-linhas"></tbody>
+            </table>
+            <p id="ap-vazio" class="vazio" hidden>Nenhum pedido mandado para o robô ainda.</p>
+          </div>
+          <p class="ap-mais"><button id="ap-mais" class="link" hidden>mostrar mais</button></p>
+        </section>
+      </div>
+
+      <section class="cartao" id="ap-sec-troca" hidden>
+        <h2>Troca de notas</h2>
+        <p class="sub">A sequência da reposição total (7 etapas, com quem pegou cada pedido à vista para todos) vem na próxima etapa.</p>
+      </section>
+    </main>
+
     <main class="conteudo" id="pagina-sac" hidden>
       <section class="filtros-cartao filtros-sac" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
@@ -593,8 +659,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=42"></script>
-  <script src="mapa-brasil.js?v=42"></script>
-  <script src="app.js?v=42"></script>
+  <script src="config.js?v=43"></script>
+  <script src="mapa-brasil.js?v=43"></script>
+  <script src="app.js?v=43"></script>
 </body>
 </html>
