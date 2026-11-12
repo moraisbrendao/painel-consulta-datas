@@ -36,10 +36,17 @@ pagina.setDefaultTimeout(30000);
 
 async function entrar() {
   await pagina.goto(BASE, { waitUntil: "domcontentloaded" });
+  await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  const usuario = pagina.locator("input[type=email], input[name*=mail i], input[id*=mail i], input[name*=user i], input[id*=user i], input[name*=login i], input[type=text]").first();
   const senha = pagina.locator("input[type=password]").first();
-  await senha.waitFor({ timeout: 45000 });
-  const usuario = pagina.locator("input[type=email], input[name*=mail i], input[id*=mail i], input[name*=user i], input[id*=user i], input[name*=login i]").first();
+  try { await usuario.or(senha).first().waitFor({ timeout: 45000 }); }
+  catch { await esqueleto("Tela de login (não achei os campos)"); throw new Error("Não achei a tela de login da Intelipost."); }
   await usuario.fill(INTELIPOST_EMAIL);
+  if (!(await senha.isVisible().catch(() => false))) {   // login em 2 passos: e-mail, continuar, senha
+    await pagina.getByRole("button", { name: /continuar|próximo|proximo|avançar|next/i }).first().click().catch(() => pagina.keyboard.press("Enter"));
+    try { await senha.waitFor({ timeout: 30000 }); }
+    catch { await esqueleto("Depois do e-mail (não apareceu a senha)"); throw new Error("Não apareceu o campo de senha da Intelipost."); }
+  }
   await senha.fill(INTELIPOST_SENHA);
   const botao = pagina.locator("button[type=submit], input[type=submit]").or(pagina.getByRole("button", { name: /entrar|acessar|login/i })).first();
   await botao.click();
@@ -64,7 +71,7 @@ async function esqueleto(titulo) {
     const links = [...document.querySelectorAll("nav a, aside a, [class*=menu] a")].slice(0, 80).map((a) => `${(a.innerText || "").trim().slice(0, 40)} -> ${(a.getAttribute("href") || "").slice(0, 80)}`);
     return { campos, botoes: [...new Set(botoes)], links: [...new Set(links)] };
   });
-  log(`== ${titulo} · ${new URL(pagina.url()).pathname}${new URL(pagina.url()).hash.replace(/[^#/a-z-]/gi, "")}`);
+  log(`== ${titulo} · ${new URL(pagina.url()).host}${new URL(pagina.url()).pathname}${new URL(pagina.url()).hash.replace(/[^#/a-z-]/gi, "")}`);
   info.campos.forEach((c) => log("  campo:", c));
   log("  botões:", info.botoes.join(" / "));
   info.links.forEach((l) => log("  link:", l));
