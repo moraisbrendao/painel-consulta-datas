@@ -187,7 +187,7 @@ async function alterar(pedido, iso) {
 // Adicionar + tabela Vigente, volume com 1 em tudo, Calcular -> "Prazo de entrega" (em dias). Só consulta, não altera pedido.
 async function simularPrazo(cep, metodo, olhar) {
   const p = pagina;
-  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}".`); } };
+  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}" (${e.message.split("\n")[0].slice(0, 160)})`); } };
   await p.bringToFront();
   await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
@@ -237,43 +237,21 @@ async function simularPrazo(cep, metodo, olhar) {
       log("  valores dos campos de volume:", v);
       log("  tabela vigente marcada:", await p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first().isChecked().catch(() => "não achei"));
     }
-    const chamadas = [], erros = [];
-    const corpos = [];
-    const ouvir = (r) => { if (/graphql\.intelipost/i.test(r.url())) corpos.push(r.text().then((t) => ({ op: (r.request().postData() || "").match(/"operationName"\s*:\s*"([^"]+)"/)?.[1] || "?", t })).catch(() => null));
-       if (!/jserrors|newrelic|nr-data|hotjar|analytics|segment|intercom|sentry|google/i.test(r.url())) chamadas.push(`${r.request().method()} ${r.status()} ${new URL(r.url()).host} ${new URL(r.url()).pathname.replace(/\d+/g, "#")}`); };
-    const errou = (e) => erros.push(String(e.message || e).slice(0, 150));
-    p.on("response", ouvir); p.on("pageerror", errou);
-    const botaoCalc = p.getByRole("button", { name: /^\s*Calcular\s*$/i });
-    if (olhar) log("  botões Calcular:", await botaoCalc.count(), "| ativo:", await botaoCalc.first().isEnabled().catch(() => "?"));
-    await botaoCalc.first().click();
-    await p.waitForTimeout(8000);
-    p.off("response", ouvir); p.off("pageerror", errou);
-    if (olhar) { const msg = await p.evaluate(() => [...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && e.getBoundingClientRect().width > 0 && /obrigat|inv[aá]lid|preencha|informe|selecione|erro|necess/i.test(e.textContent || "")).map((e) => e.textContent.trim().slice(0, 100))); [...new Set(msg)].slice(0, 15).forEach((m) => log("  texto de aviso:", m)); }
-    if (olhar) for (const c of (await Promise.all(corpos)).filter(Boolean)) {
-      log(`  graphql ${c.op}: ${c.t.length} letras`);
-      const chaves = [...new Set([...c.t.matchAll(/"([a-zA-Z_]+)"\s*:/g)].map((m) => m[1]))].slice(0, 60);
-      log("    chaves:", chaves.join(", "));
-      const err = c.t.match(/"message"\s*:\s*"([^"]{0,150})/); if (err) log("    mensagem:", err[1]);
-      [...c.t.matchAll(/"([a-zA-Z_]*(?:time|days|prazo|estimat|delivery_method_name|name)[a-zA-Z_]*)"\s*:\s*("?[^,}"]{0,40}"?)/gi)].slice(0, 20).forEach((m) => log("    ", m[1], "=", m[2]));
+    // a resposta da cotação vem do graphql (quoteFreightVolume): lê o prazo direto dela
+    const resp = p.waitForResponse(async (r) => /graphql\.intelipost/i.test(r.url()) && (await r.text().catch(() => "")).includes("quoteFreightVolume"), { timeout: 60000 });
+    await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
+    const corpo = await (await resp).json();
+    const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
+    const ms = (q && q.delivery_methods) || [];
+    if (!ms.length) {
+      const msg = (corpo.errors && corpo.errors[0] && corpo.errors[0].message) || "sem opção de entrega";
+      throw new Error(`a Intelipost não achou frete para esse CEP com ${metodo} (${msg.slice(0, 120)})`);
     }
-    if (olhar) { const txt = await p.evaluate(() => (document.body.innerText.match(/.{0,60}(dias|Opç|Op[cç]ões de envio).{0,60}/gi) || []).slice(0, 10)); txt.forEach((t) => log("  texto na tela:", t.replace(/\s+/g, " "))); }
-    if (olhar) { chamadas.slice(0, 15).forEach((c) => log("  chamada depois do Calcular:", c)); erros.forEach((e) => log("  erro de script:", e)); }
-    if (olhar) { await p.waitForTimeout(3000); const avisos = await p.evaluate(() => [...document.querySelectorAll("[role=alert], .toast, [class*=toast], [class*=alert], [class*=error], .invalid-feedback, [class*=snack]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim().slice(0, 120)).filter(Boolean)); avisos.forEach((a) => log("  aviso na tela:", a)); }
-    await p.locator("text=/Opções de Envio/i >> visible=true").first().waitFor({ timeout: 45000 });
-    await p.waitForTimeout(1500);
-    const r = await p.evaluate(() => {
-      const t = [...document.querySelectorAll("table")].find((x) => /prazo de entrega/i.test(x.innerText));
-      if (!t) return null;
-      const cab = [...t.querySelectorAll("th")].map((x) => x.innerText.trim());
-      const i = cab.findIndex((x) => /prazo de entrega/i.test(x)), m = cab.findIndex((x) => /m[eé]todos? de entrega/i.test(x));
-      return [...t.querySelectorAll("tbody tr")].map((tr) => { const td = [...tr.querySelectorAll("td")]; return { metodo: td[m] ? td[m].innerText.trim() : "", prazo: td[i] ? td[i].innerText.trim() : "" }; });
-    });
-    if (!r || !r.length) throw new Error("sem linha em Opções de Envio");
-    if (olhar) r.forEach((x) => log("  opção de envio:", x.metodo, "->", x.prazo));
-    const linha = r.find((x) => x.metodo.toLowerCase() === metodo.toLowerCase()) || r[0];
-    const n = linha.prazo.match(/\d+/);
-    if (!n) throw new Error("prazo sem número");
-    prazo = Number(n[0]);
+    if (olhar) ms.forEach((m) => log("  opção de envio:", m.name || m.description, "->", m.delivery_estimate_business_days, "dias úteis"));
+    const m = ms.find((x) => semAcento(x.name || x.description) === semAcento(metodo)) || (ms.length === 1 ? ms[0] : null);
+    if (!m) throw new Error(`a simulação não trouxe o método ${metodo}`);
+    prazo = Number(m.delivery_estimate_business_days);
+    if (!(prazo > 0)) throw new Error("a simulação veio sem prazo em dias úteis");
   });
   return prazo;
 }
@@ -329,9 +307,17 @@ async function diagTroca() {
   if (!process.env.MAPA) {   // teste completo da troca SEM salvar, com nota/chave fictícias, num pedido já alterado
     const alvo = await umPedidoParaOlhar();
     if (!alvo) { log("Não achei pedido para o teste."); return; }
+    // usa a transportadora e o método que o pedido já tem (assim a simulação acha frete para o CEP dele)
+    let atual = {};
+    try {
+      const { tela, aba } = await abrirPedido(alvo.pedido, false, true);
+      atual = await tela.evaluate(() => { const t = document.body.innerText; return { transp: (t.match(/Transportadora:\s*([^\n]+)/) || [])[1], metodo: (t.match(/M[eé]todo de entrega:\s*([^\n]+)/) || [])[1] }; });
+      if (aba) await aba.close();
+      log("Transportadora/método atuais do pedido:", atual.transp, "/", atual.metodo);
+    } catch (e) { log("Não li a transportadora atual:", e.message.split("\n")[0]); }
     try {
       const r = await fazerTroca({ ticket: "diag", pedido: alvo.pedido, nf_nova: "123456-7", serie: "7", chave: "0".repeat(44), data_emissao: hojeBR(),
-        robo_metodo: process.env.METODO_TESTE || "Transiga Standard", robo_transp: process.env.TRANSP_TESTE || "Transiga", robo_modo: "teste" });
+        robo_metodo: (atual.metodo || "Transiga Standard").trim(), robo_transp: (atual.transp || "Transiga").trim(), robo_modo: "teste" });
       log("Teste da troca (sem salvar): ok. Passos:", JSON.stringify(r.passos).replace(/"nova_data":"[^"]+",?/, ""));
     } catch (e) { log("Teste da troca:", e.message, "| passos ok:", JSON.stringify(e.passos || {})); }
     return;
