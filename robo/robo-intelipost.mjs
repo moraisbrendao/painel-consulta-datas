@@ -108,15 +108,15 @@ async function abrirPedido(pedido, olhar) {
   const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), clicar.click()]);
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
-  // pedido já entregue/cancelado não deixa mudar a previsão: avisa em vez de tentar
-  await tela.getByText(/Pedido:/).first().waitFor({ timeout: 60000 }).catch(() => {});
-  const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
-  if (olhar) log("Cabeçalho do pedido:", await tela.evaluate(() => (document.body.innerText.match(/Pedido:[\s\S]{0,60}/) || [""])[0].replace(/\s+/g, " ")));
-  if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
   // "Entrega prev.:" é um link (ng-click edit_estimated_delivery_date) que abre a edição da previsão do cliente
   const link = tela.locator("a[ng-click^='edit_estimated_delivery_date']").first();
   try { await link.waitFor({ timeout: 60000 }); }
   catch { if (olhar) await camposDeData(tela); if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o link da previsão de entrega."); }
+  // pedido já entregue/cancelado: não mexe na previsão (avisa em vez de tentar)
+  await tela.waitForFunction(() => /Pedido:[^(]{0,80}\(\s*\S/.test(document.body.innerText), null, { timeout: 20000 }).catch(() => {});
+  const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
+  if (olhar) log("Cabeçalho do pedido:", await tela.evaluate(() => (document.body.innerText.match(/Pedido:[\s\S]{0,60}/) || [""])[0].replace(/\s+/g, " ")));
+  if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
   const assinatura = () => tela.evaluate(() => [...document.querySelectorAll("input, select, textarea, button, [contenteditable=true]")]
     .filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; })
     .map((e) => `${e.tagName.toLowerCase()} | ${e.type || ""} | id=${e.id} | name=${e.name || ""} | ng-model=${e.getAttribute("ng-model") || ""} | class=${String(e.className).slice(0, 50)} | ${(e.innerText || "").trim().slice(0, 25)}`));
