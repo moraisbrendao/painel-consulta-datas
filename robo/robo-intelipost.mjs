@@ -468,7 +468,17 @@ async function fazerTroca(job) {
     await tela.locator("a[ng-click^='edit_logistic_provider_modal']:visible").first().click();
     const selMet = tela.locator("select[ng-model='delivery_method_id']:visible").first();
     await selMet.waitFor({ timeout: 20000 });
-    const selTransp = selMet.locator("xpath=preceding::select[1]");
+    // a caixinha tem 2 selects: Transportadora e Método (delivery_method_id); acha o da transportadora pelas opções
+    const iT = await tela.evaluate((alvo) => {
+      const n = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+      const sels = [...document.querySelectorAll("select")].filter((e) => e.getBoundingClientRect().width > 0 && e.getAttribute("ng-model") !== "delivery_method_id");
+      return sels.findIndex((e) => [...e.options].some((o) => n(o.text) === n(alvo)));
+    }, job.robo_transp);
+    if (iT < 0) {
+      const info = await tela.evaluate(() => [...document.querySelectorAll("select")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => `${e.getAttribute("ng-model") || "?"}:${e.options.length}`).join(" "));
+      throw new Error(`A transportadora "${job.robo_transp}" não aparece na caixinha da Intelipost (selects: ${info}).`);
+    }
+    const selTransp = tela.locator("select:visible:not([ng-model='delivery_method_id'])").nth(iT);
     if (!(await escolherOpcao(selTransp, job.robo_transp))) throw new Error(`A transportadora "${job.robo_transp}" não aparece na caixinha da Intelipost.`);
     await tela.waitForTimeout(2000);
     if (!(await escolherOpcao(selMet, job.robo_metodo))) throw new Error(`O método "${job.robo_metodo}" não aparece para essa transportadora na Intelipost.`);
