@@ -238,10 +238,12 @@ async function simularPrazo(cep, metodo, olhar) {
     const fechar = p.getByRole("button", { name: /^\s*Fechar\s*$/i }).last();
     if (await fechar.count()) await fechar.click();
   });
-  await passo("pôr 1 no peso, altura, comprimento, largura e valor", async () => {
-    for (const r of ["Peso", "Altura", "Comprimento", "Largura", "Valor Nota Fiscal"]) {
+  // o campo tem máscara de centavos: digitar "100" vira 1,00. Peso PESO_SIMULACAO kg (algumas tabelas recusam 0,01 kg).
+  const PESO = String(process.env.PESO_SIMULACAO || "1");
+  await passo("pôr peso, medidas e valor", async () => {
+    for (const [r, v] of [["Peso", PESO], ["Altura", "1"], ["Comprimento", "1"], ["Largura", "1"], ["Valor Nota Fiscal", "1"]]) {
       const c = p.locator(`xpath=//*[starts-with(normalize-space(text()),'${r}')]/following::input[1] >> visible=true`).last();
-      await c.click(); await c.fill(""); await p.keyboard.type("1");
+      await c.click(); await c.fill(""); await p.keyboard.type(String(Math.round(Number(v) * 100)));
     }
   });
   let prazo = null;
@@ -330,9 +332,11 @@ async function diagCep() {   // por que a simulação volta vazia: refaz a da ú
   if (aba) await aba.close();
   const cep = info.bruto.replace(/\D/g, "");
   log(`CEP: texto com ${info.bruto.length} letras, ${cep.length} dígitos, começa com ${cep.slice(0, 1)} · UF ${info.uf} · método ${t.robo_metodo}`);
-  for (const m of [t.robo_metodo, "Transiga Standard", "JadLog Standard"]) {
-    try { log(`== ${m}: prazo ${await simularPrazo(cep, m, true)}`); } catch (e) { log(`== ${m}:`, e.message.split("\n")[0]); }
+  for (const peso of ["1", "5", "25"]) {
+    process.env.PESO_SIMULACAO = peso;
+    try { log(`== ${t.robo_metodo} com ${peso} kg: prazo ${await simularPrazo(cep, t.robo_metodo, true)}`); } catch (e) { log(`== ${t.robo_metodo} com ${peso} kg:`, e.message.split("\n")[0]); }
   }
+  delete process.env.PESO_SIMULACAO;
 }
 async function diagTroca() {
   if (!process.env.MAPA) {   // teste completo da troca SEM salvar, com nota/chave fictícias, num pedido já alterado
