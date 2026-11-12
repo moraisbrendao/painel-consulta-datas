@@ -258,7 +258,7 @@ async function simularPrazo(cep, metodo, olhar) {
     await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
     const rr = await resp;
     const corpo = await rr.json();
-    if (olhar) log("  tabelas (contract_ids):", ((rr.request().postData() || "").match(/"contract_ids":\[[^\]]*\]/) || [""])[0], "· ignorar regras:", ((rr.request().postData() || "").match(/"skip_quote_rules":(\w+)/) || [])[1]);
+    if (olhar) log("  tabelas (contract_ids):", (((rr.request().postData() || "").match(/"contract_ids":\[([^\]]*)\]/) || [])[1] || "").replace(/\d/g, (d) => d + "·"), "· ignorar regras:", ((rr.request().postData() || "").match(/"skip_quote_rules":(\w+)/) || [])[1]);
     if (false) log("  pedido da simulação:", (rr.request().postData() || "").split(String(cep)).join("<cep>").replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
     const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
     const ms = (q && q.delivery_methods) || [];
