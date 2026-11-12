@@ -108,8 +108,13 @@ async function abrirPedido(pedido, olhar) {
   const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), clicar.click()]);
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
-  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
-  try { await campo.waitFor({ timeout: 60000 }); }
+  // a previsão só vira campo depois de clicar em "Editar" (o "Salvar" aparece junto)
+  const editar = tela.getByRole("button", { name: /^\s*editar\s*$/i }).first();
+  try { await editar.waitFor({ timeout: 60000 }); await editar.click(); await tela.waitForTimeout(1500); }
+  catch { if (olhar) await camposDeData(tela); if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o botão Editar."); }
+  if (olhar) { log("Cliquei em Editar (nada é salvo no diagnóstico)."); await camposDeData(tela); }
+  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated']:visible, [name$='_formated']:visible").first();
+  try { await campo.waitFor({ timeout: 20000 }); }
   catch { if (olhar) { await tela.waitForTimeout(5000); await camposDeData(tela); } if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
   return { tela, campo, aba };
 }
