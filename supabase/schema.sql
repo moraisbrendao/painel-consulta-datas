@@ -626,3 +626,72 @@ grant select, insert, update on public.robo_estado to authenticated;
 drop policy if exists "logistica cuida" on public.robo_estado;
 create policy "logistica cuida" on public.robo_estado for all to authenticated
   using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- 17) Troca de notas (reposição TOTAL): tickets da fila "Ajuste de dados na Intelipost" (aba Reposições do
+--     detalhamento_tickets). A tela calcula o método pelo DE × PARA e a série; quem pegou cada ticket e as
+--     etapas marcadas ficam à vista para todos.
+create table if not exists public.troca_notas (
+  ticket          text primary key,
+  pedido          text,
+  nf_ticket       text,
+  nf_nova         text,
+  serie           text,
+  chave           text,
+  data_emissao    date,
+  transp_promob   text,
+  linhas          integer,
+  metodo_manual   text,                           -- quando a Logística escolhe o método na mão
+  etapas          jsonb not null default '{}'::jsonb,
+  responsavel     text,
+  pego_em         timestamptz,
+  concluido_em    timestamptz,
+  na_planilha     boolean not null default true,  -- false = saiu da fila na última planilha
+  atualizado_em   timestamptz not null default now(),
+  atualizado_por  text
+);
+alter table public.troca_notas enable row level security;
+revoke all on public.troca_notas from anon;
+grant select, update on public.troca_notas to authenticated;
+drop policy if exists "logistica cuida" on public.troca_notas;
+create policy "logistica cuida" on public.troca_notas for all to authenticated
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create table if not exists public.troca_notas_info (
+  id integer primary key default 1, arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.troca_notas_info enable row level security;
+revoke all on public.troca_notas_info from anon;
+grant select on public.troca_notas_info to authenticated;
+drop policy if exists "logistica cuida" on public.troca_notas_info;
+create policy "logistica cuida" on public.troca_notas_info for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public._carimbo_troca()
+returns trigger language plpgsql as $$
+begin new.atualizado_em := now(); new.atualizado_por := coalesce(auth.jwt() ->> 'email', new.atualizado_por); return new; end $$;
+drop trigger if exists carimbo on public.troca_notas;
+create trigger carimbo before update on public.troca_notas for each row execute function public._carimbo_troca();
+
+-- a planilha atualiza os dados do ticket e mantém quem pegou e as etapas marcadas
+create or replace function public.importar_troca_notas(itens jsonb, arquivo text)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  update public.troca_notas set na_planilha = false
+  where ticket not in (select x ->> 'ticket' from jsonb_array_elements(itens) x);
+  insert into public.troca_notas (ticket, pedido, nf_ticket, nf_nova, serie, chave, data_emissao, transp_promob, linhas, na_planilha)
+  select x ->> 'ticket', x ->> 'pedido', x ->> 'nf_ticket', x ->> 'nf_nova', x ->> 'serie', x ->> 'chave',
+         nullif(x ->> 'data_emissao', '')::date, x ->> 'transp_promob', coalesce((x ->> 'linhas')::integer, 1), true
+  from jsonb_array_elements(itens) x where coalesce(x ->> 'ticket', '') <> ''
+  on conflict (ticket) do update set pedido = excluded.pedido, nf_ticket = excluded.nf_ticket, nf_nova = excluded.nf_nova,
+    serie = excluded.serie, chave = excluded.chave, data_emissao = excluded.data_emissao, transp_promob = excluded.transp_promob,
+    linhas = excluded.linhas, na_planilha = true;
+  get diagnostics n = row_count;
+  insert into public.troca_notas_info (id, arquivo, linhas, enviado_por, enviado_em)
+  values (1, arquivo, jsonb_array_length(itens), auth.jwt() ->> 'email', now())
+  on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  return n;
+end $$;
+revoke all on function public.importar_troca_notas(jsonb, text) from public, anon;
+grant execute on function public.importar_troca_notas(jsonb, text) to authenticated;

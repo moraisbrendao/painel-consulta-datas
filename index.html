@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=43">
+  <link rel="stylesheet" href="styles.css?v=44">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -584,10 +584,43 @@
         </section>
       </div>
 
-      <section class="cartao" id="ap-sec-troca" hidden>
-        <h2>Troca de notas</h2>
-        <p class="sub">A sequência da reposição total (7 etapas, com quem pegou cada pedido à vista para todos) vem na próxima etapa.</p>
-      </section>
+      <div id="ap-sec-troca" hidden>
+        <section class="cartao ap-cartao">
+          <div class="ap-cab">
+            <span class="ap-ic">⇄</span>
+            <div>
+              <h2>Troca de notas (reposição total)</h2>
+              <p class="sub">Tickets da fila "Ajuste de dados na Intelipost" com reposição Total. A tela já procura a nova NF, a série, a chave, a data e o método certo na Intelipost (DE × PARA + série). Marque as etapas e quem pegou cada ticket — todos veem.</p>
+              <p id="tn-info" class="info-base"></p>
+            </div>
+          </div>
+          <div class="ap-acoes">
+            <label class="btn amarelo">⇪ Subir detalhamento_tickets<input id="tn-arquivo" type="file" accept=".xlsx,.xls,.xlsm" hidden></label>
+            <span class="s">usa a aba Reposições</span>
+          </div>
+        </section>
+
+        <section class="kpis kpis-4" id="tn-cards">
+          <button class="kpi ativa" data-tn="fazer"><span class="kpi-rot">A fazer</span><b class="kpi-num"></b><small>ninguém pegou ainda</small><i>↗</i></button>
+          <button class="kpi laranja" data-tn="andamento"><span class="kpi-rot">Em andamento</span><b class="kpi-num"></b><small>alguém já pegou</small><i>↗</i></button>
+          <button class="kpi verde" data-tn="feitos"><span class="kpi-rot">Concluídos</span><b class="kpi-num"></b><small>as 7 etapas marcadas</small><i>↗</i></button>
+          <button class="kpi vermelho" data-tn="problema"><span class="kpi-rot">Sem método</span><b class="kpi-num"></b><small>DE × PARA não casou</small><i>↗</i></button>
+        </section>
+
+        <section class="cartao">
+          <div class="cartao-topo">
+            <div><h2 id="tn-titulo">Tickets</h2><p class="sub">Clique no ticket para ver os dados para digitar, a conta do prazo e as etapas.</p></div>
+            <button id="tn-baixar" class="btn contorno">Baixar Excel</button>
+          </div>
+          <div class="tabela-wrap">
+            <table class="tabela-pedidos tabela-tn">
+              <thead><tr><th>Ticket</th><th>Pedido</th><th>Nova NF</th><th>Transportadora (Promob)</th><th>Método na Intelipost</th><th>Etapas</th><th>Quem pegou</th></tr></thead>
+              <tbody id="tn-linhas"></tbody>
+            </table>
+            <p id="tn-vazio" class="vazio" hidden>Nenhum ticket.</p>
+          </div>
+        </section>
+      </div>
     </main>
 
     <main class="conteudo" id="pagina-sac" hidden>
@@ -659,8 +692,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=43"></script>
-  <script src="mapa-brasil.js?v=43"></script>
-  <script src="app.js?v=43"></script>
+  <script src="config.js?v=44"></script>
+  <script src="mapa-brasil.js?v=44"></script>
+  <script src="troca-notas.js?v=44"></script>
+  <script src="app.js?v=44"></script>
 </body>
 </html>

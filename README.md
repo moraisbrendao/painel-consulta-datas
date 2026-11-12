@@ -133,3 +133,12 @@ Para o robô funcionar:
 - No GitHub: Settings > Secrets and variables > Actions > **New repository secret**: `INTELIPOST_EMAIL` e `INTELIPOST_SENHA` (login da Intelipost usado pelo robô).
 - Primeiro roda em modo **diag** (só olha as telas, sem mexer em nada) para conferir os campos; depois **dryrun** (preenche sem salvar). Só então a variável `INTELIPOST_ATIVO = sim` liga o agendamento real.
 - Se o login falhar, o robô para de tentar com aquela senha (para não bloquear a conta) e a tela mostra um aviso vermelho. Trocou a senha no GitHub, ele volta sozinho.
+
+## 17. Troca de notas (reposição total)
+
+Aba Alterar pedidos > **Troca de notas**. Segue o passo a passo da Logística ("ajuste intelipost").
+1. **Subir detalhamento_tickets**: lê a aba **Reposições**, só os tickets da fila "Ajuste de dados na Intelipost" com Tipo de reposição **Total**.
+2. Para cada ticket a tela mostra o que digitar na Intelipost: pedido, **método de entrega** (DE × PARA em `troca-notas.js` pela transportadora do Promob — a de redespacho primeiro — e pela **série** da nova NF), código de rastreamento/nota (nova NF), série, chave e data da NF. Quando o DE × PARA não casa, ela avisa e deixa escolher o método na mão.
+3. Prazo da simulação de cotação (dias úteis) → nova Entrega prev. (pula sábado e domingo; feriado não) e botão para mandar a data ao robô.
+4. As 7 etapas com marcação e quem pegou cada ticket ficam à vista para todos.
+Precisa rodar de novo o `supabase/schema.sql` (seção 17).

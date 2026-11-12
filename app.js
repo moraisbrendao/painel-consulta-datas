@@ -660,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=43");
+        const w = new Worker("leitor-intelipost.js?v=44");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1550,8 +1550,169 @@
   });
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; });
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca";
+    if (b.dataset.ap === "troca") carregarTrocas(); });
   setInterval(() => { if (paginaAtual === "alterar" && !document.hidden) carregarAlterar(true); }, 60000);
+
+  // ---------------- troca de notas (reposição TOTAL) ----------------
+  // Planilha detalhamento_tickets, aba Reposições: fila "Ajuste de dados na Intelipost" + Tipo de reposição "Total".
+  // Método na Intelipost = DE × PARA (troca-notas.js) pela transportadora do Promob (redespacho primeiro) e pela série da nova NF.
+  const TN_ETAPAS = ["Transportadora trocada na Intelipost (método pelo DE × PARA)", "Simulação de cotação feita (prazo em dias úteis)",
+    "Entrega prev. atualizada (23:59)", "Volumes editados — TODOS os volumes", "Status: Macro 12 · Micro 920 · Equipe_04 Troca de notas",
+    "Print no ticket + Executar ação no ticket", "Conferido: ticket na fila Aguardando entrega"];
+  let tnLista = [], tnInfo = null, tnCard = "fazer", tnAberto = null, tnCarregado = false;
+  const meuEmail = () => ($("usuario").textContent || "").trim();
+  const tnMetodo = (t) => {
+    if (t.metodo_manual) { const r = TROCA.DEPARA.find((x) => x.metodo === t.metodo_manual); return r ? { ok: r, manual: true } : { erro: "Método escolhido não está mais no DE × PARA." }; }
+    if (String(t.transp_promob || "").startsWith("!")) return { erro: t.transp_promob.slice(1) };
+    return TROCA.metodoPara(t.transp_promob, t.serie);
+  };
+  const tnFeitas = (t) => TN_ETAPAS.filter((_, i) => t.etapas && t.etapas[i + 1]).length;
+  const TN_CARD = {
+    fazer: (t) => t.na_planilha && !t.responsavel && tnFeitas(t) < TN_ETAPAS.length,
+    andamento: (t) => t.responsavel && tnFeitas(t) < TN_ETAPAS.length,
+    feitos: (t) => tnFeitas(t) === TN_ETAPAS.length,
+    problema: (t) => t.na_planilha && tnFeitas(t) < TN_ETAPAS.length && !tnMetodo(t).ok,
+  };
+  const TN_NOME = { fazer: "A fazer", andamento: "Em andamento", feitos: "Concluídos", problema: "Sem método (DE × PARA não casou)" };
+  async function carregarTrocas() {
+    try {
+      const [lista, inf] = await Promise.all([buscarTudo("troca_notas", "ticket"), sb.from("troca_notas_info").select("*").limit(1)]);
+      tnLista = lista; tnInfo = (inf.data && inf.data[0]) || null; tnCarregado = true;
+    } catch (err) {
+      $("tn-info").textContent = /troca_notas|does not exist|schema cache/i.test(err.message || "") ? "Para usar a Troca de notas, rode de novo o supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
+      return;
+    }
+    desenharTrocas();
+  }
+  function desenharTrocas() {
+    $("tn-info").textContent = tnInfo ? `${tnInfo.arquivo || "planilha"} · enviada em ${new Date(tnInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${tnInfo.enviado_por ? " por " + tnInfo.enviado_por : ""} · ${fmt(tnInfo.linhas)} tickets na fila`
+      : 'Suba o detalhamento_tickets ("Subir detalhamento_tickets") para trazer os tickets.';
+    document.querySelectorAll("#tn-cards .kpi[data-tn]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(tnLista.filter(TN_CARD[b.dataset.tn]).length); b.classList.toggle("ativa", b.dataset.tn === tnCard); });
+    const L = tnLista.filter(TN_CARD[tnCard]).sort((a, b) => String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
+    $("tn-titulo").textContent = `${TN_NOME[tnCard]} (${fmt(L.length)})`;
+    const eu = meuEmail();
+    $("tn-linhas").innerHTML = L.map((t) => {
+      const m = tnMetodo(t), feitas = tnFeitas(t), aberto = tnAberto === t.ticket;
+      const met = m.ok ? `<b>${esc(m.ok.metodo)}</b>${m.manual ? ' <span class="chip cinza">escolhido</span>' : ""}` : `<span class="txt-vermelho">⚠ ${esc(m.erro)}</span>`;
+      const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
+      return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td>${esc(t.ticket)}</td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
+        <td><span class="chip ${feitas === TN_ETAPAS.length ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${TN_ETAPAS.length}</span></td><td>${quem}</td></tr>`
+        + (aberto ? `<tr class="tn-detalhe"><td colspan="7">${detalheTroca(t, m)}</td></tr>` : "");
+    }).join("");
+    $("tn-vazio").hidden = L.length > 0;
+  }
+  function detalheTroca(t, m) {
+    const [num, ser] = String(t.nf_nova || "").split("-");
+    const copiar = (rot, v) => `<div class="tn-campo"><span>${rot}</span><b>${esc(v || "—")}</b>${v ? `<button class="link" data-copiar="${esc(v)}">copiar</button>` : ""}</div>`;
+    const opcoes = m.opcoes || (!m.ok && t.transp_promob && !String(t.transp_promob).startsWith("!") ? TROCA.DEPARA : null);
+    const escolha = (!m.ok || m.manual) ? `<label class="tn-escolha">Escolher o método na mão: <select data-metodo="${esc(t.ticket)}"><option value="">—</option>${(opcoes || TROCA.DEPARA).map((r) => `<option ${t.metodo_manual === r.metodo ? "selected" : ""}>${esc(r.metodo)}</option>`).join("")}</select></label>` : "";
+    const hoje = hojeISO();
+    return `<div class="tn-grade">
+      <div><h3>Para digitar na Intelipost</h3>
+        ${copiar("Pedido (Busca por Lote)", t.pedido)}
+        ${copiar("Método de entrega", m.ok ? m.ok.metodo : "")}
+        ${copiar("Código de rastreamento", num)}${copiar("Nota", num)}${copiar("Série", ser || t.serie)}
+        ${copiar("Chave da Nota Fiscal", t.chave)}${copiar("Data da Nota Fiscal", br(t.data_emissao))}
+        <p class="s">Transportadora no Promob: ${esc(String(t.transp_promob || "").replace(/^!/, ""))} · série ${esc(t.serie || "?")}${t.linhas > 1 ? ` · <b>${t.linhas} linhas na planilha: confira se o pedido tem mais de 1 volume e altere TODOS</b>` : ""}</p>
+        ${escolha}
+      </div>
+      <div><h3>Prazo da cotação → nova data</h3>
+        <label class="tn-prazo">Prazo de entrega da simulação (dias úteis) <input type="number" min="1" max="60" data-prazo="${esc(t.ticket)}"></label>
+        <p class="tn-data" id="tn-data-${esc(t.ticket)}">Digite o prazo para calcular.</p>
+        <p class="s">Conta só sábado e domingo; feriado não entra (muda por estado e cidade) — confira se cair perto de feriado.</p>
+        <button class="btn contorno" data-robo="${esc(t.ticket)}" disabled>Mandar a data para o robô</button>
+      </div>
+      <div><h3>Etapas</h3>
+        ${TN_ETAPAS.map((e, i) => { const x = t.etapas && t.etapas[i + 1]; return `<label class="tn-etapa"><input type="checkbox" data-etapa="${i + 1}" data-tk="${esc(t.ticket)}" ${x ? "checked" : ""}> <span>${i + 1}. ${esc(e)}</span>${x ? `<em>${esc(String(x.por || "").split("@")[0])} · ${new Date(x.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</em>` : ""}</label>`; }).join("")}
+        ${t.responsavel ? `<p class="s">Com ${esc(t.responsavel)} desde ${new Date(t.pego_em || t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${t.responsavel === meuEmail() ? ' · <button class="link" data-soltar="' + esc(t.ticket) + '">soltar</button>' : ""}</p>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar este ticket</button>`}
+      </div></div>`;
+  }
+  async function salvarTroca(ticket, campos) {
+    const { data, error } = await sb.from("troca_notas").update(campos).eq("ticket", ticket).select();
+    if (error) { toast("Não consegui salvar: " + error.message, true); return false; }
+    const i = tnLista.findIndex((x) => x.ticket === ticket); if (i >= 0 && data && data[0]) tnLista[i] = data[0];
+    desenharTrocas(); return true;
+  }
+  $("tn-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-tn]"); if (!b) return; tnCard = b.dataset.tn; tnAberto = null; desenharTrocas(); });
+  $("tn-linhas").addEventListener("click", async (e) => {
+    const cp = e.target.closest("[data-copiar]"); if (cp) { e.stopPropagation(); try { await navigator.clipboard.writeText(cp.dataset.copiar); toast("Copiado."); } catch (_) { toast("Não consegui copiar.", true); } return; }
+    const pg = e.target.closest("[data-pegar]"); if (pg) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === pg.dataset.pegar);
+      if (t && t.responsavel && t.responsavel !== meuEmail()) return toast(`${t.responsavel} já pegou este ticket.`, true);
+      await salvarTroca(pg.dataset.pegar, { responsavel: meuEmail(), pego_em: new Date().toISOString() }); return; }
+    const so = e.target.closest("[data-soltar]"); if (so) { e.stopPropagation(); await salvarTroca(so.dataset.soltar, { responsavel: null, pego_em: null }); return; }
+    const rb = e.target.closest("[data-robo]"); if (rb) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rb.dataset.robo), iso = rb.dataset.iso; if (!t || !iso) return;
+      if (!confirm(`O robô vai mudar a Entrega prev. do pedido ${t.pedido} para ${br(iso)} 23:59 na Intelipost.\n\nFaça isso depois de trocar a transportadora. Confirmar?`)) return;
+      const { error } = await sb.rpc("enfileirar_intelipost", { linhas: [{ pedido: t.pedido, nova_data: iso }] });
+      if (error) return toast("Não consegui mandar: " + error.message, true);
+      toast("Mandado para o robô. Acompanhe em Nova previsão de entrega."); return; }
+    if (e.target.closest(".tn-detalhe")) return;
+    const tr = e.target.closest("tr[data-tn-abrir]"); if (!tr) return;
+    tnAberto = tnAberto === tr.dataset.tnAbrir ? null : tr.dataset.tnAbrir; desenharTrocas();
+  });
+  $("tn-linhas").addEventListener("change", async (e) => {
+    const cb = e.target.closest("input[data-etapa]");
+    if (cb) { const t = tnLista.find((x) => x.ticket === cb.dataset.tk); if (!t) return;
+      const et = { ...(t.etapas || {}) }; if (cb.checked) et[cb.dataset.etapa] = { por: meuEmail(), em: new Date().toISOString() }; else delete et[cb.dataset.etapa];
+      const completo = TN_ETAPAS.every((_, i) => et[i + 1]);
+      const campos = { etapas: et, concluido_em: completo ? new Date().toISOString() : null };
+      if (!t.responsavel) { campos.responsavel = meuEmail(); campos.pego_em = new Date().toISOString(); }
+      await salvarTroca(t.ticket, campos); return; }
+    const sel = e.target.closest("select[data-metodo]"); if (sel) { await salvarTroca(sel.dataset.metodo, { metodo_manual: sel.value || null }); return; }
+  });
+  $("tn-linhas").addEventListener("input", (e) => {
+    const inp = e.target.closest("input[data-prazo]"); if (!inp) return;
+    const n = parseInt(inp.value, 10), tk = inp.dataset.prazo, bt = document.querySelector(`[data-robo="${CSS.escape(tk)}"]`), out = document.getElementById("tn-data-" + tk);
+    if (!(n > 0 && n <= 60)) { out.textContent = "Digite o prazo para calcular."; bt.disabled = true; return; }
+    const iso = TROCA.somaDiasUteis(hojeISO(), n);
+    out.innerHTML = `Nova Entrega prev.: <b>${br(iso)} 23:59</b> <button class="link" data-copiar="${br(iso)} 23:59">copiar</button>`;
+    bt.dataset.iso = iso; bt.disabled = false;
+  });
+  // leitura da aba Reposições
+  $("tn-arquivo").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+    carregando("Lendo a aba Reposições…"); await new Promise((r) => setTimeout(r, 50));
+    let itens = [], totalFila = 0, parciais = 0;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
+      const aba = wb.SheetNames.find((n) => norm(n).startsWith("REPOSI"));
+      if (!aba) throw new Error('Não achei a aba "Reposições" nessa planilha.');
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, raw: true, defval: null });
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "ID TICKET"));
+      if (iCab < 0) throw new Error('Não achei a coluna "ID Ticket" na aba Reposições.');
+      const cab = rows[iCab].map(norm), col = (n) => cab.indexOf(n);
+      const c = { tk: col("ID TICKET"), ped: col("ID INTELIPOST"), nft: col("NOTA TICKET"), fila: col("FILA ATUAL DO TICKET"), tipo: col("TIPO DE REPOSICAO"),
+        nf: col("NF EMITIDA PROMOB"), chave: col("CHAVE ACESSO NF EMITIDA PROMOB"), dt: col("DATA EMISSAO PROMOB"), tn: col("TRANSP. NOTA REPOSICAO (PROMOB)"), tr: col("TRANSP. REDESPACHO NOTA REPOSICAO (PROMOB)") };
+      for (const [k, v] of Object.entries(c)) if (v < 0) throw new Error(`Falta a coluna ${k === "tr" ? '"Transp. redespacho nota reposição (Promob)"' : k === "tn" ? '"Transp. nota reposição (Promob)"' : k === "dt" ? '"Data emissão Promob"' : k === "chave" ? '"Chave acesso NF emitida Promob"' : k === "nf" ? '"NF emitida Promob"' : k === "tipo" ? '"Tipo de reposição"' : k === "fila" ? '"Fila atual do ticket"' : k === "ped" ? '"ID Intelipost"' : k} na aba Reposições.`);
+      const porTk = new Map();
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r || norm(r[c.fila]) !== "AJUSTE DE DADOS NA INTELIPOST") return;
+        totalFila++;
+        if (norm(r[c.tipo]) !== "TOTAL") { parciais++; return; }
+        const tk = String(r[c.tk] ?? "").trim(); if (!tk) return;
+        const ant = porTk.get(tk); if (ant) { ant.linhas++; return; }
+        const nf = String(r[c.nf] ?? "").trim(), serie = (nf.split("-")[1] || "").trim().replace(/^0+(?=\d)/, "");
+        let dt = r[c.dt]; dt = dt instanceof Date ? dt.toISOString().slice(0, 10) : typeof dt === "number" ? (() => { const p = XLSX.SSF.parse_date_code(dt); return p ? `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}` : null; })() : dt ? dataBR(String(dt).slice(0, 10)) : null;
+        const tp = TROCA.transpDaTroca(r[c.tr], r[c.tn]);
+        porTk.set(tk, { ticket: tk, pedido: String(r[c.ped] ?? "").trim(), nf_ticket: String(r[c.nft] ?? "").trim(), nf_nova: nf, serie,
+          chave: String(r[c.chave] ?? "").replace(/\D/g, ""), data_emissao: dt, transp_promob: tp.erro ? "!" + tp.erro : tp.nome, linhas: 1 });
+      });
+      itens = [...porTk.values()];
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    if (!confirm(`${arq.name}\n\nFila "Ajuste de dados na Intelipost": ${fmt(totalFila)} linha(s).\n${fmt(itens.length)} ticket(s) de reposição TOTAL entram na Troca de notas${parciais ? ` (${fmt(parciais)} linha(s) Parcial ficam de fora)` : ""}.\n\nQuem pegou e as etapas marcadas continuam salvos. Enviar?`)) return;
+    const { error } = await sb.rpc("importar_troca_notas", { itens, arquivo: arq.name });
+    if (error) return toast("Erro ao enviar: " + error.message + (/importar_troca_notas|schema cache/i.test(error.message) ? " (rode de novo o supabase/schema.sql)" : ""), true);
+    toast(`${fmt(itens.length)} ticket(s) na Troca de notas.`); await carregarTrocas();
+  });
+  $("tn-baixar").addEventListener("click", () => {
+    const L = tnLista.filter(TN_CARD[tnCard]); if (!L.length) return toast("Nada para exportar.", true);
+    const linhas = [["Ticket", "Pedido", "NF do ticket", "Nova NF", "Série", "Chave", "Data emissão", "Transportadora (Promob)", "Método na Intelipost", "Etapas", "Quem pegou"]]
+      .concat(L.map((t) => { const m = tnMetodo(t); return [t.ticket, t.pedido, t.nf_ticket, t.nf_nova, t.serie, t.chave, br(t.data_emissao), String(t.transp_promob || "").replace(/^!/, ""), m.ok ? m.ok.metodo : "⚠ " + m.erro, `${tnFeitas(t)}/${TN_ETAPAS.length}`, t.responsavel || ""]; }));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Troca de notas");
+    XLSX.writeFile(wb, `troca_de_notas_${hojeISO()}.xlsx`);
+  });
+  setInterval(() => { if (paginaAtual === "alterar" && !$("ap-sec-troca").hidden && !document.hidden && tnAberto === null) carregarTrocas(); }, 60000);
   $("e-transp-exportar").addEventListener("click", () => {
     if (!eLinhasTransp.length) return toast("Nada para exportar.", true);
     const linhas = [["Transportadora", "Entregues", "No prazo", "Com atraso", "SLA"]].concat(eLinhasTransp.map((x) => [x.t, x.ent, x.ok, x.atr, Math.round(x.sla * 1000) / 10 + "%"]));
