@@ -98,9 +98,9 @@ Na página **Reposição**, clique em **Enviar tabela de acompanhamento** e esco
 
 ## 13. Visão Gerencial
 
-Primeira página do menu. Usa o arquivo de **Transações da Intelipost** (botão **Enviar Intelipost**): além de tirar do Preventivo os entregues e cancelados, o painel guarda uma versão enxuta de **todos** os pedidos (canal, UF, transportadora, série, status, micro status, datas e situação), sem nome, endereço, e-mail, telefone ou CEP do cliente.
+Primeira página do menu. Usa a **base** (botão **Enviar base**, aba Export), com todos os pedidos que vierem nela.
 
-- Filtros com várias opções, meta de performance editável, cards clicáveis.
-- "De quem é o atraso", produtividade por dia, atrasos por transportadora e faixa, distribuição por situação, pedidos por canal, performance por transportadora e pedidos por transportadora (por situação ou por mês).
-- Data prometida = Previsão Entrega Cliente Original (senão a atual).
-- Precisa ter rodado o `schema.sql` atualizado (seção 15) e enviado o arquivo da Intelipost de novo.
+- Atrasado = coluna **Range de Atrasos** começando com "Vencido" (as faixas da tabela também vêm dela).
+- Data prometida = Data Original Estimada da Entrega (senão a atual). Entregue no prazo/com atraso pelo Status Prazo Intelipost.
+- Filtros com várias opções, meta de performance editável, cards clicáveis, "de quem é o atraso", produtividade por dia, atrasos por transportadora e faixa, distribuição por situação, pedidos por canal, performance por transportadora e pedidos por transportadora (por situação ou por mês).
+- Precisa ter rodado o `schema.sql` atualizado (seção 15) e enviado a base de novo.

@@ -110,7 +110,9 @@ begin
     ultima_atualizacao = excluded.ultima_atualizacao, data_expedicao = excluded.data_expedicao,
     prev_original = excluded.prev_original, prev_atual = excluded.prev_atual, prev_360 = excluded.prev_360,
     comentario_360 = excluded.comentario_360, uf = excluded.uf, cidade = excluded.cidade, ocorrencia = excluded.ocorrencia,
-    qtd_tickets = excluded.qtd_tickets, motivo_ticket = excluded.motivo_ticket, link_rastreio = excluded.link_rastreio;
+    qtd_tickets = excluded.qtd_tickets, motivo_ticket = excluded.motivo_ticket, link_rastreio = excluded.link_rastreio,
+    data_criacao = excluded.data_criacao, data_entrega = excluded.data_entrega, range_atrasos = excluded.range_atrasos,
+    dias_atraso = excluded.dias_atraso, status_prazo = excluded.status_prazo, sem_expedicao = excluded.sem_expedicao;
   return (select count(*) from public.base_pedidos);
 end $$;
 revoke all on function public.importar_base(jsonb, boolean, text, integer) from public, anon;
@@ -511,57 +513,26 @@ end $$;
 revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
 
--- 15) Visão Gerencial: versão enxuta de TODOS os pedidos do arquivo de Transações da Intelipost
---     (vem junto com o botão "Enviar Intelipost"; cada envio substitui o anterior).
---     Sem nome, endereço, e-mail, telefone ou CEP do cliente.
-create table if not exists public.intelipost_pedidos (
-  pedido     text primary key,
-  nf         text, serie text, canal text, uf text, transportadora text,
-  status     text,        -- Status Transportador (Entregue, Em trânsito, Cancelado...)
-  micro      text,        -- MicroStatus
-  perf       text,        -- Performance (Entregue no prazo, Entregue fora do prazo...)
-  criado     date, despacho date, entrega date,
-  prev       date,        -- Previsão Entrega Cliente
-  prev_orig  date,        -- Previsão Entrega Cliente Original
-  ultimo     date         -- Data do último status
-);
-alter table public.intelipost_pedidos enable row level security;
-revoke all on public.intelipost_pedidos from anon;
-grant select on public.intelipost_pedidos to authenticated;
-drop policy if exists "logados leem" on public.intelipost_pedidos;
-create policy "logados leem" on public.intelipost_pedidos for select to authenticated using (not public.e_sac());
+-- 15) Visão Gerencial: usa a própria base ("Enviar base"). Colunas a mais da planilha e uma leitura
+--     compacta de todos os pedidos da base em uma chamada só.
+drop function if exists public.intelipost_compacto();
+drop function if exists public.importar_intelipost(jsonb, boolean);
+drop table if exists public.intelipost_pedidos;
+alter table public.base_pedidos add column if not exists data_criacao  date;
+alter table public.base_pedidos add column if not exists data_entrega  date;
+alter table public.base_pedidos add column if not exists range_atrasos text;
+alter table public.base_pedidos add column if not exists dias_atraso   integer;
+alter table public.base_pedidos add column if not exists status_prazo  text;
+alter table public.base_pedidos add column if not exists sem_expedicao text;
 
--- recebe linhas no formato [pedido, nf, serie, canal, uf, transp, status, micro, perf, criado, despacho, entrega, prev, prev_orig, ultimo]
-create or replace function public.importar_intelipost(linhas jsonb, limpar boolean)
-returns integer
-language plpgsql security definer set search_path = public
-as $$
-begin
-  if auth.uid() is null then raise exception 'Faça login.'; end if;
-  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
-  if limpar then delete from public.intelipost_pedidos where true; end if;
-  insert into public.intelipost_pedidos (pedido, nf, serie, canal, uf, transportadora, status, micro, perf, criado, despacho, entrega, prev, prev_orig, ultimo)
-  select l->>0, nullif(l->>1,''), nullif(l->>2,''), nullif(l->>3,''), nullif(l->>4,''), nullif(l->>5,''), nullif(l->>6,''), nullif(l->>7,''), nullif(l->>8,''),
-         nullif(l->>9,'')::date, nullif(l->>10,'')::date, nullif(l->>11,'')::date, nullif(l->>12,'')::date, nullif(l->>13,'')::date, nullif(l->>14,'')::date
-  from jsonb_array_elements(linhas) as l
-  where coalesce(l->>0, '') <> ''
-  on conflict (pedido) do update set nf = excluded.nf, serie = excluded.serie, canal = excluded.canal, uf = excluded.uf,
-    transportadora = excluded.transportadora, status = excluded.status, micro = excluded.micro, perf = excluded.perf,
-    criado = excluded.criado, despacho = excluded.despacho, entrega = excluded.entrega, prev = excluded.prev,
-    prev_orig = excluded.prev_orig, ultimo = excluded.ultimo;
-  return (select count(*) from public.intelipost_pedidos);
-end $$;
-revoke all on function public.importar_intelipost(jsonb, boolean) from public, anon;
-grant execute on function public.importar_intelipost(jsonb, boolean) to authenticated;
-
--- devolve todos os pedidos de uma vez, em formato compacto (lista de listas), para a Visão Gerencial
-create or replace function public.intelipost_compacto()
+create or replace function public.base_compacta()
 returns jsonb
 language sql stable security definer set search_path = public
 as $$
   select case when public.e_sac() then '[]'::jsonb else coalesce(jsonb_agg(jsonb_build_array(
-    pedido, nf, serie, canal, uf, transportadora, status, micro, perf, criado, despacho, entrega, prev, prev_orig, ultimo)), '[]'::jsonb) end
-  from public.intelipost_pedidos;
+    pedido, nf, canal, uf, transportadora, status_intelipost, micro_status, origem, data_criacao, data_expedicao, data_entrega,
+    prev_original, prev_atual, ultima_atualizacao::date, range_atrasos, dias_atraso, status_prazo, sem_expedicao)), '[]'::jsonb) end
+  from public.base_pedidos;
 $$;
-revoke all on function public.intelipost_compacto() from public, anon;
-grant execute on function public.intelipost_compacto() to authenticated;
+revoke all on function public.base_compacta() from public, anon;
+grant execute on function public.base_compacta() to authenticated;

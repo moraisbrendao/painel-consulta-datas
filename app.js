@@ -559,8 +559,10 @@
     prev_360: "DATA ESTIMADA DA ENTREGA(360)", comentario_360: "COMENTARIO 360", uf: "ESTADO DESTINO INTELIPOST",
     cidade: "CIDADE DESTINO INTELIPOST", ocorrencia: "OCORRENCIA INTELIPOST", qtd_tickets: "QTD TICKETS",
     motivo_ticket: "MOTIVO DO PRIMEIRO TICKET", link_rastreio: "LINK DE RASTREIO",
+    data_criacao: "DATA CRIACAO", data_entrega: "DATA DE ENTREGA", range_atrasos: "RANGE DE ATRASOS", dias_atraso: "DIAS DE ATRASO",
+    status_prazo: "STATUS PRAZO INTELIPOST", sem_expedicao: "PEDIDO SEM EXPEDICAO",
   };
-  const DATAS = new Set(["data_expedicao", "prev_original", "prev_atual", "prev_360"]);
+  const DATAS = new Set(["data_expedicao", "prev_original", "prev_atual", "prev_360", "data_criacao", "data_entrega"]);
 
   function dataCelula(v, comHora) {
     if (v === null || v === undefined || v === "") return null;
@@ -605,7 +607,7 @@
           const v = idx[k] >= 0 ? r[idx[k]] : null;
           if (k === "ultima_atualizacao") o[k] = dataCelula(v, true);
           else if (DATAS.has(k)) o[k] = dataCelula(v, false);
-          else if (k === "qtd_tickets") o[k] = v == null || v === "" || isNaN(Number(v)) ? null : Math.round(Number(v));
+          else if (k === "qtd_tickets" || k === "dias_atraso") o[k] = v == null || v === "" || isNaN(Number(v)) ? null : Math.round(Number(v));
           else o[k] = v == null || v === "" ? null : String(v).trim();
         }
         linhas.push(o);
@@ -627,6 +629,7 @@
     }
     carregando("");
     toast(`Base atualizada: ${fmt(linhas.length)} pedidos.`);
+    gDados = null;
     carregar();
   });
   // ---------------- arquivo da Intelipost (entregues e cancelados) ----------------
@@ -638,7 +641,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=36");
+        const w = new Worker("leitor-intelipost.js?v=37");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -668,19 +671,8 @@
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
-    // versão enxuta de todos os pedidos, para a Visão Gerencial
-    let avisoGer = "";
-    try {
-      const todos = res.todos || [], L2 = 2000;
-      for (let i = 0; i < todos.length; i += L2) {
-        carregando(`Visão Gerencial… ${fmt(Math.min(i + L2, todos.length))} de ${fmt(todos.length)}`);
-        const { error } = await sb.rpc("importar_intelipost", { linhas: todos.slice(i, i + L2), limpar: i === 0 });
-        if (error) throw error;
-      }
-      gDados = null;
-    } catch (err) { avisoGer = " A Visão Gerencial não foi atualizada: rode de novo o supabase/schema.sql no Supabase."; }
     carregando("");
-    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.` + avisoGer, !!avisoGer);
+    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.`);
     carregar();
   });
   // =================================================================
@@ -890,8 +882,8 @@
   });
 
   // ---------------- visão gerencial ----------------
-  // Fonte: arquivo de Transações da Intelipost (todos os pedidos, inclusive entregues e cancelados),
-  // guardado enxuto em intelipost_pedidos. Data prometida = Previsão Entrega Cliente Original (senão a atual).
+  // Fonte: a base ("Enviar base", aba Export), todos os pedidos dela. Data prometida = Data Original Estimada (senão a atual).
+  // Atrasado = "Range de Atrasos" começando com "Vencido" (se a coluna existir).
   let gDados = null, gCarregando = false, gCard = "abertos", gSelecao = null, gLista = [], gPagina = 1, gTodos = false, gJanela = 14, gPtModo = "sit";
   const gSel = { canal: new Set(), uf: new Set(), transp: new Set(), serie: new Set(), origem: new Set(), status: new Set(), micro: new Set() };
   const G_CAMPOS = { canal: (r) => r.canal, uf: (r) => r.uf, transp: (r) => r.transp, serie: (r) => r.serie, origem: (r) => r.origem, status: (r) => r.status, micro: (r) => r.micro };
@@ -900,6 +892,8 @@
     ["ab_risco", "Aberto em risco", "#f59e0b"], ["ab_atraso", "Aberto atrasado", "#b91c1c"], ["cancelado", "Cancelado", "#94a3b8"]];
   const FAIXAS = [["≥ 30 dias", (d) => d >= 30], ["≥ 20 dias", (d) => d >= 20 && d < 30], ["≥ 10 dias", (d) => d >= 10 && d < 20], ["≥ 5 dias", (d) => d >= 5 && d < 10],
     ["≥ 4 dias", (d) => d === 4], ["≥ 3 dias", (d) => d === 3], ["≥ 2 dias", (d) => d === 2], ["≥ 1 dia", (d) => d === 1]];
+  // faixa: pelo "Range de Atrasos" da planilha (Vencido >= N dias), senão pelos dias de atraso
+  const faixaDe = (r) => { const m = norm(r.range).match(/^VENCIDO\s*>=\s*(\d+)/); if (m) { const n = +m[1]; return FAIXAS.findIndex(([, f]) => f(n)); } return FAIXAS.findIndex(([, f]) => f(r._atraso)); };
   const G_DIM = { transp: ["transportadora", (r) => r.transp || "(sem transportadora)"], uf: ["UF", (r) => r.uf || "(sem UF)"], canal: ["canal", (r) => r.canal || "(sem canal)"], micro: ["micro status", (r) => r.micro || "(sem micro status)"] };
   try { const m = parseFloat(localStorage.getItem("painel.meta")); if (m) $("g-meta").value = m; } catch (_) {}
   const ddmm = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "");
@@ -907,28 +901,33 @@
 
   async function carregarGerencial(forcar) {
     if (gCarregando || (gDados && !forcar)) return;
-    gCarregando = true; $("g-info").textContent = "Carregando os pedidos da Intelipost…";
+    gCarregando = true; $("g-info").textContent = "Carregando os pedidos da base…";
     try {
-      const { data, error } = await sb.rpc("intelipost_compacto");
+      const { data, error } = await sb.rpc("base_compacta");
       if (error) throw error;
-      const origem = new Map(base.map((p) => [p.pedido, p.origem]));
-      gDados = (data || []).map((a) => ({ pedido: a[0], nf: a[1], serie: a[2], canal: a[3], uf: a[4], transp: a[5], status: a[6], micro: a[7], perf: a[8],
-        criado: a[9], despacho: a[10], entrega: a[11], prev: a[12], prevOrig: a[13], ult: a[14], origem: origem.get(a[0]) || null }));
-    } catch (err) { gDados = []; $("g-info").textContent = "Para usar a Visão Gerencial, rode de novo o supabase/schema.sql no Supabase e envie o arquivo da Intelipost."; gCarregando = false; return; }
+      gDados = (data || []).map((a) => {
+        const nf = String(a[1] || ""), m = nf.match(/^(.*?)-\s*(\w+)\s*$/);
+        return { pedido: a[0], nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: a[2], uf: a[3], transp: a[4], status: a[5], micro: a[6], origem: a[7],
+          criado: a[8], despacho: a[9], entrega: a[10], prevOrig: a[11], prev: a[12], ult: a[13], range: a[14], diasAtr: a[15], sprazo: a[16], semExp: a[17] };
+      });
+    } catch (err) { gDados = []; $("g-info").textContent = "Para usar a Visão Gerencial, rode de novo o supabase/schema.sql no Supabase e envie a base de novo."; gCarregando = false; return; }
     gCarregando = false;
     montarGerencial();
   }
   function prepararG() {
     const hoje = hojeISO();
     gDados.forEach((r) => {
-      const st = norm(r.status);
+      const st = norm(r.status), rg = norm(r.range);
       r._prom = r.prevOrig || r.prev || null;
-      r._fechado = st === "ENTREGUE" || st === "CANCELADO";
+      r._fechado = st.startsWith("ENTREGUE") || st.startsWith("CANCELADO");
       r._d = r._prom ? diasEntre(hoje, r._prom) : null;           // >0 faltam dias, <0 atrasado
-      r._atraso = !r._fechado && r._d !== null && r._d < 0 ? -r._d : 0;
+      // atrasado = range "Vencido" da planilha (se a coluna existir), senão pela data prometida
+      const venc = rg ? rg.startsWith("VENCIDO") : r._d !== null && r._d < 0;
+      r._atraso = !r._fechado && venc ? Math.max(1, r.diasAtr || (r._d !== null ? -r._d : 1)) : 0;
       r._parado = r.ult ? diasEntre(r.ult, hoje) : null;
-      if (st === "CANCELADO") r._sit = "cancelado";
-      else if (st === "ENTREGUE") { const pf = norm(r.perf); r._sit = pf.includes("FORA DO PRAZO") ? "ent_atraso" : pf.includes("NO PRAZO") ? "ent_prazo" : (r.entrega && r._prom && r.entrega > r._prom ? "ent_atraso" : "ent_prazo"); }
+      r._semExp = norm(r.semExp) === "SIM" || !r.despacho;
+      if (st.startsWith("CANCELADO")) r._sit = "cancelado";
+      else if (st.startsWith("ENTREGUE")) r._sit = norm(r.sprazo).includes("FORA DO PRAZO") || (r.entrega && r._prom && r.entrega > r._prom) ? "ent_atraso" : "ent_prazo";
       else r._sit = r._atraso ? "ab_atraso" : r._d === 0 || r._d === 1 ? "ab_risco" : "ab_prazo";
     });
   }
@@ -1019,12 +1018,12 @@
     $("g-alerta-titulo").textContent = faltam ? `Para bater a meta de ${metaTxt}, faltam ${fmt(faltam)} atraso${faltam === 1 ? "" : "s"} para resolver.` : `Meta de ${metaTxt} batida.`;
     $("g-alerta-texto").innerHTML = `A performance está em <b>${pct(perf)}</b>: ${fmt(cont.atrasados)} atrasados sobre ${fmt(denom)} ${sobre}. Na meta, o máximo seria <b>${fmt(maxAtr)}</b>.`;
     $("g-perf-nota").innerHTML = `A <b>performance</b> está sendo calculada sobre <b>${sobre}</b> (${fmt(cont.atrasados)} atrasados ÷ ${fmt(denom)}). <button class="link" id="g-modo" type="button">${gTodos ? "Calcular só sobre os pedidos em aberto" : "Calcular sobre todos os pedidos"}</button> daria ${pct(outro ? 1 - cont.atrasados / outro : 1)}.`;
-    $("g-info").textContent = infoFech ? `Intelipost de ${new Date(infoFech.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos · clique nos cards e nas barras dos gráficos para ver a lista e exportar`
-      : 'Envie o arquivo de Transações da Intelipost ("Enviar Intelipost") para montar a Visão Gerencial.';
+    $("g-info").textContent = info ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos · clique nos cards e nas barras dos gráficos para ver a lista e exportar`
+      : 'Envie a base ("Enviar base") para montar a Visão Gerencial.';
 
     // de quem é o atraso
     const atr = L.filter(G_CARD.atrasados);
-    const deFato = atr.filter((r) => r.despacho && r.despacho <= r._prom), sairam = atr.filter((r) => r.despacho && r.despacho > r._prom), semExp = atr.filter((r) => !r.despacho);
+    const semExp = atr.filter((r) => r._semExp), sairam = atr.filter((r) => !r._semExp && r._prom && r.despacho > r._prom), deFato = atr.filter((r) => !r._semExp && !(r._prom && r.despacho > r._prom));
     $("g-atr").innerHTML = atr.length ? `<h2>🚚 Dos ${fmt(atr.length)} atrasados, ${fmt(deFato.length)} são de fato da transportadora.</h2>
       <p class="g-links"><button class="link vermelho" data-atr="fato">${fmt(deFato.length)} para cobrar</button><button class="link laranja" data-atr="sairam">${fmt(sairam.length)} saíram atrasados daqui</button><button class="link" data-atr="semexp">${fmt(semExp.length)} nem foram expedidos</button></p>
       <p class="s">Pedido que saiu daqui depois da data prometida já nasceu atrasado: levar ele para a reunião com a transportadora é perder a razão.</p>` : "<h2>🚚 Nenhum pedido atrasado nesse filtro.</h2>";
@@ -1056,8 +1055,8 @@
     const J = gJanela, dias = []; for (let i = -J; i <= J; i++) dias.push(somaDias(hoje, i));
     const ent = new Map(), venc = new Map(); let atrHoje = 0;
     L.forEach((r) => {
-      if (r.entrega && norm(r.status) === "ENTREGUE") ent.set(r.entrega, (ent.get(r.entrega) || 0) + 1);
-      if (!r._fechado && r._prom) { if (r._prom >= hoje) venc.set(r._prom, (venc.get(r._prom) || 0) + 1); else atrHoje++; }
+      if (r.entrega && norm(r.status).startsWith("ENTREGUE")) ent.set(r.entrega, (ent.get(r.entrega) || 0) + 1);
+      if (r._atraso) atrHoje++; else if (!r._fechado && r._prom && r._prom >= hoje) venc.set(r._prom, (venc.get(r._prom) || 0) + 1);
     });
     const val = dias.map((d) => ({ d, e: d <= hoje ? ent.get(d) || 0 : null, v: d >= hoje ? venc.get(d) || 0 : 0, a: d === hoje ? atrHoje : 0 }));
     const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v + x.a)));
@@ -1081,7 +1080,7 @@
     const ultDia = [...ent.keys()].filter((d) => d < hoje).sort().pop();
     let txt = "";
     if (ultDia) {
-      const doDia = L.filter((r) => r.entrega === ultDia && norm(r.status) === "ENTREGUE"), atrasadas = doDia.filter((r) => r._sit === "ent_atraso").length;
+      const doDia = L.filter((r) => r.entrega === ultDia && norm(r.status).startsWith("ENTREGUE")), atrasadas = doDia.filter((r) => r._sit === "ent_atraso").length;
       const porT = new Map(); doDia.forEach((r) => porT.set(r.transp, (porT.get(r.transp) || 0) + 1));
       const [tMax, nMax] = [...porT.entries()].sort((a, b) => b[1] - a[1])[0] || ["—", 0];
       txt += `<p>No último dia com movimento (<b>${ddmm(ultDia)}</b>) as transportadoras entregaram <button class="link verde" data-prod="ent">${fmt(doDia.length)} pedidos</button>, dos quais <button class="link laranja" data-prod="entatr">${fmt(atrasadas)} estavam atrasados</button>; o maior volume foi da <b>${esc(tMax)}</b>, com ${fmt(nMax)}.</p>`;
@@ -1097,7 +1096,7 @@
     const dim = $("g-faixa-dim").value, [nomeDim, fd] = G_DIM[dim];
     $("g-faixa-dim-nome").textContent = nomeDim;
     const porL = new Map();
-    atr.forEach((r) => { const k = fd(r); const x = porL.get(k) || new Array(FAIXAS.length).fill(0); const i = FAIXAS.findIndex(([, f]) => f(r._atraso)); if (i >= 0) x[i]++; porL.set(k, x); });
+    atr.forEach((r) => { const k = fd(r); const x = porL.get(k) || new Array(FAIXAS.length).fill(0); const i = faixaDe(r); if (i >= 0) x[i]++; porL.set(k, x); });
     const tot = FAIXAS.map((_, i) => [...porL.values()].reduce((s, x) => s + x[i], 0));
     $("g-faixa-cab").innerHTML = `<tr><th>Rótulos de linha</th>${FAIXAS.map(([n], i) => `<th class="num clic" data-fx="${i}">${n}</th>`).join("")}<th class="num">Total</th></tr>`;
     $("g-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, x.reduce((a, b) => a + b, 0)]).sort((a, b) => b[2] - a[2])
@@ -1130,7 +1129,7 @@
     const porT = new Map(), meses = new Set();
     L.forEach((r) => {
       const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { tot: 0, ent: 0, can: 0, ab: 0, m: new Map() };
-      x.tot++; const st = norm(r.status); if (st === "ENTREGUE") x.ent++; else if (st === "CANCELADO") x.can++; else x.ab++;
+      x.tot++; const st = norm(r.status); if (st.startsWith("ENTREGUE")) x.ent++; else if (st.startsWith("CANCELADO")) x.can++; else x.ab++;
       const m = (r.criado || "").slice(0, 7); if (m) { x.m.set(m, (x.m.get(m) || 0) + 1); meses.add(m); }
       porT.set(t, x);
     });
@@ -1173,18 +1172,18 @@
     const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };
     const ids = new Set(gAtr[b.dataset.atr].map((r) => r.pedido)); selecionar(nomes[b.dataset.atr], (L) => L.filter((r) => ids.has(r.pedido))); });
   $("g-prod-resumo").addEventListener("click", (e) => { const b = e.target.closest("[data-prod]"); if (!b) return; const k = b.dataset.prod, hoje = hojeISO();
-    if (k === "hoje") return selecionar("Para entregar hoje (atrasados + vencem hoje)", (L) => L.filter((r) => !r._fechado && r._prom && r._prom <= hoje));
+    if (k === "hoje") return selecionar("Para entregar hoje (atrasados + vencem hoje)", (L) => L.filter((r) => r._atraso || (!r._fechado && r._prom === hoje)));
     const ids = new Set(gProd[k].map((r) => r.pedido)); selecionar(k === "ent" ? `Entregues em ${ddmm(gProd.dia)}` : `Entregues atrasados em ${ddmm(gProd.dia)}`, (L) => L.filter((r) => ids.has(r.pedido))); });
   $("g-prod").addEventListener("click", (e) => { const b = e.target.closest("[data-dia]"); if (!b) return; const d = b.dataset.dia, t = b.dataset.tipo;
-    if (t === "entregue") selecionar(`Entregues em ${ddmm(d)}`, (L) => L.filter((r) => r.entrega === d && norm(r.status) === "ENTREGUE"));
+    if (t === "entregue") selecionar(`Entregues em ${ddmm(d)}`, (L) => L.filter((r) => r.entrega === d && norm(r.status).startsWith("ENTREGUE")));
     else if (t === "atraso") selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados));
-    else selecionar(`Vencem em ${ddmm(d)}`, (L) => L.filter((r) => !r._fechado && r._prom === d)); });
+    else selecionar(`Vencem em ${ddmm(d)}`, (L) => L.filter((r) => !r._fechado && !r._atraso && r._prom === d)); });
   $("g-janela").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (!b) return; gJanela = +b.dataset.j;
     $("g-janela").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));
   document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx]"); if (!c) return;
     const fd = G_DIM[$("g-faixa-dim").value][1], lin = c.dataset.lin, fx = c.dataset.fx !== undefined ? +c.dataset.fx : null;
-    selecionar(`Atrasados${lin ? " · " + lin : ""}${fx !== null ? " · " + FAIXAS[fx][0] : ""}`, (L) => L.filter((r) => r._atraso && (!lin || fd(r) === lin) && (fx === null || FAIXAS[fx][1](r._atraso)))); });
+    selecionar(`Atrasados${lin ? " · " + lin : ""}${fx !== null ? " · " + FAIXAS[fx][0] : ""}`, (L) => L.filter((r) => r._atraso && (!lin || fd(r) === lin) && (fx === null || faixaDe(r) === fx))); });
   $("g-faixa-todos").addEventListener("click", () => { selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados)); baixarGLista(); });
   $("g-situacao").addEventListener("click", (e) => { const b = e.target.closest("[data-sit]"); if (!b) return; const k = b.dataset.sit;
     selecionar(SIT.find((x) => x[0] === k)[1], (L) => L.filter((r) => r._sit === k)); });
