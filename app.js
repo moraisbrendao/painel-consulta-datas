@@ -173,7 +173,7 @@
     montarOpcoes();
     redesenhar();
     desenharOcorrencias();
-    if (paginaAtual === "gerencial") montarGerencial();
+    if (paginaAtual === "gerencial" || paginaAtual === "entregas") montarGerencial();
     if (paginaAtual === "sac") desenharSacLogistica();
     desenharResponsaveis();
   }
@@ -660,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=40");
+        const w = new Worker("leitor-intelipost.js?v=41");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -923,7 +923,7 @@
   const G_COLS_NOVAS = ",data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao";
   async function carregarGerencial(forcar) {
     if (gCarregando || (gDados && gDados.length && !forcar)) return;
-    gCarregando = true; $("g-info").textContent = "Carregando os pedidos da base…";
+    gCarregando = true; $("g-info").textContent = $("e-info").textContent = "Carregando os pedidos da base…";
     try {
       let lista, semColunas = false;
       try { lista = await buscarTudo("base_pedidos", "pedido", G_COLS + G_COLS_NOVAS); }
@@ -938,7 +938,7 @@
       });
     } catch (err) {
       gDados = null; gCarregando = false;
-      $("g-info").textContent = "Não consegui carregar a base: " + (err.message || err) + ". Atualize a página para tentar de novo.";
+      $("g-info").textContent = $("e-info").textContent = "Não consegui carregar a base: " + (err.message || err) + ". Atualize a página para tentar de novo.";
       return;
     }
     gCarregando = false;
@@ -1009,7 +1009,7 @@
     e.target.closest(".multi").querySelectorAll(".multi-op").forEach((op) => (op.hidden = q && !norm(op.textContent).includes(q)));
   });
   document.addEventListener("click", (e) => { if (!e.target.closest("#g-filtros .multi")) document.querySelectorAll("#g-filtros .multi-painel").forEach((x) => (x.hidden = true)); });
-  function filtrosGMudaram() { gSelecao = null; gPagina = 1; desenharGerencial(); }
+  function filtrosGMudaram() { gSelecao = null; gPagina = 1; eSelecao = null; ePagina = 1; desenharGAtual(); }
 
   function gFiltrados() {
     const nfs = $("g-nf").value.split(/[\s,;]+/).map((x) => chaveNF(x)).filter(Boolean);
@@ -1024,10 +1024,12 @@
     });
   }
   function montarGerencial() {
-    if (paginaAtual !== "gerencial") return;
+    if (paginaAtual !== "gerencial" && paginaAtual !== "entregas") return;
     if (!gDados) { carregarGerencial(); return; }
-    prepararG(); montarFiltrosG(); desenharGerencial();
+    prepararG(); montarFiltrosG(); desenharGAtual();
   }
+  // Visão Gerencial e Entregas e SLA usam os mesmos dados e os mesmos filtros
+  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else desenharGerencial(); }
   function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
 
   function desenharGerencial() {
@@ -1234,7 +1236,7 @@
   });
   ["g-de", "g-ate"].forEach((id) => $(id).addEventListener("change", filtrosGMudaram));
   let esperaG; $("g-nf").addEventListener("input", () => { clearTimeout(esperaG); esperaG = setTimeout(filtrosGMudaram, 300); });
-  $("g-meta").addEventListener("change", () => { try { localStorage.setItem("painel.meta", $("g-meta").value); } catch (_) {} desenharGerencial(); });
+  $("g-meta").addEventListener("change", () => { try { localStorage.setItem("painel.meta", $("g-meta").value); } catch (_) {} desenharGAtual(); });
   $("g-perf-nota").addEventListener("click", (e) => { if (e.target.id === "g-modo") { gTodos = !gTodos; desenharGerencial(); } });
   $("g-limpar").addEventListener("click", () => { Object.values(gSel).forEach((s) => s.clear()); ["g-de", "g-ate", "g-nf"].forEach((id) => ($(id).value = "")); montarFiltrosG(); filtrosGMudaram(); });
   $("g-paginacao").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; gPagina += Number(b.dataset.p); desenharGLista(false); });
@@ -1247,19 +1249,90 @@
   }
   $("g-exportar").addEventListener("click", baixarGLista);
 
+  // ---------------- entregas e SLA ----------------
+  // Fonte: a mesma base da Visão Gerencial, só os pedidos com status Entregue.
+  // No prazo / com atraso: "Status Prazo Intelipost" (Fora do Prazo = atraso); senão data de entrega > data prometida.
+  let eCard = "sla", eSelecao = null, eLista = [], ePagina = 1, eEntregues = [];
+  const E_NOME = { sla: "Todas as entregas", todas: "Todas as entregas", prazo: "Entregues no prazo", atraso: "Entregues com atraso" };
+  const E_CARD = { sla: () => true, todas: () => true, prazo: (r) => r._sit === "ent_prazo", atraso: (r) => r._sit === "ent_atraso" };
+  const pctBR = (x) => (x * 100).toFixed(1).replace(".", ",") + "%";
+  function desenharEntregas() {
+    if (!gDados) return;
+    const E = gFiltrados().filter((r) => r._sit === "ent_prazo" || r._sit === "ent_atraso");
+    eEntregues = E;
+    const prazo = E.filter(E_CARD.prazo).length, atraso = E.length - prazo, sla = E.length ? prazo / E.length : 0;
+    const meta = Math.min(100, Math.max(50, parseFloat($("g-meta").value) || 97)) / 100, metaTxt = pctBR(meta).replace(",0%", "%");
+    const num = { sla: E.length ? pctBR(sla) : "—", todas: fmt(E.length), prazo: fmt(prazo), atraso: fmt(atraso) };
+    document.querySelectorAll("#e-cards .kpi[data-e]").forEach((b) => { b.querySelector(".kpi-num").textContent = num[b.dataset.e]; b.classList.toggle("ativa", !eSelecao && b.dataset.e === eCard); });
+    $("e-sla-sub").textContent = `${fmt(prazo)} no prazo de ${fmt(E.length)}`;
+    const faltam = Math.max(0, Math.ceil(E.length * meta - 1e-9) - prazo);
+    $("e-alerta").hidden = !E.length;
+    $("e-alerta-titulo").textContent = faltam ? `Faltaram ${fmt(faltam)} entregas no prazo para bater a meta de ${metaTxt}.` : `Meta de ${metaTxt} batida.`;
+    $("e-alerta-texto").innerHTML = `O SLA está em <b>${pctBR(sla)}</b> — ${fmt(atraso)} entrega${atraso === 1 ? "" : "s"} saíra${atraso === 1 ? "" : "m"} com atraso.`;
+    const totalBase = gDados.length, entBase = gDados.filter((r) => norm(r.status).startsWith("ENTREGUE")).length;
+    $("e-info").textContent = !info ? 'Envie a base ("Enviar base") para montar esta página.'
+      : !entBase ? `A base enviada (${fmt(totalBase)} pedidos) não tem pedidos com status Entregue. Para ver o SLA, envie no botão "Enviar base" uma exportação que inclua os entregues.`
+      : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(E.length)} entregues com esses filtros · meta de ${metaTxt} (a mesma da Visão Gerencial)`;
+    // por transportadora
+    const m = new Map();
+    E.forEach((r) => { const t = r.transp || "(sem transportadora)"; const x = m.get(t) || { t, ent: 0, ok: 0 }; x.ent++; if (r._sit === "ent_prazo") x.ok++; m.set(t, x); });
+    const linhas = [...m.values()].map((x) => ({ ...x, atr: x.ent - x.ok, sla: x.ok / x.ent })).sort((a, b) => b.atr - a.atr || b.ent - a.ent);
+    const cor = (v) => (v >= meta ? "verde" : v >= 0.85 ? "laranja" : "vermelho");
+    $("e-transp").innerHTML = linhas.map((x) => `<tr class="clic" data-et="${esc(x.t)}"><td>${esc(x.t)}</td><td class="num">${fmt(x.ent)}</td><td class="num txt-verde">${fmt(x.ok)}</td><td class="num txt-vermelho">${fmt(x.atr)}</td><td class="num txt-${cor(x.sla)}">${pctBR(x.sla)}</td></tr>`).join("");
+    $("e-vazio-transp").hidden = linhas.length > 0;
+    eLinhasTransp = linhas;
+    desenharELista(false);
+  }
+  let eLinhasTransp = [];
+  function desenharELista(rolar) {
+    eLista = eSelecao ? eSelecao.filtro(eEntregues) : eEntregues.filter(E_CARD[eCard]);
+    eLista.sort((a, b) => String(b.entrega || "").localeCompare(String(a.entrega || "")));
+    document.querySelectorAll("#e-cards .kpi[data-e]").forEach((b) => b.classList.toggle("ativa", !eSelecao && b.dataset.e === eCard));
+    $("e-lista-titulo").textContent = `${eSelecao ? eSelecao.titulo : E_NOME[eCard]} (${fmt(eLista.length)})`;
+    const total = eLista.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+    ePagina = Math.min(Math.max(1, ePagina), paginas);
+    $("e-linhas").innerHTML = eLista.slice((ePagina - 1) * POR_PAGINA, ePagina * POR_PAGINA).map((r) =>
+      `<tr><td><div class="p">${esc(r.pedido)}</div></td><td>${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""}</td><td>${esc(r.canal)}</td><td>${esc(r.transp)}</td><td>${esc(r.uf)}</td>
+        <td>${br(r.criado)}</td><td>${br(r._prom) || "—"}</td><td>${br(r.entrega) || "—"}</td>
+        <td><span class="chip ${r._sit === "ent_atraso" ? "vermelho" : "verde"}">${r._sit === "ent_atraso" ? "com atraso" : "no prazo"}</span></td></tr>`).join("");
+    $("e-vazio").hidden = total > 0;
+    $("e-paginacao").innerHTML = total > POR_PAGINA
+      ? `<button class="btn" data-p="-1" ${ePagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${ePagina} de ${paginas}</span>
+         <button class="btn" data-p="1" ${ePagina === paginas ? "disabled" : ""}>Próxima ›</button>` : "";
+    if (rolar) $("e-lista-cartao").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+  $("e-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-e]"); if (!b) return; eCard = b.dataset.e; eSelecao = null; ePagina = 1; desenharELista(true); });
+  $("e-transp").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-et]"); if (!tr) return; const t = tr.dataset.et;
+    eSelecao = { titulo: `Entregues com atraso · ${t}`, filtro: (L) => L.filter((r) => r._sit === "ent_atraso" && (r.transp || "(sem transportadora)") === t) }; ePagina = 1; desenharELista(true); });
+  $("e-paginacao").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; ePagina += Number(b.dataset.p); desenharELista(false); });
+  $("e-exportar").addEventListener("click", () => {
+    if (!eLista.length) return toast("Nada para exportar.", true);
+    const linhas = [["Pedido", "NF", "Série", "Canal", "Transportadora", "UF", "Origem", "Micro status", "Criado", "Despacho", "Prometido", "Entrega", "Situação"]]
+      .concat(eLista.map((r) => [r.pedido, r.nf, r.serie, r.canal, r.transp, r.uf, r.origem, r.micro, br(r.criado), br(r.despacho), br(r._prom), br(r.entrega), r._sit === "ent_atraso" ? "Com atraso" : "No prazo"]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Entregas");
+    XLSX.writeFile(wb, `entregas_sla_${hojeISO()}.xlsx`);
+  });
+  $("e-transp-exportar").addEventListener("click", () => {
+    if (!eLinhasTransp.length) return toast("Nada para exportar.", true);
+    const linhas = [["Transportadora", "Entregues", "No prazo", "Com atraso", "SLA"]].concat(eLinhasTransp.map((x) => [x.t, x.ent, x.ok, x.atr, Math.round(x.sla * 1000) / 10 + "%"]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "SLA por transportadora");
+    XLSX.writeFile(wb, `sla_por_transportadora_${hojeISO()}.xlsx`);
+  });
+
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
+    if (pag === "gerencial" || pag === "entregas") { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
     window.scrollTo(0, 0);
   }
   document.querySelector(".menu-lateral").addEventListener("click", (e) => {
     const b = e.target.closest(".menu-item"); if (!b) return;
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
-    if (b.dataset.pagina === "gerencial") montarGerencial();
+    if (b.dataset.pagina === "gerencial" || b.dataset.pagina === "entregas") montarGerencial();
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------

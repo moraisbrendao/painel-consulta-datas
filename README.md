@@ -104,3 +104,11 @@ Primeira página do menu. Usa a **base** (botão **Enviar base**, aba Export), c
 - Data prometida = Data Original Estimada da Entrega (senão a atual). Entregue no prazo/com atraso pelo Status Prazo Intelipost.
 - Filtros com várias opções, meta de performance editável, cards clicáveis, "de quem é o atraso", produtividade por dia, atrasos por transportadora e faixa, distribuição por situação, pedidos por canal, performance por transportadora e pedidos por transportadora (por situação ou por mês).
 - Precisa ter rodado o `schema.sql` atualizado (seção 15) e enviado a base de novo.
+
+## 14. Entregas e SLA
+
+Página no menu logo abaixo da Visão Gerencial. Usa a mesma base ("Enviar base") e os mesmos filtros da Visão Gerencial, mas só os pedidos com status **Entregue**.
+- **No prazo / com atraso:** pela coluna "Status Prazo Intelipost" (Fora do Prazo = atraso); se ela estiver vazia, data de entrega depois da data prometida = atraso.
+- Cards: SLA de entrega, Entregues, No prazo, Com atraso. Aviso de quantas entregas no prazo faltaram para a meta (a mesma meta da Visão Gerencial).
+- SLA por transportadora (clique na linha para ver as entregas com atraso dela) e lista com Baixar Excel.
+- Se a base enviada só tiver pedidos em aberto, a página avisa que não há entregues.

@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=40">
+  <link rel="stylesheet" href="styles.css?v=41">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -28,6 +28,7 @@
     <nav class="menu-lateral" aria-label="Menu">
       <div class="marca"><b>E-loggia 2.0</b><span>Multimóveis</span></div>
       <button class="menu-item so-log" data-pagina="gerencial"><span class="menu-icone">▦</span>Visão Gerencial</button>
+      <button class="menu-item so-log" data-pagina="entregas"><span class="menu-icone">✓</span>Entregas e SLA</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
@@ -174,6 +175,64 @@
           <p id="g-vazio" class="vazio" hidden>Nenhum pedido.</p>
         </div>
         <nav id="g-paginacao" class="paginacao"></nav>
+      </section>
+    </main>
+
+    <main class="conteudo" id="pagina-entregas" hidden>
+      <!-- o cartão de filtros da Visão Gerencial é colocado aqui quando esta página abre (mesmos filtros) -->
+      <div class="titulo-pagina">
+        <div>
+          <h1>Entregas e SLA</h1>
+          <p class="sub">Só os pedidos já entregues. É o histórico que serve para sentar com a transportadora — o que está em aberto fica na Visão Gerencial.</p>
+          <p id="e-info" class="info-base">Carregando…</p>
+        </div>
+      </div>
+
+      <section class="kpis kpis-4" id="e-cards">
+        <button class="kpi ativa" data-e="sla"><span class="kpi-rot">SLA de entrega</span><b class="kpi-num"></b><small id="e-sla-sub"></small><i>↗</i></button>
+        <button class="kpi" data-e="todas"><span class="kpi-rot">Entregues</span><b class="kpi-num"></b><small>&nbsp;</small><i>↗</i></button>
+        <button class="kpi verde" data-e="prazo"><span class="kpi-rot">Entregues no prazo</span><b class="kpi-num"></b><small>&nbsp;</small><i>↗</i></button>
+        <button class="kpi vermelho" data-e="atraso"><span class="kpi-rot">Entregues com atraso</span><b class="kpi-num"></b><small>oportunidade de melhoria</small><i>↗</i></button>
+      </section>
+
+      <section id="e-alerta" class="alerta" hidden>
+        <span class="alerta-ic">📦</span>
+        <div><b id="e-alerta-titulo"></b><p id="e-alerta-texto"></p></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>SLA por transportadora</h2>
+            <p class="sub">Clique numa linha para ver as entregas com atraso dela.</p>
+          </div>
+          <button id="e-transp-exportar" class="btn contorno">Baixar Excel</button>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-sla">
+            <thead><tr><th>Transportadora</th><th class="num">Entregues</th><th class="num">No prazo</th><th class="num">Com atraso</th><th class="num">SLA</th></tr></thead>
+            <tbody id="e-transp"></tbody>
+          </table>
+          <p id="e-vazio-transp" class="vazio" hidden>Nenhuma entrega com esses filtros.</p>
+        </div>
+      </section>
+
+      <section class="cartao" id="e-lista-cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2 id="e-lista-titulo">Entregas</h2>
+            <p class="sub">Clique nos cards e nas transportadoras para mudar esta lista.</p>
+          </div>
+          <button id="e-exportar" class="btn contorno">Baixar Excel</button>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>Pedido</th><th>NF</th><th>Canal</th><th>Transportadora</th><th>UF</th><th>Criado</th><th>Prometido</th><th>Entrega</th><th>Situação</th></tr></thead>
+            <tbody id="e-linhas"></tbody>
+          </table>
+          <p id="e-vazio" class="vazio" hidden>Nenhuma entrega.</p>
+        </div>
+        <nav id="e-paginacao" class="paginacao"></nav>
       </section>
     </main>
 
@@ -468,7 +527,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=40"></script>
-  <script src="app.js?v=40"></script>
+  <script src="config.js?v=41"></script>
+  <script src="app.js?v=41"></script>
 </body>
 </html>

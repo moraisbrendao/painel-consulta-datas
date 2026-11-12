@@ -395,3 +395,15 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tabela-perf tr.clicavel:hover td, .tabela-pt tr.clicavel:hover td { background: #fffbea; }
 @media (max-width: 1200px) { .filtros-cartao.filtros-ger { grid-template-columns: repeat(4, minmax(0,1fr)); } .filtros-ger .filtros-rot, .filtros-ger .g-dica { grid-column: 1 / -1; justify-self: start; } .filtros-ger .g-nf { grid-column: auto; } }
 @media (max-width: 520px) { .filtros-cartao.filtros-ger { grid-template-columns: 1fr 1fr; } #g-prod svg { height: 200px; } }
+
+/* Entregas e SLA */
+.kpis-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+@media (max-width: 900px) { .kpis-4 { grid-template-columns: 1fr 1fr; } }
+.kpi.ativa.verde .kpi-num, .kpi.ativa.vermelho .kpi-num { color: var(--marinho); }
+.tabela-sla { width: 100%; border-collapse: collapse; font-size: 14px; }
+.tabela-sla th { text-align: left; font-weight: 500; color: var(--suave, #64748b); border-bottom: 1px solid #334155; padding: 8px 10px; }
+.tabela-sla td { padding: 8px 10px; border-bottom: 1px solid #eef2f7; }
+.tabela-sla .num { text-align: right; font-variant-numeric: tabular-nums; }
+.tabela-sla tr.clic { cursor: pointer; }
+.tabela-sla tr.clic:hover td { background: #fffbea; }
+.txt-verde { color: #16a34a; } .txt-vermelho { color: #dc2626; } .txt-laranja { color: #d97706; }
