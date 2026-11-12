@@ -111,6 +111,7 @@ async function abrirPedido(pedido, olhar) {
   // pedido já entregue/cancelado não deixa mudar a previsão: avisa em vez de tentar
   await tela.getByText(/Pedido:/).first().waitFor({ timeout: 60000 }).catch(() => {});
   const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
+  if (olhar) log("Cabeçalho do pedido:", await tela.evaluate(() => (document.body.innerText.match(/Pedido:[\s\S]{0,60}/) || [""])[0].replace(/\s+/g, " ")));
   if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
   // "Entrega prev.:" é um link (ng-click edit_estimated_delivery_date) que abre a edição da previsão do cliente
   const link = tela.locator("a[ng-click^='edit_estimated_delivery_date']").first();
@@ -134,24 +135,10 @@ async function abrirPedido(pedido, olhar) {
       .slice(0, 20).map((e) => `${e.tagName.toLowerCase()} | id=${e.id} | ng-model=${e.getAttribute("ng-model") || ""} | class=${String(e.className).slice(0, 50)} | ${e.getBoundingClientRect().width > 0 ? "visível" : "escondido"}`));
     ocultos.forEach((x) => log("  formated/modal:", x));
   }
-  if (false) {
-    log("Cliquei na previsão de entrega (nada é salvo no diagnóstico).");
-    const m = await tela.evaluate(() => {
-      const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
-      const caixa = [...document.querySelectorAll(".modal, [role=dialog], .modal-dialog, .popover")].find(vis) || document.body;
-      return {
-        noModal: caixa !== document.body,
-        campos: [...caixa.querySelectorAll("input, select, textarea")].filter(vis).map((e) => `${e.tagName.toLowerCase()} | ${e.type} | id=${e.id} | name=${e.name} | ng-model=${e.getAttribute("ng-model") || ""}`).slice(0, 20),
-        botoes: [...caixa.querySelectorAll("button, a.btn, input[type=submit], input[type=button]")].filter(vis).map((e) => `${(e.innerText || e.value || "").trim().slice(0, 30)} | ng-click=${(e.getAttribute("ng-click") || "").slice(0, 50)}`).slice(0, 15),
-        textos: [...caixa.querySelectorAll("h1,h2,h3,h4,h5,label,.modal-title")].filter(vis).map((e) => e.innerText.trim()).filter((t) => t && t.length < 60).slice(0, 15),
-      };
-    });
-    log(`== Edição da previsão (${m.noModal ? "janela" : "na própria tela"})`);
-    m.textos.forEach((t) => log("  texto:", t)); m.campos.forEach((c) => log("  campo:", c)); m.botoes.forEach((b) => log("  botão:", b));
-  }
-  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
-  try { await campo.waitFor({ state: "attached", timeout: 20000 }); }
-  catch { if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
+  // ao clicar, aparece o campo de data e hora (input#estimated_delivery_date, datetime-local) e o botão "Atualizar"
+  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "input#estimated_delivery_date").first();
+  try { await campo.waitFor({ timeout: 20000 }); }
+  catch { if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não apareceu o campo da previsão."); }
   return { tela, campo, aba };
 }
 
@@ -178,15 +165,18 @@ async function camposDeData(tela) {
 async function alterar(pedido, iso) {
   const { tela, campo, aba } = await abrirPedido(pedido, false);
   try {
-    await campo.click();   // o input datetime-local de verdade só aparece depois de clicar na caixa de cima
-    const dt = tela.locator("input[type=datetime-local]").first();
-    await dt.waitFor({ timeout: 15000 });
-    await dt.fill(`${iso}T23:59`);
+    await campo.fill(`${iso}T23:59`);
+    const valor = await campo.inputValue();
+    if (!valor.startsWith(iso)) throw new Error("Não consegui preencher a data na Intelipost.");
     if (MODO !== "real") return "teste";
-    const resp = tela.waitForResponse((r) => r.request().method() === "PUT" && /intelipost/i.test(r.url()), { timeout: 45000 });
-    await tela.locator("button:visible, a:visible, [role=button]:visible").filter({ hasText: /^\s*salvar\s*$/i }).first().click();
+    // o "Atualizar" do mesmo formulário do campo (há outros botões Atualizar na tela)
+    let botao = campo.locator("xpath=ancestor::form[1]//button[@type='submit']").first();
+    if (!(await botao.count())) botao = tela.locator("button.btn-primary:visible").filter({ hasText: /^\s*atualizar\s*$/i }).last();
+    const resp = tela.waitForResponse((r) => ["PUT", "POST", "PATCH"].includes(r.request().method()) && /intelipost/i.test(r.url()) && !/log|track|analytics|hotjar|segment/i.test(r.url()), { timeout: 45000 });
+    await botao.click();
     const r = await resp;   // confirma pela resposta do servidor, não pela tela
     if (r.status() >= 400) throw new Error(`A Intelipost recusou a alteração (código ${r.status()}).`);
+    log(`Resposta da Intelipost: ${r.request().method()} ${r.status()}`);
     return "ok";
   } finally { if (aba) await aba.close().catch(() => {}); }
 }
@@ -207,13 +197,7 @@ try {
     for (const item of fila) {
       try {
         const { tela, campo, aba } = await abrirPedido(item.pedido, true);
-        log("Achei o campo da previsão.");
-        await campo.click();
-        const dt = tela.locator("input[type=datetime-local]").first();
-        const apareceu = await dt.waitFor({ timeout: 15000 }).then(() => true).catch(() => false);
-        log(apareceu ? "Depois de clicar, apareceu o campo de data e hora (datetime-local)." : "Depois de clicar, NÃO apareceu o campo datetime-local.");
-        const salvar = await tela.locator("button:visible, a:visible, [role=button]:visible").filter({ hasText: /^\s*salvar\s*$/i }).count();
-        log(`Botões Salvar visíveis: ${salvar}. Saio sem salvar.`);
+        log("Achei o campo da previsão. Saio sem salvar.");
         if (aba) await aba.close();
         break;
       } catch (e) { log("Pedido da fila:", e.message.split("\n")[0]); }
