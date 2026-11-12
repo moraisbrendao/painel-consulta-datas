@@ -96,20 +96,33 @@
       carregarSac();
     } else {
       irPara("gerencial");
+      carregarGerencial();   // a Visão Gerencial não depende do resto: começa junto
       carregar();
       ligarTempoReal();
     }
   }
 
   // ---------------- carregar ----------------
+  // busca a tabela inteira em páginas de 1.000, várias ao mesmo tempo (bem mais rápido que uma por vez)
   async function buscarTudo(tabela, ordem) {
-    let lista = [];
-    for (let de = 0; ; de += 1000) {
-      const { data, error } = await sb.from(tabela).select("*").order(ordem).range(de, de + 999);
-      if (error) throw error;
-      lista = lista.concat(data);
-      if (data.length < 1000) return lista;
+    const PAG = 1000, JUNTAS = 8;
+    const prim = await sb.from(tabela).select("*", { count: "exact" }).order(ordem).range(0, PAG - 1);
+    if (prim.error) throw prim.error;
+    let lista = prim.data;
+    if (lista.length < PAG) return lista;
+    if (prim.count == null) {   // sem contagem: segue página por página
+      for (let de = PAG; ; de += PAG) {
+        const { data, error } = await sb.from(tabela).select("*").order(ordem).range(de, de + PAG - 1);
+        if (error) throw error; lista = lista.concat(data); if (data.length < PAG) return lista;
+      }
     }
+    const total = prim.count;
+    const inicios = []; for (let de = PAG; de < total; de += PAG) inicios.push(de);
+    for (let i = 0; i < inicios.length; i += JUNTAS) {
+      const partes = await Promise.all(inicios.slice(i, i + JUNTAS).map((de) => sb.from(tabela).select("*").order(ordem).range(de, de + PAG - 1)));
+      for (const r of partes) { if (r.error) throw r.error; lista = lista.concat(r.data); }
+    }
+    return lista;
   }
 
   async function carregar() {
@@ -127,10 +140,7 @@
       info = i.data && i.data[0];
       infoFech = fi.data && fi.data[0];
       ocultos = Math.max(0, (tot.count || 0) - base.length);
-      await carregarOcorrencias();
-      await carregarResponsaveis();
-      await carregarFila();
-      await carregarTickets();
+      await Promise.all([carregarOcorrencias(), carregarResponsaveis(), carregarFila(), carregarTickets()]);
       if (perfil !== "sac") carregarReposicoes();
     } catch (err) {
       $("info-base").textContent = "";
@@ -641,7 +651,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=37");
+        const w = new Worker("leitor-intelipost.js?v=38");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }

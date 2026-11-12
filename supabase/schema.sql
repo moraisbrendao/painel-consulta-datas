@@ -151,7 +151,8 @@ grant select on public.intelipost_fechados, public.fechados_info to authenticate
 -- pedidos da base que ainda estão em aberto (o painel lê daqui)
 create or replace view public.base_aberta with (security_invoker = true) as
   select b.* from public.base_pedidos b
-  where not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido);
+  where coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+    and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido);
 revoke all on public.base_aberta from anon;
 grant select on public.base_aberta to authenticated;
 
