@@ -198,9 +198,10 @@ async function simularPrazo(cep, metodo, olhar) {
       .findIndex((e) => { let a = e.parentElement; while (a && (a.innerText || "").trim().length < 25) a = a.parentElement; return a && /ignorar regras/i.test(a.innerText); })); }
     if (i < 0) throw new Error("não achei a chave");
     const caixa = p.locator("input[type=checkbox]:visible").nth(i);
-    if (!(await caixa.isChecked())) await caixa.click({ force: true });
+    const querSim = process.env.IGNORAR_REGRAS !== "nao";
+    if ((await caixa.isChecked()) !== querSim) await caixa.click({ force: true });
     await p.waitForTimeout(800);
-    if (!(await caixa.isChecked())) throw new Error("continua Não");
+    if ((await caixa.isChecked()) !== querSim) throw new Error("a chave não mudou");
   });
   const destino = p.locator("input[placeholder*='cep de destino' i]:visible").first();
   if (!cep) cep = await p.locator("xpath=//*[starts-with(normalize-space(text()),'Cep Origem')]/following::input[1] >> visible=true").first().inputValue();   // teste: usa o CEP da própria loja
@@ -257,7 +258,8 @@ async function simularPrazo(cep, metodo, olhar) {
     await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
     const rr = await resp;
     const corpo = await rr.json();
-    if (olhar) log("  pedido da simulação:", (rr.request().postData() || "").split(String(cep)).join("<cep>").replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
+    if (olhar) log("  tabelas (contract_ids):", ((rr.request().postData() || "").match(/"contract_ids":\[[^\]]*\]/) || [""])[0], "· ignorar regras:", ((rr.request().postData() || "").match(/"skip_quote_rules":(\w+)/) || [])[1]);
+    if (false) log("  pedido da simulação:", (rr.request().postData() || "").split(String(cep)).join("<cep>").replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
     const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
     const ms = (q && q.delivery_methods) || [];
     if (!ms.length) {
@@ -332,11 +334,11 @@ async function diagCep() {   // por que a simulação volta vazia: refaz a da ú
   if (aba) await aba.close();
   const cep = info.bruto.replace(/\D/g, "");
   log(`CEP: texto com ${info.bruto.length} letras, ${cep.length} dígitos, começa com ${cep.slice(0, 1)} · UF ${info.uf} · método ${t.robo_metodo}`);
-  for (const peso of ["1", "5", "25"]) {
-    process.env.PESO_SIMULACAO = peso;
-    try { log(`== ${t.robo_metodo} com ${peso} kg: prazo ${await simularPrazo(cep, t.robo_metodo, true)}`); } catch (e) { log(`== ${t.robo_metodo} com ${peso} kg:`, e.message.split("\n")[0]); }
+  for (const [peso, ign] of [["25", "sim"], ["25", "nao"], ["1", "nao"]]) {
+    process.env.PESO_SIMULACAO = peso; process.env.IGNORAR_REGRAS = ign;
+    try { log(`== ${t.robo_metodo} ${peso} kg, ignorar regras ${ign}: prazo ${await simularPrazo(cep, t.robo_metodo, true)}`); } catch (e) { log(`== ${t.robo_metodo} ${peso} kg, ignorar regras ${ign}:`, e.message.split("\n")[0]); }
   }
-  delete process.env.PESO_SIMULACAO;
+  delete process.env.PESO_SIMULACAO; delete process.env.IGNORAR_REGRAS;
 }
 async function diagTroca() {
   if (!process.env.MAPA) {   // teste completo da troca SEM salvar, com nota/chave fictícias, num pedido já alterado
