@@ -108,14 +108,11 @@ async function abrirPedido(pedido, olhar) {
   const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), clicar.click()]);
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
-  // a previsão só vira campo depois de clicar em "Editar" (o "Salvar" aparece junto)
-  const editar = tela.locator("button:visible, a:visible, [role=button]:visible, input[type=button]:visible").filter({ hasText: /^\s*editar\s*$/i }).first();
-  try { await editar.waitFor({ timeout: 60000 }); await editar.click(); await tela.waitForTimeout(1500); }
-  catch { if (olhar) await camposDeData(tela); if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o botão Editar."); }
-  if (olhar) { log("Cliquei em Editar (nada é salvo no diagnóstico)."); await camposDeData(tela); }
-  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated']:visible, [name$='_formated']:visible").first();
-  try { await campo.waitFor({ timeout: 20000 }); }
-  catch { if (olhar) { await tela.waitForTimeout(5000); await camposDeData(tela); } if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
+  await tela.waitForTimeout(3000);
+  if (olhar) await camposDeData(tela);
+  const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
+  try { await campo.waitFor({ state: "attached", timeout: 20000 }); }
+  catch { if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
   return { tela, campo, aba };
 }
 
@@ -125,12 +122,17 @@ async function camposDeData(tela) {
     const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
     const campos = [...document.querySelectorAll("input")].filter((e) => /date|data|previs|estimat|formated|delivery|entrega/i.test(`${e.id} ${e.name} ${e.type} ${e.className} ${e.getAttribute("ng-model") || ""}`))
       .slice(0, 40).map((e) => `${e.type} | id=${e.id} | name=${e.name} | ng-model=${e.getAttribute("ng-model") || ""} | ${vis(e) ? "visível" : "escondido"}`);
+    const outros = [...document.querySelectorAll("[id*=formated i], [name*=formated i], [ng-model*=estimated i], [ng-model*=delivery i], [ng-model*=previs i], [ng-click*=estimated i], [ng-click*=delivery i], [ng-click*=edit i]")]
+      .slice(0, 40).map((e) => `${e.tagName.toLowerCase()} | id=${e.id} | ng-model=${e.getAttribute("ng-model") || ""} | ng-click=${(e.getAttribute("ng-click") || "").slice(0, 60)} | class=${String(e.className).slice(0, 40)} | ${vis(e) ? "visível" : "escondido"}`);
+    const perto = [...document.querySelectorAll("*")].filter((e) => e.children.length === 0 && /^\s*Entrega prev\.:?\s*$/i.test(e.textContent || "")).slice(0, 2)
+      .map((e) => { const pai = e.parentElement; return [...pai.querySelectorAll("*")].map((x) => `${x.tagName.toLowerCase()}${x.id ? "#" + x.id : ""}${x.getAttribute("ng-click") ? " ng-click=" + x.getAttribute("ng-click").slice(0, 50) : ""}${x.getAttribute("ng-model") ? " ng-model=" + x.getAttribute("ng-model") : ""}`).join(" > "); });
     const rotulos = [...document.querySelectorAll("label, th, dt, .control-label, strong, b, h3, h4, h5")].map((e) => e.innerText.trim()).filter((t) => t && t.length < 50 && /previs|entrega|data/i.test(t)).slice(0, 30);
     const botoes = [...document.querySelectorAll("button, a.btn, [role=button], input[type=submit], input[type=button]")].map((e) => `${(e.innerText || e.value || e.title || "").trim().slice(0, 30)}${vis(e) ? "" : " (escondido)"}`).filter((t) => t && !/^\(escondido\)$/.test(t));
-    return { campos, rotulos: [...new Set(rotulos)], botoes: [...new Set(botoes)].slice(0, 50) };
+    return { campos, outros, perto, rotulos: [...new Set(rotulos)], botoes: [...new Set(botoes)].slice(0, 50) };
   });
   log("== Tela do pedido · campos de data:"); r.campos.forEach((c) => log("  campo:", c));
-  log("  rótulos com data/previsão:", r.rotulos.join(" / "));
+  r.outros.forEach((c) => log("  elemento:", c));
+  r.perto.forEach((c) => log("  perto de 'Entrega prev.':", c));
   log("  botões:", r.botoes.join(" / "));
 }
 
