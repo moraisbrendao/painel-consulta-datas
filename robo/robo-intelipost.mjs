@@ -199,8 +199,8 @@ async function simularPrazo(cep, metodo, olhar) {
     await p.waitForTimeout(800);
     if (!(await caixa.isChecked())) throw new Error("continua Não");
   });
-  const destino = p.getByPlaceholder(/cep de destino/i).first();
-  if (!cep) cep = await p.getByText(/^\s*Cep Origem/i).first().locator("xpath=following::input[1]").inputValue();   // teste: usa o CEP da própria loja
+  const destino = p.locator("input[placeholder*='cep de destino' i]:visible").first();
+  if (!cep) cep = await p.locator("xpath=//*[starts-with(normalize-space(text()),'Cep Origem')]/following::input[1] >> visible=true").first().inputValue();   // teste: usa o CEP da própria loja
   await passo("preencher o CEP de destino", async () => { await destino.fill(String(cep).replace(/\D/g, "")); await destino.press("Tab"); });
   await passo("escolher o método de entrega", async () => {
     const sel = p.locator("select:visible").filter({ has: p.locator("option", { hasText: /selecione um método/i }) }).first();
@@ -212,9 +212,9 @@ async function simularPrazo(cep, metodo, olhar) {
   });
   await passo("clicar em Adicionar", async () => { await p.getByRole("button", { name: /^\s*Adicionar\s*$/i }).first().click(); await p.waitForTimeout(2000); });
   await passo("marcar a tabela Vigente", async () => {
-    await p.getByText(/^\s*Tabelas\s*$/i).last().click();
+    await p.locator("text=/^\\s*Tabelas\\s*$/ >> visible=true").last().click();
     await p.waitForTimeout(1500);
-    const vig = p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1]").first();
+    const vig = p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first();
     await vig.click({ force: true });
     if (olhar) log("  tabelas vigentes/rascunho na lista:", await p.locator("xpath=//*[normalize-space(text())='Vigente' or normalize-space(text())='Rascunho']").count());
     const fechar = p.getByRole("button", { name: /^\s*Fechar\s*$/i }).last();
@@ -222,7 +222,7 @@ async function simularPrazo(cep, metodo, olhar) {
   });
   await passo("pôr 1 no peso, altura, comprimento, largura e valor", async () => {
     for (const r of ["Peso", "Altura", "Comprimento", "Largura", "Valor Nota Fiscal"]) {
-      const c = p.getByText(new RegExp("^\\s*" + r + "\\*?\\s*$", "i")).last().locator("xpath=following::input[1]");
+      const c = p.locator(`xpath=//*[starts-with(normalize-space(text()),'${r}')]/following::input[1] >> visible=true`).last();
       await c.click(); await c.fill(""); await p.keyboard.type("1");
     }
   });
