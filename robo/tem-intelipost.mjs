@@ -1,6 +1,6 @@
-// Passo rápido do robô da Intelipost: só monta o navegador se houver pedido pendente.
-import { entrarSupabase, contarIntelipost, saida } from "./supa.mjs";
+// Passo rápido do robô da Intelipost: só monta o navegador se houver pedido pendente (nova data ou troca de notas).
+import { entrarSupabase, contarIntelipost, temTroca, saida } from "./supa.mjs";
 await entrarSupabase();
-const tem = await contarIntelipost();
-console.log(tem ? "Há pedido na fila da Intelipost." : "Fila da Intelipost vazia.");
+const tem = (await contarIntelipost()) || (await temTroca());
+console.log(tem ? "Há trabalho na fila da Intelipost." : "Fila da Intelipost vazia.");
 saida("tem", tem ? "sim" : "nao");

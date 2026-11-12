@@ -142,3 +142,12 @@ Aba Alterar pedidos > **Troca de notas**. Segue o passo a passo da Logística ("
 3. Prazo da simulação de cotação (dias úteis) → nova Entrega prev. (pula sábado e domingo; feriado não) e botão para mandar a data ao robô.
 4. As 7 etapas com marcação e quem pegou cada ticket ficam à vista para todos.
 Precisa rodar de novo o `supabase/schema.sql` (seção 17).
+
+## 18. Robô da troca de notas
+
+Na aba **Alterar pedidos › Troca de notas**, abra um ticket e use:
+
+- **Testar com o robô (não salva)**: o robô abre o pedido na Intelipost, faz a simulação de cotação e preenche tudo (transportadora, método, Entrega prev., todos os volumes, status), mas fecha sem salvar. Serve para conferir.
+- **Fazer com o robô**: faz de verdade as etapas 1 a 5 e marca essas etapas no painel. As etapas 6 e 7 (ticket no Multi360) continuam na mão.
+
+Para funcionar, rode de novo o `supabase/schema.sql` (parte 18). O robô passa de 30 em 30 minutos quando a variável `INTELIPOST_ATIVO = sim` existe no GitHub.

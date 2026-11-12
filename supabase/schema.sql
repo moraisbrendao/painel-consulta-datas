@@ -695,3 +695,65 @@ begin
 end $$;
 revoke all on function public.importar_troca_notas(jsonb, text) from public, anon;
 grant execute on function public.importar_troca_notas(jsonb, text) to authenticated;
+
+-- 18) Robô da troca de notas: a Logística pede no painel ("Testar" sem salvar ou "Fazer" de verdade) e o robô
+--     da Intelipost troca transportadora/método, faz a simulação de cotação, muda a Entrega prev., edita TODOS
+--     os volumes e muda o status (Macro 12 · Micro 920 · Equipe_04 Troca de notas). As etapas 1 a 5 ficam marcadas.
+alter table public.troca_notas add column if not exists robo_status text;        -- pendente | processando | testado | feito | erro
+alter table public.troca_notas add column if not exists robo_modo text;          -- teste | real
+alter table public.troca_notas add column if not exists robo_metodo text;
+alter table public.troca_notas add column if not exists robo_transp text;
+alter table public.troca_notas add column if not exists robo_msg text;
+alter table public.troca_notas add column if not exists robo_passos jsonb;
+alter table public.troca_notas add column if not exists robo_pedido_por text;
+alter table public.troca_notas add column if not exists robo_pedido_em timestamptz;
+alter table public.troca_notas add column if not exists robo_iniciado_em timestamptz;
+alter table public.troca_notas add column if not exists robo_feito_em timestamptz;
+alter table public.troca_notas add column if not exists prazo_dias integer;
+alter table public.troca_notas add column if not exists nova_data date;
+
+create or replace function public.pedir_robo_troca(tk text, metodo text, transp text, modo text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if modo not in ('teste', 'real') then raise exception 'Modo inválido.'; end if;
+  if coalesce(metodo, '') = '' or coalesce(transp, '') = '' then raise exception 'Sem método de entrega para este ticket.'; end if;
+  update public.troca_notas set robo_status = 'pendente', robo_modo = modo, robo_metodo = metodo, robo_transp = transp,
+    robo_msg = null, robo_passos = null, robo_pedido_por = auth.jwt() ->> 'email', robo_pedido_em = now(), robo_feito_em = null
+  where ticket = tk and coalesce(robo_status, '') <> 'processando';
+  if not found then raise exception 'O robô já está com este ticket (ou o ticket não existe).'; end if;
+end $$;
+revoke all on function public.pedir_robo_troca(text, text, text, text) from public, anon;
+grant execute on function public.pedir_robo_troca(text, text, text, text) to authenticated;
+
+create or replace function public.pegar_troca(limite integer default 20)
+returns setof public.troca_notas language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.troca_notas set robo_status = 'erro', robo_msg = 'O robô parou no meio (mais de 2 horas). Confira na Intelipost e peça de novo.'
+  where robo_status = 'processando' and robo_iniciado_em < now() - interval '2 hours';
+  return query
+  update public.troca_notas t set robo_status = 'processando', robo_iniciado_em = now()
+  where t.ticket in (select ticket from public.troca_notas where robo_status = 'pendente' order by robo_pedido_em limit limite for update skip locked)
+  returning t.*;
+end $$;
+revoke all on function public.pegar_troca(integer) from public, anon;
+grant execute on function public.pegar_troca(integer) to authenticated;
+
+create or replace function public.resultado_troca(tk text, st text, msg text, passos jsonb, prazo integer, nova date)
+returns void language plpgsql security definer set search_path = public as $$
+declare et jsonb; quem text := 'robô';
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  select etapas into et from public.troca_notas where ticket = tk;
+  if st = 'feito' then   -- marca as etapas 1 a 5 (as da Intelipost)
+    for i in 1..5 loop
+      if coalesce((passos ->> i::text)::boolean, false) then et := coalesce(et, '{}'::jsonb) || jsonb_build_object(i::text, jsonb_build_object('por', quem, 'em', now())); end if;
+    end loop;
+  end if;
+  update public.troca_notas set robo_status = st, robo_msg = msg, robo_passos = passos, prazo_dias = coalesce(prazo, prazo_dias),
+    nova_data = coalesce(nova, nova_data), robo_feito_em = now(), etapas = coalesce(et, etapas)
+  where ticket = tk;
+end $$;
+revoke all on function public.resultado_troca(text, text, text, jsonb, integer, date) from public, anon;
+grant execute on function public.resultado_troca(text, text, text, jsonb, integer, date) to authenticated;

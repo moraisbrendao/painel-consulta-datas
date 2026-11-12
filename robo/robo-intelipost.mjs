@@ -9,7 +9,7 @@
 // de novo enquanto a senha guardada no GitHub for a mesma, para a Intelipost não bloquear a conta do time.
 import { chromium } from "playwright";
 import { createHash } from "node:crypto";
-import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar } from "./supa.mjs";
+import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca } from "./supa.mjs";
 
 const MODO = (process.env.MODO || "diag").toLowerCase();
 const BASE = (process.env.INTELIPOST_URL || "https://secure.intelipost.com.br").replace(/\/$/, "");
@@ -84,7 +84,7 @@ async function esqueleto(titulo) {
 // abre o pedido pela "Busca por Lote" (a Gestão de Pedidos tem filtro de data e esconde pedido antigo).
 // Clicar no pedido da lista abre a tela dele em ABA NOVA. Essa tela (/ng#/order-number/) nunca "termina"
 // de carregar: espera o CAMPO aparecer, não a página.
-async function abrirPedido(pedido, olhar) {
+async function abrirPedido(pedido, olhar, soAbrir) {
   await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
   const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
   await caixa.waitFor({ timeout: 45000 });
@@ -118,6 +118,7 @@ async function abrirPedido(pedido, olhar) {
   const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
   if (olhar) log("Cabeçalho do pedido:", await tela.evaluate(() => (document.body.innerText.match(/Pedido:[\s\S]{0,60}/) || [""])[0].replace(/\s+/g, " ")));
   if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
+  if (soAbrir) return { tela, aba };
   const assinatura = () => tela.evaluate(() => [...document.querySelectorAll("input, select, textarea, button, [contenteditable=true]")]
     .filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; })
     .map((e) => `${e.tagName.toLowerCase()} | ${e.type || ""} | id=${e.id} | name=${e.name || ""} | ng-model=${e.getAttribute("ng-model") || ""} | class=${String(e.className).slice(0, 50)} | ${(e.innerText || "").trim().slice(0, 25)}`));
@@ -323,6 +324,16 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
   await tela.waitForTimeout(1500);
 }
 async function diagTroca() {
+  if (!process.env.MAPA) {   // teste completo da troca SEM salvar, com nota/chave fictícias, num pedido já alterado
+    const alvo = await umPedidoParaOlhar();
+    if (!alvo) { log("Não achei pedido para o teste."); return; }
+    try {
+      const r = await fazerTroca({ ticket: "diag", pedido: alvo.pedido, nf_nova: "123456-7", serie: "7", chave: "0".repeat(44), data_emissao: hojeBR(),
+        robo_metodo: process.env.METODO_TESTE || "Transiga Standard", robo_transp: process.env.TRANSP_TESTE || "Transiga", robo_modo: "teste" });
+      log("Teste da troca (sem salvar): ok. Passos:", JSON.stringify(r.passos).replace(/"nova_data":"[^"]+",?/, ""));
+    } catch (e) { log("Teste da troca:", e.message, "| passos ok:", JSON.stringify(e.passos || {})); }
+    return;
+  }
   // 1) menu: onde fica a Cotação de frete / Simulação
   await pagina.goto(BASE, { waitUntil: "domcontentloaded" });
   await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
@@ -393,6 +404,157 @@ async function diagTroca() {
   } catch (e) { log("Alterar Pedidos:", e.message.split("\n")[0]); }
 }
 
+// ================= TROCA DE NOTAS (reposição TOTAL) =================
+// Passos do "ajuste intelipost.docx": 1) transportadora/método  2) simulação de cotação  3) Entrega prev. 23:59
+// 4) TODOS os volumes (rastreio, nota, série, chave, data)  5) status Macro 12 · Micro 920 · Equipe_04 Troca de notas.
+// modo "teste": preenche e confere tudo, mas fecha sem salvar (recarrega a tela). modo "real": salva cada passo.
+// Nada de dado do pedido no registro (pedido, CEP, nota, chave): só "ok" ou o nome do passo que falhou.
+const semAcento = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const brData = (iso) => iso.split("-").reverse().join("/");
+function hojeBR() { return new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10); }
+function somaDiasUteis(iso, dias) { const d = new Date(iso + "T12:00:00Z"); let n = 0; while (n < dias) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) n++; } return d.toISOString().slice(0, 10); }
+const SALVOU = (r) => ["PUT", "POST", "PATCH"].includes(r.request().method()) && /intelipost\.com\.br/i.test(r.url()) && !/jserrors|kissmetrics|analytics|hotjar|segment|nr-data|log/i.test(r.url());
+async function escolherOpcao(sel, alvo) {
+  const ops = (await sel.locator("option").allInnerTexts()).map((x) => x.trim());
+  const a = semAcento(alvo);
+  const certo = ops.find((o) => semAcento(o) === a) || ops.find((o) => semAcento(o).startsWith(a + " ")) ;
+  if (!certo) return null;
+  await sel.selectOption({ label: certo }); return certo;
+}
+async function salvarNoModal(tela) {
+  const modal = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
+  const bt = modal.locator("button").filter({ hasText: /^\s*atualizar\s*$/i }).first();
+  const resp = tela.waitForResponse(SALVOU, { timeout: 45000 });
+  await bt.click();
+  const r = await resp;
+  if (r.status() >= 400) throw new Error(`a Intelipost recusou (código ${r.status()})`);
+  await tela.waitForTimeout(1500);
+}
+async function fecharModal(tela) {
+  const modal = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
+  const x = modal.locator("button.close, [ng-click*='dismiss'], [ng-click*='cancel'], [ng-click*='close']").first();
+  if (await x.count()) await x.click().catch(() => {}); else await tela.keyboard.press("Escape").catch(() => {});
+  await tela.waitForTimeout(1000);
+}
+async function recarregar(tela) {
+  await tela.reload({ waitUntil: "domcontentloaded" });
+  await tela.locator("a[ng-click^='edit_estimated_delivery_date']").first().waitFor({ timeout: 60000 });
+  await tela.waitForTimeout(1500);
+}
+
+async function fazerTroca(job) {
+  const real = job.robo_modo === "real";
+  const passos = {};
+  const [num, serieNF] = String(job.nf_nova || "").split("-").map((x) => (x || "").trim());
+  const serie = (job.serie || serieNF || "").replace(/^0+(?=\d)/, "");
+  if (!num || !serie) throw new Error("Falta a nova nota (NF emitida Promob) ou a série na planilha.");
+  if (!job.chave || String(job.chave).replace(/\D/g, "").length !== 44) throw new Error("A chave da nova nota não tem 44 números.");
+  if (!job.data_emissao) throw new Error("Falta a data de emissão da nova nota.");
+  const { tela, aba } = await abrirPedido(job.pedido, false, true);
+  let etapa = "abrir o pedido";
+  try {
+    // status do pedido e CEP do destinatário (o CEP só é usado na simulação; não vai para registro nem painel)
+    const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
+    if (fechado) throw new Error(`O pedido está ${fechado.toLowerCase()} na Intelipost.`);
+    const cep = await tela.evaluate(() => { const m = document.body.innerText.match(/Destinat[aá]rio[\s\S]{0,2000}?CEP:\s*([\d.\-]{8,10})/i); return m ? m[1].replace(/\D/g, "") : ""; });
+    if (cep.length !== 8) throw new Error("Não achei o CEP do destinatário na tela do pedido.");
+    const nVol = await tela.locator("[ng-click^='edit_volume_modal']").count();
+    if (!nVol) throw new Error("Não achei os volumes do pedido (botão Editar).");
+
+    // 2) simulação de cotação (na aba principal) -> prazo em dias úteis
+    etapa = "simulação de cotação";
+    const prazo = await simularPrazo(cep, job.robo_metodo, false);
+    if (!(prazo > 0 && prazo <= 60)) throw new Error(`Prazo estranho na simulação (${prazo}).`);
+    const nova = somaDiasUteis(hojeBR(), prazo);
+    passos[2] = true; passos.prazo = prazo; passos.volumes = nVol;
+
+    // 1) transportadora e método de entrega
+    etapa = "trocar a transportadora";
+    await tela.bringToFront();
+    await tela.locator("a[ng-click^='edit_logistic_provider_modal']").first().click();
+    const modal = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
+    await modal.locator("select").first().waitFor({ timeout: 20000 });
+    const selTransp = modal.locator("select").first();
+    if (!(await escolherOpcao(selTransp, job.robo_transp))) throw new Error(`A transportadora "${job.robo_transp}" não aparece na caixinha da Intelipost.`);
+    await tela.waitForTimeout(2000);
+    const selMet = modal.locator("select[ng-model='delivery_method_id']").first();
+    if (!(await escolherOpcao(selMet, job.robo_metodo))) throw new Error(`O método "${job.robo_metodo}" não aparece para essa transportadora na Intelipost.`);
+    if (real) await salvarNoModal(tela); else await fecharModal(tela);
+    passos[1] = true;
+    if (!real) await recarregar(tela);
+
+    // 3) Entrega prev. = hoje + prazo (dias úteis) 23:59
+    etapa = "mudar a Entrega prev.";
+    await tela.locator("a[ng-click^='edit_estimated_delivery_date']").first().click();
+    const campo = tela.locator("input#estimated_delivery_date").first();
+    await campo.waitFor({ timeout: 20000 });
+    await campo.fill(`${nova}T23:59`);
+    if (!(await campo.inputValue()).startsWith(nova)) throw new Error("não consegui preencher a data");
+    if (real) {
+      const resp = tela.waitForResponse(SALVOU, { timeout: 45000 });
+      await campo.locator("xpath=ancestor::form[1]//button[@type='submit']").first().click();
+      const r = await resp; if (r.status() >= 400) throw new Error(`a Intelipost recusou (código ${r.status()})`);
+    }
+    passos[3] = true; passos.nova_data = nova;
+    await recarregar(tela);
+
+    // 4) TODOS os volumes
+    etapa = "editar os volumes";
+    const n2 = await tela.locator("[ng-click^='edit_volume_modal']").count();
+    for (let i = 0; i < n2; i++) {
+      etapa = `editar o volume ${i + 1} de ${n2}`;
+      await tela.locator("[ng-click^='edit_volume_modal']").nth(i).click();
+      const m = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").last();
+      const campos = [["current_volume.client_tracking_code", num], ["current_volume.invoice.invoice_number", num], ["current_volume.invoice.invoice_series", serie],
+        ["current_volume.invoice.invoice_key", String(job.chave).replace(/\D/g, "")], ["current_volume.invoice.invoice_date_iso", brData(job.data_emissao)]];
+      for (const [ng, v] of campos) {
+        const c = m.locator(`input[ng-model='${ng}']`).first();
+        await c.waitFor({ timeout: 20000 });
+        await c.fill(v);
+        if (ng.endsWith("date_iso")) { await c.press("Tab").catch(() => {}); }
+        const lido = (await c.inputValue()).replace(/\D/g, "");
+        if (lido !== v.replace(/\D/g, "")) throw new Error(`o campo ${ng.split(".").pop()} não aceitou o valor`);
+      }
+      if (real) await salvarNoModal(tela); else await fecharModal(tela);
+      await recarregar(tela);
+    }
+    passos[4] = true;
+
+    // 5) status: Entregas > Alterar Pedidos > Micro
+    etapa = "mudar o status (Alterar Pedidos)";
+    await pagina.bringToFront();
+    await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
+    const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
+    await caixa.waitFor({ timeout: 45000 });
+    await pagina.locator("select:visible").first().selectOption({ label: "Pedido" });
+    await caixa.fill(job.pedido);
+    await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
+    await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 });
+    const linhas = await pagina.locator("table tbody tr").count();
+    if (linhas !== 1) throw new Error(`a busca trouxe ${linhas} linhas (esperava 1)`);
+    await pagina.locator("table tbody tr input[type=checkbox]").first().click({ force: true });
+    await pagina.waitForTimeout(1000);
+    const sel = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
+    const pick = async (re, nome) => { const s = sel(re); const l = (await s.locator("option", { hasText: re }).first().innerText().catch(() => "")).trim(); if (!l) throw new Error(`não achei a opção ${nome}`); await s.selectOption({ label: l }); await pagina.waitForTimeout(2000); };
+    await pick(/^\s*Micro\s*$/, "Alterar por: Micro");
+    await pick(/^\s*12\s*-/, "Macro 12");
+    await pick(/^\s*920\b/, "Micro 920");
+    await pick(/equipe_?04.*troca de notas/i, "Evento Equipe_04 - Troca de notas");
+    if (real) {
+      const resp = pagina.waitForResponse(SALVOU, { timeout: 45000 });
+      await pagina.getByRole("button", { name: /^\s*alterar\s*$/i }).first().click();
+      await pagina.waitForTimeout(1500);
+      const conf = pagina.locator("[role=dialog]:visible, .modal:visible").getByRole("button", { name: /^\s*(confirmar|sim|ok|alterar)\s*$/i }).first();
+      if (await conf.count()) await conf.click();
+      const r = await resp; if (r.status() >= 400) throw new Error(`a Intelipost recusou (código ${r.status()})`);
+    }
+    passos[5] = true;
+    return { passos, prazo, nova };
+  } catch (e) {
+    e.message = `Parei em "${etapa}": ${e.message.split("\n")[0]}`; e.passos = passos; throw e;
+  } finally { if (aba) await aba.close().catch(() => {}); }
+}
+
 let ok = 0, erro = 0;
 try {
   await entrar();
@@ -431,6 +593,22 @@ try {
       }
     }
     log(`Fim: ${ok} ${MODO === "real" ? "alterados" : "preenchidos sem salvar"}, ${erro} com problema.`);
+    // troca de notas: cada ticket já diz se é teste ou real (quem pediu no painel escolheu)
+    const trocas = await pegarTroca(20).catch((e) => { log("Troca de notas:", e.message.split("\n")[0]); return []; });
+    if (trocas.length) log(`${trocas.length} troca(s) de nota na passagem.`);
+    let tOk = 0, tErro = 0;
+    for (const job of trocas) {
+      const modoJob = MODO === "real" ? job.robo_modo : "teste";   // dryrun nunca salva
+      try {
+        const r = await fazerTroca({ ...job, robo_modo: modoJob });
+        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", modoJob === "real" ? "Feito na Intelipost." : "Teste ok: tudo preenchido, nada salvo.", r.passos, r.prazo, r.nova);
+        tOk++; log(`Troca ${tOk + tErro}: ok (${modoJob}).`);
+      } catch (e) {
+        tErro++; log(`Troca ${tOk + tErro}: problema -`, e.message);
+        await resultadoTroca(job.ticket, "erro", e.message.slice(0, 300), e.passos || {}, e.passos && e.passos.prazo || null, null).catch(() => {});
+      }
+    }
+    if (trocas.length) log(`Troca de notas: ${tOk} ok, ${tErro} com problema.`);
   }
 } catch (e) {
   log("Parei:", e.message);

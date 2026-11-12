@@ -476,3 +476,8 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tn-etapa { flex-wrap: nowrap; display: grid; grid-template-columns: 18px 1fr; column-gap: 6px; }
 .tn-etapa input { width: auto; margin: 3px 0 0; }
 .tn-etapa em { grid-column: 2; padding-left: 0; }
+
+.tn-robo{margin:.4rem 0;padding:.5rem .7rem;border-radius:8px;font-size:.9rem;line-height:1.35}
+.tn-robo.ambar{background:#fff6d6;color:#6b5200}.tn-robo.verde{background:#e5f6ea;color:#1d6b36}.tn-robo.vermelho{background:#fde8e8;color:#9b1c1c}
+.tn-robo-bts{display:flex;flex-wrap:wrap;gap:.5rem;margin:.4rem 0}
+.tn-mao{margin-top:1rem;font-size:.95rem}

@@ -59,3 +59,6 @@ export async function umPedidoParaOlhar() {
   const f = await chamar("fila_intelipost?select=pedido&status=eq.alterado&order=feito_em.desc&limit=1");
   return f && f[0] ? { pedido: String(f[0].pedido), de: "alterar" } : null;
 }
+export async function temTroca() { try { return (await chamar("troca_notas?select=ticket&robo_status=eq.pendente&limit=1")).length > 0; } catch { return false; } }
+export const pegarTroca = async (limite = 20) => (await chamar("rpc/pegar_troca", "POST", { limite })) || [];
+export const resultadoTroca = (tk, st, msg, passos, prazo = null, nova = null) => chamar("rpc/resultado_troca", "POST", { tk, st, msg, passos, prazo, nova });

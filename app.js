@@ -660,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=44");
+        const w = new Worker("leitor-intelipost.js?v=45");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1617,7 +1617,14 @@
         <p class="s">Transportadora no Promob: ${esc(String(t.transp_promob || "").replace(/^!/, ""))} · série ${esc(t.serie || "?")}${t.linhas > 1 ? ` · <b>${t.linhas} linhas na planilha: confira se o pedido tem mais de 1 volume e altere TODOS</b>` : ""}</p>
         ${escolha}
       </div>
-      <div><h3>Prazo da cotação → nova data</h3>
+      <div><h3>Robô na Intelipost</h3>
+        ${tnRoboInfo(t)}
+        <div class="tn-robo-bts">
+          <button class="btn contorno" data-robo-troca="teste" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Testar com o robô (não salva)</button>
+          <button class="btn" data-robo-troca="real" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Fazer com o robô</button>
+        </div>
+        <p class="s">O robô faz as etapas 1 a 5: transportadora e método, simulação de cotação, Entrega prev. 23:59, todos os volumes e o status Micro 920. Ele passa de 30 em 30 minutos.</p>
+        <h3 class="tn-mao">Ou na mão: prazo da cotação → nova data</h3>
         <label class="tn-prazo">Prazo de entrega da simulação (dias úteis) <input type="number" min="1" max="60" data-prazo="${esc(t.ticket)}"></label>
         <p class="tn-data" id="tn-data-${esc(t.ticket)}">Digite o prazo para calcular.</p>
         <p class="s">Conta só sábado e domingo; feriado não entra (muda por estado e cidade) — confira se cair perto de feriado.</p>
@@ -1627,6 +1634,20 @@
         ${TN_ETAPAS.map((e, i) => { const x = t.etapas && t.etapas[i + 1]; return `<label class="tn-etapa"><input type="checkbox" data-etapa="${i + 1}" data-tk="${esc(t.ticket)}" ${x ? "checked" : ""}> <span>${i + 1}. ${esc(e)}</span>${x ? `<em>${esc(String(x.por || "").split("@")[0])} · ${new Date(x.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</em>` : ""}</label>`; }).join("")}
         ${t.responsavel ? `<p class="s">Com ${esc(t.responsavel)} desde ${new Date(t.pego_em || t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${t.responsavel === meuEmail() ? ' · <button class="link" data-soltar="' + esc(t.ticket) + '">soltar</button>' : ""}</p>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar este ticket</button>`}
       </div></div>`;
+  }
+  function tnRoboInfo(t) {
+    const quando = (d) => d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+    const modo = t.robo_modo === "real" ? "de verdade" : "em teste";
+    const dt = t.prazo_dias ? ` Prazo da simulação: <b>${t.prazo_dias} dias úteis</b>${t.nova_data ? ` → Entrega prev. <b>${br(t.nova_data)} 23:59</b>` : ""}.` : "";
+    const vol = t.robo_passos && t.robo_passos.volumes ? ` ${t.robo_passos.volumes} volume(s).` : "";
+    switch (t.robo_status) {
+      case "pendente": return `<p class="tn-robo ambar">Na fila do robô (${modo}) desde ${quando(t.robo_pedido_em)}.</p>`;
+      case "processando": return `<p class="tn-robo ambar">O robô está fazendo agora (${modo}).</p>`;
+      case "testado": return `<p class="tn-robo verde">Teste ok em ${quando(t.robo_feito_em)}: o robô preencheu tudo e não salvou.${dt}${vol}</p>`;
+      case "feito": return `<p class="tn-robo verde">Feito pelo robô em ${quando(t.robo_feito_em)}.${dt}${vol} Faltam as etapas 6 e 7 (ticket).</p>`;
+      case "erro": return `<p class="tn-robo vermelho">⚠ ${esc(t.robo_msg || "O robô não conseguiu.")}${t.robo_modo === "real" && t.robo_passos && Object.keys(t.robo_passos).some((k) => /^[1-5]$/.test(k)) ? ` Já tinha feito: etapa(s) ${Object.keys(t.robo_passos).filter((k) => /^[1-5]$/.test(k)).join(", ")}.` : ""}</p>`;
+      default: return "";
+    }
   }
   async function salvarTroca(ticket, campos) {
     const { data, error } = await sb.from("troca_notas").update(campos).eq("ticket", ticket).select();
@@ -1641,6 +1662,13 @@
       if (t && t.responsavel && t.responsavel !== meuEmail()) return toast(`${t.responsavel} já pegou este ticket.`, true);
       await salvarTroca(pg.dataset.pegar, { responsavel: meuEmail(), pego_em: new Date().toISOString() }); return; }
     const so = e.target.closest("[data-soltar]"); if (so) { e.stopPropagation(); await salvarTroca(so.dataset.soltar, { responsavel: null, pego_em: null }); return; }
+    const rt = e.target.closest("[data-robo-troca]"); if (rt) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rt.dataset.tk), m = t && tnMetodo(t); if (!t || !m.ok) return;
+      const real = rt.dataset.roboTroca === "real";
+      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}\n• simulação de cotação e Entrega prev. 23:59\n• todos os volumes com a nota ${t.nf_nova}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n\nConfirmar?`)) return;
+      const { error } = await sb.rpc("pedir_robo_troca", { tk: t.ticket, metodo: m.ok.metodo, transp: m.ok.transp, modo: real ? "real" : "teste" });
+      if (error) return toast(/pedir_robo_troca|schema cache/i.test(error.message) ? "Rode de novo o supabase/schema.sql (parte 18) para usar o robô da troca." : "Não consegui mandar: " + error.message, true);
+      toast(real ? "Mandado para o robô fazer na Intelipost." : "Mandado para o robô testar (não salva nada).");
+      await carregarTrocas(); return; }
     const rb = e.target.closest("[data-robo]"); if (rb) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rb.dataset.robo), iso = rb.dataset.iso; if (!t || !iso) return;
       if (!confirm(`O robô vai mudar a Entrega prev. do pedido ${t.pedido} para ${br(iso)} 23:59 na Intelipost.\n\nFaça isso depois de trocar a transportadora. Confirmar?`)) return;
       const { error } = await sb.rpc("enfileirar_intelipost", { linhas: [{ pedido: t.pedido, nova_data: iso }] });
