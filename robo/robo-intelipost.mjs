@@ -201,7 +201,8 @@ async function simularPrazo(cep, metodo, olhar) {
   });
   const destino = p.locator("input[placeholder*='cep de destino' i]:visible").first();
   if (!cep) cep = await p.locator("xpath=//*[starts-with(normalize-space(text()),'Cep Origem')]/following::input[1] >> visible=true").first().inputValue();   // teste: usa o CEP da própria loja
-  await passo("preencher o CEP de destino", async () => { await destino.fill(String(cep).replace(/\D/g, "")); await destino.press("Tab"); });
+  await passo("preencher o CEP de destino", async () => { await destino.click(); await destino.fill(""); await p.keyboard.type(String(cep).replace(/\D/g, ""), { delay: 40 }); await destino.press("Tab");
+    if (olhar) log("  CEP destino ficou com", (await destino.inputValue()).replace(/\D/g, "").length, "dígitos"); });
   await passo("escolher o método de entrega", async () => {
     const sel = p.locator("select:visible").filter({ has: p.locator("option", { hasText: /selecione um método/i }) }).first();
     const nomes = await sel.locator("option").allInnerTexts();
@@ -242,6 +243,7 @@ async function simularPrazo(cep, metodo, olhar) {
     await botaoCalc.first().click();
     await p.waitForTimeout(8000);
     p.off("response", ouvir); p.off("pageerror", errou);
+    if (olhar) { const msg = await p.evaluate(() => [...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && e.getBoundingClientRect().width > 0 && /obrigat|inv[aá]lid|preencha|informe|selecione|erro|necess/i.test(e.textContent || "")).map((e) => e.textContent.trim().slice(0, 100))); [...new Set(msg)].slice(0, 15).forEach((m) => log("  texto de aviso:", m)); }
     if (olhar) { chamadas.slice(0, 15).forEach((c) => log("  chamada depois do Calcular:", c)); erros.forEach((e) => log("  erro de script:", e)); }
     if (olhar) { await p.waitForTimeout(3000); const avisos = await p.evaluate(() => [...document.querySelectorAll("[role=alert], .toast, [class*=toast], [class*=alert], [class*=error], .invalid-feedback, [class*=snack]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim().slice(0, 120)).filter(Boolean)); avisos.forEach((a) => log("  aviso na tela:", a)); }
     await p.locator("text=/Opções de Envio/i >> visible=true").first().waitFor({ timeout: 45000 });
