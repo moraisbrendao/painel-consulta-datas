@@ -456,7 +456,9 @@ async function fazerTroca(job) {
 
     // 2) simulação de cotação (na aba principal) -> prazo em dias úteis
     etapa = "simulação de cotação";
-    const prazo = await simularPrazo(cep, job.robo_metodo, false);
+    let prazo;
+    try { prazo = await simularPrazo(cep, job.robo_metodo, false); }
+    catch (e) { if (job.ticket !== "diag") throw e; log("Diagnóstico: simulação sem frete para esse pedido; sigo com prazo 5 só para testar os outros passos."); prazo = 5; }
     if (!(prazo > 0 && prazo <= 60)) throw new Error(`Prazo estranho na simulação (${prazo}).`);
     const nova = somaDiasUteis(hojeBR(), prazo);
     passos[2] = true; passos.prazo = prazo; passos.volumes = nVol;
