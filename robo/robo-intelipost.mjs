@@ -9,7 +9,7 @@
 // de novo enquanto a senha guardada no GitHub for a mesma, para a Intelipost não bloquear a conta do time.
 import { chromium } from "playwright";
 import { createHash } from "node:crypto";
-import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca } from "./supa.mjs";
+import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro } from "./supa.mjs";
 
 const MODO = (process.env.MODO || "diag").toLowerCase();
 const BASE = (process.env.INTELIPOST_URL || "https://secure.intelipost.com.br").replace(/\/$/, "");
@@ -307,6 +307,18 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
   } else await tela.keyboard.press("Escape").catch(() => {});
   await tela.waitForTimeout(1500);
 }
+async function diagCep() {   // por que a simulação volta vazia: refaz a da última troca com erro, mostrando cada passo
+  const t = await ultimaTrocaComErro();
+  if (!t) { log("Nenhuma troca com erro."); return; }
+  const { tela, aba } = await abrirPedido(t.pedido, false, true);
+  const info = await tela.evaluate(() => { const txt = document.body.innerText; const m = txt.match(/Destinat[aá]rio[\s\S]{0,2000}?CEP:\s*([^\n]{0,20})/i); return { bruto: m ? m[1] : "", uf: (txt.match(/Destinat[aá]rio[\s\S]{0,2500}?Estado:\s*([A-Z]{2})/i) || [])[1] || "?" }; });
+  if (aba) await aba.close();
+  const cep = info.bruto.replace(/\D/g, "");
+  log(`CEP: texto com ${info.bruto.length} letras, ${cep.length} dígitos, começa com ${cep.slice(0, 1)} · UF ${info.uf} · método ${t.robo_metodo}`);
+  for (const m of [t.robo_metodo, "Transiga Standard", "JadLog Standard"]) {
+    try { log(`== ${m}: prazo ${await simularPrazo(cep, m, true)}`); } catch (e) { log(`== ${m}:`, e.message.split("\n")[0]); }
+  }
+}
 async function diagTroca() {
   if (!process.env.MAPA) {   // teste completo da troca SEM salvar, com nota/chave fictícias, num pedido já alterado
     const alvo = await umPedidoParaOlhar();
@@ -556,6 +568,7 @@ let ok = 0, erro = 0;
 try {
   await entrar();
   if (MODO === "diag-troca") await diagTroca();
+  else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag") {
     for (const [nome, caminho] of [["Busca por Lote", "/order/transactions-batch"], ["Alterar Pedidos", "/order/change-order"]]) {
       try {
