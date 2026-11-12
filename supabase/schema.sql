@@ -649,6 +649,7 @@ create table if not exists public.troca_notas (
   atualizado_em   timestamptz not null default now(),
   atualizado_por  text
 );
+alter table public.troca_notas add column if not exists tipo text not null default 'TOTAL';   -- TOTAL | PARCIAL (parcial não mexe nos volumes)
 alter table public.troca_notas enable row level security;
 revoke all on public.troca_notas from anon;
 grant select, update on public.troca_notas to authenticated;
@@ -680,13 +681,14 @@ begin
   if auth.uid() is null or public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
   update public.troca_notas set na_planilha = false
   where ticket not in (select x ->> 'ticket' from jsonb_array_elements(itens) x);
-  insert into public.troca_notas (ticket, pedido, nf_ticket, nf_nova, serie, chave, data_emissao, transp_promob, linhas, na_planilha)
+  insert into public.troca_notas (ticket, pedido, nf_ticket, nf_nova, serie, chave, data_emissao, transp_promob, linhas, na_planilha, tipo)
   select x ->> 'ticket', x ->> 'pedido', x ->> 'nf_ticket', x ->> 'nf_nova', x ->> 'serie', x ->> 'chave',
-         nullif(x ->> 'data_emissao', '')::date, x ->> 'transp_promob', coalesce((x ->> 'linhas')::integer, 1), true
+         nullif(x ->> 'data_emissao', '')::date, x ->> 'transp_promob', coalesce((x ->> 'linhas')::integer, 1), true,
+         coalesce(nullif(x ->> 'tipo', ''), 'TOTAL')
   from jsonb_array_elements(itens) x where coalesce(x ->> 'ticket', '') <> ''
   on conflict (ticket) do update set pedido = excluded.pedido, nf_ticket = excluded.nf_ticket, nf_nova = excluded.nf_nova,
     serie = excluded.serie, chave = excluded.chave, data_emissao = excluded.data_emissao, transp_promob = excluded.transp_promob,
-    linhas = excluded.linhas, na_planilha = true;
+    linhas = excluded.linhas, na_planilha = true, tipo = excluded.tipo;
   get diagnostics n = row_count;
   insert into public.troca_notas_info (id, arquivo, linhas, enviado_por, enviado_em)
   values (1, arquivo, jsonb_array_length(itens), auth.jwt() ->> 'email', now())

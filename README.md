@@ -151,3 +151,5 @@ Na aba **Alterar pedidos › Troca de notas**, abra um ticket e use:
 - **Fazer com o robô**: faz de verdade as etapas 1 a 5 e marca essas etapas no painel. As etapas 6 e 7 (ticket no Multi360) continuam na mão.
 
 Para funcionar, rode de novo o `supabase/schema.sql` (parte 18). O robô passa de 30 em 30 minutos quando a variável `INTELIPOST_ATIVO = sim` existe no GitHub.
+
+**Reposição parcial:** a Troca de notas também traz os tickets "Parcial" da mesma fila (coluna Tipo e filtro Tipo). O passo a passo é o mesmo, só que **sem a etapa 4 (volumes)**: na tela ela aparece como "não se aplica" e o robô pula os volumes. Rode o `supabase/schema.sql` de novo (coluna `tipo`) e suba o detalhamento_tickets outra vez.

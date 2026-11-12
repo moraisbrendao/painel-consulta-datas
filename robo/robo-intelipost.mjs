@@ -435,12 +435,13 @@ async function recarregar(tela) {
 
 async function fazerTroca(job) {
   const real = job.robo_modo === "real";
+  const parcial = job.tipo === "PARCIAL";   // reposição parcial: mesmo passo a passo, sem mexer nos volumes
   const passos = {};
   const [num, serieNF] = String(job.nf_nova || "").split("-").map((x) => (x || "").trim());
   const serie = (job.serie || serieNF || "").replace(/^0+(?=\d)/, "");
   if (!num || !serie) throw new Error("Falta a nova nota (NF emitida Promob) ou a série na planilha.");
-  if (!job.chave || String(job.chave).replace(/\D/g, "").length !== 44) throw new Error("A chave da nova nota não tem 44 números.");
-  if (!job.data_emissao) throw new Error("Falta a data de emissão da nova nota.");
+  if (!parcial && (!job.chave || String(job.chave).replace(/\D/g, "").length !== 44)) throw new Error("A chave da nova nota não tem 44 números.");
+  if (!parcial && !job.data_emissao) throw new Error("Falta a data de emissão da nova nota.");
   const { tela, aba } = await abrirPedido(job.pedido, false, true);
   let etapa = "abrir o pedido";
   try {
@@ -451,7 +452,7 @@ async function fazerTroca(job) {
     if (cep.length !== 8) throw new Error("Não achei o CEP do destinatário na tela do pedido.");
     if (job.ticket === "diag") log(`CEP lido: ${cep.length} dígitos, começa com ${cep[0]} (a loja começa com 9) · CEPs na tela: ${await tela.evaluate(() => (document.body.innerText.match(/CEP:/gi) || []).length)}`);
     const nVol = await tela.locator("[ng-click^='edit_volume_modal']").count();
-    if (!nVol) throw new Error("Não achei os volumes do pedido (botão Editar).");
+    if (!nVol && !parcial) throw new Error("Não achei os volumes do pedido (botão Editar).");
 
     // 2) simulação de cotação (na aba principal) -> prazo em dias úteis
     etapa = "simulação de cotação";
@@ -497,7 +498,7 @@ async function fazerTroca(job) {
 
     // 4) TODOS os volumes
     etapa = "editar os volumes";
-    const n2 = await tela.locator("[ng-click^='edit_volume_modal']").count();
+    const n2 = parcial ? 0 : await tela.locator("[ng-click^='edit_volume_modal']").count();
     for (let i = 0; i < n2; i++) {
       etapa = `editar o volume ${i + 1} de ${n2}`;
       await tela.locator("[ng-click^='edit_volume_modal']").nth(i).click();
@@ -514,7 +515,7 @@ async function fazerTroca(job) {
       if (real) await salvarNoModal(tela, tela.locator("input[ng-model='current_volume.invoice.invoice_date_iso']:visible").first());
       await recarregar(tela);   // no teste, recarregar descarta o que foi preenchido
     }
-    passos[4] = true;
+    if (!parcial) passos[4] = true;
 
     // 5) status: Entregas > Alterar Pedidos > Micro
     etapa = "mudar o status (Alterar Pedidos)";

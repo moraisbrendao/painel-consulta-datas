@@ -481,3 +481,8 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .tn-robo.ambar{background:#fff6d6;color:#6b5200}.tn-robo.verde{background:#e5f6ea;color:#1d6b36}.tn-robo.vermelho{background:#fde8e8;color:#9b1c1c}
 .tn-robo-bts{display:flex;flex-wrap:wrap;gap:.5rem;margin:.4rem 0}
 .tn-mao{margin-top:1rem;font-size:.95rem}
+
+.tn-topo-acoes{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+.tn-topo-acoes select{margin-left:.3rem;padding:.35rem .5rem;border:1px solid #d6dbe4;border-radius:8px;background:#fff}
+.tn-etapa.tn-na{opacity:.55}
+.chip.azul{background:#e3edff;color:#1d4ed8}

@@ -660,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=45");
+        const w = new Worker("leitor-intelipost.js?v=46");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1554,8 +1554,9 @@
     if (b.dataset.ap === "troca") carregarTrocas(); });
   setInterval(() => { if (paginaAtual === "alterar" && !document.hidden) carregarAlterar(true); }, 60000);
 
-  // ---------------- troca de notas (reposição TOTAL) ----------------
-  // Planilha detalhamento_tickets, aba Reposições: fila "Ajuste de dados na Intelipost" + Tipo de reposição "Total".
+  // ---------------- troca de notas (reposição TOTAL e PARCIAL) ----------------
+  // Planilha detalhamento_tickets, aba Reposições: fila "Ajuste de dados na Intelipost" + Tipo de reposição "Total" ou "Parcial".
+  // Parcial = mesmo passo a passo, sem a etapa 4 (volumes).
   // Método na Intelipost = DE × PARA (troca-notas.js) pela transportadora do Promob (redespacho primeiro) e pela série da nova NF.
   const TN_ETAPAS = ["Transportadora trocada na Intelipost (método pelo DE × PARA)", "Simulação de cotação feita (prazo em dias úteis)",
     "Entrega prev. atualizada (23:59)", "Volumes editados — TODOS os volumes", "Status: Macro 12 · Micro 920 · Equipe_04 Troca de notas",
@@ -1567,12 +1568,17 @@
     if (String(t.transp_promob || "").startsWith("!")) return { erro: t.transp_promob.slice(1) };
     return TROCA.metodoPara(t.transp_promob, t.serie);
   };
-  const tnFeitas = (t) => TN_ETAPAS.filter((_, i) => t.etapas && t.etapas[i + 1]).length;
+  const tnParcial = (t) => t.tipo === "PARCIAL";
+  const tnPula = (t, n) => tnParcial(t) && n === 4;   // parcial não mexe nos volumes
+  const tnTam = (t) => TN_ETAPAS.length - (tnParcial(t) ? 1 : 0);
+  const tnFeitas = (t) => TN_ETAPAS.filter((_, i) => !tnPula(t, i + 1) && t.etapas && t.etapas[i + 1]).length;
+  let tnTipo = "";
+  const tnDoTipo = (t) => !tnTipo || (tnTipo === "PARCIAL") === tnParcial(t);
   const TN_CARD = {
-    fazer: (t) => t.na_planilha && !t.responsavel && tnFeitas(t) < TN_ETAPAS.length,
-    andamento: (t) => t.responsavel && tnFeitas(t) < TN_ETAPAS.length,
-    feitos: (t) => tnFeitas(t) === TN_ETAPAS.length,
-    problema: (t) => t.na_planilha && tnFeitas(t) < TN_ETAPAS.length && !tnMetodo(t).ok,
+    fazer: (t) => t.na_planilha && !t.responsavel && tnFeitas(t) < tnTam(t),
+    andamento: (t) => t.responsavel && tnFeitas(t) < tnTam(t),
+    feitos: (t) => tnFeitas(t) === tnTam(t),
+    problema: (t) => t.na_planilha && tnFeitas(t) < tnTam(t) && !tnMetodo(t).ok,
   };
   const TN_NOME = { fazer: "A fazer", andamento: "Em andamento", feitos: "Concluídos", problema: "Sem método (DE × PARA não casou)" };
   async function carregarTrocas() {
@@ -1588,17 +1594,17 @@
   function desenharTrocas() {
     $("tn-info").textContent = tnInfo ? `${tnInfo.arquivo || "planilha"} · enviada em ${new Date(tnInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${tnInfo.enviado_por ? " por " + tnInfo.enviado_por : ""} · ${fmt(tnInfo.linhas)} tickets na fila`
       : 'Suba o detalhamento_tickets ("Subir detalhamento_tickets") para trazer os tickets.';
-    document.querySelectorAll("#tn-cards .kpi[data-tn]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(tnLista.filter(TN_CARD[b.dataset.tn]).length); b.classList.toggle("ativa", b.dataset.tn === tnCard); });
-    const L = tnLista.filter(TN_CARD[tnCard]).sort((a, b) => String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
+    document.querySelectorAll("#tn-cards .kpi[data-tn]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(tnLista.filter(tnDoTipo).filter(TN_CARD[b.dataset.tn]).length); b.classList.toggle("ativa", b.dataset.tn === tnCard); });
+    const L = tnLista.filter(tnDoTipo).filter(TN_CARD[tnCard]).sort((a, b) => String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
     $("tn-titulo").textContent = `${TN_NOME[tnCard]} (${fmt(L.length)})`;
     const eu = meuEmail();
     $("tn-linhas").innerHTML = L.map((t) => {
       const m = tnMetodo(t), feitas = tnFeitas(t), aberto = tnAberto === t.ticket;
       const met = m.ok ? `<b>${esc(m.ok.metodo)}</b>${m.manual ? ' <span class="chip cinza">escolhido</span>' : ""}` : `<span class="txt-vermelho">⚠ ${esc(m.erro)}</span>`;
       const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
-      return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td>${esc(t.ticket)}</td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
-        <td><span class="chip ${feitas === TN_ETAPAS.length ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${TN_ETAPAS.length}</span></td><td>${quem}</td></tr>`
-        + (aberto ? `<tr class="tn-detalhe"><td colspan="7">${detalheTroca(t, m)}</td></tr>` : "");
+      return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td>${esc(t.ticket)}</td><td><span class="chip ${tnParcial(t) ? "azul" : "cinza"}">${tnParcial(t) ? "Parcial" : "Total"}</span></td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
+        <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span></td><td>${quem}</td></tr>`
+        + (aberto ? `<tr class="tn-detalhe"><td colspan="8">${detalheTroca(t, m)}</td></tr>` : "");
     }).join("");
     $("tn-vazio").hidden = L.length > 0;
   }
@@ -1612,9 +1618,9 @@
       <div><h3>Para digitar na Intelipost</h3>
         ${copiar("Pedido (Busca por Lote)", t.pedido)}
         ${copiar("Método de entrega", m.ok ? m.ok.metodo : "")}
-        ${copiar("Código de rastreamento", num)}${copiar("Nota", num)}${copiar("Série", ser || t.serie)}
-        ${copiar("Chave da Nota Fiscal", t.chave)}${copiar("Data da Nota Fiscal", br(t.data_emissao))}
-        <p class="s">Transportadora no Promob: ${esc(String(t.transp_promob || "").replace(/^!/, ""))} · série ${esc(t.serie || "?")}${t.linhas > 1 ? ` · <b>${t.linhas} linhas na planilha: confira se o pedido tem mais de 1 volume e altere TODOS</b>` : ""}</p>
+        ${tnParcial(t) ? copiar("Nova NF (para a série)", t.nf_nova) : `${copiar("Código de rastreamento", num)}${copiar("Nota", num)}${copiar("Série", ser || t.serie)}
+        ${copiar("Chave da Nota Fiscal", t.chave)}${copiar("Data da Nota Fiscal", br(t.data_emissao))}`}
+        <p class="s">Transportadora no Promob: ${esc(String(t.transp_promob || "").replace(/^!/, ""))} · série ${esc(t.serie || "?")}${tnParcial(t) ? " · <b>Parcial: não altere os volumes</b>" : t.linhas > 1 ? ` · <b>${t.linhas} linhas na planilha: confira se o pedido tem mais de 1 volume e altere TODOS</b>` : ""}</p>
         ${escolha}
       </div>
       <div><h3>Robô na Intelipost</h3>
@@ -1623,7 +1629,7 @@
           <button class="btn contorno" data-robo-troca="teste" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Testar com o robô (não salva)</button>
           <button class="btn" data-robo-troca="real" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Fazer com o robô</button>
         </div>
-        <p class="s">O robô faz as etapas 1 a 5: transportadora e método, simulação de cotação, Entrega prev. 23:59, todos os volumes e o status Micro 920. Ele passa de 30 em 30 minutos.</p>
+        <p class="s">${tnParcial(t) ? "Parcial: o robô troca transportadora e método, faz a simulação de cotação, a Entrega prev. 23:59 e o status Micro 920 (não mexe nos volumes)." : "O robô faz as etapas 1 a 5: transportadora e método, simulação de cotação, Entrega prev. 23:59, todos os volumes e o status Micro 920."} Ele passa de 30 em 30 minutos.</p>
         <h3 class="tn-mao">Ou na mão: prazo da cotação → nova data</h3>
         <label class="tn-prazo">Prazo de entrega da simulação (dias úteis) <input type="number" min="1" max="60" data-prazo="${esc(t.ticket)}"></label>
         <p class="tn-data" id="tn-data-${esc(t.ticket)}">Digite o prazo para calcular.</p>
@@ -1631,7 +1637,7 @@
         <button class="btn contorno" data-robo="${esc(t.ticket)}" disabled>Mandar a data para o robô</button>
       </div>
       <div><h3>Etapas</h3>
-        ${TN_ETAPAS.map((e, i) => { const x = t.etapas && t.etapas[i + 1]; return `<label class="tn-etapa"><input type="checkbox" data-etapa="${i + 1}" data-tk="${esc(t.ticket)}" ${x ? "checked" : ""}> <span>${i + 1}. ${esc(e)}</span>${x ? `<em>${esc(String(x.por || "").split("@")[0])} · ${new Date(x.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</em>` : ""}</label>`; }).join("")}
+        ${TN_ETAPAS.map((e, i) => { if (tnPula(t, i + 1)) return `<label class="tn-etapa tn-na"><input type="checkbox" disabled> <span>${i + 1}. ${esc(e)} — não se aplica (Parcial)</span></label>`; const x = t.etapas && t.etapas[i + 1]; return `<label class="tn-etapa"><input type="checkbox" data-etapa="${i + 1}" data-tk="${esc(t.ticket)}" ${x ? "checked" : ""}> <span>${i + 1}. ${esc(e)}</span>${x ? `<em>${esc(String(x.por || "").split("@")[0])} · ${new Date(x.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</em>` : ""}</label>`; }).join("")}
         ${t.responsavel ? `<p class="s">Com ${esc(t.responsavel)} desde ${new Date(t.pego_em || t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${t.responsavel === meuEmail() ? ' · <button class="link" data-soltar="' + esc(t.ticket) + '">soltar</button>' : ""}</p>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar este ticket</button>`}
       </div></div>`;
   }
@@ -1655,6 +1661,7 @@
     const i = tnLista.findIndex((x) => x.ticket === ticket); if (i >= 0 && data && data[0]) tnLista[i] = data[0];
     desenharTrocas(); return true;
   }
+  $("tn-tipo").addEventListener("change", (e) => { tnTipo = e.target.value; tnAberto = null; desenharTrocas(); });
   $("tn-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-tn]"); if (!b) return; tnCard = b.dataset.tn; tnAberto = null; desenharTrocas(); });
   $("tn-linhas").addEventListener("click", async (e) => {
     const cp = e.target.closest("[data-copiar]"); if (cp) { e.stopPropagation(); try { await navigator.clipboard.writeText(cp.dataset.copiar); toast("Copiado."); } catch (_) { toast("Não consegui copiar.", true); } return; }
@@ -1664,7 +1671,7 @@
     const so = e.target.closest("[data-soltar]"); if (so) { e.stopPropagation(); await salvarTroca(so.dataset.soltar, { responsavel: null, pego_em: null }); return; }
     const rt = e.target.closest("[data-robo-troca]"); if (rt) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rt.dataset.tk), m = t && tnMetodo(t); if (!t || !m.ok) return;
       const real = rt.dataset.roboTroca === "real";
-      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}\n• simulação de cotação e Entrega prev. 23:59\n• todos os volumes com a nota ${t.nf_nova}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n\nConfirmar?`)) return;
+      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}\n• simulação de cotação e Entrega prev. 23:59${tnParcial(t) ? "\n• volumes: não mexe (Parcial)" : `\n• todos os volumes com a nota ${t.nf_nova}`}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n\nConfirmar?`)) return;
       const { error } = await sb.rpc("pedir_robo_troca", { tk: t.ticket, metodo: m.ok.metodo, transp: m.ok.transp, modo: real ? "real" : "teste" });
       if (error) return toast(/pedir_robo_troca|schema cache/i.test(error.message) ? "Rode de novo o supabase/schema.sql (parte 18) para usar o robô da troca." : "Não consegui mandar: " + error.message, true);
       toast(real ? "Mandado para o robô fazer na Intelipost." : "Mandado para o robô testar (não salva nada).");
@@ -1682,7 +1689,7 @@
     const cb = e.target.closest("input[data-etapa]");
     if (cb) { const t = tnLista.find((x) => x.ticket === cb.dataset.tk); if (!t) return;
       const et = { ...(t.etapas || {}) }; if (cb.checked) et[cb.dataset.etapa] = { por: meuEmail(), em: new Date().toISOString() }; else delete et[cb.dataset.etapa];
-      const completo = TN_ETAPAS.every((_, i) => et[i + 1]);
+      const completo = TN_ETAPAS.every((_, i) => tnPula(t, i + 1) || et[i + 1]);
       const campos = { etapas: et, concluido_em: completo ? new Date().toISOString() : null };
       if (!t.responsavel) { campos.responsavel = meuEmail(); campos.pego_em = new Date().toISOString(); }
       await salvarTroca(t.ticket, campos); return; }
@@ -1700,7 +1707,7 @@
   $("tn-arquivo").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
     carregando("Lendo a aba Reposições…"); await new Promise((r) => setTimeout(r, 50));
-    let itens = [], totalFila = 0, parciais = 0;
+    let itens = [], totalFila = 0, outros = 0;
     try {
       const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
       const aba = wb.SheetNames.find((n) => norm(n).startsWith("REPOSI"));
@@ -1716,27 +1723,28 @@
       rows.slice(iCab + 1).forEach((r) => {
         if (!r || norm(r[c.fila]) !== "AJUSTE DE DADOS NA INTELIPOST") return;
         totalFila++;
-        if (norm(r[c.tipo]) !== "TOTAL") { parciais++; return; }
+        const tipo = norm(r[c.tipo]);
+        if (tipo !== "TOTAL" && tipo !== "PARCIAL") { outros++; return; }
         const tk = String(r[c.tk] ?? "").trim(); if (!tk) return;
-        const ant = porTk.get(tk); if (ant) { ant.linhas++; return; }
+        const ant = porTk.get(tk); if (ant) { ant.linhas++; if (tipo === "TOTAL") ant.tipo = "TOTAL"; return; }
         const nf = String(r[c.nf] ?? "").trim(), serie = (nf.split("-")[1] || "").trim().replace(/^0+(?=\d)/, "");
         let dt = r[c.dt]; dt = dt instanceof Date ? dt.toISOString().slice(0, 10) : typeof dt === "number" ? (() => { const p = XLSX.SSF.parse_date_code(dt); return p ? `${p.y}-${String(p.m).padStart(2, "0")}-${String(p.d).padStart(2, "0")}` : null; })() : dt ? dataBR(String(dt).slice(0, 10)) : null;
         const tp = TROCA.transpDaTroca(r[c.tr], r[c.tn]);
         porTk.set(tk, { ticket: tk, pedido: String(r[c.ped] ?? "").trim(), nf_ticket: String(r[c.nft] ?? "").trim(), nf_nova: nf, serie,
-          chave: String(r[c.chave] ?? "").replace(/\D/g, ""), data_emissao: dt, transp_promob: tp.erro ? "!" + tp.erro : tp.nome, linhas: 1 });
+          chave: String(r[c.chave] ?? "").replace(/\D/g, ""), data_emissao: dt, transp_promob: tp.erro ? "!" + tp.erro : tp.nome, linhas: 1, tipo });
       });
       itens = [...porTk.values()];
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    if (!confirm(`${arq.name}\n\nFila "Ajuste de dados na Intelipost": ${fmt(totalFila)} linha(s).\n${fmt(itens.length)} ticket(s) de reposição TOTAL entram na Troca de notas${parciais ? ` (${fmt(parciais)} linha(s) Parcial ficam de fora)` : ""}.\n\nQuem pegou e as etapas marcadas continuam salvos. Enviar?`)) return;
+    if (!confirm(`${arq.name}\n\nFila "Ajuste de dados na Intelipost": ${fmt(totalFila)} linha(s).\n${fmt(itens.filter((x) => x.tipo === "TOTAL").length)} ticket(s) Total e ${fmt(itens.filter((x) => x.tipo === "PARCIAL").length)} Parcial entram na Troca de notas${outros ? ` (${fmt(outros)} linha(s) sem tipo Total/Parcial ficam de fora)` : ""}.\n\nQuem pegou e as etapas marcadas continuam salvos. Enviar?`)) return;
     const { error } = await sb.rpc("importar_troca_notas", { itens, arquivo: arq.name });
     if (error) return toast("Erro ao enviar: " + error.message + (/importar_troca_notas|schema cache/i.test(error.message) ? " (rode de novo o supabase/schema.sql)" : ""), true);
     toast(`${fmt(itens.length)} ticket(s) na Troca de notas.`); await carregarTrocas();
   });
   $("tn-baixar").addEventListener("click", () => {
-    const L = tnLista.filter(TN_CARD[tnCard]); if (!L.length) return toast("Nada para exportar.", true);
-    const linhas = [["Ticket", "Pedido", "NF do ticket", "Nova NF", "Série", "Chave", "Data emissão", "Transportadora (Promob)", "Método na Intelipost", "Etapas", "Quem pegou"]]
-      .concat(L.map((t) => { const m = tnMetodo(t); return [t.ticket, t.pedido, t.nf_ticket, t.nf_nova, t.serie, t.chave, br(t.data_emissao), String(t.transp_promob || "").replace(/^!/, ""), m.ok ? m.ok.metodo : "⚠ " + m.erro, `${tnFeitas(t)}/${TN_ETAPAS.length}`, t.responsavel || ""]; }));
+    const L = tnLista.filter(tnDoTipo).filter(TN_CARD[tnCard]); if (!L.length) return toast("Nada para exportar.", true);
+    const linhas = [["Ticket", "Tipo", "Pedido", "NF do ticket", "Nova NF", "Série", "Chave", "Data emissão", "Transportadora (Promob)", "Método na Intelipost", "Etapas", "Quem pegou"]]
+      .concat(L.map((t) => { const m = tnMetodo(t); return [t.ticket, tnParcial(t) ? "Parcial" : "Total", t.pedido, t.nf_ticket, t.nf_nova, t.serie, t.chave, br(t.data_emissao), String(t.transp_promob || "").replace(/^!/, ""), m.ok ? m.ok.metodo : "⚠ " + m.erro, `${tnFeitas(t)}/${tnTam(t)}`, t.responsavel || ""]; }));
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Troca de notas");
     XLSX.writeFile(wb, `troca_de_notas_${hojeISO()}.xlsx`);
   });
