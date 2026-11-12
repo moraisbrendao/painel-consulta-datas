@@ -109,7 +109,7 @@ async function abrirPedido(pedido, olhar) {
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
   // a previsão só vira campo depois de clicar em "Editar" (o "Salvar" aparece junto)
-  const editar = tela.getByRole("button", { name: /^\s*editar\s*$/i }).first();
+  const editar = tela.locator("button:visible, a:visible, [role=button]:visible, input[type=button]:visible").filter({ hasText: /^\s*editar\s*$/i }).first();
   try { await editar.waitFor({ timeout: 60000 }); await editar.click(); await tela.waitForTimeout(1500); }
   catch { if (olhar) await camposDeData(tela); if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o botão Editar."); }
   if (olhar) { log("Cliquei em Editar (nada é salvo no diagnóstico)."); await camposDeData(tela); }
@@ -143,7 +143,7 @@ async function alterar(pedido, iso) {
     await dt.fill(`${iso}T23:59`);
     if (MODO !== "real") return "teste";
     const resp = tela.waitForResponse((r) => r.request().method() === "PUT" && /intelipost/i.test(r.url()), { timeout: 45000 });
-    await tela.getByRole("button", { name: /salvar|atualizar|confirmar|gravar/i }).first().click();
+    await tela.locator("button:visible, a:visible, [role=button]:visible").filter({ hasText: /^\s*salvar\s*$/i }).first().click();
     const r = await resp;   // confirma pela resposta do servidor, não pela tela
     if (r.status() >= 400) throw new Error(`A Intelipost recusou a alteração (código ${r.status()}).`);
     return "ok";
