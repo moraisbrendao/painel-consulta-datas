@@ -73,7 +73,7 @@ async function esqueleto(titulo) {
     const links = [...document.querySelectorAll("nav a, aside a, [class*=menu] a")].slice(0, 80).map((a) => `${(a.innerText || "").trim().slice(0, 40)} -> ${(a.getAttribute("href") || "").slice(0, 80)}`);
     return { campos, opcoes, botoes: [...new Set(botoes)], links: [...new Set(links)] };
   });
-  log(`== ${titulo} · ${new URL(pagina.url()).host}${new URL(pagina.url()).pathname}${new URL(pagina.url()).hash.replace(/[^#/a-z-]/gi, "")}`);
+  log(`== ${titulo} · ${new URL(pagina.url()).host}${new URL(pagina.url()).pathname}${new URL(pagina.url()).hash.replace(/order-number\/[^/]+/i, "order-number/<pedido>")}`);
   info.campos.forEach((c) => log("  campo:", c));
   info.opcoes.forEach((o) => log("  opções:", o));
   log("  botões:", info.botoes.join(" / "));
@@ -98,7 +98,7 @@ async function abrirPedido(pedido, olhar) {
     const t = await pagina.evaluate(() => ({
       cab: [...document.querySelectorAll("table thead th")].map((x) => x.innerText.trim()).filter(Boolean).slice(0, 30),
       clic: [...(document.querySelector("table tbody tr") || document.createElement("tr")).querySelectorAll("a, button, [role=button], [class*=link]")]
-        .map((x) => `${x.tagName.toLowerCase()}${x.getAttribute("href") ? " href=" + x.getAttribute("href").replace(/[^/#?=&a-z-]+/gi, "*") : ""}${x.getAttribute("target") ? " target=" + x.getAttribute("target") : ""} class=${(x.className || "").toString().slice(0, 40)}`).slice(0, 15),
+        .map((x) => `${x.tagName.toLowerCase()}${x.getAttribute("href") ? " href=" + x.getAttribute("href").replace(/order-number\/[^/]+/i, "order-number/<pedido>").replace(/\d+/g, "#") : ""}${x.getAttribute("target") ? " target=" + x.getAttribute("target") : ""} class=${(x.className || "").toString().slice(0, 40)}`).slice(0, 15),
     }));
     log("  colunas da lista:", t.cab.join(" / "));
     t.clic.forEach((c) => log("  clicável na linha:", c));
@@ -110,8 +110,23 @@ async function abrirPedido(pedido, olhar) {
   tela.setDefaultTimeout(30000);
   const campo = tela.locator(process.env.INTELIPOST_CAMPO || "[id$='_formated'], [name$='_formated']").first();
   try { await campo.waitFor({ timeout: 60000 }); }
-  catch { if (olhar) { const p0 = pagina; pagina = tela; await esqueleto("Tela do pedido (sem o campo de data)"); pagina = p0; } if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
+  catch { if (olhar) { await tela.waitForTimeout(5000); await camposDeData(tela); } if (aba) await aba.close(); throw new Error("A tela do pedido abriu, mas não achei o campo da previsão."); }
   return { tela, campo, aba };
+}
+
+// diagnóstico: todos os campos de data da tela do pedido (inclusive escondidos) e os botões, sem valores
+async function camposDeData(tela) {
+  const r = await tela.evaluate(() => {
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const campos = [...document.querySelectorAll("input")].filter((e) => /date|data|previs|estimat|formated|delivery|entrega/i.test(`${e.id} ${e.name} ${e.type} ${e.className} ${e.getAttribute("ng-model") || ""}`))
+      .slice(0, 40).map((e) => `${e.type} | id=${e.id} | name=${e.name} | ng-model=${e.getAttribute("ng-model") || ""} | ${vis(e) ? "visível" : "escondido"}`);
+    const rotulos = [...document.querySelectorAll("label, th, dt, .control-label, strong, b, h3, h4, h5")].map((e) => e.innerText.trim()).filter((t) => t && t.length < 50 && /previs|entrega|data/i.test(t)).slice(0, 30);
+    const botoes = [...document.querySelectorAll("button, a.btn, [role=button], input[type=submit], input[type=button]")].map((e) => `${(e.innerText || e.value || e.title || "").trim().slice(0, 30)}${vis(e) ? "" : " (escondido)"}`).filter((t) => t && !/^\(escondido\)$/.test(t));
+    return { campos, rotulos: [...new Set(rotulos)], botoes: [...new Set(botoes)].slice(0, 50) };
+  });
+  log("== Tela do pedido · campos de data:"); r.campos.forEach((c) => log("  campo:", c));
+  log("  rótulos com data/previsão:", r.rotulos.join(" / "));
+  log("  botões:", r.botoes.join(" / "));
 }
 
 async function alterar(pedido, iso) {
