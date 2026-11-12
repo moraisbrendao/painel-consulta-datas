@@ -277,9 +277,15 @@ async function diagTroca() {
     await esqueleto("Alterar Pedidos depois de buscar");
     await mapaTela(pagina, "Alterar Pedidos · ng-click");
     // marca o pedido e escolhe "Micro" (isso só mostra os campos; nada é salvo sem o Atualizar)
-    await pagina.locator("table tbody tr input[type=checkbox]:visible").first().check().catch((e) => log("Marcar pedido:", e.message.split("\n")[0]));
+    const cx = await pagina.evaluate(() => [...document.querySelectorAll("input[type=checkbox]")].filter((e) => e.getBoundingClientRect().width > 0)
+      .map((e) => `ng-model=${e.getAttribute("ng-model") || ""} | ng-change=${(e.getAttribute("ng-change") || e.getAttribute("ng-click") || "").slice(0, 50)} | dentro de ${e.closest("thead") ? "thead" : e.closest("tbody") ? "tbody" : e.closest("table") ? "table" : "fora da tabela"} | ${e.disabled ? "desativado" : "ativo"}`));
+    cx.forEach((c) => log("  caixinha:", c));
+    const sels = await pagina.evaluate(() => [...document.querySelectorAll("select")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => `ng-model=${e.getAttribute("ng-model") || ""} | ${e.disabled ? "desativado" : "ativo"}`));
+    sels.forEach((c) => log("  select:", c));
+    await pagina.locator("input[type=checkbox]:visible").last().click({ force: true }).catch((e) => log("Marcar pedido:", e.message.split("\n")[0]));
+    await pagina.waitForTimeout(1500);
     const porSel = pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: /^\s*Micro\s*$/ }) }).first();
-    await porSel.selectOption({ label: "Micro" }).catch((e) => log("Alterar por Micro:", e.message.split("\n")[0]));
+    await porSel.selectOption({ label: "Micro" }, { timeout: 10000 }).catch((e) => log("Alterar por Micro:", e.message.split("\n")[0]));
     await pagina.waitForTimeout(3000);
     await camposDetalhe(pagina, "Alterar Pedidos · Alterar por Micro", "^(12|920)\\b|tr[aâ]nsito|nova nota|equipe_?04|troca");
     const botoes = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("button, input[type=submit]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => (e.innerText || e.value || "").trim()).filter(Boolean))]);
