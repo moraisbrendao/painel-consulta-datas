@@ -306,3 +306,21 @@ body[data-perfil="sac"] .so-log { display: none !important; }
   #pagina-preventivo .filtros-topo { grid-template-columns: 1fr 1fr; position: static; }
 }
 @media (max-width: 520px) { .kpis { grid-template-columns: 1fr 1fr; } #pagina-preventivo .filtros-topo { grid-template-columns: 1fr; } .kpi .kpi-num { font-size: 22px; } }
+
+/* mesmo padrão em todas as páginas: filtros em cartão, título, cards */
+.filtros-cartao { background: #fff; border: 1px solid var(--borda); border-radius: 12px; padding: 14px 16px; box-shadow: 0 1px 2px rgba(13,34,64,.04);
+  display: grid; gap: 10px; align-items: end; margin: 0; }
+.filtros-cartao.filtros-sac { grid-template-columns: auto minmax(0,1.6fr) repeat(3, minmax(0,1fr)); }
+.filtros-cartao.filtros-rep { grid-template-columns: auto repeat(4, minmax(0,1fr)) auto; margin-top: 0; }
+.titulo-pagina.com-acoes { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; flex-wrap: wrap; }
+.titulo-pagina.com-acoes > div:first-child { flex: 1; min-width: 260px; }
+.kpis-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.kpis-oc { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
+.kpis-oc .oc-card { border-radius: 12px; padding: 18px 16px; gap: 6px; min-height: 104px; border-left-width: 1px; }
+.kpis-oc .oc-card span { font-weight: 500; text-transform: uppercase; letter-spacing: .02em; font-size: 11px; }
+.kpis-oc .oc-card b { font-size: 26px; font-weight: 800; }
+.kpis-oc .oc-card.pend { border-left: 1px solid var(--borda); }
+@media (max-width: 1200px) { .kpis-oc { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 1000px) { .filtros-cartao.filtros-sac, .filtros-cartao.filtros-rep { grid-template-columns: 1fr 1fr; } .filtros-cartao .filtros-rot, .filtros-cartao .cresce { grid-column: 1 / -1; } }
+@media (max-width: 700px) { .kpis-3 { grid-template-columns: 1fr 1fr; } .kpis-oc { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .filtros-cartao.filtros-sac, .filtros-cartao.filtros-rep { grid-template-columns: 1fr; } }

@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=31">
+  <link rel="stylesheet" href="styles.css?v=32">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -155,20 +155,18 @@
 
     <!-- ============ OCORRÊNCIAS ============ -->
     <main class="conteudo" id="pagina-ocorrencias" hidden>
-      <section class="cartao">
-        <div class="cartao-topo">
-          <div>
-            <h2>Ocorrências no portal da transportadora</h2>
-            <p class="sub">Pedidos em DESTINATÁRIO AUSENTE, ENDEREÇO NÃO LOCALIZADO, AGUARDANDO INSTRUÇÃO, DESTINATÁRIO MUDOU-SE,
-              CARGA RECUSADA PELO DESTINATARIO e ESTABELECIMENTO FECHADO vencidos ou a vencer (os mesmos da tabela de range) precisam ter ocorrência cadastrada no portal.</p>
-            <p id="oc-info" class="info-base"></p>
-          </div>
-          <label class="btn amarelo" title="Planilha com as ocorrências já cadastradas no portal">
-            Enviar ocorrências cadastradas<input id="arquivo-ocorrencias" type="file" accept=".xlsx,.xls,.csv" hidden>
-          </label>
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Ocorrências</h1>
+          <p class="sub">Pedidos em DESTINATÁRIO AUSENTE, ENDEREÇO NÃO LOCALIZADO, AGUARDANDO INSTRUÇÃO, DESTINATÁRIO MUDOU-SE,
+            CARGA RECUSADA PELO DESTINATARIO e ESTABELECIMENTO FECHADO vencidos ou a vencer (os mesmos da tabela de range) precisam ter ocorrência cadastrada no portal.</p>
+          <p id="oc-info" class="info-base"></p>
         </div>
-        <div id="oc-resumo" class="oc-resumo"></div>
-      </section>
+        <label class="btn amarelo" title="Planilha com as ocorrências já cadastradas no portal">
+          Enviar ocorrências cadastradas<input id="arquivo-ocorrencias" type="file" accept=".xlsx,.xls,.csv" hidden>
+        </label>
+      </div>
+      <div id="oc-resumo" class="oc-resumo kpis-oc"></div>
 
       <section class="cartao">
         <div class="cartao-topo">
@@ -200,8 +198,12 @@
     </main>
     <!-- ============ RESPONSÁVEIS ============ -->
     <main class="conteudo" id="pagina-responsaveis" hidden>
+      <div class="titulo-pagina">
+        <h1>Responsáveis</h1>
+        <p class="sub">Cada micro status tem um dono. Quem não tem dono aparece como pendente no Preventivo.</p>
+      </div>
       <section class="cartao">
-        <h2>Responsáveis</h2>
+        <h2>Pessoas</h2>
         <p class="sub">Cadastre as pessoas (ou áreas) que cuidam dos micro status.</p>
         <form id="form-resp" class="form-sac">
           <label class="cresce">Nome<input id="resp-nome" required maxlength="80" placeholder="Nome da pessoa"></label>
@@ -230,31 +232,32 @@
 
     <!-- ============ REPOSIÇÃO ============ -->
     <main class="conteudo" id="pagina-reposicao" hidden>
-      <section class="cartao">
-        <div class="cartao-topo">
-          <div>
-            <h2>Reposição</h2>
-            <p class="sub"><b>Pré entrega</b> = ticket criado pelo <b>CCP</b> (coluna Via) que foi para a fila <b>Atribuir transportador</b>.
-              <b>Pós entrega</b> = Tipo <b>Reposição Pós Entrega</b>. A transportadora é a de <b>redespacho</b> quando houver.</p>
-            <p id="rep-info" class="info-base">Carregando…</p>
-          </div>
-          <div class="acoes-robo">
-            <label class="btn amarelo" title="Planilha TABELA DE ACOMPANHAMENTO (aba Export)">Enviar tabela de acompanhamento<input id="arquivo-rep" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
-            <button id="rep-exportar" class="btn">Exportar (Excel)</button>
-          </div>
+      <section class="filtros-cartao filtros-rep" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label>Criação de<input id="rep-de" type="date"></label>
+        <label>até<input id="rep-ate" type="date"></label>
+        <label>Mês<select id="rep-mes"></select></label>
+        <label>Transportadora<select id="rep-transp"></select></label>
+        <button id="rep-limpar" class="link limpar" type="button">Limpar filtros</button>
+      </section>
+
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Reposição</h1>
+          <p class="sub"><b>Pré entrega</b> = ticket criado pelo <b>CCP</b> (coluna Via) que foi para a fila <b>Atribuir transportador</b>.
+            <b>Pós entrega</b> = Tipo <b>Reposição Pós Entrega</b>. A transportadora é a de <b>redespacho</b> quando houver.</p>
+          <p id="rep-info" class="info-base">Carregando…</p>
         </div>
-        <div class="visoes visoes-sac" id="rep-visoes" role="tablist">
-          <button class="visao-sac ativa" data-rv="pre">Pré entrega <span></span></button>
-          <button class="visao-sac" data-rv="pos">Pós entrega <span></span></button>
-          <button class="visao-sac" data-rv="todas">Todas <span></span></button>
+        <div class="acoes-robo">
+          <label class="btn amarelo" title="Planilha TABELA DE ACOMPANHAMENTO (aba Export)">Enviar tabela de acompanhamento<input id="arquivo-rep" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
+          <button id="rep-exportar" class="btn contorno">Exportar (Excel)</button>
         </div>
-        <div class="filtros-sac filtros-rep">
-          <label>De<input id="rep-de" type="date"></label>
-          <label>Até<input id="rep-ate" type="date"></label>
-          <label>Mês<select id="rep-mes"></select></label>
-          <label>Transportadora<select id="rep-transp"></select></label>
-          <label><span>&nbsp;</span><button id="rep-limpar" class="btn" type="button">Limpar filtros</button></label>
-        </div>
+      </div>
+
+      <section class="kpis kpis-3" id="rep-visoes" role="tablist">
+        <button class="visao-sac kpi laranja ativa" data-rv="pre"><span class="kpi-rot">Pré entrega</span><b class="kpi-num"></b><small>criado pelo CCP · Atribuir transportador</small><i>↗</i></button>
+        <button class="visao-sac kpi azul" data-rv="pos"><span class="kpi-rot">Pós entrega</span><b class="kpi-num"></b><small>tipo Reposição Pós Entrega</small><i>↗</i></button>
+        <button class="visao-sac kpi " data-rv="todas"><span class="kpi-rot">Todas</span><b class="kpi-num"></b><small>pré + pós entrega</small><i>↗</i></button>
       </section>
 
       <section class="cartao">
@@ -274,30 +277,34 @@
 
     <!-- ============ CONSULTA SAC ============ -->
     <main class="conteudo" id="pagina-sac" hidden>
+      <section class="filtros-cartao filtros-sac" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label class="cresce">Nota fiscal ou pedido<input id="sac-busca" type="search" placeholder="# um ou vários"></label>
+        <label>Canal<select id="sac-canal"></select></label>
+        <label>Transportadora<select id="sac-transp"></select></label>
+        <label>Nova data<select id="sac-nova">
+          <option value="">Todas</option><option value="com">Com nova data</option>
+          <option value="sem">Sem nova data</option><option value="obs">Com observação</option>
+        </select></label>
+      </section>
+
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Consulta de entregas</h1>
+          <p class="sub">Pedidos em aberto já vencidos ou que vencem hoje ou amanhã, com a data prometida ao cliente, a nova data e a observação da Logística.</p>
+          <p id="sac-info" class="info-base">Carregando…</p>
+        </div>
+        <button id="sac-baixar" class="btn contorno">Baixar Excel</button>
+      </div>
+
+      <section class="kpis" id="sac-visoes" role="tablist">
+        <button class="visao-sac kpi  ativa" data-sv="todos"><span class="kpi-rot">Todos</span><b class="kpi-num"></b><small>vencidos, hoje e amanhã</small><i>↗</i></button>
+        <button class="visao-sac kpi vermelho" data-sv="vencidos"><span class="kpi-rot">Já vencidos</span><b class="kpi-num"></b><small>passou da data prometida</small><i>↗</i></button>
+        <button class="visao-sac kpi laranja" data-sv="hoje"><span class="kpi-rot">Vencem hoje</span><b class="kpi-num"></b><small>entrega prevista para hoje</small><i>↗</i></button>
+        <button class="visao-sac kpi azul" data-sv="amanha"><span class="kpi-rot">Vencem amanhã</span><b class="kpi-num"></b><small>entrega prevista para amanhã</small><i>↗</i></button>
+      </section>
+
       <section class="cartao">
-        <div class="cartao-topo">
-          <div>
-            <h2>Consulta de entregas</h2>
-            <p class="sub">Pedidos em aberto já vencidos ou que vencem hoje ou amanhã, com a data prometida ao cliente, a nova data e a observação da Logística.</p>
-            <p id="sac-info" class="info-base">Carregando…</p>
-          </div>
-          <button id="sac-baixar" class="btn">Baixar (Excel)</button>
-        </div>
-        <div class="visoes visoes-sac" id="sac-visoes" role="tablist">
-          <button class="visao-sac ativa" data-sv="todos">Todos <span></span></button>
-          <button class="visao-sac" data-sv="vencidos">Já vencidos <span></span></button>
-          <button class="visao-sac" data-sv="hoje">Vencem hoje <span></span></button>
-          <button class="visao-sac" data-sv="amanha">Vencem amanhã <span></span></button>
-        </div>
-        <div class="filtros-sac">
-          <label class="cresce">Buscar<input id="sac-busca" type="search" placeholder="NF ou pedido…"></label>
-          <label>Canal<select id="sac-canal"></select></label>
-          <label>Transportadora<select id="sac-transp"></select></label>
-          <label>Nova data<select id="sac-nova">
-            <option value="">Todas</option><option value="com">Com nova data</option>
-            <option value="sem">Sem nova data</option><option value="obs">Com observação</option>
-          </select></label>
-        </div>
         <div class="tabela-wrap">
           <table class="tabela-pedidos tabela-sac">
             <thead><tr>
@@ -338,7 +345,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=31"></script>
-  <script src="app.js?v=31"></script>
+  <script src="config.js?v=32"></script>
+  <script src="app.js?v=32"></script>
 </body>
 </html>

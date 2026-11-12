@@ -630,7 +630,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=31");
+        const w = new Worker("leitor-intelipost.js?v=32");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1055,7 +1055,7 @@
     });
     const pre = base0.filter(ePre), pos = base0.filter(ePos);
     const cont = { pre: pre.length, pos: pos.length, todas: pre.length + pos.length };
-    document.querySelectorAll("#rep-visoes .visao-sac").forEach((b) => { b.classList.toggle("ativa", b.dataset.rv === repVisao); b.querySelector("span").textContent = `(${fmt(cont[b.dataset.rv])})`; });
+    document.querySelectorAll("#rep-visoes .visao-sac").forEach((b) => { b.classList.toggle("ativa", b.dataset.rv === repVisao); b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.rv]); });
     repFiltradas = repVisao === "pre" ? pre : repVisao === "pos" ? pos : pre.concat(pos);
     $("rep-titulo").textContent = `Casos por transportadora e motivo · ${{ pre: "Pré entrega", pos: "Pós entrega", todas: "Pré e pós entrega" }[repVisao]} (${fmt(repFiltradas.length)})`;
     const porMot = new Map(), porTr = new Map();
@@ -1256,7 +1256,7 @@
     const base1 = sacLinhas.filter(passa);
     document.querySelectorAll("#sac-visoes .visao-sac").forEach((b) => {
       b.classList.toggle("ativa", b.dataset.sv === sacVisao);
-      b.querySelector("span").textContent = `(${fmt(base1.filter(naSv[b.dataset.sv]).length)})`;
+      b.querySelector(".kpi-num").textContent = fmt(base1.filter(naSv[b.dataset.sv]).length);
     });
     sacFiltrados = base1.filter(naSv[sacVisao]);
     sacFiltrados.sort((a, b) => String(a.prometido || "9999").localeCompare(String(b.prometido || "9999")));
