@@ -235,7 +235,9 @@ async function simularPrazo(cep, metodo, olhar) {
       log("  tabela vigente marcada:", await p.locator("xpath=//*[normalize-space(text())='Vigente']/following::input[@type='checkbox'][1] >> visible=true").first().isChecked().catch(() => "não achei"));
     }
     const chamadas = [], erros = [];
-    const ouvir = (r) => { if (!/jserrors|newrelic|nr-data|hotjar|analytics|segment|intercom|sentry|google/i.test(r.url())) chamadas.push(`${r.request().method()} ${r.status()} ${new URL(r.url()).host} ${new URL(r.url()).pathname.replace(/\d+/g, "#")}`); };
+    const corpos = [];
+    const ouvir = (r) => { if (/graphql\.intelipost/i.test(r.url())) corpos.push(r.text().then((t) => ({ op: (r.request().postData() || "").match(/"operationName"\s*:\s*"([^"]+)"/)?.[1] || "?", t })).catch(() => null));
+       if (!/jserrors|newrelic|nr-data|hotjar|analytics|segment|intercom|sentry|google/i.test(r.url())) chamadas.push(`${r.request().method()} ${r.status()} ${new URL(r.url()).host} ${new URL(r.url()).pathname.replace(/\d+/g, "#")}`); };
     const errou = (e) => erros.push(String(e.message || e).slice(0, 150));
     p.on("response", ouvir); p.on("pageerror", errou);
     const botaoCalc = p.getByRole("button", { name: /^\s*Calcular\s*$/i });
@@ -244,6 +246,14 @@ async function simularPrazo(cep, metodo, olhar) {
     await p.waitForTimeout(8000);
     p.off("response", ouvir); p.off("pageerror", errou);
     if (olhar) { const msg = await p.evaluate(() => [...document.querySelectorAll("body *")].filter((e) => e.children.length === 0 && e.getBoundingClientRect().width > 0 && /obrigat|inv[aá]lid|preencha|informe|selecione|erro|necess/i.test(e.textContent || "")).map((e) => e.textContent.trim().slice(0, 100))); [...new Set(msg)].slice(0, 15).forEach((m) => log("  texto de aviso:", m)); }
+    if (olhar) for (const c of (await Promise.all(corpos)).filter(Boolean)) {
+      log(`  graphql ${c.op}: ${c.t.length} letras`);
+      const chaves = [...new Set([...c.t.matchAll(/"([a-zA-Z_]+)"\s*:/g)].map((m) => m[1]))].slice(0, 60);
+      log("    chaves:", chaves.join(", "));
+      const err = c.t.match(/"message"\s*:\s*"([^"]{0,150})/); if (err) log("    mensagem:", err[1]);
+      [...c.t.matchAll(/"([a-zA-Z_]*(?:time|days|prazo|estimat|delivery_method_name|name)[a-zA-Z_]*)"\s*:\s*("?[^,}"]{0,40}"?)/gi)].slice(0, 20).forEach((m) => log("    ", m[1], "=", m[2]));
+    }
+    if (olhar) { const txt = await p.evaluate(() => (document.body.innerText.match(/.{0,60}(dias|Opç|Op[cç]ões de envio).{0,60}/gi) || []).slice(0, 10)); txt.forEach((t) => log("  texto na tela:", t.replace(/\s+/g, " "))); }
     if (olhar) { chamadas.slice(0, 15).forEach((c) => log("  chamada depois do Calcular:", c)); erros.forEach((e) => log("  erro de script:", e)); }
     if (olhar) { await p.waitForTimeout(3000); const avisos = await p.evaluate(() => [...document.querySelectorAll("[role=alert], .toast, [class*=toast], [class*=alert], [class*=error], .invalid-feedback, [class*=snack]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => e.innerText.trim().slice(0, 120)).filter(Boolean)); avisos.forEach((a) => log("  aviso na tela:", a)); }
     await p.locator("text=/Opções de Envio/i >> visible=true").first().waitFor({ timeout: 45000 });
