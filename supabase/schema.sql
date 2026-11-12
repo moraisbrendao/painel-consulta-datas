@@ -510,3 +510,58 @@ begin
 end $$;
 revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
+
+-- 15) Visão Gerencial: versão enxuta de TODOS os pedidos do arquivo de Transações da Intelipost
+--     (vem junto com o botão "Enviar Intelipost"; cada envio substitui o anterior).
+--     Sem nome, endereço, e-mail, telefone ou CEP do cliente.
+create table if not exists public.intelipost_pedidos (
+  pedido     text primary key,
+  nf         text, serie text, canal text, uf text, transportadora text,
+  status     text,        -- Status Transportador (Entregue, Em trânsito, Cancelado...)
+  micro      text,        -- MicroStatus
+  perf       text,        -- Performance (Entregue no prazo, Entregue fora do prazo...)
+  criado     date, despacho date, entrega date,
+  prev       date,        -- Previsão Entrega Cliente
+  prev_orig  date,        -- Previsão Entrega Cliente Original
+  ultimo     date         -- Data do último status
+);
+alter table public.intelipost_pedidos enable row level security;
+revoke all on public.intelipost_pedidos from anon;
+grant select on public.intelipost_pedidos to authenticated;
+drop policy if exists "logados leem" on public.intelipost_pedidos;
+create policy "logados leem" on public.intelipost_pedidos for select to authenticated using (not public.e_sac());
+
+-- recebe linhas no formato [pedido, nf, serie, canal, uf, transp, status, micro, perf, criado, despacho, entrega, prev, prev_orig, ultimo]
+create or replace function public.importar_intelipost(linhas jsonb, limpar boolean)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if limpar then delete from public.intelipost_pedidos where true; end if;
+  insert into public.intelipost_pedidos (pedido, nf, serie, canal, uf, transportadora, status, micro, perf, criado, despacho, entrega, prev, prev_orig, ultimo)
+  select l->>0, nullif(l->>1,''), nullif(l->>2,''), nullif(l->>3,''), nullif(l->>4,''), nullif(l->>5,''), nullif(l->>6,''), nullif(l->>7,''), nullif(l->>8,''),
+         nullif(l->>9,'')::date, nullif(l->>10,'')::date, nullif(l->>11,'')::date, nullif(l->>12,'')::date, nullif(l->>13,'')::date, nullif(l->>14,'')::date
+  from jsonb_array_elements(linhas) as l
+  where coalesce(l->>0, '') <> ''
+  on conflict (pedido) do update set nf = excluded.nf, serie = excluded.serie, canal = excluded.canal, uf = excluded.uf,
+    transportadora = excluded.transportadora, status = excluded.status, micro = excluded.micro, perf = excluded.perf,
+    criado = excluded.criado, despacho = excluded.despacho, entrega = excluded.entrega, prev = excluded.prev,
+    prev_orig = excluded.prev_orig, ultimo = excluded.ultimo;
+  return (select count(*) from public.intelipost_pedidos);
+end $$;
+revoke all on function public.importar_intelipost(jsonb, boolean) from public, anon;
+grant execute on function public.importar_intelipost(jsonb, boolean) to authenticated;
+
+-- devolve todos os pedidos de uma vez, em formato compacto (lista de listas), para a Visão Gerencial
+create or replace function public.intelipost_compacto()
+returns jsonb
+language sql stable security definer set search_path = public
+as $$
+  select case when public.e_sac() then '[]'::jsonb else coalesce(jsonb_agg(jsonb_build_array(
+    pedido, nf, serie, canal, uf, transportadora, status, micro, perf, criado, despacho, entrega, prev, prev_orig, ultimo)), '[]'::jsonb) end
+  from public.intelipost_pedidos;
+$$;
+revoke all on function public.intelipost_compacto() from public, anon;
+grant execute on function public.intelipost_compacto() to authenticated;

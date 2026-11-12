@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=34">
+  <link rel="stylesheet" href="styles.css?v=36">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -27,7 +27,8 @@
   <div id="tela-painel" hidden>
     <nav class="menu-lateral" aria-label="Menu">
       <div class="marca"><b>E-loggia 2.0</b><span>Multimóveis</span></div>
-      <button class="menu-item ativo so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
+      <button class="menu-item so-log" data-pagina="gerencial"><span class="menu-icone">▦</span>Visão Gerencial</button>
+      <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
@@ -54,6 +55,128 @@
     </header>
 
     <p id="aviso-perfil" class="aviso-perfil" hidden>⚠ O banco ainda não tem a parte do SAC: rode de novo o arquivo <b>supabase/schema.sql</b> no Supabase (SQL Editor › New query › Run). Até lá, o login do SAC vê o painel inteiro.</p>
+    <!-- ============ VISÃO GERENCIAL ============ -->
+    <main class="conteudo" id="pagina-gerencial" hidden>
+      <section class="filtros-cartao filtros-ger" id="g-filtros" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <div class="multi" data-g="canal" data-rotulo="Canal"></div>
+        <div class="multi" data-g="uf" data-rotulo="UF"></div>
+        <div class="multi" data-g="transp" data-rotulo="Transportadora"></div>
+        <div class="multi" data-g="serie" data-rotulo="Série"></div>
+        <div class="multi" data-g="origem" data-rotulo="Origem"></div>
+        <div class="multi" data-g="status" data-rotulo="Status Intelipost"></div>
+        <div class="multi" data-g="micro" data-rotulo="Micro status"></div>
+        <label class="g-nf">Nota fiscal<input id="g-nf" type="search" placeholder="# uma ou várias"></label>
+        <label>Criação de<input id="g-de" type="date"></label>
+        <label>até<input id="g-ate" type="date"></label>
+        <span class="g-dica">dá para escolher mais de um em cada filtro · <button id="g-limpar" class="link limpar" type="button">Limpar filtros</button></span>
+      </section>
+
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Visão Gerencial</h1>
+          <p id="g-info" class="sub">Carregando…</p>
+        </div>
+        <label class="g-meta">Meta de performance<span><input id="g-meta" type="number" min="50" max="100" step="0.5" value="97">%</span></label>
+      </div>
+
+      <section id="g-alerta" class="alerta" hidden>
+        <span class="alerta-ic">◎</span>
+        <div><b id="g-alerta-titulo"></b><p id="g-alerta-texto"></p></div>
+      </section>
+
+      <section class="kpis" id="g-cards">
+        <button class="kpi ativa" data-g="abertos"><span class="kpi-rot">Pedidos em aberto</span><b class="kpi-num"></b><small>ainda não entregues nem cancelados</small><i>↗</i></button>
+        <button class="kpi vermelho" data-g="atrasados"><span class="kpi-rot">Atrasados (em aberto)</span><b class="kpi-num"></b><small>passou da data prometida</small><i>↗</i></button>
+        <button class="kpi laranja" data-g="risco"><span class="kpi-rot">Em risco (vencendo)</span><b class="kpi-num"></b><small>vencem hoje ou amanhã · ação preventiva</small><i>↗</i></button>
+        <button class="kpi roxo" data-g="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>sem movimento ≥ 5 dias</small><i>↗</i></button>
+        <button class="kpi azul" data-g="vencem"><span class="kpi-rot">Vencem em até 5 dias</span><b class="kpi-num"></b><small>preventivo: dá para evitar o atraso</small><i>↗</i></button>
+        <div class="kpi kpi-fixo" id="g-perf"><span class="kpi-rot">Performance</span><b class="kpi-num"></b><small id="g-perf-sub"></small></div>
+      </section>
+      <p id="g-perf-nota" class="info-base"></p>
+
+      <section class="cartao g-atr" id="g-atr"></section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>〜 Produtividade | Transportadoras</h2>
+            <p class="sub">Entregue (linha), atraso de hoje e o que vence nos próximos dias. Clique numa barra para ver a lista.</p>
+          </div>
+          <div class="seg" id="g-janela"><button data-j="7">1 semana</button><button data-j="14" class="ativo">2 semanas</button><button data-j="30">1 mês</button></div>
+        </div>
+        <div id="g-prod-resumo" class="g-resumo"></div>
+        <div id="g-prod" class="g-svg"></div>
+        <div class="g-legenda"><span class="lg verde">À vencer</span><span class="lg amarelo">Atrasos</span><span class="lg linha">Entregue</span></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>▦ Atrasos por <span id="g-faixa-dim-nome">transportadora</span> e faixa</h2>
+            <p class="sub">Clique num número para ver aquele grupo, no nome para a linha inteira, no cabeçalho para a coluna. Depois é só baixar.</p>
+          </div>
+          <div class="acoes-robo">
+            <select id="g-faixa-dim"><option value="transp">Transportadora</option><option value="uf">UF</option><option value="canal">Canal</option><option value="micro">Micro status</option></select>
+            <button id="g-faixa-todos" class="btn primario">Extrair todos</button>
+          </div>
+        </div>
+        <div class="tabela-wrap"><table class="tabela-range tabela-faixa"><thead id="g-faixa-cab"></thead><tbody id="g-faixa-linhas"></tbody></table></div>
+      </section>
+
+      <div class="g-graficos">
+        <section class="cartao">
+          <h2>Distribuição por situação</h2>
+          <p class="sub">Situação de todos os pedidos da base. Clique numa barra para ver a lista.</p>
+          <div id="g-situacao" class="barras"></div>
+        </section>
+        <section class="cartao">
+          <h2>Pedidos por canal</h2>
+          <p class="sub">Volume total e o que ainda está na rua, por canal de venda. Clique numa barra para ver a lista.</p>
+          <div id="g-canais" class="g-svg"></div>
+          <div class="g-legenda"><span class="lg amarelo">Volume</span><span class="lg azul">Em aberto</span><span class="lg vermelho">Atrasados</span></div>
+        </section>
+      </div>
+
+      <section class="cartao">
+        <h2>Atraso por transportadora</h2>
+        <p class="sub">Sobre os pedidos em aberto, contra a meta. Clique numa linha para ver os atrasados dela.</p>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-perf"><thead><tr><th>Transportadora</th><th class="num">Performance</th><th class="num">Qtd em aberto</th><th class="num">Atrasado</th></tr></thead><tbody id="g-perf-linhas"></tbody></table></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Pedidos por transportadora</h2>
+            <p class="sub">Cada pedido conta uma vez só. O mês é o da criação do pedido.</p>
+          </div>
+          <div class="acoes-robo">
+            <div class="seg" id="g-pt-modo"><button data-m="sit" class="ativo">Por situação</button><button data-m="mes">Por mês</button></div>
+            <button id="g-pt-extrair" class="btn primario">Extrair</button>
+          </div>
+        </div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-pt"><thead id="g-pt-cab"></thead><tbody id="g-pt-linhas"></tbody></table></div>
+      </section>
+
+      <section class="cartao" id="g-lista-cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2 id="g-lista-titulo">Pedidos</h2>
+            <p class="sub">Clique nos cards, nas barras e nos números para mudar esta lista.</p>
+          </div>
+          <button id="g-exportar" class="btn contorno">Baixar Excel</button>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>Pedido</th><th>NF</th><th>Canal</th><th>Transportadora</th><th>UF</th><th>Status</th><th>Criado</th><th>Prometido</th><th>Entrega</th><th class="num">Parado (d)</th></tr></thead>
+            <tbody id="g-linhas"></tbody>
+          </table>
+          <p id="g-vazio" class="vazio" hidden>Nenhum pedido.</p>
+        </div>
+        <nav id="g-paginacao" class="paginacao"></nav>
+      </section>
+    </main>
+
     <main class="conteudo" id="pagina-preventivo">
       <!-- filtros: valem para todas as tabelas da página -->
       <section class="filtros-topo" id="filtros" aria-label="Filtros">
@@ -345,7 +468,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=34"></script>
-  <script src="app.js?v=34"></script>
+  <script src="config.js?v=36"></script>
+  <script src="app.js?v=36"></script>
 </body>
 </html>

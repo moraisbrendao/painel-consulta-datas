@@ -95,7 +95,7 @@
       irPara("sac");
       carregarSac();
     } else {
-      irPara("preventivo");
+      irPara("gerencial");
       carregar();
       ligarTempoReal();
     }
@@ -154,6 +154,7 @@
     montarOpcoes();
     redesenhar();
     desenharOcorrencias();
+    if (paginaAtual === "gerencial") montarGerencial();
     if (paginaAtual === "sac") desenharSacLogistica();
     desenharResponsaveis();
   }
@@ -637,7 +638,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=34");
+        const w = new Worker("leitor-intelipost.js?v=36");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -667,8 +668,19 @@
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
+    // versão enxuta de todos os pedidos, para a Visão Gerencial
+    let avisoGer = "";
+    try {
+      const todos = res.todos || [], L2 = 2000;
+      for (let i = 0; i < todos.length; i += L2) {
+        carregando(`Visão Gerencial… ${fmt(Math.min(i + L2, todos.length))} de ${fmt(todos.length)}`);
+        const { error } = await sb.rpc("importar_intelipost", { linhas: todos.slice(i, i + L2), limpar: i === 0 });
+        if (error) throw error;
+      }
+      gDados = null;
+    } catch (err) { avisoGer = " A Visão Gerencial não foi atualizada: rode de novo o supabase/schema.sql no Supabase."; }
     carregando("");
-    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.`);
+    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.` + avisoGer, !!avisoGer);
     carregar();
   });
   // =================================================================
@@ -877,10 +889,337 @@
     desenharOcorrencias(); redesenhar(true);
   });
 
+  // ---------------- visão gerencial ----------------
+  // Fonte: arquivo de Transações da Intelipost (todos os pedidos, inclusive entregues e cancelados),
+  // guardado enxuto em intelipost_pedidos. Data prometida = Previsão Entrega Cliente Original (senão a atual).
+  let gDados = null, gCarregando = false, gCard = "abertos", gSelecao = null, gLista = [], gPagina = 1, gTodos = false, gJanela = 14, gPtModo = "sit";
+  const gSel = { canal: new Set(), uf: new Set(), transp: new Set(), serie: new Set(), origem: new Set(), status: new Set(), micro: new Set() };
+  const G_CAMPOS = { canal: (r) => r.canal, uf: (r) => r.uf, transp: (r) => r.transp, serie: (r) => r.serie, origem: (r) => r.origem, status: (r) => r.status, micro: (r) => r.micro };
+  const G_NOME = { abertos: "Pedidos em aberto", atrasados: "Atrasados (em aberto)", risco: "Em risco (vencendo)", parados: "Parados no rastreio", vencem: "Vencem em até 5 dias" };
+  const SIT = [["ent_prazo", "Entregue no prazo", "#16a34a"], ["ent_atraso", "Entregue c/ atraso", "#dc2626"], ["ab_prazo", "Aberto no prazo", "#0ea5e9"],
+    ["ab_risco", "Aberto em risco", "#f59e0b"], ["ab_atraso", "Aberto atrasado", "#b91c1c"], ["cancelado", "Cancelado", "#94a3b8"]];
+  const FAIXAS = [["≥ 30 dias", (d) => d >= 30], ["≥ 20 dias", (d) => d >= 20 && d < 30], ["≥ 10 dias", (d) => d >= 10 && d < 20], ["≥ 5 dias", (d) => d >= 5 && d < 10],
+    ["≥ 4 dias", (d) => d === 4], ["≥ 3 dias", (d) => d === 3], ["≥ 2 dias", (d) => d === 2], ["≥ 1 dia", (d) => d === 1]];
+  const G_DIM = { transp: ["transportadora", (r) => r.transp || "(sem transportadora)"], uf: ["UF", (r) => r.uf || "(sem UF)"], canal: ["canal", (r) => r.canal || "(sem canal)"], micro: ["micro status", (r) => r.micro || "(sem micro status)"] };
+  try { const m = parseFloat(localStorage.getItem("painel.meta")); if (m) $("g-meta").value = m; } catch (_) {}
+  const ddmm = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) : "");
+  const somaDias = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return d.toISOString().slice(0, 10); };
+
+  async function carregarGerencial(forcar) {
+    if (gCarregando || (gDados && !forcar)) return;
+    gCarregando = true; $("g-info").textContent = "Carregando os pedidos da Intelipost…";
+    try {
+      const { data, error } = await sb.rpc("intelipost_compacto");
+      if (error) throw error;
+      const origem = new Map(base.map((p) => [p.pedido, p.origem]));
+      gDados = (data || []).map((a) => ({ pedido: a[0], nf: a[1], serie: a[2], canal: a[3], uf: a[4], transp: a[5], status: a[6], micro: a[7], perf: a[8],
+        criado: a[9], despacho: a[10], entrega: a[11], prev: a[12], prevOrig: a[13], ult: a[14], origem: origem.get(a[0]) || null }));
+    } catch (err) { gDados = []; $("g-info").textContent = "Para usar a Visão Gerencial, rode de novo o supabase/schema.sql no Supabase e envie o arquivo da Intelipost."; gCarregando = false; return; }
+    gCarregando = false;
+    montarGerencial();
+  }
+  function prepararG() {
+    const hoje = hojeISO();
+    gDados.forEach((r) => {
+      const st = norm(r.status);
+      r._prom = r.prevOrig || r.prev || null;
+      r._fechado = st === "ENTREGUE" || st === "CANCELADO";
+      r._d = r._prom ? diasEntre(hoje, r._prom) : null;           // >0 faltam dias, <0 atrasado
+      r._atraso = !r._fechado && r._d !== null && r._d < 0 ? -r._d : 0;
+      r._parado = r.ult ? diasEntre(r.ult, hoje) : null;
+      if (st === "CANCELADO") r._sit = "cancelado";
+      else if (st === "ENTREGUE") { const pf = norm(r.perf); r._sit = pf.includes("FORA DO PRAZO") ? "ent_atraso" : pf.includes("NO PRAZO") ? "ent_prazo" : (r.entrega && r._prom && r.entrega > r._prom ? "ent_atraso" : "ent_prazo"); }
+      else r._sit = r._atraso ? "ab_atraso" : r._d === 0 || r._d === 1 ? "ab_risco" : "ab_prazo";
+    });
+  }
+  const G_CARD = {
+    abertos: (r) => !r._fechado,
+    atrasados: (r) => r._atraso > 0,
+    risco: (r) => !r._fechado && (r._d === 0 || r._d === 1),
+    parados: (r) => !r._fechado && r._parado !== null && r._parado >= 5,
+    vencem: (r) => !r._fechado && r._d !== null && r._d >= 0 && r._d <= 5,
+  };
+
+  // filtros com várias opções (mesmo visual dos filtros do Preventivo)
+  function montarFiltrosG() {
+    document.querySelectorAll("#g-filtros .multi").forEach((el) => {
+      const k = el.dataset.g, cont = new Map();
+      gDados.forEach((r) => { const v = G_CAMPOS[k](r); if (v) cont.set(v, (cont.get(v) || 0) + 1); });
+      [...gSel[k]].forEach((v) => { if (!cont.has(v)) gSel[k].delete(v); });
+      const ops = [...cont.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), "pt-BR", { numeric: true }));
+      const aberto = el.querySelector(".multi-painel") && !el.querySelector(".multi-painel").hidden;
+      el.innerHTML = `<span class="multi-rotulo">${esc(el.dataset.rotulo)}</span>
+        <button type="button" class="multi-botao"><span class="multi-valor"></span><span class="seta">▾</span></button>
+        <div class="multi-painel" ${aberto ? "" : "hidden"}><input class="multi-busca" type="search" placeholder="Procurar…">
+          <div class="multi-lista">${ops.map(([v, n]) => `<label class="multi-op"><input type="checkbox" value="${esc(v)}" ${gSel[k].has(v) ? "checked" : ""}><span>${esc(v)}</span><em>${fmt(n)}</em></label>`).join("")}</div>
+          <div class="multi-acoes"><button type="button" class="link" data-acao="limpar">Limpar</button><span class="s">${fmt(ops.length)} opções</span></div></div>`;
+      valorMultiG(el);
+    });
+  }
+  function valorMultiG(el) {
+    const s = gSel[el.dataset.g];
+    el.querySelector(".multi-valor").textContent = !s.size ? "Todos" : s.size === 1 ? [...s][0] : `${s.size} selecionados`;
+    el.classList.toggle("ativo", s.size > 0);
+  }
+  $("g-filtros").addEventListener("click", (e) => {
+    const bt = e.target.closest(".multi-botao");
+    if (bt) { const pn = bt.parentElement.querySelector(".multi-painel"); const ab = pn.hidden;
+      document.querySelectorAll("#g-filtros .multi-painel").forEach((x) => (x.hidden = true)); pn.hidden = !ab; if (ab) pn.querySelector(".multi-busca").focus(); return; }
+    const lp = e.target.closest("[data-acao=limpar]");
+    if (lp) { const el = lp.closest(".multi"); gSel[el.dataset.g].clear(); el.querySelectorAll("input[type=checkbox]").forEach((c) => (c.checked = false)); valorMultiG(el); filtrosGMudaram(); }
+  });
+  $("g-filtros").addEventListener("change", (e) => {
+    if (e.target.type !== "checkbox") return;
+    const el = e.target.closest(".multi"); e.target.checked ? gSel[el.dataset.g].add(e.target.value) : gSel[el.dataset.g].delete(e.target.value);
+    valorMultiG(el); filtrosGMudaram();
+  });
+  $("g-filtros").addEventListener("input", (e) => {
+    if (!e.target.classList.contains("multi-busca")) return;
+    const q = norm(e.target.value);
+    e.target.closest(".multi").querySelectorAll(".multi-op").forEach((op) => (op.hidden = q && !norm(op.textContent).includes(q)));
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#g-filtros .multi")) document.querySelectorAll("#g-filtros .multi-painel").forEach((x) => (x.hidden = true)); });
+  function filtrosGMudaram() { gSelecao = null; gPagina = 1; desenharGerencial(); }
+
+  function gFiltrados() {
+    const nfs = $("g-nf").value.split(/[\s,;]+/).map((x) => chaveNF(x)).filter(Boolean);
+    const de = $("g-de").value, ate = $("g-ate").value;
+    const ativos = Object.entries(gSel).filter(([, s]) => s.size);
+    return gDados.filter((r) => {
+      if (ativos.some(([k, s]) => !s.has(G_CAMPOS[k](r)))) return false;
+      if (nfs.length) { const a = chaveNF(r.nf), b = chaveNF(`${r.nf}-${r.serie}`); if (!nfs.some((n) => n === a || n === b)) return false; }
+      if (de && (!r.criado || r.criado < de)) return false;
+      if (ate && (!r.criado || r.criado > ate)) return false;
+      return true;
+    });
+  }
+  function montarGerencial() {
+    if (paginaAtual !== "gerencial") return;
+    if (!gDados) { carregarGerencial(); return; }
+    prepararG(); montarFiltrosG(); desenharGerencial();
+  }
+  function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
+
+  function desenharGerencial() {
+    if (!gDados) return;
+    const L = gFiltrados(), hoje = hojeISO();
+    const cont = Object.fromEntries(Object.entries(G_CARD).map(([k, f]) => [k, L.filter(f).length]));
+    document.querySelectorAll("#g-cards .kpi[data-g]").forEach((b) => { b.classList.toggle("ativa", !gSelecao && b.dataset.g === gCard); b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.g]); });
+    // performance
+    const meta = Math.min(100, Math.max(50, parseFloat($("g-meta").value) || 97)) / 100;
+    const denom = gTodos ? L.length : cont.abertos, outro = gTodos ? cont.abertos : L.length;
+    const perf = denom ? 1 - cont.atrasados / denom : 1;
+    const pct = (x) => (x * 100).toFixed(1).replace(".", ",") + "%";
+    const sobre = gTodos ? "todos os pedidos" : "só os pedidos em aberto";
+    const maxAtr = Math.floor(denom * (1 - meta) + 1e-9), faltam = Math.max(0, cont.atrasados - maxAtr), metaTxt = pct(meta).replace(",0%", "%");
+    $("g-perf").querySelector(".kpi-num").textContent = pct(perf);
+    $("g-perf").className = "kpi kpi-fixo " + (perf >= meta ? "verde" : "laranja");
+    $("g-perf-sub").textContent = `${fmt(cont.atrasados)} atrasados ÷ ${fmt(denom)} ${sobre}`;
+    $("g-alerta").hidden = !L.length;
+    $("g-alerta-titulo").textContent = faltam ? `Para bater a meta de ${metaTxt}, faltam ${fmt(faltam)} atraso${faltam === 1 ? "" : "s"} para resolver.` : `Meta de ${metaTxt} batida.`;
+    $("g-alerta-texto").innerHTML = `A performance está em <b>${pct(perf)}</b>: ${fmt(cont.atrasados)} atrasados sobre ${fmt(denom)} ${sobre}. Na meta, o máximo seria <b>${fmt(maxAtr)}</b>.`;
+    $("g-perf-nota").innerHTML = `A <b>performance</b> está sendo calculada sobre <b>${sobre}</b> (${fmt(cont.atrasados)} atrasados ÷ ${fmt(denom)}). <button class="link" id="g-modo" type="button">${gTodos ? "Calcular só sobre os pedidos em aberto" : "Calcular sobre todos os pedidos"}</button> daria ${pct(outro ? 1 - cont.atrasados / outro : 1)}.`;
+    $("g-info").textContent = infoFech ? `Intelipost de ${new Date(infoFech.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos · clique nos cards e nas barras dos gráficos para ver a lista e exportar`
+      : 'Envie o arquivo de Transações da Intelipost ("Enviar Intelipost") para montar a Visão Gerencial.';
+
+    // de quem é o atraso
+    const atr = L.filter(G_CARD.atrasados);
+    const deFato = atr.filter((r) => r.despacho && r.despacho <= r._prom), sairam = atr.filter((r) => r.despacho && r.despacho > r._prom), semExp = atr.filter((r) => !r.despacho);
+    $("g-atr").innerHTML = atr.length ? `<h2>🚚 Dos ${fmt(atr.length)} atrasados, ${fmt(deFato.length)} são de fato da transportadora.</h2>
+      <p class="g-links"><button class="link vermelho" data-atr="fato">${fmt(deFato.length)} para cobrar</button><button class="link laranja" data-atr="sairam">${fmt(sairam.length)} saíram atrasados daqui</button><button class="link" data-atr="semexp">${fmt(semExp.length)} nem foram expedidos</button></p>
+      <p class="s">Pedido que saiu daqui depois da data prometida já nasceu atrasado: levar ele para a reunião com a transportadora é perder a razão.</p>` : "<h2>🚚 Nenhum pedido atrasado nesse filtro.</h2>";
+    gAtr = { fato: deFato, sairam, semexp: semExp };
+
+    desenharProdutividade(L, hoje);
+    desenharFaixas(atr);
+    // distribuição por situação
+    const porSit = new Map(SIT.map(([k]) => [k, 0])); L.forEach((r) => porSit.set(r._sit, porSit.get(r._sit) + 1));
+    const maxS = Math.max(1, ...porSit.values());
+    $("g-situacao").innerHTML = SIT.map(([k, nome, cor]) => `<button class="barra" data-sit="${k}" title="${nome}: ${fmt(porSit.get(k))}"><span class="barra-nome">${nome}</span>
+      <span class="barra-trilho"><span style="width:${Math.max(1, (porSit.get(k) / maxS) * 100)}%;background:${cor}"></span></span><b style="color:${cor}">${fmt(porSit.get(k))}</b></button>`).join("");
+    desenharCanais(L);
+    // atraso por transportadora (performance)
+    const porT = new Map();
+    L.forEach((r) => { if (r._fechado) return; const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { ab: 0, atr: 0 }; x.ab++; if (r._atraso) x.atr++; porT.set(t, x); });
+    $("g-perf-linhas").innerHTML = [...porT.entries()].sort((a, b) => b[1].atr - a[1].atr || b[1].ab - a[1].ab).map(([t, x]) => {
+      const pf = 1 - x.atr / x.ab, ok = pf >= meta;
+      return `<tr class="clicavel" data-pt="${esc(t)}"><td>${esc(t)}</td><td class="num ${ok ? "ok" : "ruim"}">${ok ? "●" : "↘"} ${(pf * 100).toFixed(2).replace(".", ",")}%</td><td class="num neutro">${fmt(x.ab)}</td><td class="num">${fmt(x.atr)}</td></tr>`;
+    }).join("");
+    desenharPorTransp(L);
+    gFiltradosCache = L;
+    if (!gSelecao) { gPagina = Math.min(gPagina, 9999); }
+    desenharGLista(false);
+  }
+  let gAtr = {}, gFiltradosCache = [];
+
+  function desenharProdutividade(L, hoje) {
+    const J = gJanela, dias = []; for (let i = -J; i <= J; i++) dias.push(somaDias(hoje, i));
+    const ent = new Map(), venc = new Map(); let atrHoje = 0;
+    L.forEach((r) => {
+      if (r.entrega && norm(r.status) === "ENTREGUE") ent.set(r.entrega, (ent.get(r.entrega) || 0) + 1);
+      if (!r._fechado && r._prom) { if (r._prom >= hoje) venc.set(r._prom, (venc.get(r._prom) || 0) + 1); else atrHoje++; }
+    });
+    const val = dias.map((d) => ({ d, e: d <= hoje ? ent.get(d) || 0 : null, v: d >= hoje ? venc.get(d) || 0 : 0, a: d === hoje ? atrHoje : 0 }));
+    const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v + x.a)));
+    const W = 1000, H = 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (n) => H - pb - (n / max) * (H - pb - pt);
+    let g = "";
+    for (let i = 0; i <= 4; i++) { const n = Math.round((max * i) / 4); g += `<line x1="${pl}" x2="${W - 10}" y1="${y(n)}" y2="${y(n)}" class="grade"/><text x="${pl - 6}" y="${y(n) + 4}" class="eixo" text-anchor="end">${fmt(n)}</text>`; }
+    val.forEach((x, i) => {
+      const cx = pl + i * cw + cw / 2, bw = Math.min(34, cw * 0.7);
+      if (x.v) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="vence" x="${cx - bw / 2}" y="${y(x.v)}" width="${bw}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${ddmm(x.d)}: ${fmt(x.v)} vencem</title></rect>`;
+      if (x.a) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="atraso" x="${cx - bw / 2}" y="${y(x.v + x.a)}" width="${bw}" height="${y(x.v) - y(x.v + x.a)}" fill="#f5b400" rx="2"><title>${fmt(x.a)} atrasados</title></rect>`;
+      if (x.v + x.a) g += `<text x="${cx}" y="${y(x.v + x.a) - 5}" class="rot" text-anchor="middle">${fmt(x.v + x.a)}</text>`;
+      g += `<text x="${cx}" y="${H - pb + 16}" class="eixo ${x.d === hoje ? "hoje" : ""}" text-anchor="end" transform="rotate(-45 ${cx} ${H - pb + 16})">${ddmm(x.d)}</text>`;
+    });
+    const pts = val.map((x, i) => (x.e === null ? null : [pl + i * cw + cw / 2, y(x.e), x])).filter(Boolean);
+    if (pts.length) {
+      g += `<polyline points="${pts.map((p) => p[0] + "," + p[1]).join(" ")}" class="linha-ent"/>`;
+      pts.forEach(([px, py, x]) => { g += `<circle cx="${px}" cy="${py}" r="3.5" class="ponto-ent bar-clic" data-dia="${x.d}" data-tipo="entregue"><title>${ddmm(x.d)}: ${fmt(x.e)} entregues</title></circle>`; if (x.e) g += `<text x="${px}" y="${py - 8}" class="rot azul" text-anchor="middle">${fmt(x.e)}</text>`; });
+    }
+    $("g-prod").innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Entregas por dia e o que vence">${g}</svg>`;
+    // resumo do último dia com movimento
+    const ultDia = [...ent.keys()].filter((d) => d < hoje).sort().pop();
+    let txt = "";
+    if (ultDia) {
+      const doDia = L.filter((r) => r.entrega === ultDia && norm(r.status) === "ENTREGUE"), atrasadas = doDia.filter((r) => r._sit === "ent_atraso").length;
+      const porT = new Map(); doDia.forEach((r) => porT.set(r.transp, (porT.get(r.transp) || 0) + 1));
+      const [tMax, nMax] = [...porT.entries()].sort((a, b) => b[1] - a[1])[0] || ["—", 0];
+      txt += `<p>No último dia com movimento (<b>${ddmm(ultDia)}</b>) as transportadoras entregaram <button class="link verde" data-prod="ent">${fmt(doDia.length)} pedidos</button>, dos quais <button class="link laranja" data-prod="entatr">${fmt(atrasadas)} estavam atrasados</button>; o maior volume foi da <b>${esc(tMax)}</b>, com ${fmt(nMax)}.</p>`;
+      gProd = { ent: doDia, entatr: doDia.filter((r) => r._sit === "ent_atraso"), dia: ultDia };
+    }
+    const vHoje = venc.get(hoje) || 0;
+    txt += `<p>Para hoje há <button class="link vermelho" data-prod="hoje">${fmt(atrHoje + vHoje)} pedidos para entregar</button>: ${fmt(atrHoje)} já atrasados e ${fmt(vHoje)} vencendo hoje.</p>`;
+    $("g-prod-resumo").innerHTML = txt;
+  }
+  let gProd = {};
+
+  function desenharFaixas(atr) {
+    const dim = $("g-faixa-dim").value, [nomeDim, fd] = G_DIM[dim];
+    $("g-faixa-dim-nome").textContent = nomeDim;
+    const porL = new Map();
+    atr.forEach((r) => { const k = fd(r); const x = porL.get(k) || new Array(FAIXAS.length).fill(0); const i = FAIXAS.findIndex(([, f]) => f(r._atraso)); if (i >= 0) x[i]++; porL.set(k, x); });
+    const tot = FAIXAS.map((_, i) => [...porL.values()].reduce((s, x) => s + x[i], 0));
+    $("g-faixa-cab").innerHTML = `<tr><th>Rótulos de linha</th>${FAIXAS.map(([n], i) => `<th class="num clic" data-fx="${i}">${n}</th>`).join("")}<th class="num">Total</th></tr>`;
+    $("g-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, x.reduce((a, b) => a + b, 0)]).sort((a, b) => b[2] - a[2])
+      .map(([k, x, t]) => `<tr><td class="clic" data-lin="${esc(k)}">${esc(k)}</td>${x.map((n, i) => `<td class="num ${n ? "clic" : "vazio-c"}" ${n ? `data-lin="${esc(k)}" data-fx="${i}"` : ""}>${n ? fmt(n) : "·"}</td>`).join("")}<td class="num tot">${fmt(t)}</td></tr>`).join("")
+      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${tot.map((n) => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(atr.length)}</td></tr>` : "");
+    $("g-faixa-todos").textContent = `Extrair todos (${fmt(atr.length)})`;
+  }
+
+  function desenharCanais(L) {
+    const porC = new Map();
+    L.forEach((r) => { const c = r.canal || "(sem canal)"; const x = porC.get(c) || { v: 0, a: 0, t: 0 }; x.v++; if (!r._fechado) x.a++; if (r._atraso) x.t++; porC.set(c, x); });
+    const top = [...porC.entries()].sort((a, b) => b[1].v - a[1].v).slice(0, 8);
+    const max = Math.max(1, ...top.map(([, x]) => x.v));
+    const W = 560, H = 240, pl = 44, pb = 56, pt = 16, cw = (W - pl - 6) / Math.max(1, top.length), y = (n) => H - pb - (n / max) * (H - pb - pt);
+    let g = "";
+    for (let i = 0; i <= 4; i++) { const n = Math.round((max * i) / 4); g += `<line x1="${pl}" x2="${W - 6}" y1="${y(n)}" y2="${y(n)}" class="grade"/><text x="${pl - 6}" y="${y(n) + 4}" class="eixo" text-anchor="end">${fmt(n)}</text>`; }
+    top.forEach(([c, x], i) => {
+      const x0 = pl + i * cw + cw * 0.15, bw = (cw * 0.7) / 3;
+      [["v", "#f5b400", "volume"], ["a", "#0ea5e9", "em aberto"], ["t", "#b91c1c", "atrasados"]].forEach(([k, cor, nome], j) => {
+        g += `<rect class="bar-clic" data-canal="${esc(c)}" data-ck="${k}" x="${x0 + j * bw}" y="${y(x[k])}" width="${bw - 2}" height="${Math.max(0.5, y(0) - y(x[k]))}" fill="${cor}" rx="2"><title>${esc(c)} · ${nome}: ${fmt(x[k])}</title></rect>`;
+      });
+      g += `<text x="${x0 + bw / 2}" y="${y(x.v) - 4}" class="rot" text-anchor="start">${fmt(x.v)}</text>`;
+      const cx = pl + i * cw + cw / 2;
+      g += `<text x="${cx}" y="${H - pb + 14}" class="eixo" text-anchor="end" transform="rotate(-25 ${cx} ${H - pb + 14})">${esc(c.length > 18 ? c.slice(0, 17) + "…" : c)}</text>`;
+    });
+    $("g-canais").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pedidos por canal">${g}</svg>`;
+  }
+
+  function desenharPorTransp(L) {
+    const porT = new Map(), meses = new Set();
+    L.forEach((r) => {
+      const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { tot: 0, ent: 0, can: 0, ab: 0, m: new Map() };
+      x.tot++; const st = norm(r.status); if (st === "ENTREGUE") x.ent++; else if (st === "CANCELADO") x.can++; else x.ab++;
+      const m = (r.criado || "").slice(0, 7); if (m) { x.m.set(m, (x.m.get(m) || 0) + 1); meses.add(m); }
+      porT.set(t, x);
+    });
+    const ord = [...porT.entries()].sort((a, b) => b[1].tot - a[1].tot);
+    if (gPtModo === "sit") {
+      $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th><th class="num">Total</th><th class="num">Entregues</th><th class="num">Cancelados</th><th class="num">Em trânsito</th></tr>`;
+      $("g-pt-linhas").innerHTML = ord.map(([t, x]) => `<tr class="clicavel" data-ptt="${esc(t)}"><td>${esc(t)}</td><td class="num neutro tot">${fmt(x.tot)}</td>
+        <td class="num verde-t">${fmt(x.ent)} <small>(${Math.round((x.ent / x.tot) * 100)}%)</small></td><td class="num neutro">${fmt(x.can)}</td><td class="num azul-t">${fmt(x.ab)}</td></tr>`).join("");
+    } else {
+      const ms = [...meses].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+      $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th>${ms.map((m) => `<th class="num">${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}</th>`).join("")}<th class="num">Total</th></tr>`;
+      $("g-pt-linhas").innerHTML = ord.map(([t, x]) => `<tr class="clicavel" data-ptt="${esc(t)}"><td>${esc(t)}</td>${ms.map((m) => `<td class="num neutro">${fmt(x.m.get(m) || 0)}</td>`).join("")}<td class="num neutro tot">${fmt(x.tot)}</td></tr>`).join("");
+    }
+  }
+
+  function desenharGLista(rolar) {
+    const L = gFiltradosCache;
+    gLista = gSelecao ? gSelecao.filtro(L) : L.filter(G_CARD[gCard]);
+    gLista.sort((a, b) => (b._atraso - a._atraso) || String(a._prom || "9").localeCompare(String(b._prom || "9")));
+    document.querySelectorAll("#g-cards .kpi[data-g]").forEach((b) => b.classList.toggle("ativa", !gSelecao && b.dataset.g === gCard));
+    $("g-lista-titulo").textContent = `${gSelecao ? gSelecao.titulo : G_NOME[gCard]} (${fmt(gLista.length)})`;
+    const total = gLista.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+    gPagina = Math.min(Math.max(1, gPagina), paginas);
+    $("g-linhas").innerHTML = gLista.slice((gPagina - 1) * POR_PAGINA, gPagina * POR_PAGINA).map((r) => {
+      const chip = r._fechado ? `<span class="chip ${r._sit === "ent_atraso" ? "vermelho" : r._sit === "cancelado" ? "cinza" : "verde"}">${esc(r.status)}</span>`
+        : r._atraso ? `<span class="chip vermelho">atrasado ${r._atraso} d</span>` : r._d !== null && r._d <= 1 ? `<span class="chip ambar">${r._d === 0 ? "vence hoje" : "vence amanhã"}</span>` : `<span class="chip cinza">${esc(r.status || "")}</span>`;
+      return `<tr><td><div class="p">${esc(r.pedido)}</div></td><td>${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""}</td><td>${esc(r.canal)}</td><td>${esc(r.transp)}</td><td>${esc(r.uf)}</td>
+        <td><span class="ms">${esc(r.micro)}</span><div>${chip}</div></td><td>${br(r.criado)}</td><td>${br(r._prom) || "—"}</td><td>${br(r.entrega) || "—"}</td><td class="num">${r._fechado ? "—" : r._parado ?? "—"}</td></tr>`;
+    }).join("");
+    $("g-vazio").hidden = total > 0;
+    $("g-paginacao").innerHTML = total > POR_PAGINA
+      ? `<button class="btn" data-p="-1" ${gPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${gPagina} de ${paginas}</span>
+         <button class="btn" data-p="1" ${gPagina === paginas ? "disabled" : ""}>Próxima ›</button>` : "";
+    if (rolar) $("g-lista-cartao").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  // cliques
+  $("g-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-g]"); if (!b) return; gCard = b.dataset.g; gSelecao = null; gPagina = 1; desenharGLista(true); });
+  $("g-atr").addEventListener("click", (e) => { const b = e.target.closest("[data-atr]"); if (!b) return;
+    const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };
+    const ids = new Set(gAtr[b.dataset.atr].map((r) => r.pedido)); selecionar(nomes[b.dataset.atr], (L) => L.filter((r) => ids.has(r.pedido))); });
+  $("g-prod-resumo").addEventListener("click", (e) => { const b = e.target.closest("[data-prod]"); if (!b) return; const k = b.dataset.prod, hoje = hojeISO();
+    if (k === "hoje") return selecionar("Para entregar hoje (atrasados + vencem hoje)", (L) => L.filter((r) => !r._fechado && r._prom && r._prom <= hoje));
+    const ids = new Set(gProd[k].map((r) => r.pedido)); selecionar(k === "ent" ? `Entregues em ${ddmm(gProd.dia)}` : `Entregues atrasados em ${ddmm(gProd.dia)}`, (L) => L.filter((r) => ids.has(r.pedido))); });
+  $("g-prod").addEventListener("click", (e) => { const b = e.target.closest("[data-dia]"); if (!b) return; const d = b.dataset.dia, t = b.dataset.tipo;
+    if (t === "entregue") selecionar(`Entregues em ${ddmm(d)}`, (L) => L.filter((r) => r.entrega === d && norm(r.status) === "ENTREGUE"));
+    else if (t === "atraso") selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados));
+    else selecionar(`Vencem em ${ddmm(d)}`, (L) => L.filter((r) => !r._fechado && r._prom === d)); });
+  $("g-janela").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (!b) return; gJanela = +b.dataset.j;
+    $("g-janela").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharProdutividade(gFiltradosCache, hojeISO()); });
+  $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));
+  document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx]"); if (!c) return;
+    const fd = G_DIM[$("g-faixa-dim").value][1], lin = c.dataset.lin, fx = c.dataset.fx !== undefined ? +c.dataset.fx : null;
+    selecionar(`Atrasados${lin ? " · " + lin : ""}${fx !== null ? " · " + FAIXAS[fx][0] : ""}`, (L) => L.filter((r) => r._atraso && (!lin || fd(r) === lin) && (fx === null || FAIXAS[fx][1](r._atraso)))); });
+  $("g-faixa-todos").addEventListener("click", () => { selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados)); baixarGLista(); });
+  $("g-situacao").addEventListener("click", (e) => { const b = e.target.closest("[data-sit]"); if (!b) return; const k = b.dataset.sit;
+    selecionar(SIT.find((x) => x[0] === k)[1], (L) => L.filter((r) => r._sit === k)); });
+  $("g-canais").addEventListener("click", (e) => { const b = e.target.closest("[data-canal]"); if (!b) return; const c = b.dataset.canal, k = b.dataset.ck;
+    selecionar(`${c} · ${{ v: "todos", a: "em aberto", t: "atrasados" }[k]}`, (L) => L.filter((r) => (r.canal || "(sem canal)") === c && (k === "v" || (k === "a" ? !r._fechado : r._atraso > 0)))); });
+  $("g-perf-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-pt]"); if (!tr) return; const t = tr.dataset.pt;
+    selecionar(`Atrasados · ${t}`, (L) => L.filter((r) => r._atraso && (r.transp || "(sem transportadora)") === t)); });
+  $("g-pt-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-ptt]"); if (!tr) return; const t = tr.dataset.ptt;
+    selecionar(`Todos os pedidos · ${t}`, (L) => L.filter((r) => (r.transp || "(sem transportadora)") === t)); });
+  $("g-pt-modo").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; gPtModo = b.dataset.m;
+    $("g-pt-modo").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharPorTransp(gFiltradosCache); });
+  $("g-pt-extrair").addEventListener("click", () => {
+    const linhas = [...document.querySelectorAll(".tabela-pt tr")].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Por transportadora");
+    XLSX.writeFile(wb, `pedidos_por_transportadora_${gPtModo === "sit" ? "situacao" : "mes"}_${hojeISO()}.xlsx`);
+  });
+  ["g-de", "g-ate"].forEach((id) => $(id).addEventListener("change", filtrosGMudaram));
+  let esperaG; $("g-nf").addEventListener("input", () => { clearTimeout(esperaG); esperaG = setTimeout(filtrosGMudaram, 300); });
+  $("g-meta").addEventListener("change", () => { try { localStorage.setItem("painel.meta", $("g-meta").value); } catch (_) {} desenharGerencial(); });
+  $("g-perf-nota").addEventListener("click", (e) => { if (e.target.id === "g-modo") { gTodos = !gTodos; desenharGerencial(); } });
+  $("g-limpar").addEventListener("click", () => { Object.values(gSel).forEach((s) => s.clear()); ["g-de", "g-ate", "g-nf"].forEach((id) => ($(id).value = "")); montarFiltrosG(); filtrosGMudaram(); });
+  $("g-paginacao").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; gPagina += Number(b.dataset.p); desenharGLista(false); });
+  function baixarGLista() {
+    if (!gLista.length) return toast("Nada para exportar.", true);
+    const linhas = [["Pedido", "NF", "Série", "Canal", "Transportadora", "UF", "Origem", "Status", "Micro status", "Criado", "Despacho", "Prometido", "Entrega", "Dias de atraso", "Dias parado"]]
+      .concat(gLista.map((r) => [r.pedido, r.nf, r.serie, r.canal, r.transp, r.uf, r.origem, r.status, r.micro, br(r.criado), br(r.despacho), br(r._prom), br(r.entrega), r._atraso || "", r._fechado ? "" : r._parado]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Visão Gerencial");
+    XLSX.writeFile(wb, `visao_gerencial_${hojeISO()}.xlsx`);
+  }
+  $("g-exportar").addEventListener("click", baixarGLista);
+
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     window.scrollTo(0, 0);
@@ -889,6 +1228,7 @@
     const b = e.target.closest(".menu-item"); if (!b) return;
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
+    if (b.dataset.pagina === "gerencial") montarGerencial();
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------
