@@ -108,6 +108,10 @@ async function abrirPedido(pedido, olhar) {
   const [aba] = await Promise.all([ctx.waitForEvent("page", { timeout: 30000 }).catch(() => null), clicar.click()]);
   const tela = aba || pagina;
   tela.setDefaultTimeout(30000);
+  // pedido já entregue/cancelado não deixa mudar a previsão: avisa em vez de tentar
+  await tela.getByText(/Pedido:/).first().waitFor({ timeout: 60000 }).catch(() => {});
+  const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^\n(]*\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
+  if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
   // "Entrega prev.:" é um link (ng-click edit_estimated_delivery_date) que abre a edição da previsão do cliente
   const link = tela.locator("a[ng-click^='edit_estimated_delivery_date']").first();
   try { await link.waitFor({ timeout: 60000 }); }
