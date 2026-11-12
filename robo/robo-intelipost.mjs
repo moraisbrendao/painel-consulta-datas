@@ -244,7 +244,9 @@ async function simularPrazo(cep, metodo, olhar) {
     const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
     const ms = (q && q.delivery_methods) || [];
     if (!ms.length) {
-      const msg = (corpo.errors && corpo.errors[0] && corpo.errors[0].message) || "sem opção de entrega";
+      const exc = (q && q.excluded_methods) || [];
+      if (exc.length) log("  métodos excluídos na simulação:", JSON.stringify(exc).slice(0, 400));
+      const msg = (corpo.errors && corpo.errors[0] && corpo.errors[0].message) || (exc[0] && (exc[0].reason || exc[0].message || exc[0].description)) || "sem opção de entrega";
       throw new Error(`a Intelipost não achou frete para esse CEP com ${metodo} (${msg.slice(0, 120)})`);
     }
     if (olhar) ms.forEach((m) => log("  opção de envio:", m.name || m.description, "->", m.delivery_estimate_business_days, "dias úteis"));
