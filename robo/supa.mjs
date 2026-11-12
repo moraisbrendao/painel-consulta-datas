@@ -49,3 +49,13 @@ export const gravarEstado = (nome, valor) =>
     headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify({ nome, valor, atualizado_em: new Date().toISOString() }),
   }).then(async (r) => { if (!r.ok) throw new Error("Supabase robo_estado: " + r.status + " " + (await r.text()).slice(0, 200)); });
+
+// ---- troca de notas: só para o diagnóstico (lê um pedido, não muda nada) ----
+export async function umPedidoParaOlhar() {
+  try {
+    const t = await chamar("troca_notas?select=pedido&na_planilha=eq.true&concluido_em=is.null&pedido=not.is.null&limit=1");
+    if (t && t[0] && t[0].pedido) return { pedido: String(t[0].pedido), de: "troca" };
+  } catch { /* tabela ainda não criada */ }
+  const f = await chamar("fila_intelipost?select=pedido&status=eq.alterado&order=feito_em.desc&limit=1");
+  return f && f[0] ? { pedido: String(f[0].pedido), de: "alterar" } : null;
+}

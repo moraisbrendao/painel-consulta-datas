@@ -11,9 +11,9 @@ on:
   workflow_dispatch:
     inputs:
       modo:
-        description: "diag = só olhar as telas · dryrun = preencher sem salvar · real = alterar"
+        description: "diag = só olhar as telas · diag-troca = olhar as telas da troca de notas · dryrun = preencher sem salvar · real = alterar"
         type: choice
-        options: [diag, dryrun, real]
+        options: [diag, diag-troca, dryrun, real]
         default: diag
 
 concurrency:
@@ -44,7 +44,7 @@ jobs:
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
 
       - name: Preparar o navegador
-        if: steps.fila.outputs.tem == 'sim' || env.MODO == 'diag'
+        if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag')
         working-directory: robo
         run: |
           npm install --no-audit --no-fund
@@ -52,7 +52,7 @@ jobs:
           sudo apt-get install -y xvfb > /dev/null
 
       - name: Alterar na Intelipost
-        if: steps.fila.outputs.tem == 'sim' || env.MODO == 'diag'
+        if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag')
         run: xvfb-run -a node robo/robo-intelipost.mjs
         env:
           INTELIPOST_EMAIL: ${{ secrets.INTELIPOST_EMAIL }}

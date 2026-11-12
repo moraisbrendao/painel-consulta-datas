@@ -3,12 +3,13 @@
 //   diag   -> só entra e anota no registro COMO são as telas (nomes de campos e botões, nunca dados de pedido)
 //   dryrun -> abre cada pedido e preenche a data, mas NÃO salva (o pedido volta para a fila)
 //   real   -> altera de verdade e grava o resultado na fila
+//   diag-troca -> só OLHA as telas da troca de notas (transportadora, volumes, cotação, status) e fecha sem salvar
 // Os registros (logs) do GitHub são públicos: aqui nunca aparece número de pedido, nome ou endereço.
 // Trava da senha: se o login falhar, grava uma "impressão" da senha (16 letras de um sha256) e não tenta
 // de novo enquanto a senha guardada no GitHub for a mesma, para a Intelipost não bloquear a conta do time.
 import { chromium } from "playwright";
 import { createHash } from "node:crypto";
-import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado } from "./supa.mjs";
+import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar } from "./supa.mjs";
 
 const MODO = (process.env.MODO || "diag").toLowerCase();
 const BASE = (process.env.INTELIPOST_URL || "https://secure.intelipost.com.br").replace(/\/$/, "");
@@ -48,7 +49,7 @@ async function entrar() {
     catch { await esqueleto("Depois do e-mail (não apareceu a senha)"); throw new Error("Não apareceu o campo de senha da Intelipost."); }
   }
   await senha.fill(INTELIPOST_SENHA);
-  if (MODO === "diag") await esqueleto("Tela de login");
+  if (MODO.startsWith("diag")) await esqueleto("Tela de login");
   const botao = pagina.locator("button[type=submit]:visible, input[type=submit]:visible").first();
   if (await botao.count()) await botao.click(); else await senha.press("Enter");
   try { await senha.waitFor({ state: "detached", timeout: 45000 }); }
@@ -181,10 +182,96 @@ async function alterar(pedido, iso) {
   } finally { if (aba) await aba.close().catch(() => {}); }
 }
 
+// ---- diagnóstico da troca de notas: só abre e fecha, nunca clica em Salvar/Atualizar/Confirmar ----
+const PROIBIDO = /^\s*(salvar|atualizar|confirmar|alterar|gravar|enviar|executar|aplicar|ok|sim)\s*$/i;
+async function mapaTela(tela, titulo) {
+  const r = await tela.evaluate(() => {
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const clic = [...new Set([...document.querySelectorAll("[ng-click]")].filter(vis).map((e) => `${e.tagName.toLowerCase()} ng-click=${e.getAttribute("ng-click").slice(0, 70)} | ${(e.innerText || e.title || "").trim().length > 0 ? "com texto" : "sem texto"}`))].slice(0, 60);
+    const titulos = [...new Set([...document.querySelectorAll("label,th,dt,.control-label,legend")].filter(vis).map((e) => e.innerText.trim()).filter((t) => t && t.length < 45 && !/@|\d{4}/.test(t)))].slice(0, 60);
+    return { clic, titulos };
+  });
+  log(`== ${titulo}`);
+  log("  títulos/rótulos:", r.titulos.join(" / "));
+  r.clic.forEach((c) => log("  ng-click:", c));
+}
+async function abrirEFechar(tela, alvo, titulo) {
+  const antes = new Set(await tela.evaluate(() => [...document.querySelectorAll("input,select,textarea,button")].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; }).map((e, i) => e.outerHTML.slice(0, 120))));
+  await alvo.click();
+  await tela.waitForTimeout(2500);
+  const novos = await tela.evaluate((antes) => {
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const rot = (e) => { const l = (e.labels && e.labels[0]) || (e.id && document.querySelector(`label[for="${e.id}"]`)); if (l) return l.innerText.trim(); const g = e.closest(".form-group, .row, td, div"); const t = g && g.querySelector("label, .control-label"); return t ? t.innerText.trim() : ""; };
+    return [...document.querySelectorAll("input,select,textarea,button")].filter(vis).filter((e) => !antes.includes(e.outerHTML.slice(0, 120)))
+      .map((e) => `${e.tagName.toLowerCase()} | ${e.type || ""} | id=${e.id} | name=${e.name || ""} | ng-model=${e.getAttribute("ng-model") || ""} | rótulo=${rot(e).slice(0, 40)} | ${e.tagName === "BUTTON" ? (e.innerText || "").trim().slice(0, 25) : ""}${e.tagName === "SELECT" ? " | opções: " + [...e.options].map((o) => o.text.trim()).slice(0, 25).join(" / ") : ""}`);
+  }, [...antes]);
+  log(`== ${titulo}: ${novos.length} elemento(s) novos`);
+  novos.slice(0, 40).forEach((x) => log("  novo:", x));
+  // fecha sem salvar: Cancelar/Fechar/X ou Esc
+  const fechar = tela.locator(".modal:visible, [uib-modal-window]:visible, [role=dialog]:visible").locator("button, a").filter({ hasText: /^\s*(cancelar|fechar|voltar|×|x)\s*$/i }).first();
+  if (await fechar.count()) {
+    const txt = (await fechar.innerText().catch(() => "")).trim();
+    if (!PROIBIDO.test(txt)) await fechar.click().catch(() => {});
+  } else await tela.keyboard.press("Escape").catch(() => {});
+  await tela.waitForTimeout(1500);
+}
+async function diagTroca() {
+  // 1) menu: onde fica a Cotação de frete / Simulação
+  await pagina.goto(BASE, { waitUntil: "domcontentloaded" });
+  await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  await pagina.waitForTimeout(3000);
+  const links = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("a[href]")].map((a) => `${(a.innerText || a.title || "").trim().replace(/\s+/g, " ").slice(0, 40)} -> ${a.getAttribute("href").slice(0, 80)}`))]
+    .filter((t) => /cota|simul|frete|alterar|volume|transport|quote/i.test(t)).slice(0, 40));
+  log("== Menu (links de cotação/simulação/alterar):"); links.forEach((l) => log("  link:", l));
+  const simul = links.map((l) => l.split(" -> ")[1]).find((h) => /simul/i.test(h)) || links.map((l) => l.split(" -> ")[1]).find((h) => /quote|cota/i.test(h));
+  for (const caminho of [simul, "/quote/simulation", "/quote/freight-quote"].filter(Boolean)) {
+    try {
+      await pagina.goto(caminho.startsWith("http") ? caminho : BASE + (caminho.startsWith("/") ? caminho : "/" + caminho), { waitUntil: "domcontentloaded" });
+      await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+      await pagina.waitForTimeout(3000);
+      await esqueleto("Cotação/Simulação (" + caminho.replace(/^https?:\/\/[^/]+/, "").slice(0, 60) + ")");
+      await mapaTela(pagina, "Cotação/Simulação · ng-click");
+    } catch (e) { log("Simulação:", e.message.split("\n")[0]); }
+  }
+  // 2) tela do pedido: transportadora e volumes (abre a caixinha e fecha sem salvar)
+  const alvo = await umPedidoParaOlhar();
+  if (!alvo) { log("Não achei pedido para olhar (nem na troca de notas, nem alterado na fila)."); return; }
+  log(`Pedido para olhar veio da aba: ${alvo.de}`);
+  const { tela, aba } = await abrirPedido(alvo.pedido, false).catch((e) => { log("Tela do pedido:", e.message); return {}; });
+  if (tela) {
+    await tela.keyboard.press("Escape").catch(() => {});   // fecha o campo da previsão que abrirPedido abriu
+    await tela.waitForTimeout(1500);
+    await mapaTela(tela, "Tela do pedido");
+    const transp = tela.locator("[ng-click*=carrier i], [ng-click*=logistic i], [ng-click*=delivery_method i], [ng-click*=shipping i], [ng-click*=transport i]").first();
+    if (await transp.count()) await abrirEFechar(tela, transp, "Caixinha da transportadora").catch((e) => log("Transportadora:", e.message.split("\n")[0]));
+    else log("Não achei um ng-click de transportadora (ver lista acima).");
+    const vol = tela.locator("[ng-click^='edit_volume_modal']").first();
+    const nvol = await tela.locator("[ng-click^='edit_volume_modal']").count();
+    log(`Botões de editar volume na tela: ${nvol}`);
+    if (nvol) await abrirEFechar(tela, vol, "Editar volume").catch((e) => log("Volume:", e.message.split("\n")[0]));
+    if (aba) await aba.close().catch(() => {});
+  }
+  // 3) Alterar Pedidos: busca o pedido e lista as opções (Macro/Micro/Evento) sem clicar em Atualizar
+  try {
+    await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
+    const caixa = pagina.locator("textarea:visible, input[type=text]:visible").first();
+    await caixa.waitFor({ timeout: 45000 });
+    await pagina.locator("select:visible").first().selectOption({ label: "Pedido" }).catch(() => {});
+    await caixa.fill(alvo.pedido);
+    await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
+    await pagina.waitForTimeout(5000);
+    await esqueleto("Alterar Pedidos depois de buscar");
+    await mapaTela(pagina, "Alterar Pedidos · ng-click");
+    const micro = pagina.getByText(/alterar por micro/i).first();
+    if (await micro.count()) { await micro.click().catch(() => {}); await pagina.waitForTimeout(2000); await esqueleto("Alterar Pedidos · Alterar por MICRO"); }
+  } catch (e) { log("Alterar Pedidos:", e.message.split("\n")[0]); }
+}
+
 let ok = 0, erro = 0;
 try {
   await entrar();
-  if (MODO === "diag") {
+  if (MODO === "diag-troca") await diagTroca();
+  else if (MODO === "diag") {
     for (const [nome, caminho] of [["Busca por Lote", "/order/transactions-batch"], ["Alterar Pedidos", "/order/change-order"]]) {
       try {
         await pagina.goto(BASE + caminho, { waitUntil: "domcontentloaded" });
