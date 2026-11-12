@@ -195,6 +195,19 @@ async function mapaTela(tela, titulo) {
   log("  títulos/rótulos:", r.titulos.join(" / "));
   r.clic.forEach((c) => log("  ng-click:", c));
 }
+async function camposDetalhe(tela, titulo, filtroOpcao) {
+  const r = await tela.evaluate((f) => {
+    const re = f ? new RegExp(f, "i") : null;
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const rot = (e) => { const l = (e.labels && e.labels[0]) || (e.id && document.querySelector(`label[for="${e.id}"]`)); if (l) return l.innerText.trim(); let g = e.parentElement; for (let i = 0; i < 3 && g; i++, g = g.parentElement) { const t = g.querySelector("label, .control-label"); if (t) return t.innerText.trim(); } return ""; };
+    return [...document.querySelectorAll("input,select,textarea")].filter(vis).slice(0, 50).map((e) => {
+      let ops = "";
+      if (e.tagName === "SELECT") { const o = [...e.options].map((o) => o.text.trim()); ops = ` | ${o.length} opções: ` + (re ? o.filter((t) => re.test(t)) : o).slice(0, 25).join(" / "); }
+      return `${e.tagName.toLowerCase()} | ${e.type || ""} | ng-model=${e.getAttribute("ng-model") || ""} | rótulo=${rot(e).replace(/\s+/g, " ").slice(0, 40)}${ops}`;
+    });
+  }, filtroOpcao || null);
+  log(`== ${titulo} · campos`); r.forEach((x) => log("  campo:", x));
+}
 async function abrirEFechar(tela, alvo, titulo) {
   const antes = new Set(await tela.evaluate(() => [...document.querySelectorAll("input,select,textarea,button")].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; }).map((e, i) => e.outerHTML.slice(0, 120))));
   await alvo.click();
@@ -223,14 +236,14 @@ async function diagTroca() {
   const links = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("a[href]")].map((a) => `${(a.innerText || a.title || "").trim().replace(/\s+/g, " ").slice(0, 40)} -> ${a.getAttribute("href").slice(0, 80)}`))]
     .filter((t) => /cota|simul|frete|alterar|volume|transport|quote/i.test(t)).slice(0, 40));
   log("== Menu (links de cotação/simulação/alterar):"); links.forEach((l) => log("  link:", l));
-  const simul = links.map((l) => l.split(" -> ")[1]).find((h) => /simul/i.test(h)) || links.map((l) => l.split(" -> ")[1]).find((h) => /quote|cota/i.test(h));
-  for (const caminho of [simul, "/quote/simulation", "/quote/freight-quote"].filter(Boolean)) {
+  for (const caminho of ["/quote/freight-quote"]) {   // Cotação > Cotação de frete (é a "simulação" do passo a passo)
     try {
       await pagina.goto(caminho.startsWith("http") ? caminho : BASE + (caminho.startsWith("/") ? caminho : "/" + caminho), { waitUntil: "domcontentloaded" });
       await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
       await pagina.waitForTimeout(3000);
       await esqueleto("Cotação/Simulação (" + caminho.replace(/^https?:\/\/[^/]+/, "").slice(0, 60) + ")");
       await mapaTela(pagina, "Cotação/Simulação · ng-click");
+      await camposDetalhe(pagina, "Cotação/Simulação");
     } catch (e) { log("Simulação:", e.message.split("\n")[0]); }
   }
   // 2) tela do pedido: transportadora e volumes (abre a caixinha e fecha sem salvar)
@@ -239,10 +252,11 @@ async function diagTroca() {
   log(`Pedido para olhar veio da aba: ${alvo.de}`);
   const { tela, aba } = await abrirPedido(alvo.pedido, false).catch((e) => { log("Tela do pedido:", e.message); return {}; });
   if (tela) {
-    await tela.keyboard.press("Escape").catch(() => {});   // fecha o campo da previsão que abrirPedido abriu
-    await tela.waitForTimeout(1500);
+    await tela.reload({ waitUntil: "domcontentloaded" }).catch(() => {});   // descarta o campo da previsão que abrirPedido abriu (sem salvar)
+    await tela.locator("a[ng-click^='edit_estimated_delivery_date']").first().waitFor({ timeout: 60000 }).catch(() => {});
+    await tela.waitForTimeout(2000);
     await mapaTela(tela, "Tela do pedido");
-    const transp = tela.locator("[ng-click*=carrier i], [ng-click*=logistic i], [ng-click*=delivery_method i], [ng-click*=shipping i], [ng-click*=transport i]").first();
+    const transp = tela.locator("a[ng-click^='edit_logistic_provider_modal']:visible").first();
     if (await transp.count()) await abrirEFechar(tela, transp, "Caixinha da transportadora").catch((e) => log("Transportadora:", e.message.split("\n")[0]));
     else log("Não achei um ng-click de transportadora (ver lista acima).");
     const vol = tela.locator("[ng-click^='edit_volume_modal']").first();
@@ -262,8 +276,14 @@ async function diagTroca() {
     await pagina.waitForTimeout(5000);
     await esqueleto("Alterar Pedidos depois de buscar");
     await mapaTela(pagina, "Alterar Pedidos · ng-click");
-    const micro = pagina.getByText(/alterar por micro/i).first();
-    if (await micro.count()) { await micro.click().catch(() => {}); await pagina.waitForTimeout(2000); await esqueleto("Alterar Pedidos · Alterar por MICRO"); }
+    // marca o pedido e escolhe "Micro" (isso só mostra os campos; nada é salvo sem o Atualizar)
+    await pagina.locator("table tbody tr input[type=checkbox]:visible").first().check().catch((e) => log("Marcar pedido:", e.message.split("\n")[0]));
+    const porSel = pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: /^\s*Micro\s*$/ }) }).first();
+    await porSel.selectOption({ label: "Micro" }).catch((e) => log("Alterar por Micro:", e.message.split("\n")[0]));
+    await pagina.waitForTimeout(3000);
+    await camposDetalhe(pagina, "Alterar Pedidos · Alterar por Micro", "^(12|920)\\b|tr[aâ]nsito|nova nota|equipe_?04|troca");
+    const botoes = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("button, input[type=submit]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => (e.innerText || e.value || "").trim()).filter(Boolean))]);
+    log("  botões:", botoes.join(" / "));
   } catch (e) { log("Alterar Pedidos:", e.message.split("\n")[0]); }
 }
 
