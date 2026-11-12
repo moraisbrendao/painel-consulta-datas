@@ -240,7 +240,9 @@ async function simularPrazo(cep, metodo, olhar) {
     // a resposta da cotação vem do graphql (quoteFreightVolume): lê o prazo direto dela
     const resp = p.waitForResponse(async (r) => /graphql\.intelipost/i.test(r.url()) && (await r.text().catch(() => "")).includes("quoteFreightVolume"), { timeout: 60000 });
     await p.getByRole("button", { name: /^\s*Calcular\s*$/i }).first().click();
-    const corpo = await (await resp).json();
+    const rr = await resp;
+    const corpo = await rr.json();
+    if (olhar) log("  pedido da simulação:", (rr.request().postData() || "").split(String(cep)).join("<cep>").replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
     const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
     const ms = (q && q.delivery_methods) || [];
     if (!ms.length) {
