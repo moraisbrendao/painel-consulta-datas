@@ -104,23 +104,32 @@
 
   // ---------------- carregar ----------------
   // busca a tabela inteira em páginas de 1.000, várias ao mesmo tempo (bem mais rápido que uma por vez)
+  // busca uma página; se o banco demorar (timeout), tenta de novo uma vez
+  async function buscarPagina(tabela, ordem, colunas, de, ate, contar) {
+    for (let tentativa = 0; ; tentativa++) {
+      const r = await sb.from(tabela).select(colunas, contar ? { count: "exact" } : undefined).order(ordem).range(de, ate);
+      if (!r.error) return r;
+      if (tentativa >= 1 || !/timeout/i.test(r.error.message || "")) throw r.error;
+      await new Promise((ok) => setTimeout(ok, 1500));
+    }
+  }
+
   async function buscarTudo(tabela, ordem, colunas = "*") {
-    const PAG = 1000, JUNTAS = 8;
-    const prim = await sb.from(tabela).select(colunas, { count: "exact" }).order(ordem).range(0, PAG - 1);
-    if (prim.error) throw prim.error;
+    const PAG = 1000, JUNTAS = 4;
+    const prim = await buscarPagina(tabela, ordem, colunas, 0, PAG - 1, true);
     let lista = prim.data;
     if (lista.length < PAG) return lista;
     if (prim.count == null) {   // sem contagem: segue página por página
       for (let de = PAG; ; de += PAG) {
-        const { data, error } = await sb.from(tabela).select(colunas).order(ordem).range(de, de + PAG - 1);
-        if (error) throw error; lista = lista.concat(data); if (data.length < PAG) return lista;
+        const { data } = await buscarPagina(tabela, ordem, colunas, de, de + PAG - 1);
+        lista = lista.concat(data); if (data.length < PAG) return lista;
       }
     }
     const total = prim.count;
     const inicios = []; for (let de = PAG; de < total; de += PAG) inicios.push(de);
     for (let i = 0; i < inicios.length; i += JUNTAS) {
-      const partes = await Promise.all(inicios.slice(i, i + JUNTAS).map((de) => sb.from(tabela).select(colunas).order(ordem).range(de, de + PAG - 1)));
-      for (const r of partes) { if (r.error) throw r.error; lista = lista.concat(r.data); }
+      const partes = await Promise.all(inicios.slice(i, i + JUNTAS).map((de) => buscarPagina(tabela, ordem, colunas, de, de + PAG - 1)));
+      for (const r of partes) lista = lista.concat(r.data);
     }
     return lista;
   }
@@ -651,7 +660,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=39");
+        const w = new Worker("leitor-intelipost.js?v=40");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }

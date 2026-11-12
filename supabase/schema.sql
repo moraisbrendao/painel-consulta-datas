@@ -253,7 +253,7 @@ grant execute on function public.meu_perfil_painel() to authenticated;
 -- a Logística (quem não é SAC) cuida da lista; o SAC não lê nada direto das tabelas
 drop policy if exists "logistica gerencia" on public.logins_sac;
 create policy "logistica gerencia" on public.logins_sac for all to authenticated
-  using (not public.e_sac()) with check (not public.e_sac());
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
 grant select, insert, delete on public.logins_sac to authenticated;
 
 do $$
@@ -262,12 +262,12 @@ begin
   foreach t in array array['base_pedidos','base_info','tratativas','intelipost_fechados','fechados_info',
                            'ocorrencias_cadastradas','ocorrencias_info'] loop
     execute format('drop policy if exists "logados leem" on public.%I', t);
-    execute format('create policy "logados leem" on public.%I for select to authenticated using (not public.e_sac())', t);
+    execute format('create policy "logados leem" on public.%I for select to authenticated using ((select not public.e_sac()))', t);
   end loop;
 end $$;
 drop policy if exists "logados alteram" on public.tratativas;
 create policy "logados alteram" on public.tratativas for all to authenticated
-  using (not public.e_sac()) with check (not public.e_sac());
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
 
 -- o que o SAC vê: só pedidos em aberto e só estas colunas
 create or replace function public.consultar_sac()
@@ -309,9 +309,9 @@ grant select, insert, update, delete on public.pessoas_responsaveis, public.resp
 drop policy if exists "logistica cuida" on public.pessoas_responsaveis;
 drop policy if exists "logistica cuida" on public.responsavel_por_ms;
 create policy "logistica cuida" on public.pessoas_responsaveis for all to authenticated
-  using (not public.e_sac()) with check (not public.e_sac());
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
 create policy "logistica cuida" on public.responsavel_por_ms for all to authenticated
-  using (not public.e_sac()) with check (not public.e_sac());
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
 
 create or replace function public._carimbo_responsavel()
 returns trigger language plpgsql as $$
@@ -343,7 +343,7 @@ revoke all on public.fila_portal from anon;
 grant select, insert, update on public.fila_portal to authenticated;
 drop policy if exists "logistica cuida" on public.fila_portal;
 create policy "logistica cuida" on public.fila_portal for all to authenticated
-  using (not public.e_sac()) with check (not public.e_sac());
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
 
 create or replace function public._carimbo_fila()
 returns trigger language plpgsql as $$
@@ -399,8 +399,8 @@ revoke all on public.tickets_abertos, public.tickets_info from anon;
 grant select on public.tickets_abertos, public.tickets_info to authenticated;
 drop policy if exists "logados leem" on public.tickets_abertos;
 drop policy if exists "logados leem" on public.tickets_info;
-create policy "logados leem" on public.tickets_abertos for select to authenticated using (not public.e_sac());
-create policy "logados leem" on public.tickets_info for select to authenticated using (not public.e_sac());
+create policy "logados leem" on public.tickets_abertos for select to authenticated using ((select not public.e_sac()));
+create policy "logados leem" on public.tickets_info for select to authenticated using ((select not public.e_sac()));
 
 create or replace function public.importar_tickets(linhas jsonb, limpar boolean, arquivo text, total integer)
 returns integer
@@ -485,8 +485,8 @@ revoke all on public.reposicoes_tk, public.reposicoes_tk_info from anon;
 grant select on public.reposicoes_tk, public.reposicoes_tk_info to authenticated;
 drop policy if exists "logados leem" on public.reposicoes_tk;
 drop policy if exists "logados leem" on public.reposicoes_tk_info;
-create policy "logados leem" on public.reposicoes_tk for select to authenticated using (not public.e_sac());
-create policy "logados leem" on public.reposicoes_tk_info for select to authenticated using (not public.e_sac());
+create policy "logados leem" on public.reposicoes_tk for select to authenticated using ((select not public.e_sac()));
+create policy "logados leem" on public.reposicoes_tk_info for select to authenticated using ((select not public.e_sac()));
 
 create or replace function public.importar_reposicoes_tk(linhas jsonb, primeiro boolean, arquivo text, total integer)
 returns integer
