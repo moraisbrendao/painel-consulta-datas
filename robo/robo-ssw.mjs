@@ -299,6 +299,10 @@ if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem sen
     conta(`${rot} 1 NF (${um.status})`, um.txt); await dorme(3000);
     const lote = await pagina(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: nums.join("\n"), cnpj: "00349443000192", urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
     conta(`${rot} lote ${nums.length} NFs (${lote.status})`, lote.txt); await dorme(3000);
+    if (rot === "form1") { const csvL = (lote.txt.match(/href="(\/2\/ssw_resultSSW\?[^"]*output=csv[^"]*)"/) || [])[1];
+      if (csvL) { await dorme(3000); const c = await pagina("https://ssw.inf.br" + csvL.replace(/&amp;/g, "&")); const lin = c.txt.split(/\r?\n/).filter(Boolean);
+        log(`  CSV (${c.status}): ${lin.length} linhas · cabeçalho: ${limpo(lin[0] || "").slice(0, 400)} · 'ENTREGUE' ${(c.txt.match(/ENTREGUE/gi) || []).length} · datas ${(c.txt.match(/\d{2}\/\d{2}\/\d{2}/g) || []).length} · previsão ${(c.txt.match(/previs/gi) || []).length}`);
+        log("  colunas por linha:", lin.slice(0, 5).map((l) => l.split(/;|,|\t/).length).join(","), "· separador:", (lin[0] || "").includes(";") ? ";" : (lin[0] || "").includes("\t") ? "tab" : ","); } }
     if (rot === "form1") log("  estrutura lote:", tags(lote.txt, /<(table|tr|form|a)[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#").replace(/class="[^"]*"|style="[^"]*"/g, "")).slice(0, 25).join(" "));
   }
 }
