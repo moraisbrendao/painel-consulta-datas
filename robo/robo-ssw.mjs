@@ -650,7 +650,7 @@ async function conferirTudo(minutos) {
   log(`Conferir tudo: ${lista.length.toLocaleString("pt-BR")} pedido(s) ainda não conferidos desde o clique.`);
   return conferirLista(lista, minutos);
 }
-if (MODO === "conferencia") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 320)); }
+if (MODO === "conferencia" || MODO === "conferencia-tudo") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 320)); }
 if (MODO === "transito-cte") {   // AJUSTE ÚNICO (13/11): Trânsito Brasil sem registro na Senior → transportadora que emitiu o CT-e no SSW
   await entrarSupabase();
   const L = await chamar("conferencia_ssw?select=pedido,nf,transportadora,detalhe&transportadora=ilike.*sito*brasil*&situacao=eq.sem%20cte&limit=1000");
