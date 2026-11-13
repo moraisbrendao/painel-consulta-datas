@@ -688,7 +688,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=54");
+        const w = new Worker("leitor-intelipost.js?v=55");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1807,10 +1807,108 @@
     XLSX.writeFile(wb, `sla_por_transportadora_${hojeISO()}.xlsx`);
   });
 
+
+  // ---------------- Conferência SSW (lista importada → robô confere no SSW se já foi entregue) ----------------
+  let cfLista = [], cfCard = "atualizar", cfPag = 1, cfOk = true;
+  const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
+  const CF_CARD = {
+    atualizar: (x) => x.situacao === "entregue" && !cfEntregueIP(x),
+    nao: (x) => x.situacao === "nao entregue",
+    fora: (x) => /fora do ssw|sem permissao|sem nf/.test(x.situacao),
+    pendente: (x) => x.situacao === "pendente",
+    todos: () => true,
+  };
+  const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
+  async function carregarConferencia() {
+    try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true; }
+    catch (err) { cfOk = false; cfLista = []; }
+    desenharConferencia();
+  }
+  function cfFiltrados() {
+    const b = norm($("cf-busca").value), t = $("cf-transp").value;
+    return cfLista.filter((x) => (!b || norm(x.pedido).includes(b) || norm(x.nf).includes(b)) && (!t || (x.transportadora || "—") === t));
+  }
+  function desenharConferencia() {
+    if (!cfOk) { $("cf-info").textContent = "Para usar a Conferência SSW, rode no Supabase a parte 21 do supabase/schema.sql."; return; }
+    const imp = cfLista.reduce((m, x) => (x.importado_em > m ? x.importado_em : m), "");
+    const pend = cfLista.filter(CF_CARD.pendente).length, ult = cfLista.reduce((m, x) => (x.consultado_em && x.consultado_em > m ? x.consultado_em : m), "");
+    $("cf-info").textContent = cfLista.length
+      ? `${fmt(cfLista.length)} pedidos importados em ${new Date(imp).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${cfLista[0].importado_por ? " por " + cfLista[0].importado_por.split("@")[0] : ""}`
+        + (pend ? ` · o robô está conferindo (faltam ${fmt(pend)}; ~14 por minuto)` : " · todos conferidos") + (ult ? ` · última conferência ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
+      : 'Clique em "Importar pedidos" e escolha a planilha (modelo Intelipost) com os pedidos para conferir.';
+    const tSel = $("cf-transp").value, ts = [...new Set(cfLista.map((x) => x.transportadora || "—"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    $("cf-transp").innerHTML = `<option value="">Todas</option>` + ts.map((t) => `<option ${t === tSel ? "selected" : ""}>${esc(t)}</option>`).join("");
+    const F = cfFiltrados();
+    document.querySelectorAll("#cf-cards .kpi[data-cf]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(F.filter(CF_CARD[b.dataset.cf]).length); b.classList.toggle("ativa", b.dataset.cf === cfCard); });
+    const L = F.filter(CF_CARD[cfCard]);
+    $("cf-titulo").textContent = `${(document.querySelector(`#cf-cards [data-cf="${cfCard}"] .kpi-rot`) || {}).textContent || "Pedidos"} (${fmt(L.length)})`;
+    const POR = 100, pags = Math.max(1, Math.ceil(L.length / POR)); cfPag = Math.min(cfPag, pags);
+    $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[x.situacao] || [x.situacao, "cinza"];
+      return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td>
+        <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td></tr>`; }).join("");
+    $("cf-vazio").hidden = L.length > 0;
+    $("cf-paginacao").innerHTML = L.length > POR ? `<button class="btn" data-cfp="-1" ${cfPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cfPag} de ${pags}</span><button class="btn" data-cfp="1" ${cfPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
+  }
+  $("cf-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-cf]"); if (!b) return; cfCard = b.dataset.cf; cfPag = 1; desenharConferencia(); });
+  $("cf-paginacao").addEventListener("click", (e) => { const b = e.target.closest("[data-cfp]"); if (!b) return; cfPag += Number(b.dataset.cfp); desenharConferencia(); });
+  $("cf-busca").addEventListener("input", () => { cfPag = 1; desenharConferencia(); });
+  $("cf-transp").addEventListener("change", () => { cfPag = 1; desenharConferencia(); });
+  $("cf-limpar").addEventListener("click", () => { $("cf-busca").value = ""; $("cf-transp").value = ""; cfPag = 1; desenharConferencia(); });
+  $("cf-modelo").addEventListener("click", () => {
+    const ws = XLSX.utils.aoa_to_sheet([["Pedido Intelipost", "NF", "Transportadora", "Status Intelipost"]]); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 18 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos"); XLSX.writeFile(wb, "modelo_conferencia_ssw.xlsx");
+  });
+  $("cf-exportar").addEventListener("click", () => {
+    const L = cfFiltrados().filter(CF_CARD[cfCard]);
+    const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Status Intelipost", "Situação no SSW", "Último evento no SSW", "Data do evento", "Entregue em (SSW)"]]
+      .concat(L.map((x) => [x.pedido, x.nf, x.transportadora, x.status_intelipost, (CF_SIT[x.situacao] || [x.situacao])[0], x.ultimo_evento, br(x.data_evento), br(x.data_entrega)]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }];
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Conferência SSW"); XLSX.writeFile(wb, `conferencia_ssw_${cfCard}_${hojeISO()}.xlsx`);
+  });
+  $("arquivo-cf").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = "";
+    if (!arq) return;
+    if (!cfOk) return toast("Rode no Supabase a parte 21 do supabase/schema.sql para usar a Conferência SSW.", true);
+    carregando("Lendo a planilha…"); await new Promise((r) => setTimeout(r, 50));
+    let itens = [], semNf = 0;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c).startsWith("PEDIDO")));
+      if (iCab < 0) throw new Error('Não achei a coluna "Pedido Intelipost" na planilha.');
+      const cab = rows[iCab].map(norm);
+      const cPed = cab.findIndex((c) => c === "PEDIDO INTELIPOST") >= 0 ? cab.findIndex((c) => c === "PEDIDO INTELIPOST") : cab.findIndex((c) => c.startsWith("PEDIDO"));
+      const cNf = cab.findIndex((c) => ["NF", "NOTA", "NOTA-SERIE", "NOTA FISCAL", "NOTA SERIE"].includes(c));
+      const cNum = cab.findIndex((c) => c === "NUMERO DA NF" || c === "NUMERO NF"), cSer = cab.findIndex((c) => c === "SERIE");
+      const cT = cab.findIndex((c) => c.startsWith("TRANSPORTADORA")), cSt = cab.findIndex((c) => c === "STATUS INTELIPOST" || c === "STATUS TRANSPORTADOR" || c === "STATUS");
+      const porPed = new Map(base.map((p) => [norm(p.pedido), p]));
+      const vistos = new Set();
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r || r[cPed] == null || String(r[cPed]).trim() === "") return;
+        const pedido = String(r[cPed]).trim(); if (vistos.has(pedido)) return; vistos.add(pedido);
+        const b = porPed.get(norm(pedido)) || {};
+        let nf = cNf >= 0 && r[cNf] != null ? String(r[cNf]).trim() : cNum >= 0 && r[cNum] != null ? `${String(r[cNum]).trim()}-${cSer >= 0 && r[cSer] != null ? String(r[cSer]).trim() : ""}` : "";
+        if (!/^\d+\s*-\s*\d+$/.test(nf)) nf = b.nf || "";   // sem série: usa a NF da base
+        if (!nf) semNf++;
+        itens.push({ pedido, nf: chaveNF(nf), transportadora: (cT >= 0 && r[cT] != null ? String(r[cT]).trim() : "") || b.transportadora || "", status_intelipost: (cSt >= 0 && r[cSt] != null ? String(r[cSt]).trim() : "") || b.status_intelipost || "" });
+      });
+      if (!itens.length) throw new Error("A planilha não tem pedidos.");
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    if (!confirm(`${arq.name}\n\n${fmt(itens.length)} pedidos para conferir no SSW${semNf ? ` (${fmt(semNf)} sem NF com série: não dá para conferir)` : ""}.\n\nA lista anterior da Conferência SSW será substituída e o robô começa a conferir agora (~14 pedidos por minuto). Continuar?`)) return;
+    carregando("Gravando…");
+    const { error } = await sb.rpc("importar_conferencia", { linhas: itens });
+    carregando("");
+    if (error) return toast("Não consegui gravar: " + error.message, true);
+    toast(`${fmt(itens.length)} pedidos importados. O robô do SSW já começou a conferir.`);
+    cfCard = "todos"; await carregarConferencia();
+  });
+  setInterval(() => { if (paginaAtual === "conferencia" && cfLista.some(CF_CARD.pendente)) carregarConferencia(); }, 60000);
+
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", sac: "Consulta SAC" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
@@ -1822,6 +1920,7 @@
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
     if (G_PAGINAS.includes(b.dataset.pagina)) montarGerencial();
     if (b.dataset.pagina === "alterar") carregarAlterar();
+    if (b.dataset.pagina === "conferencia") carregarConferencia();
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------

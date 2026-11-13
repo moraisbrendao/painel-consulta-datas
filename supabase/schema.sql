@@ -822,3 +822,76 @@ begin
 end $$;
 revoke all on function public.gravar_ssw(jsonb) from public, anon;
 grant execute on function public.gravar_ssw(jsonb) to authenticated;
+
+-- 21) Aba Conferência SSW: a Logística importa uma lista de pedidos (modelo Intelipost) e o robô confere
+--     no rastreio do SSW se já foram entregues (para atualizar a Intelipost). Cada importação substitui a lista.
+create table if not exists public.conferencia_ssw (
+  pedido            text primary key,
+  nf                text,
+  transportadora    text,
+  status_intelipost text,
+  situacao          text not null default 'pendente',   -- pendente | entregue | nao entregue | fora do ssw | sem permissao | sem nf
+  ultimo_evento     text,
+  data_evento       date,
+  data_entrega      date,
+  consultado_em     timestamptz,
+  importado_em      timestamptz not null default now(),
+  importado_por     text
+);
+alter table public.conferencia_ssw enable row level security;
+revoke all on public.conferencia_ssw from anon;
+grant select on public.conferencia_ssw to authenticated;
+drop policy if exists "logistica le" on public.conferencia_ssw;
+create policy "logistica le" on public.conferencia_ssw for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public.importar_conferencia(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  delete from public.conferencia_ssw where true;
+  insert into public.conferencia_ssw (pedido, nf, transportadora, status_intelipost, situacao, importado_por)
+  select distinct on (r.pedido) r.pedido, nullif(r.nf, ''), r.transportadora, r.status_intelipost,
+         case when coalesce(r.nf, '') = '' then 'sem nf' else 'pendente' end, auth.jwt() ->> 'email'
+  from jsonb_to_recordset(linhas) as r(pedido text, nf text, transportadora text, status_intelipost text)
+  where coalesce(r.pedido, '') <> '';
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.importar_conferencia(jsonb) from public, anon;
+grant execute on function public.importar_conferencia(jsonb) to authenticated;
+
+create or replace function public.gravar_conferencia(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.conferencia_ssw c set situacao = r.situacao, ultimo_evento = r.ultimo_evento, data_evento = r.data_evento,
+    data_entrega = r.data_entrega, consultado_em = now()
+  from jsonb_to_recordset(linhas) as r(pedido text, situacao text, ultimo_evento text, data_evento date, data_entrega date)
+  where c.pedido = r.pedido;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.gravar_conferencia(jsonb) from public, anon;
+grant execute on function public.gravar_conferencia(jsonb) to authenticated;
+
+-- ao importar, chama o robô do SSW na hora (mesmo token da parte 13)
+create or replace function public._chamar_robo_conferencia()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"conferencia"}}'::jsonb);
+  end if;
+  return null;
+end $$;
+drop trigger if exists chamar_robo_conferencia on public.conferencia_ssw;
+create trigger chamar_robo_conferencia after insert on public.conferencia_ssw
+  for each statement execute function public._chamar_robo_conferencia();

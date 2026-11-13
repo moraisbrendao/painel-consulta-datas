@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=54">
+  <link rel="stylesheet" href="styles.css?v=55">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -35,6 +35,7 @@
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
+      <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
     </nav>
     <div class="lado">
@@ -525,6 +526,49 @@
 
     </main>
 
+    <main class="conteudo" id="pagina-conferencia" hidden>
+      <section class="filtros-cartao filtros-cf" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label>Pedido ou NF<input id="cf-busca" type="search" placeholder="# pedido ou nota"></label>
+        <label>Transportadora<select id="cf-transp"></select></label>
+        <button id="cf-limpar" class="link limpar" type="button">Limpar filtros</button>
+      </section>
+
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Conferência SSW</h1>
+          <p class="sub">Importe a lista de pedidos (modelo Intelipost: <b>Pedido Intelipost</b>, <b>NF</b> ou <b>Nota-Série</b>, Transportadora).
+            O robô confere no rastreio do SSW se cada pedido já foi <b>entregue</b>: os entregues no SSW que não estão como Entregue na Intelipost são os que <b>falta atualizar na Intelipost</b>.</p>
+          <p id="cf-info" class="info-base">Carregando…</p>
+        </div>
+        <div class="acoes-robo">
+          <label class="btn amarelo" title="Planilha com Pedido Intelipost e NF (ou Nota-Série)">Importar pedidos<input id="arquivo-cf" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label>
+          <button id="cf-modelo" class="btn contorno">Baixar modelo</button>
+          <button id="cf-exportar" class="btn contorno">Exportar (Excel)</button>
+        </div>
+      </div>
+
+      <section class="kpis kpis-cf" id="cf-cards">
+        <button class="kpi vermelho ativa" data-cf="atualizar"><span class="kpi-rot">Falta atualizar a Intelipost</span><b class="kpi-num"></b><small>entregue no SSW, Intelipost não</small><i>↗</i></button>
+        <button class="kpi laranja" data-cf="nao"><span class="kpi-rot">Não entregue no SSW</span><b class="kpi-num"></b><small>ainda em trânsito</small><i>↗</i></button>
+        <button class="kpi azul" data-cf="fora"><span class="kpi-rot">Fora do SSW</span><b class="kpi-num"></b><small>transportadora não usa SSW, pede senha ou sem NF</small><i>↗</i></button>
+        <button class="kpi roxo" data-cf="pendente"><span class="kpi-rot">Aguardando o robô</span><b class="kpi-num"></b><small>ainda não conferidos</small><i>↗</i></button>
+        <button class="kpi" data-cf="todos"><span class="kpi-rot">Todos</span><b class="kpi-num"></b><small>a lista importada</small><i>↗</i></button>
+      </section>
+
+      <section class="cartao">
+        <h2 id="cf-titulo">Pedidos</h2>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>Pedido</th><th>NF</th><th>Transportadora</th><th>Status Intelipost</th><th>SSW</th><th>Último evento no SSW</th><th>Entregue em</th></tr></thead>
+            <tbody id="cf-linhas"></tbody>
+          </table>
+          <p id="cf-vazio" class="vazio" hidden>Nenhum pedido aqui.</p>
+        </div>
+        <div id="cf-paginacao" class="paginacao"></div>
+      </section>
+    </main>
+
     <!-- ============ CONSULTA SAC ============ -->
     <main class="conteudo" id="pagina-alterar" hidden>
       <div class="titulo-pagina com-acoes">
@@ -694,9 +738,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=54"></script>
-  <script src="mapa-brasil.js?v=54"></script>
-  <script src="troca-notas.js?v=54"></script>
-  <script src="app.js?v=54"></script>
+  <script src="config.js?v=55"></script>
+  <script src="mapa-brasil.js?v=55"></script>
+  <script src="troca-notas.js?v=55"></script>
+  <script src="app.js?v=55"></script>
 </body>
 </html>

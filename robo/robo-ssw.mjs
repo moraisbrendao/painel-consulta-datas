@@ -194,6 +194,7 @@ function lerResultado(txt) {
 }
 if (MODO === "real") {
   await entrarSupabase();
+  await conferir(30).catch((e) => log("Conferência SSW:", e.message.slice(0, 120)));
   const todos = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora,status_intelipost,micro_status,data_entrega,prev_original,prev_atual&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
   // só os pedidos em aberto: fora os entregues e cancelados (status, micro status ou data de entrega preenchida)
@@ -258,3 +259,51 @@ if (MODO === "real") {
   log("Resultado:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
   log("Transportadoras fora do SSW (ou com senha):", Object.entries(porT).filter(([, v]) => v.n && v.fora === v.n).map(([k]) => k).join(", ") || "nenhuma");
 }
+
+// ---- aba Conferência SSW: a lista importada pela Logística (entregue ou não no SSW) ----
+function lerEntrega(txt) {
+  const ls = sohTexto(txt);
+  if (ls.some((l) => /n[ãa]o tem permiss[ãa]o/i.test(l))) return { situacao: "sem permissao" };
+  if (ls.some((l) => /informa[cç][aã]o n[ãa]o dispon[ií]vel/i.test(l))) return { situacao: "fora do ssw" };
+  const iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
+  const ehData = (l) => /^\d{2}\/\d{2}\/\d{2,4}$/.test(l);
+  const iEnt = ls.findIndex((l) => /MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(l) && !/previs/i.test(l));
+  if (iEnt >= 0) { let d = (ls[iEnt].match(/\d{2}\/\d{2}\/\d{2,4}/) || [])[0] || null; for (let k = iEnt - 1; !d && k >= Math.max(0, iEnt - 4); k--) if (ehData(ls[k])) { d = ls[k]; break; }
+    return { situacao: "entregue", data_entrega: d ? iso(d) : null, data_evento: d ? iso(d) : null, ultimo_evento: "MERCADORIA ENTREGUE" }; }
+  const iD = ls.findIndex(ehData);
+  if (iD < 0) return { situacao: "nao entregue" };
+  const ev = (ls.slice(iD + 1, iD + 4).find((l) => /^[A-ZÀ-Ú][A-ZÀ-Ú0-9 \-\/.]{3,}/.test(l) && !/^\d/.test(l)) || "").replace(/\s*\(.*$/, "").trim();
+  return { situacao: "nao entregue", data_evento: iso(ls[iD]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{4,60}$/.test(ev) ? ev : null };
+}
+async function conferir(minutos) {
+  const lista = [];
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
+  log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
+  const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  const salvar = async () => { if (grava.length) { const lote = grava.splice(0); try { await chamar("rpc/gravar_conferencia", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
+  let bloq = 0;
+  for (const l of lista) {
+    if (Date.now() > fim) { log("Tempo acabou; o resto fica para a próxima rodada."); break; }
+    const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim());
+    const c = cnpjDaSerie(ser);
+    let r;
+    if (!num || !c) r = { situacao: "sem nf" };
+    else {
+      const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: "" }).toString() }).catch(() => null);
+      if (!pg) { await dorme(PAUSA); continue; }
+      if (pg.status === 403 || pg.status === 429) {
+        if (++bloq > 3) { log("O SSW continua bloqueando; paro e continuo na próxima rodada."); break; }
+        log(`SSW bloqueou; espero ${bloq * 5} min.`); await dorme(bloq * 5 * 60000); continue;
+      }
+      bloq = 0; r = lerEntrega(pg.txt); await dorme(PAUSA);
+    }
+    cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+    grava.push({ pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null });
+    if (grava.length >= 50) await salvar();
+  }
+  await salvar();
+  log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+}
+if (MODO === "conferencia") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 85)); }

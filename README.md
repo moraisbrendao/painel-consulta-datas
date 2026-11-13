@@ -166,3 +166,10 @@ Rode a parte 20 do `supabase/schema.sql`. O robô do SSW (`.github/workflows/rob
 (ou à mão em *Actions › Robô do SSW › Run workflow*): para cada pedido em aberto, consulta o rastreio público do SSW pela NF
 (sem a série) + CNPJ do remetente escolhido pela série, e grava a "Previsão de entrega" da transportadora. No Preventivo aparece
 "SSW dd/mm" embaixo da data prometida (vermelho se for depois) e o filtro "Conferência SSW".
+
+## 21. Aba Conferência SSW
+
+Rode a parte 21 do `supabase/schema.sql`. Na aba *Conferência SSW*, "Importar pedidos" lê uma planilha com Pedido Intelipost e NF
+(ou Nota-Série; sem NF, usa a da base) e substitui a lista. O robô do SSW começa na hora (modo `conferencia`) e confere, um por vez,
+se o SSW mostra MERCADORIA ENTREGUE. Card "Falta atualizar a Intelipost" = entregue no SSW e status da Intelipost diferente de Entregue.
+As rodadas agendadas também conferem os pendentes antes das previsões.
