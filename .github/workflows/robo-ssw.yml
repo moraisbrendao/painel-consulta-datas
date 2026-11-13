@@ -15,6 +15,10 @@ on:
         description: "Consultas ao mesmo tempo (padrão 5)"
         type: string
         default: ""
+      pausa:
+        description: "Pausa entre consultas em ms (padrão 2500)"
+        type: string
+        default: ""
       limite:
         description: "Teste: consultar só os N primeiros pedidos (vazio = todos)"
         type: string
@@ -42,6 +46,7 @@ jobs:
           MODO: ${{ github.event.inputs.modo || 'real' }}
           SSW_LIMITE: ${{ github.event.inputs.limite || '' }}
           SSW_PARALELO: ${{ github.event.inputs.paralelo || '' }}
+          SSW_PAUSA: ${{ github.event.inputs.pausa || '' }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
           DOMINALOG_DOMINIO: ${{ secrets.DOMINALOG_DOMINIO }}

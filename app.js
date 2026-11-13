@@ -688,7 +688,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=56");
+        const w = new Worker("leitor-intelipost.js?v=57");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1810,6 +1810,18 @@
 
   // ---------------- Conferência SSW (lista importada → robô confere no SSW se já foi entregue) ----------------
   let cfLista = [], cfCard = "atualizar", cfPag = 1, cfOk = true;
+  // CNPJ do remetente pela série da NF (tabela da Logística) — para abrir o rastreio do SSW na hora
+  const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 22, 34], "00349443000516": [10],
+    "00349443000788": [11, 24, 25, 27, 301, 302, 303], "00349443001083": [14, 35], "00349443001245": [17], "00349443001407": [21],
+    "00349443001750": [23], "00349443001679": [26] };
+  const cnpjDaSerie = (ser) => { const n = parseInt(ser, 10); return Object.keys(CNPJ_SERIE).find((c) => CNPJ_SERIE[c].includes(n)) || null; };
+  function abrirSSW(nf) {   // abre o rastreio do SSW numa aba nova (consulta feita pelo navegador de quem clicou)
+    const [num, ser] = String(nf || "").split("-").map((x) => x.trim()); const c = cnpjDaSerie(ser);
+    if (!num || !c) return toast("Essa NF não tem série com CNPJ conhecido.", true);
+    const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/resultSSW"; f.target = "_blank"; f.rel = "noopener";
+    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", ""]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
+    document.body.appendChild(f); f.submit(); f.remove();
+  }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
   const CF_CARD = {
     atualizar: (x) => x.situacao === "entregue" && !cfEntregueIP(x),
@@ -1845,11 +1857,13 @@
     const POR = 100, pags = Math.max(1, Math.ceil(L.length / POR)); cfPag = Math.min(cfPag, pags);
     $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[x.situacao] || [x.situacao, "cinza"];
       return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
-        <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td></tr>`; }).join("");
+        <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td>
+        <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" title="Abre o rastreio dessa nota no SSW agora">Ver no SSW ↗</button>` : ""}</td></tr>`; }).join("");
     $("cf-vazio").hidden = L.length > 0;
     $("cf-paginacao").innerHTML = L.length > POR ? `<button class="btn" data-cfp="-1" ${cfPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cfPag} de ${pags}</span><button class="btn" data-cfp="1" ${cfPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
   $("cf-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-cf]"); if (!b) return; cfCard = b.dataset.cf; cfPag = 1; desenharConferencia(); });
+  $("cf-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw); });
   $("cf-paginacao").addEventListener("click", (e) => { const b = e.target.closest("[data-cfp]"); if (!b) return; cfPag += Number(b.dataset.cfp); desenharConferencia(); });
   $("cf-busca").addEventListener("input", () => { cfPag = 1; desenharConferencia(); });
   $("cf-transp").addEventListener("change", () => { cfPag = 1; desenharConferencia(); });
@@ -1869,7 +1883,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=56");
+        const w = new Worker("leitor-conferencia.js?v=57");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
