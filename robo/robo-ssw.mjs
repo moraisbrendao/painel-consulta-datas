@@ -331,7 +331,9 @@ if (MODO === "diag-emissor") {   // Trânsito Brasil "sem CT-e" na Senior: quem 
     if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det); const ls = sohTexto(d.txt);
       const i = ls.findIndex((x) => /transportador/i.test(x));
       log("  detalhe: rótulo transportadora na linha", i, "·", i >= 0 ? ls.slice(i, i + 3).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 80)).join(" / ") : "", "· img/title:", tags(d.txt, /<img[^>]*(alt|title)=["'][^"']{0,80}["'][^>]*>|<title>[^<]*/gi).map((x) => x.replace(/\d{5,}/g, "#")).slice(0, 4).join(" | "));
-      log("  rótulos do detalhe:", ls.filter((x) => /^[A-Za-zÀ-ú ./]{3,30}:$/.test(x.trim())).slice(0, 30).join(" ")); }
+      log("  unidades (siglas):", [...new Set((d.txt.match(/\(([A-Z]{2,5} [A-Z]{2,4}(?: \d{1,3})?)\)/g) || []))].join(" "));
+      log("  linhas com emissão/transportadora:", ls.filter((x) => /emitid|emiss|transport|redespach|parceir/i.test(x)).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 140)).slice(0, 8).join(" || "));
+      const t1 = sohTexto(a.txt); log("  1ª página, linhas do evento:", t1.filter((x) => /\(([A-Z]{2,5} [A-Z]{2,4})/.test(x) || /^[A-Z ]{6,}$/.test(x.trim())).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 100)).slice(0, 6).join(" || ")); }
     await new Promise((ok) => setTimeout(ok, 2500));
   }
 }
