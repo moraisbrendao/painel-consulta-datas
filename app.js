@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=68");
+        const w = new Worker("leitor-intelipost.js?v=69");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1878,7 +1878,9 @@
   };
   const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem cte": ["Sem CT-e ainda", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
   async function carregarConferencia() {
-    try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true; }
+    try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true;
+      // carta de correção: outra transportadora emitiu o CT-e no SSW → o pedido passa a contar para ela (regra da Brenda)
+      cfLista.forEach((x) => { const em = x.detalhe && x.detalhe.emissor; if (em) { x.transp_original = x.transportadora; x.transportadora = em; } }); }
     catch (err) { cfOk = false; cfLista = []; }
     desenharConferencia();
   }
@@ -1902,7 +1904,7 @@
     $("cf-titulo").textContent = `${(document.querySelector(`#cf-cards [data-cf="${cfCard}"] .kpi-rot`) || {}).textContent || "Pedidos"} (${fmt(L.length)})`;
     const POR = 100, pags = Math.max(1, Math.ceil(L.length / POR)); cfPag = Math.min(cfPag, pags);
     $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao, "cinza"];
-      return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
+      return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}${x.transp_original ? `<div class="s" title="Carta de correção: o CT-e foi emitido por outra transportadora">era ${esc(x.transp_original)}</div>` : ""}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
         <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td>
         <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" data-transp="${esc(x.transportadora || "")}" data-pedido="${esc(x.pedido)}" title="Abre o rastreio dessa nota agora">${rastreioDe(x.transportadora) ? "Ver na " + esc(rastreioDe(x.transportadora)[1]) : "Ver no SSW"} ↗</button>` : ""}</td></tr>`; }).join("");
     $("cf-vazio").hidden = L.length > 0;
@@ -1929,7 +1931,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=68");
+        const w = new Worker("leitor-conferencia.js?v=69");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
