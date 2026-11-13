@@ -335,6 +335,7 @@ async function diagStatus() {   // confere, sem salvar nada, como ficou o pedido
   const r = await tela.evaluate(() => { const x = document.body.innerText; return {
     s920: /\b920\b|nova nota fiscal/i.test(x), troca: /troca de notas/i.test(x), metodo: (x.match(/M[eé]todo de entrega:\s*([^\n]+)/) || [])[1] || "?",
     prev: /Entrega prev\.:\s*\d{2}\/\d{2}\/\d{4}\s*23:59/.test(x), cab: (x.match(/Pedido:[^(]{0,80}\(\s*([^)]+)\)/) || [])[1] || "?" }; });
+  log("Tipo do ticket no painel:", t.tipo || "?");
   log(`Tela do pedido: status ${r.cab} · método ${r.metodo} · Entrega prev. 23:59: ${r.prev ? "sim" : "não"} · aparece 920/nova nota: ${r.s920 ? "sim" : "não"} · aparece "Troca de notas": ${r.troca ? "sim" : "não"}`);
   const vols = await tela.locator("[ng-click^='edit_volume_modal']").count();
   log("Volumes:", vols);
@@ -479,7 +480,7 @@ const semAcento = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, ""
 const brData = (iso) => iso.split("-").reverse().join("/");
 function hojeBR() { return new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10); }
 function somaDiasUteis(iso, dias) { const d = new Date(iso + "T12:00:00Z"); let n = 0; while (n < dias) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) n++; } return d.toISOString().slice(0, 10); }
-const SALVOU = (r) => ["PUT", "POST", "PATCH"].includes(r.request().method()) && /intelipost\.com\.br/i.test(r.url()) && !/jserrors|kissmetrics|analytics|hotjar|segment|nr-data|log/i.test(r.url());
+const SALVOU = (r) => ["PUT", "POST", "PATCH"].includes(r.request().method()) && /intelipost\.com\.br/i.test(r.url()) && !/jserrors|kissmetrics|analytics|hotjar|segment|nr-data|newrelic|sentry|intercom/i.test(r.url());
 async function escolherOpcao(sel, alvo) {
   const ops = (await sel.locator("option").allInnerTexts()).map((x) => x.trim());
   const a = semAcento(alvo);
@@ -618,7 +619,13 @@ async function fazerTroca(job) {
       await pagina.waitForTimeout(1500);
       const conf = pagina.locator("[role=dialog]:visible, .modal:visible").getByRole("button", { name: /^\s*(confirmar|sim|ok|alterar)\s*$/i }).first();
       if (await conf.count()) await conf.click();
-      const r = await resp; if (r.status() >= 400) throw new Error(`a Intelipost recusou (código ${r.status()})`);
+      const r = await resp.catch(() => null);
+      if (r && r.status() >= 400) throw new Error(`a Intelipost recusou (código ${r.status()})`);
+      if (!r) {   // sem resposta reconhecida: confere no histórico do pedido se o evento entrou
+        await recarregar(tela);
+        const ok = await tela.evaluate(() => /Troca de notas/i.test(document.body.innerText) && /nova nota fiscal/i.test(document.body.innerText));
+        if (!ok) throw new Error("cliquei em Alterar, mas o status não apareceu no pedido");
+      }
     }
     passos[5] = true;
     return { passos, prazo, nova };
