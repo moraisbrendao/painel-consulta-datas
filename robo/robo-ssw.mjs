@@ -194,7 +194,7 @@ function lerResultado(txt) {
 }
 if (MODO === "real") {
   await entrarSupabase();
-  await conferir(30).catch((e) => log("Conferência SSW:", e.message.slice(0, 120)));
+  await conferir(60).catch((e) => log("Conferência SSW:", e.message.slice(0, 120)));
   const todos = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora,status_intelipost,micro_status,data_entrega,prev_original,prev_atual&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
   // só os pedidos em aberto: fora os entregues e cancelados (status, micro status ou data de entrega preenchida)
@@ -282,16 +282,17 @@ function lerEntrega(txt) {
   return { situacao: "nao entregue", data_evento: iso(ls[iD]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{4,60}$/.test(ev) ? ev : null };
 }
 async function conferir(minutos) {
-  const lista = [], ateUrg = new Date(Date.now() - 3 * 3600000 + 2 * 86400000).toISOString().slice(0, 10);   // urgentes: previsão até daqui a 2 dias
-  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&or=(prev_cliente.is.null,prev_cliente.lte.${ateUrg})&order=prev_cliente.asc.nullslast,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  // confere TODOS os pendentes, os de previsão mais antiga primeiro (vencidos e urgentes saem antes)
+  const lista = [];
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
-  log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) urgentes para conferir.`);
+  log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const salvar = async () => { if (grava.length) { const lote = grava.splice(0); try { await chamar("rpc/gravar_conferencia", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
   let bloq = 0;
   for (const l of lista) {
-    if (Date.now() > fim) { log("Tempo acabou; o resto fica para a próxima rodada."); break; }
+    if (Date.now() > fim) { log("Tempo acabou; o resto fica para a próxima rodada."); if (MODO === "conferencia") (await import("node:fs")).writeFileSync("continuar", "1"); break; }
     const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim());
     const c = cnpjDaSerie(ser);
     let r;
@@ -312,4 +313,4 @@ async function conferir(minutos) {
   await salvar();
   log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
 }
-if (MODO === "conferencia") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 85)); }
+if (MODO === "conferencia") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 320)); }

@@ -25,16 +25,17 @@ on:
         default: ""
 
 concurrency:
-  group: robo-ssw-${{ github.event.inputs.modo || 'real' }}
+  group: robo-ssw-${{ startsWith(github.event.inputs.modo || 'real', 'diag') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
   cancel-in-progress: false
 
 permissions:
   contents: read
+  actions: write   # para a conferência continuar sozinha na rodada seguinte
 
 jobs:
   robo:
     runs-on: ubuntu-latest
-    timeout-minutes: 100
+    timeout-minutes: 345
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -53,3 +54,10 @@ jobs:
           DOMINALOG_USUARIO: ${{ secrets.DOMINALOG_USUARIO }}
           DOMINALOG_SENHA: ${{ secrets.DOMINALOG_SENHA }}
           DOMINALOG_CNPJ: ${{ secrets.DOMINALOG_CNPJ }}
+      - name: Continuar a conferência (se ainda falta)
+        if: ${{ hashFiles('continuar') != '' }}
+        run: |
+          curl -sS -o /dev/null -w "%{http_code}\n" -X POST -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/workflows/robo-ssw.yml/dispatches" -d '{"ref":"main","inputs":{"modo":"conferencia"}}'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
