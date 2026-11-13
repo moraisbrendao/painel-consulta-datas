@@ -111,21 +111,28 @@ if (MODO === "real") {
   const fila = todos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
   log(`Pedidos em aberto: ${todos.length} · com série conhecida: ${fila.length}`);
   const porT = {}, cont = {}, grava = [];
-  const salvar = async (forca) => { if (grava.length >= 100 || (forca && grava.length)) { await chamar("rpc/gravar_ssw", "POST", { linhas: grava.splice(0) }); } };
-  for (const l of fila) {
-    const t = l.transportadora || "?"; const st = (porT[t] ||= { n: 0, fora: 0 });
-    let r;
-    if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
-    else {
-      try { r = lerResultado((await consultar(l.c, [l.num])).txt); } catch (e) { r = null; log("erro na consulta:", e.message.slice(0, 80)); }
-      await new Promise((ok) => setTimeout(ok, 700));
-      if (!r) continue;
-      st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;
+  const salvar = async (forca) => { if (grava.length >= 100 || (forca && grava.length)) { const lote = grava.splice(0); try { await chamar("rpc/gravar_ssw", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
+  const PARALELO = Number(process.env.SSW_PARALELO || 5);
+  let i = 0, feitos = 0; const t0 = Date.now();
+  async function trabalhador() {
+    while (i < fila.length) {
+      const l = fila[i++];
+      const t = l.transportadora || "?"; const st = (porT[t] ||= { n: 0, fora: 0 });
+      let r;
+      if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
+      else {
+        try { r = lerResultado((await consultar(l.c, [l.num])).txt); } catch (e) { r = null; }
+        await new Promise((ok) => setTimeout(ok, 300));
+        if (!r) continue;
+        st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;
+      }
+      cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+      grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
+      if (++feitos % 1000 === 0) log(`${feitos} de ${fila.length} em ${Math.round((Date.now() - t0) / 60000)} min`);
+      await salvar(false);
     }
-    cont[r.situacao] = (cont[r.situacao] || 0) + 1;
-    grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
-    await salvar(false);
   }
+  await Promise.all(Array.from({ length: PARALELO }, trabalhador));
   await salvar(true);
   log("Resultado:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
   log("Transportadoras fora do SSW (ou com senha):", Object.entries(porT).filter(([, v]) => v.n && v.fora === v.n).map(([k]) => k).join(", ") || "nenhuma");
