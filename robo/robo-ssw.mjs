@@ -486,7 +486,7 @@ async function conferir(minutos) {
   for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
     const jad = lista.filter((l) => EH.test(l.transportadora || ""));
     // fora do SSW e rápido: confere de novo toda a transportadora que ainda não foi entregue
-    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*${nome}*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []);
+    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*${nome}*&or=(situacao.neq.entregue,detalhe.is.null)&order=pedido&limit=1000&offset=${de}`).catch(() => []);
       L.forEach((x) => { if (!jad.some((y) => y.pedido === x.pedido)) jad.push(x); }); if (L.length < 1000) break; }
     for (let i = lista.length - 1; i >= 0; i--) if (EH.test(lista[i].transportadora || "")) lista.splice(i, 1);
     const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
