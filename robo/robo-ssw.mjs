@@ -55,8 +55,11 @@ if (MODO === "diag-nf2") {
   for (const l of linhas) { const [num, ser] = String(l.nf).split("-"); const c = cnpjDaSerie(ser); if (!c || !num) continue; (porT[l.transportadora || "?"] ||= []).push({ num: num.trim(), c }); }
   for (const t of ["Dominalog", "Jadlog", "Tsl Transportes"]) { const x = (porT[t] || [])[0]; if (!x) continue;
     const ls = sohTexto((await consultar(x.c, [x.num])).txt); const i = ls.findIndex((l) => /pelo pagador/i.test(l));
-    log(`${t}:`, ls.slice(i + 1).filter((l) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(l)).slice(0, 25).map(limpo).join(" / ")); }
+    log(`${t}:`, ls.slice(i + 1).filter((l) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(l)).slice(0, 25).map(limpo).join(" / "));
+    log("   mensagem:", ls.filter((l) => /n[ãa]o /i.test(l) && !/\d/.test(l) && l.length < 70).slice(0, 3).join(" | ")); }
   const L = (porT["Prolog Transportes E Logistica Ltda"] || []).filter((x) => x.c === (porT["Prolog Transportes E Logistica Ltda"] || [{}])[0].c).slice(0, 3);
+  for (const sep of [",", " ", ";"]) { const l2 = sohTexto((await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: L[0].c, NR: L.map((x) => x.num).join(sep), chave: "" }).toString() })).txt);
+    log(`Lote separado por "${sep}": linhas com previsão: ${l2.filter((l) => /previs[aã]o de entrega/i.test(l)).length} · mensagem: ${l2.filter((l) => /n[ãa]o /i.test(l) && !/\d/.test(l) && l.length < 70).slice(0, 2).join(" | ")}`); }
   const ls = sohTexto((await consultar(L[0].c, L.map((x) => x.num))).txt);
   log("Lote de 3 NFs Prolog: linhas com previsão:", ls.filter((l) => /previs/i.test(l)).length, "·", ls.slice(ls.findIndex((l) => /pelo pagador/i.test(l)) + 1).filter((l) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(l)).slice(0, 30).map(limpo).join(" / "));
   log("  links no resultado do lote:", tags((await consultar(L[0].c, L.map((x) => x.num))).txt, /<a [^>]*href=["'][^"']*["'][^>]*>|onclick=["'][^"']{0,120}["']/gi).filter((t) => !/rastreamento|ajuda|\.css|ssw\.inf\.br\/?["']|menu/i.test(t)).slice(0, 8).map((t) => t.replace(/\d{4,}/g, "#")).join(" | "));
