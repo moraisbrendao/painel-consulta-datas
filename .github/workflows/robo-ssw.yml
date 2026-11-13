@@ -11,6 +11,10 @@ on:
         type: choice
         options: [real, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det]
         default: real
+      paralelo:
+        description: "Consultas ao mesmo tempo (padrão 5)"
+        type: string
+        default: ""
       limite:
         description: "Teste: consultar só os N primeiros pedidos (vazio = todos)"
         type: string
@@ -37,5 +41,6 @@ jobs:
         env:
           MODO: ${{ github.event.inputs.modo || 'real' }}
           SSW_LIMITE: ${{ github.event.inputs.limite || '' }}
+          SSW_PARALELO: ${{ github.event.inputs.paralelo || '' }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}

@@ -180,10 +180,11 @@ if (MODO === "real") {
           r = lerResultado(pg.txt);
           // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
           const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+          if (det) cont._det = (cont._det || 0) + 1;
           if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
             await new Promise((ok) => setTimeout(ok, 200));
             const r2 = lerResultado((await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
-            if (r2.previsao || r2.situacao === "entregue") r = r2;
+            if (r2.previsao || r2.situacao === "entregue") r = r2; else cont._detSem = (cont._detSem || 0) + 1;
           }
         } catch (e) { r = null; }
         await new Promise((ok) => setTimeout(ok, 300));
