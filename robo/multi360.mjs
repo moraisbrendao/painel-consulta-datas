@@ -49,7 +49,7 @@ export async function olharTicket(p, ticket, log) {
   const r = await p.evaluate(() => {
     const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
     return {
-      botoes: [...new Set([...document.querySelectorAll("button")].filter(vis).map((b) => (b.innerText || b.title || b.getAttribute("aria-label") || "").trim().slice(0, 30)).filter(Boolean))],
+      botoes: [...new Set([...document.querySelectorAll("button")].filter(vis).filter((b) => !b.closest("header, nav")).map((b) => (b.innerText || b.title || b.getAttribute("aria-label") || "").trim().slice(0, 30)).filter((t) => t && /a[cç][aã]o|coment|macro|ticket|admin|enviar|anexo/i.test(t)))],
       arquivos: [...document.querySelectorAll("input[type=file]")].map((e) => `accept=${e.accept || ""} multiple=${e.multiple}`),
       caixa: [...document.querySelectorAll("textarea, [contenteditable=true]")].filter(vis).map((e) => `${e.tagName.toLowerCase()} placeholder=${e.getAttribute("placeholder") || ""}`),
     };
@@ -63,10 +63,13 @@ export async function olharTicket(p, ticket, log) {
   await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().click();
   await p.waitForTimeout(2000);
   const m = await p.evaluate(() => {
-    const d = [...document.querySelectorAll("[role=dialog], .modal, [class*=modal i], [class*=dialog i]")].filter((e) => e.getBoundingClientRect().width > 0).pop();
-    if (!d) return null;
-    return { titulo: (d.querySelector("h1,h2,h3,h4,h5,[class*=title i]") || {}).innerText || "", texto: d.innerText.replace(/\s+/g, " ").slice(0, 200),
-      botoes: [...d.querySelectorAll("button")].map((b) => (b.innerText || b.getAttribute("aria-label") || "").trim()).filter(Boolean), arquivo: !!d.querySelector("input[type=file]"), caixa: !!d.querySelector("textarea") };
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const tit = [...document.querySelectorAll("body *")].filter((e) => vis(e) && e.children.length === 0 && /atualizadas na intelipost/i.test(e.textContent || "")).pop();
+    if (!tit) return null;
+    let d = tit; while (d && !(d.querySelectorAll("button").length >= 2 && d.querySelector("textarea"))) d = d.parentElement;
+    if (!d) return { titulo: tit.textContent.trim(), semCaixa: true };
+    return { titulo: tit.textContent.trim(), texto: d.innerText.replace(/\s+/g, " ").slice(0, 200),
+      botoes: [...d.querySelectorAll("button")].map((b) => (b.innerText || b.getAttribute("aria-label") || "").trim()).filter(Boolean), arquivo: !!d.querySelector("input[type=file]"), caixa: d.querySelector("textarea") ? d.querySelector("textarea").getAttribute("placeholder") : "" };
   });
   log("  caixinha Executar ação:", m ? JSON.stringify(m).replace(/#\d+/g, "#<ticket>") : "não abriu");
   const cancelar = p.getByRole("button", { name: /^\s*cancelar\s*$/i }).last();
