@@ -11,12 +11,15 @@ const alvo = L.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) =
 log("pedidos Trânsito Brasil:", L.length, "· série do teste:", alvo ? alvo.ser : "nenhuma");
 const cnpj = alvo && String(parseInt(alvo.ser, 10)) === "35" ? "00349443001083" : "00349443000192";
 
+let modelo = null;
 const nav = await chromium.launch();
 const pg = await nav.newPage();
 pg.on("response", async (r) => {
   const req = r.request(); if (!["xhr", "fetch"].includes(req.resourceType())) return;
   let corpo = ""; try { const j = JSON.parse(req.postData() || "null"); corpo = j ? Object.keys(j).join(",") : ""; } catch { corpo = (req.postData() || "").slice(0, 0); }
   let resp = ""; try { const j = await r.json(); resp = chaves(j).slice(0, 60).join(" | "); } catch { resp = "(não JSON)"; }
+  if (/externalTenantConsultaTracking/.test(r.url())) { modelo = { url: r.url(), corpo: JSON.parse(req.postData() || "{}"), cab: Object.fromEntries(Object.entries(req.headers()).filter(([h]) => /^x-tenant/i.test(h))) };
+    log("corpo modelo:", JSON.stringify({ ...modelo.corpo, documento: "…", inscricaoFiscal: "…" }), "· x-tenant:", JSON.stringify(modelo.cab)); }
   log(`${req.method()} ${r.url().split("?")[0]} → ${r.status()} · corpo: ${corpo} · cabeçalhos: ${Object.keys(req.headers()).filter((h) => /auth|token|tenant|x-/i.test(h)).join(",")} · resposta: ${resp.slice(0, 1500)}`);
 });
 await pg.goto(URL_T, { waitUntil: "networkidle" }).catch((e) => log("goto:", e.message.slice(0, 100)));
@@ -34,3 +37,14 @@ if (alvo) {
   log("cabeçalhos da lista:", (await pg.$$eval("th", (es) => es.map((e) => e.textContent.trim()))).join(" | "), "· linhas:", await pg.locator("tbody tr").count());
 }
 await nav.close();
+// chamada direta, várias NFs da Trânsito Brasil (CNPJ pela série)
+if (modelo) for (const l of L.slice(0, 10)) {
+  const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()), sn = String(parseInt(ser, 10));
+  const insc = sn === "35" ? "00349443001083" : "00349443000192";
+  const r = await fetch(modelo.url, { method: "POST", headers: { "Content-Type": "application/json", ...modelo.cab }, body: JSON.stringify({ ...modelo.corpo, documento: num, inscricaoFiscal: insc }) });
+  let j = null; try { j = await r.json(); } catch {}
+  const t = j && j.listaTracking || [];
+  log(`direto série ${ser}: ${r.status} · achados ${t.length} · séries: ${t.map((x) => x.serie ?? x.serieDocumento ?? "?").join(",")}`);
+  if (t.length) log("  campos:", chaves(t[0]).slice(0, 80).join(" | ").slice(0, 2500));
+  await new Promise((ok) => setTimeout(ok, 1500));
+}
