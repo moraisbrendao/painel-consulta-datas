@@ -318,6 +318,23 @@ if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem sen
     if (rot === "form1") log("  estrutura lote:", tags(lote.txt, /<(table|tr|form|a)[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#").replace(/class="[^"]*"|style="[^"]*"/g, "")).slice(0, 25).join(" "));
   }
 }
+if (MODO === "diag-emissor") {   // Trânsito Brasil "sem CT-e" na Senior: quem emitiu o CT-e no SSW (só rótulos e o nome da transportadora)
+  await entrarSupabase();
+  const L = await chamar("conferencia_ssw?select=nf,transportadora&transportadora=ilike.*sito*brasil*&situacao=eq.sem%20cte&limit=6");
+  for (const l of L) {
+    const [n, se] = String(l.nf).split("-").map((v) => (v || "").trim()), c = cnpjDaSerie(se); if (!c) continue;
+    const a = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: n, chave: "" }).toString() });
+    const e = lerEntrega(a.txt); log("SSW:", e.situacao, e.ultimo_evento || "");
+    if (/sem cte|sem permissao/.test(e.situacao)) { await new Promise((ok) => setTimeout(ok, 2500)); continue; }
+    log("  1ª página img/title:", tags(a.txt, /<img[^>]*(alt|title|src)=["'][^"']{0,80}["'][^>]*>|<title>[^<]*/gi).map((x) => x.replace(/\d{5,}/g, "#")).slice(0, 6).join(" | "));
+    const det = (a.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+    if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det); const ls = sohTexto(d.txt);
+      const i = ls.findIndex((x) => /transportador/i.test(x));
+      log("  detalhe: rótulo transportadora na linha", i, "·", i >= 0 ? ls.slice(i, i + 3).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 80)).join(" / ") : "", "· img/title:", tags(d.txt, /<img[^>]*(alt|title)=["'][^"']{0,80}["'][^>]*>|<title>[^<]*/gi).map((x) => x.replace(/\d{5,}/g, "#")).slice(0, 4).join(" | "));
+      log("  rótulos do detalhe:", ls.filter((x) => /^[A-Za-zÀ-ú ./]{3,30}:$/.test(x.trim())).slice(0, 30).join(" ")); }
+    await new Promise((ok) => setTimeout(ok, 2500));
+  }
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
