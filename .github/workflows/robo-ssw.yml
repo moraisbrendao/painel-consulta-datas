@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito]
+        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito, diag-transiga]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -42,7 +42,7 @@ jobs:
         with:
           node-version: 20
       - name: Navegador (só no diagnóstico da Trânsito Brasil)
-        if: ${{ github.event.inputs.modo == 'diag-transito' }}
+        if: ${{ github.event.inputs.modo == 'diag-transito' || github.event.inputs.modo == 'diag-transiga' }}
         run: |
           cd robo
           npm install --no-audit --no-fund
@@ -53,8 +53,16 @@ jobs:
         env:
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+      - name: Diagnóstico Transiga
+        if: ${{ github.event.inputs.modo == 'diag-transiga' }}
+        run: node robo/diag-transiga.mjs
+        env:
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+          EMAIL_TRANSIGA: ${{ secrets.EMAIL_TRANSIGA }}
+          SENHA_TRANSIGA: ${{ secrets.SENHA_TRANSIGA }}
       - name: Rodar o robô
-        if: ${{ github.event.inputs.modo != 'diag-transito' }}
+        if: ${{ github.event.inputs.modo != 'diag-transito' && github.event.inputs.modo != 'diag-transiga' }}
         run: node robo/robo-ssw.mjs
         env:
           MODO: ${{ github.event.inputs.modo || 'real' }}
