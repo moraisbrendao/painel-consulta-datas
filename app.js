@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=67");
+        const w = new Worker("leitor-intelipost.js?v=68");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1858,7 +1858,7 @@
   function abrirSSW(nf, transp, pedido) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
     const x = pedido && cfLista.find((y) => y.pedido === pedido);
-    if (x && x.detalhe) return cfJanela(x);
+    if (x && x.detalhe && /jadlog/i.test(x.transportadora || "")) return cfJanela(x);   // janela só para a Jadlog (pedido da Brenda)
     const prop = rastreioDe(transp);
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
     const c = cnpjDaSerie(ser);
@@ -1929,7 +1929,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=67");
+        const w = new Worker("leitor-conferencia.js?v=68");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
