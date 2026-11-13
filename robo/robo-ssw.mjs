@@ -622,6 +622,27 @@ if (MODO === "transito-cte") {   // AJUSTE ÚNICO (13/11): Trânsito Brasil sem 
   const linhas = [...m].map(([pedido, r]) => ({ pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe || null }));
   for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) });
 }
+if (MODO === "transportadora") {   // confere de novo agora todos os não entregues de uma transportadora (ex.: depois de cadastrar a senha)
+  await entrarSupabase(); await carregarSenhasDB();
+  const nome = String(process.env.TRANSP || "").trim().replace(/[^\p{L}\p{N} ]/gu, "");
+  if (!nome) { log("Informe a transportadora."); process.exit(0); }
+  const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*${encodeURIComponent(nome)}*&situacao=neq.entregue&limit=2000`);
+  log(`${nome}: ${L.length} pedido(s) · senha: ${chaveDe(L[0] && L[0].transportadora) ? "sim" : "não"}`);
+  const PAUSA = Number(process.env.SSW_PAUSA || 2500), cont = {}, grava = [];
+  for (const l of L) {
+    const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()), c = cnpjDaSerie(ser);
+    let r;
+    if (!num || !c) r = { situacao: "sem nf" };
+    else { const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: chaveDe(l.transportadora) }).toString() }).catch(() => null);
+      if (!pg) continue; if (pg.status === 403 || pg.status === 429) { log("SSW bloqueou; paro."); break; }
+      r = lerEntrega(pg.txt); await new Promise((ok) => setTimeout(ok, PAUSA)); }
+    cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+    grava.push({ pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null });
+    if (grava.length >= 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: grava.splice(0) });
+  }
+  if (grava.length) await chamar("rpc/gravar_conferencia", "POST", { linhas: grava });
+  log("Resultado:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+}
 if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no SSW
   await entrarSupabase(); process.env.SSW_MINUTOS = "0"; await conferir(0);
 }
