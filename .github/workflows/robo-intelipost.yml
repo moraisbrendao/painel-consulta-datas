@@ -13,7 +13,7 @@ on:
       modo:
         description: "diag = só olhar as telas · diag-troca = olhar as telas da troca de notas · dryrun = preencher sem salvar · real = alterar"
         type: choice
-        options: [diag, diag-troca, diag-cep, diag-status, dryrun, real]
+        options: [diag, diag-troca, diag-cep, diag-status, diag-ticket, dryrun, real]
         default: diag
 
 concurrency:
@@ -57,5 +57,9 @@ jobs:
         env:
           INTELIPOST_EMAIL: ${{ secrets.INTELIPOST_EMAIL }}
           INTELIPOST_SENHA: ${{ secrets.INTELIPOST_SENHA }}
+          MULTI360_EMAIL: ${{ secrets.MULTI360_EMAIL }}
+          MULTI360_SENHA: ${{ secrets.MULTI360_SENHA }}
+          PORTAL_EMAIL: ${{ secrets.PORTAL_EMAIL }}
+          PORTAL_SENHA: ${{ secrets.PORTAL_SENHA }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}

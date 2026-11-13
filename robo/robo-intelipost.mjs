@@ -8,6 +8,7 @@
 // Trava da senha: se o login falhar, grava uma "impressão" da senha (16 letras de um sha256) e não tenta
 // de novo enquanto a senha guardada no GitHub for a mesma, para a Intelipost não bloquear a conta do time.
 import { chromium } from "playwright";
+import { entrarMulti360, olharTicket } from "./multi360.mjs";
 import { createHash } from "node:crypto";
 import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro } from "./supa.mjs";
 
@@ -640,6 +641,7 @@ try {
   if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();
+  else if (MODO === "diag-ticket") { const p = await entrarMulti360(ctx, log); const t = await ultimaTrocaComErro(); if (t) await olharTicket(p, t.ticket, log); else log("Nenhuma troca para olhar."); }
   else if (MODO === "diag") {
     for (const [nome, caminho] of [["Busca por Lote", "/order/transactions-batch"], ["Alterar Pedidos", "/order/change-order"]]) {
       try {

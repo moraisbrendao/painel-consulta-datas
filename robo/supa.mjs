@@ -62,4 +62,4 @@ export async function umPedidoParaOlhar() {
 export async function temTroca() { try { return (await chamar("troca_notas?select=ticket&robo_status=eq.pendente&limit=1")).length > 0; } catch { return false; } }
 export const pegarTroca = async (limite = 20) => (await chamar("rpc/pegar_troca", "POST", { limite })) || [];
 export const resultadoTroca = (tk, st, msg, passos, prazo = null, nova = null) => chamar("rpc/resultado_troca", "POST", { tk, st, msg, passos, prazo, nova });
-export async function ultimaTrocaComErro() { const r = await chamar("troca_notas?select=pedido,robo_metodo,tipo,robo_passos,robo_msg,robo_iniciado_em&robo_status=eq.erro&order=robo_feito_em.desc&limit=1"); return r && r[0] ? r[0] : null; }
+export async function ultimaTrocaComErro() { const r = await chamar("troca_notas?select=ticket,pedido,robo_metodo,tipo,robo_passos,robo_msg,robo_iniciado_em&robo_status=eq.erro&order=robo_feito_em.desc&limit=1"); return r && r[0] ? r[0] : null; }
