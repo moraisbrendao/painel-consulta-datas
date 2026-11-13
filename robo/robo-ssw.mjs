@@ -64,6 +64,28 @@ if (MODO === "diag-nf2") {
   log("Lote de 3 NFs Prolog: linhas com previsão:", ls.filter((l) => /previs/i.test(l)).length, "·", ls.slice(ls.findIndex((l) => /pelo pagador/i.test(l)) + 1).filter((l) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(l)).slice(0, 30).map(limpo).join(" / "));
   log("  links no resultado do lote:", tags((await consultar(L[0].c, L.map((x) => x.num))).txt, /<a [^>]*href=["'][^"']*["'][^>]*>|onclick=["'][^"']{0,120}["']/gi).filter((t) => !/rastreamento|ajuda|\.css|ssw\.inf\.br\/?["']|menu/i.test(t)).slice(0, 8).map((t) => t.replace(/\d{4,}/g, "#")).join(" | "));
 }
+if (MODO === "diag-st") {
+  await entrarSupabase();
+  const todos = [];
+  for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora,status_intelipost,micro_status,data_entrega&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
+  const conta = (f) => { const c = {}; todos.forEach((l) => { const k = f(l); c[k] = (c[k] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1]).slice(0, 25).map(([k, v]) => `${k}=${v.toLocaleString("pt-BR")}`).join(" | "); };
+  log("Total na base_aberta:", todos.length.toLocaleString("pt-BR"));
+  log("status_intelipost:", conta((l) => l.status_intelipost || "(vazio)"));
+  log("micro_status:", conta((l) => l.micro_status || "(vazio)"));
+  log("data_entrega:", conta((l) => (l.data_entrega ? "preenchida" : "vazia")));
+  const f = await chamar("intelipost_fechados?select=pedido&limit=1"); const fi = await chamar("fechados_info?select=*&limit=1");
+  log("intelipost_fechados tem linhas:", f.length ? "sim" : "não", "· último arquivo Intelipost:", fi[0] ? fi[0].enviado_em : "nenhum");
+  // amostra de 40 sem previsão: quais situações o SSW mostra (só palavras de sistema)
+  const SIT = /(MERCADORIA|ENTREG|SAIDA|SAÍDA|CHEGADA|TRANSFER|COLETA|AGUARD|EMISS|DOCUMENTO|OCORR|DEVOL|ROTA|CONHECIMENTO|EMBARQUE|DESCARREG|INFORMA)/i;
+  const resumo = {};
+  for (const l of todos.slice(0, 4000).filter((_, i) => i % 100 === 0)) {
+    const [num, ser] = String(l.nf).split("-"); const c = cnpjDaSerie(ser); if (!c) continue;
+    const ls = sohTexto((await consultar(c, [num.trim()])).txt);
+    const sit = ls.filter((x) => SIT.test(x) && x.length < 90).map((x) => x.split(/\s+/).slice(0, 3).join(" ").replace(/\d/g, "9")).slice(-2).join(" > ") || "(nada)";
+    const k = `${l.transportadora}: ${sit}`; resumo[k] = (resumo[k] || 0) + 1;
+  }
+  Object.entries(resumo).forEach(([k, v]) => log("  ", v, "×", k));
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
