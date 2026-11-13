@@ -625,9 +625,9 @@ async function conferirLista(lista, minutos) {
         log(`SSW bloqueou; espero ${bloq * 5} min.`); await dorme(bloq * 5 * 60000); continue;
       }
       bloq = 0; r = lerEntrega(pg.txt); await dorme(PAUSA);
-      // não entregue e vence de hoje a 5 dias: guarda a previsão do SSW (o painel grava na Nova data se for depois da prometida)
-      const hj = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10), lim = new Date(Date.now() - 3 * 3600000 + 5 * 86400000).toISOString().slice(0, 10);
-      if (r.situacao === "nao entregue" && l.prev_cliente && l.prev_cliente >= hj && l.prev_cliente <= lim) {
+      // não entregue, vencido ou vence em até 5 dias: guarda a previsão do SSW (o painel grava na Nova data se for depois da prometida)
+      const lim = new Date(Date.now() - 3 * 3600000 + 5 * 86400000).toISOString().slice(0, 10);
+      if (r.situacao === "nao entregue" && l.prev_cliente && l.prev_cliente <= lim) {   // vencidos também (Brenda, 13/11)
         let pv = lerResultado(pg.txt).previsao;
         const det = !pv && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
         if (det) { const d = await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&")).catch(() => null); if (d && d.status === 200) pv = lerResultado(d.txt).previsao; await dorme(PAUSA); }
@@ -639,7 +639,7 @@ async function conferirLista(lista, minutos) {
     if (grava.length >= 50) await salvar();
   }
   await salvar();
-  log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), nPrev ? `· previsão do SSW guardada (vencem em até 5 dias) ${nPrev}` : "");
+  log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), nPrev ? `· previsão do SSW guardada (vencidos e vencem em até 5 dias) ${nPrev}` : "");
   if (TUDO) { const { existsSync } = await import("node:fs"); if (!existsSync("continuar") && !(await mudouTudo())) { await chamar("rpc/fim_conferencia_tudo", "POST", {}).catch(() => {}); log("Conferência de tudo terminada."); } }
 }
 // "Conferir tudo agora": todos os pedidos da lista que não estão entregues e ainda não foram conferidos desde o clique

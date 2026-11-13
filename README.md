@@ -212,3 +212,8 @@ a data do SSW na Nova data (marcada como automática). Se alguém mudar a nova d
 
 Rode a parte 28 do `supabase/schema.sql`. A conferência passa a guardar a previsão do rastreio dos não entregues que vencem de hoje
 a 5 dias; se for depois da data prometida ao cliente, vai sozinha para a Nova data (card "Data do SSW" no Preventivo).
+
+## 29. Nova data automática para vencidos
+
+Rode a parte 29 do `supabase/schema.sql`. A nova data automática (partes 27 e 28) passa a valer também para pedidos já vencidos,
+quando o rastreio tem previsão de hoje em diante e depois da prometida.

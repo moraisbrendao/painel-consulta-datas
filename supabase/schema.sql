@@ -1300,3 +1300,56 @@ grant execute on function public.gravar_conferencia(jsonb) to authenticated;
 
 -- já aplica no que a conferência tem hoje (Jadlog, Bento e Trânsito já trazem a previsão)
 select public._conf_nova_data(null) as novas_datas_da_conferencia;
+
+-- =====================================================================
+-- 29) Nova data automática também para os pedidos já vencidos/atrasados (não só os que vencem em até 5 dias),
+--     quando o rastreio tem previsão atualizada (de hoje em diante) e depois da prometida.
+create or replace function public._ssw_nova_data(p_pedidos text[])
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  perform set_config('painel.ssw', '1', true);
+  insert into public.tratativas (pedido, nova_data, nova_data_fonte, atualizado_por)
+  select b.pedido, s.previsao, 'ssw', 'SSW (automático)'
+  from public.base_aberta b
+  join public.previsao_ssw s on s.pedido = b.pedido
+  left join public.tratativas t on t.pedido = b.pedido
+  where (p_pedidos is null or b.pedido = any(p_pedidos))
+    and s.previsao is not null and s.situacao <> 'entregue'
+    and coalesce(b.transportadora, '') !~* '(formato|transiga)'
+    and coalesce(b.prev_original, b.prev_atual) <= current_date + 5
+    and s.previsao >= current_date
+    and s.previsao > coalesce(b.prev_original, b.prev_atual)
+    and (t.pedido is null or t.nova_data is null or (t.nova_data_fonte = 'ssw' and t.nova_data <> s.previsao))
+  on conflict (pedido) do update set nova_data = excluded.nova_data, nova_data_fonte = 'ssw';
+  get diagnostics n = row_count;
+  perform set_config('painel.ssw', '', true);
+  return n;
+end $$;
+revoke all on function public._ssw_nova_data(text[]) from public, anon, authenticated;
+
+create or replace function public._conf_nova_data(p_pedidos text[])
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  perform set_config('painel.ssw', '1', true);
+  insert into public.tratativas (pedido, nova_data, nova_data_fonte, atualizado_por)
+  select c.pedido, (c.detalhe ->> 'previsao')::date, 'ssw', 'SSW (automático)'
+  from public.conferencia_ssw c
+  left join public.tratativas t on t.pedido = c.pedido
+  where (p_pedidos is null or c.pedido = any(p_pedidos))
+    and c.situacao <> 'entregue'
+    and coalesce(c.detalhe ->> 'previsao', '') ~ '^\d{4}-\d{2}-\d{2}$'
+    and coalesce(c.transportadora, '') !~* '(formato|transiga)'
+    and c.prev_cliente <= current_date + 5
+    and (c.detalhe ->> 'previsao')::date >= current_date
+    and (c.detalhe ->> 'previsao')::date > c.prev_cliente
+    and (t.pedido is null or t.nova_data is null or (t.nova_data_fonte = 'ssw' and t.nova_data <> (c.detalhe ->> 'previsao')::date))
+  on conflict (pedido) do update set nova_data = excluded.nova_data, nova_data_fonte = 'ssw';
+  get diagnostics n = row_count;
+  perform set_config('painel.ssw', '', true);
+  return n;
+end $$;
+revoke all on function public._conf_nova_data(text[]) from public, anon, authenticated;
+
+select public._ssw_nova_data(null) as do_preventivo, public._conf_nova_data(null) as da_conferencia;
