@@ -104,24 +104,30 @@ export async function fazerTicket(p, ticket, print, real, log) {
 
 // Fila Aguardando entrega: lê no chat do ticket a última "NF 123-7 emitida para o pedido" (com a data da mensagem)
 // e a última "Transportadora definida: X". Abre o ticket antes. Nada disso vai para o registro público.
-export async function lerChatTicket(p, ticket) {
+export async function lerChatTicket(p, ticket, nfOriginal = "") {
   await abrirTicket(p, ticket);
   // o chat pode carregar as mensagens antigas só ao rolar para cima
   for (let i = 0; i < 6; i++) {
     const subiu = await p.evaluate(() => { let s = false; for (const e of document.querySelectorAll("*")) { if (e.scrollHeight > e.clientHeight + 50 && e.scrollTop > 0 && /auto|scroll/.test(getComputedStyle(e).overflowY)) { e.scrollTop = 0; s = true; } } return s; });
     if (!subiu) break; await p.waitForTimeout(1200);
   }
-  const r = await p.evaluate(() => {
+  const r = await p.evaluate((orig) => {
     const ls = document.body.innerText.split("\n").map((x) => x.trim()).filter(Boolean);
-    let nf = null, em = null, transp = null, nfs = 0;
+    const semZ = (x) => String(x || "").replace(/^0+(?=\d)/, "");
+    const [oN, oS] = String(orig || "").split("-").map((x) => semZ((x || "").trim()));
+    let nf = null, em = null, transp = null, nfs = 0, solta = null;
+    const quando = (i) => { for (let k = i - 1; k >= Math.max(0, i - 4); k--) { const d = ls[k].match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/); if (d) return `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; } return null; };
     ls.forEach((l, i) => {
       const m = l.match(/NF\s*(\d+)\s*-\s*(\d+)\s+emitida\s+para\s+o\s+pedido/i);
-      if (m) { nfs++; nf = `${m[1]}-${m[2]}`; em = null;
-        for (let k = i - 1; k >= Math.max(0, i - 4); k--) { const d = ls[k].match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/); if (d) { em = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; break; } } }
+      if (m) { nfs++; nf = `${m[1]}-${m[2]}`; em = quando(i); }
+      // sem a mensagem padrão: NF escrita à mão no chat (ex.: "NF 147730-25"), que não seja a NF original do ticket
+      else { const s = l.match(/\bNF\s*(?:n[º°o.]*\s*)?:?\s*(\d{4,})\s*-\s*(\d{1,3})\b/i);
+        if (s && !(semZ(s[1]) === oN && semZ(s[2]) === oS)) solta = { nf: `${s[1]}-${s[2]}`, em: quando(i) }; }
       const t = l.match(/Transportadora definida:\s*(.+?)(?:\s*\(Intelipost|$)/i); if (t) transp = t[1].trim().slice(0, 80);
     });
+    if (!nf && solta) return { nf: solta.nf, em: solta.em, transp, nfs: 0, solta: true };
     return { nf, em, transp, nfs };
-  });
+  }, nfOriginal);
   return { ...r, fila: await filaAtual(p) };
 }
 

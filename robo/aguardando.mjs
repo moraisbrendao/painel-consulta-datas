@@ -45,10 +45,11 @@ export async function rodar(R) {
       const lote = []; let erros = 0;
       for (const t of ler) {
         try {
-          const c = await lerChatTicket(p, t.ticket); erros = 0;
+          const c = await lerChatTicket(p, t.ticket, t.nf_original); erros = 0;
           const x = { ticket: t.ticket, fila_360: c.fila || null, transp_chat: c.transp || null };
           if (c.nf) { x.nf_nova = c.nf; x.nf_emitida_em = c.em || null; Object.assign(t, x); soma("NF achada no chat"); }
           else { x.situacao = "sem nf nova"; soma("sem NF no chat"); }
+          if (c.solta) soma("NF escrita à mão no chat (sem a mensagem padrão)");
           if (c.nfs > 1) soma("ticket com mais de uma NF no chat (usei a última)");
           lote.push(x);
         } catch (e) { soma("não abriu o ticket"); lote.push({ ticket: t.ticket, situacao: "sem nf nova", fila_360: "não abriu no Multi360" }); if (++erros >= 8) { log("Multi360: 8 tickets seguidos sem abrir; paro a leitura."); break; } }
