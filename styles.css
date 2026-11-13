@@ -546,3 +546,4 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .t-uf-topo .t-sub3 { margin: 0; }
 .ag-prev { font-size: 12px; color: #1d4ed8; margin-top: 2px; }
 .ag-prev.vencida { color: #b91c1c; }
+.tabela-range td.num.cinza-t { color: #6b7280; }

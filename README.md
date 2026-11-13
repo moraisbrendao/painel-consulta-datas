@@ -222,3 +222,7 @@ quando o rastreio tem previsão de hoje em diante e depois da prometida.
 - As contas continuam sendo criadas no Supabase: Authentication › Users › Add user › Create new user (marque "Auto Confirm User"). "Allow new users to sign up" fica desligado.
 - Na página Consulta SAC, o cartão "Logins do painel" lista todo mundo e tem "Gerar senha provisória" para quem esqueceu. A pessoa troca por uma senha dela no primeiro acesso.
 - Qualquer pessoa logada troca a própria senha no botão "Trocar senha" do topo.
+
+## 31. Histórico diário (aba Transportadoras)
+- Tabela historico_base: uma foto por dia, do 1º arquivo enviado no botão "Enviar base" naquele dia.
+- A aba Transportadoras mostra a "Tabela do histórico" e segue os filtros de transportadora, canal e UF.

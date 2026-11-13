@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=85">
+  <link rel="stylesheet" href="styles.css?v=86">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -295,6 +295,20 @@
           <h3 class="t-sub3">Volume por mês (criação do pedido)</h3>
           <div id="t-cmp-graf" class="t-graf"></div>
         </div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Tabela do histórico</h2>
+            <p class="sub" id="t-hist-sub">Carregando…</p>
+          </div>
+          <button id="t-hist-extrair" class="btn primario">Extrair</button>
+        </div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range">
+          <thead><tr><th>Dia</th><th class="num">Volume</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">Em risco</th>
+            <th class="num">Entregues no prazo</th><th class="num">Entregues c/ atraso</th><th class="num">SLA entrega</th><th class="num" title="(entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto)">SLA geral</th></tr></thead>
+          <tbody id="t-hist-linhas"></tbody></table></div>
       </section>
 
       <section class="cartao">
@@ -884,9 +898,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=85"></script>
-  <script src="mapa-brasil.js?v=85"></script>
-  <script src="troca-notas.js?v=85"></script>
-  <script src="app.js?v=85"></script>
+  <script src="config.js?v=86"></script>
+  <script src="mapa-brasil.js?v=86"></script>
+  <script src="troca-notas.js?v=86"></script>
+  <script src="app.js?v=86"></script>
 </body>
 </html>

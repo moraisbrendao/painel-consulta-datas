@@ -1052,6 +1052,7 @@
       return;
     }
     gCarregando = false;
+    fotoDoDia(gBaseEm, minha);
     montarGerencial();
   }
   let gAvisoColunas = false;
@@ -1412,7 +1413,7 @@
     $("t-k-sla").textContent = ent ? pct0(soma("entOk") / ent) : "—";
     // tira da comparação quem sumiu com os filtros
     [...tCmp.keys()].forEach((t) => { if (!tStats.some((x) => x.t === t)) tCmp.delete(t); });
-    desenharDetalhe(); desenharPorTransp(L); desenharComparacao();
+    desenharDetalhe(); desenharPorTransp(L); desenharComparacao(); desenharHistorico();
   }
   function desenharDetalhe() {
     const ord = { vol: (a, b) => b.vol - a.vol, ab: (a, b) => b.ab - a.ab, atr: (a, b) => b.atr - a.atr, risco: (a, b) => b.risco - a.risco, entAtr: (a, b) => b.entAtr - a.entAtr,
@@ -1527,6 +1528,65 @@
       .concat(tStats.filter((x) => x.vol).sort((a, b) => b.vol - a.vol).map((x) => [x.t, x.vol, x.ab, x.atr, x.risco, x.ent, x.entAtr, x.med === null ? "" : +x.med.toFixed(1), x.sla === null ? "" : +(x.sla * 100).toFixed(1), x.can]));
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Transportadoras");
     XLSX.writeFile(wb, `transportadoras_${hojeISO()}.xlsx`);
+  });
+
+  // ---------------- histórico diário (parte 31) ----------------
+  // A 1ª base enviada no dia vira a foto do dia (o banco ignora as seguintes). Grava agrupado por transportadora × canal × UF,
+  // para a tabela seguir esses filtros do topo.
+  let tHist = null, tHistErro = "", fotoFeita = "";
+  const diaLocal = (iso) => { const d = new Date(iso); return new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+  async function fotoDoDia(baseEm, geracao) {
+    if (!baseEm || !gDados || !gDados.length || perfil === "sac") return;
+    const dia = diaLocal(baseEm);
+    if (dia !== hojeISO() || fotoFeita === dia) return;
+    fotoFeita = dia;
+    prepararG();
+    const g = new Map();
+    gDados.forEach((r) => {
+      const k = [r.transp || "", r.canal || "", r.uf || ""].join("\u0001");
+      const x = g.get(k) || [r.transp || "", r.canal || "", r.uf || "", 0, 0, 0, 0, 0, 0];
+      x[3]++; if (!r._fechado) x[4]++; if (r._atraso > 0) x[5]++; if (G_CARD.risco(r)) x[6]++;
+      if (r._sit === "ent_prazo") x[7]++; if (r._sit === "ent_atraso") x[8]++;
+      g.set(k, x);
+    });
+    if (geracao !== gGeracao) return;   // chegou uma base mais nova no meio do caminho
+    const inf = info && info.arquivo ? info.arquivo : null;
+    const { data, error } = await sb.rpc("gravar_historico", { p_dia: dia, p_dados: [...g.values()], p_arquivo: inf });
+    if (error) { fotoFeita = ""; return; }   // parte 31 ainda não rodada: tenta na próxima carga
+    if (data) { tHist = null; if (paginaAtual === "transp") carregarHistorico(); }
+  }
+  async function carregarHistorico() {
+    const { data, error } = await sb.from("historico_base").select("dia,dados").order("dia", { ascending: false }).limit(180);
+    tHistErro = error ? (/historico_base|does not exist|schema cache/i.test(error.message) ? "Falta rodar a parte 31 do schema.sql no Supabase." : "Não consegui ler o histórico: " + error.message) : "";
+    tHist = error ? [] : data || [];
+    desenharHistorico();
+  }
+  function desenharHistorico() {
+    if (tHist === null) { carregarHistorico(); return; }
+    const fs = ["transp", "canal", "uf"].map((k) => gSel[k]);
+    const linhas = tHist.map((h) => {
+      const s = [0, 0, 0, 0, 0, 0];
+      (h.dados || []).forEach((x) => { if ((fs[0].size && !fs[0].has(x[0])) || (fs[1].size && !fs[1].has(x[1])) || (fs[2].size && !fs[2].has(x[2]))) return; for (let i = 0; i < 6; i++) s[i] += x[3 + i] || 0; });
+      const [vol, ab, atr, risco, ok, entAtr] = s;
+      return { dia: h.dia, vol, ab, atr, risco, ok, entAtr, sla: ok + entAtr ? ok / (ok + entAtr) : null, geral: ok + entAtr + ab ? (ok + ab - atr) / (ok + entAtr + ab) : null };
+    });
+    tHistLinhas = linhas;
+    const outros = ["serie", "origem", "status", "micro"].some((k) => gSel[k].size) || $("g-nf").value.trim() || $("g-de").value || $("g-ate").value;
+    $("t-hist-sub").textContent = tHistErro || (linhas.length
+      ? `Foto do 1º arquivo da base enviado em cada dia · ${fmt(linhas.length)} dia(s) registrado(s)${outros ? " · aqui só valem os filtros de transportadora, canal e UF" : ""}`
+      : "Ainda não há dias registrados. A foto de hoje é gravada quando a base do dia é enviada (ou já está carregada).");
+    const p1 = (x) => (x === null ? "—" : (x * 100).toFixed(1).replace(".", ",") + "%");
+    $("t-hist-linhas").innerHTML = linhas.map((x) => `<tr><td>${ddmm(x.dia)}</td><td class="num neutro">${fmt(x.vol)}</td><td class="num neutro">${fmt(x.ab)}</td>
+      <td class="num vermelho-t">${fmt(x.atr)}</td><td class="num laranja-t">${fmt(x.risco)}</td><td class="num verde-t">${fmt(x.ok)}</td><td class="num neutro">${fmt(x.entAtr)}</td>
+      <td class="num neutro"><b>${p1(x.sla)}</b></td><td class="num cinza-t">${p1(x.geral)}</td></tr>`).join("");
+  }
+  let tHistLinhas = [];
+  $("t-hist-extrair").addEventListener("click", () => {
+    if (!tHistLinhas.length) return toast("Nada para exportar.", true);
+    const linhas = [["Dia", "Volume", "Em aberto", "Atrasados", "Em risco", "Entregues no prazo", "Entregues c/ atraso", "SLA entrega %", "SLA geral %"]]
+      .concat(tHistLinhas.map((x) => [br(x.dia), x.vol, x.ab, x.atr, x.risco, x.ok, x.entAtr, x.sla === null ? "" : +(x.sla * 100).toFixed(1), x.geral === null ? "" : +(x.geral * 100).toFixed(1)]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Histórico");
+    XLSX.writeFile(wb, `historico_${hojeISO()}.xlsx`);
   });
 
   // ---------------- entregas e SLA ----------------

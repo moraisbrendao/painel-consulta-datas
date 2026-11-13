@@ -1413,3 +1413,34 @@ begin
 end $$;
 revoke all on function public.senha_provisoria(text) from public, anon;
 grant execute on function public.senha_provisoria(text) to authenticated;
+
+-- ============ PARTE 31: histórico diário da base (aba Transportadoras) ============
+-- Uma foto por dia, tirada do 1º arquivo enviado no botão "Enviar base" naquele dia (os seguintes não mudam a foto).
+-- dados = lista de grupos [transportadora, canal, uf, volume, em aberto, atrasados, em risco, entregues no prazo, entregues c/ atraso]
+create table if not exists public.historico_base (
+  dia        date primary key,
+  dados      jsonb not null,
+  arquivo    text,
+  gravado_por text,
+  gravado_em timestamptz not null default now()
+);
+alter table public.historico_base enable row level security;
+drop policy if exists "logados leem" on public.historico_base;
+create policy "logados leem" on public.historico_base for select to authenticated using ((select not public.e_sac()));
+grant select on public.historico_base to authenticated;
+
+create or replace function public.gravar_historico(p_dia date, p_dados jsonb, p_arquivo text)
+returns boolean language plpgsql security definer set search_path = public
+as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if p_dia is null or p_dia > current_date + 1 or jsonb_typeof(p_dados) <> 'array' then raise exception 'dados inválidos'; end if;
+  insert into public.historico_base (dia, dados, arquivo, gravado_por)
+  values (p_dia, p_dados, left(p_arquivo, 200), auth.jwt() ->> 'email')
+  on conflict (dia) do nothing;
+  get diagnostics n = row_count;
+  return n > 0;   -- false = esse dia já tinha foto
+end $$;
+revoke all on function public.gravar_historico(date, jsonb, text) from public, anon;
+grant execute on function public.gravar_historico(date, jsonb, text) to authenticated;
