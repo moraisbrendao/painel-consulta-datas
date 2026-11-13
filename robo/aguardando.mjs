@@ -113,7 +113,7 @@ export async function rodar(R) {
       if (t.fonte === "SSW" && !(t._r.emissor && mesmaTransp(t._r.emissor, tp(t)))) { soma("entregue no SSW por outra transportadora (conferir à mão)"); lote.push({ ticket: t.ticket, baixa_status: "conferir", baixa_msg: t._r.emissor ? `O SSW mostra a entrega pela ${t._r.emissor}, que não é a transportadora do ticket (pode ser a de first mile).` : "Não consegui ver no SSW qual transportadora fez a entrega." }); continue; }
       const arq = `/tmp/ag-${Date.now()}.png`;
       try {
-        await printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe });
+        await printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina });
         const msg = `Nota ${t.nf_nova} entregue em ${BR(t.data_entrega)} conforme rastreio (${t.fonte}).`;
         const r = await executarAcao(p, t.ticket, { titulo: /Nota entregue\?/i, msg, print: arq, real: REAL });
         soma(REAL ? "baixa feita (Sim)" : "teste da baixa ok (Cancelar)");
@@ -127,7 +127,7 @@ export async function rodar(R) {
 }
 
 // print do rastreio que mostra a entrega: a própria página do SSW ou da Bento; Jadlog e Trânsito Brasil: relatório do rastreio (API)
-async function printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe }) {
+async function printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina }) {
   const pg = await ctx.newPage();
   try {
     const [num, ser] = String(t.nf_nova).split("-");
@@ -137,8 +137,12 @@ async function printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe }) {
       await pg.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
     };
     if (t.fonte === "SSW") {
-      await posta("https://ssw.inf.br/2/resultSSW", { cnpj: cnpjDaSerie(ser), NR: num, chave: chaveDe(t.transp_chat) || chaveDe(t.transportadora) || "" });
-      if (!/entregue|entrega realizada/i.test(await pg.innerText("body"))) throw new Error("a página do SSW não mostrou a entrega para o print");
+      // a mesma página que o robô leu (o navegador do runner não abre o SSW igual): HTML do resultado com os estilos do SSW
+      const r = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: chaveDe(t.transp_chat) || chaveDe(t.transportadora) || "" }).toString() });
+      if (!/MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(r.txt)) throw new Error("a página do SSW não mostrou a entrega para o print");
+      await pg.setViewportSize({ width: 1100, height: 700 });
+      await pg.setContent(r.txt.replace(/<head[^>]*>/i, (h) => h + '<base href="https://ssw.inf.br/2/">'), { waitUntil: "load", timeout: 30000 }).catch(() => {});
+      await pg.waitForTimeout(1500);
     } else if (t.fonte === "Bento Brasil") {
       await posta("https://sistema.bentobrasil.com.br/consultaNotas.php", { nr: "00349443000192", nrNota: num });
     } else {
