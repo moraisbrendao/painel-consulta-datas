@@ -202,3 +202,8 @@ param para não passar do limite do SSW, e o botão mostra o andamento em vez de
 
 Rode a parte 26 do `supabase/schema.sql`. Em *Alterar pedidos*, o botão "Aguardando entrega AT" faz o mesmo da Fila Aguardando
 entrega com o relatório da fila "Aguardando entrega (AT)" (Assistência Técnica). Cada relatório só mexe nos tickets da própria fila.
+
+## 27. Nova data automática pelo SSW (Preventivo)
+
+Rode a parte 27 do `supabase/schema.sql`. Pedido que vence de hoje até 5 dias com previsão do SSW depois da prometida recebe
+a data do SSW na Nova data (marcada como automática). Se alguém mudar a nova data à mão, o robô não mexe mais nela.

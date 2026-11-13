@@ -1193,3 +1193,64 @@ begin
   if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
   update public.aguardando_info set enviado_em = enviado_em where true;
 end $$;
+
+-- =====================================================================
+-- 27) Preventivo: quando a previsão do SSW é DEPOIS da data prometida de um pedido que vence nos próximos 5 dias
+--     (hoje até +5), a nova data recebe sozinha a data do SSW. Ela fica até alguém mudar a nova data à mão
+--     (aí o robô não mexe mais) ou o pedido sair como entregue/cancelado. Se o SSW mudar a previsão, a data automática acompanha.
+alter table public.tratativas add column if not exists nova_data_fonte text;   -- 'ssw' = gravada pelo robô
+create or replace function public._carimbo_tratativa()
+returns trigger language plpgsql as $$
+begin
+  new.atualizado_por := coalesce(auth.jwt() ->> 'email', new.atualizado_por);
+  new.atualizado_em := now();
+  if coalesce(current_setting('painel.ssw', true), '') = '1' then new.atualizado_por := 'SSW (automático)';
+  -- nova data mudada por uma pessoa: deixa de ser automática
+  elsif tg_op = 'INSERT' then new.nova_data_fonte := null;
+  elsif new.nova_data is distinct from old.nova_data then new.nova_data_fonte := null;
+  end if;
+  return new;
+end $$;
+
+create or replace function public._ssw_nova_data(p_pedidos text[])
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  perform set_config('painel.ssw', '1', true);
+  insert into public.tratativas (pedido, nova_data, nova_data_fonte, atualizado_por)
+  select b.pedido, s.previsao, 'ssw', 'SSW (automático)'
+  from public.base_aberta b
+  join public.previsao_ssw s on s.pedido = b.pedido
+  left join public.tratativas t on t.pedido = b.pedido
+  where (p_pedidos is null or b.pedido = any(p_pedidos))
+    and s.previsao is not null and s.situacao <> 'entregue'
+    and coalesce(b.transportadora, '') !~* '(formato|transiga)'
+    and coalesce(b.prev_original, b.prev_atual) between current_date and current_date + 5
+    and s.previsao > coalesce(b.prev_original, b.prev_atual)
+    and (t.pedido is null or t.nova_data is null or (t.nova_data_fonte = 'ssw' and t.nova_data <> s.previsao))
+  on conflict (pedido) do update set nova_data = excluded.nova_data, nova_data_fonte = 'ssw';
+  get diagnostics n = row_count;
+  perform set_config('painel.ssw', '', true);
+  return n;
+end $$;
+revoke all on function public._ssw_nova_data(text[]) from public, anon, authenticated;
+
+create or replace function public.gravar_ssw(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  insert into public.previsao_ssw (pedido, nf, previsao, situacao, consultado_em)
+  select r.pedido, r.nf, r.previsao, r.situacao, now()
+  from jsonb_to_recordset(linhas) as r(pedido text, nf text, previsao date, situacao text)
+  where coalesce(r.pedido, '') <> ''
+  on conflict (pedido) do update set nf = excluded.nf, previsao = excluded.previsao, situacao = excluded.situacao, consultado_em = now();
+  get diagnostics n = row_count;
+  perform public._ssw_nova_data(array(select r.pedido from jsonb_to_recordset(linhas) as r(pedido text)));
+  return n;
+end $$;
+revoke all on function public.gravar_ssw(jsonb) from public, anon;
+grant execute on function public.gravar_ssw(jsonb) to authenticated;
+
+-- já aplica nos pedidos que hoje estão assim
+select public._ssw_nova_data(null) as novas_datas_do_ssw;
