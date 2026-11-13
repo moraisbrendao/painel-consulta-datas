@@ -667,7 +667,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=48");
+        const w = new Worker("leitor-intelipost.js?v=49");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1643,7 +1643,7 @@
           <button class="btn" data-robo-troca="real" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Fazer com o robô</button>
         </div>
         <p class="s">Se a simulação do robô não achar frete, faça a simulação na mão, digite o prazo abaixo e clique de novo: o robô usa o seu prazo.</p>
-        <p class="s">${tnParcial(t) ? "Parcial: o robô troca transportadora e método, faz a simulação de cotação, a Entrega prev. 23:59 e o status Micro 920 (não mexe nos volumes)." : "O robô faz as etapas 1 a 5: transportadora e método, simulação de cotação, Entrega prev. 23:59, todos os volumes e o status Micro 920."} Ele passa de 30 em 30 minutos.</p>
+        <p class="s">${tnParcial(t) ? "Parcial: o robô troca transportadora e método, faz a simulação de cotação, a Entrega prev. 23:59, o status Micro 920 (não mexe nos volumes) e executa a ação no ticket do Multi360." : "O robô faz as 7 etapas: transportadora e método, simulação de cotação, Entrega prev. 23:59, todos os volumes, status Micro 920 e, no Multi360, o print + Executar ação no ticket e a conferência da fila."} Ele passa de 30 em 30 minutos.</p>
         <h3 class="tn-mao">Ou na mão: prazo da cotação → nova data</h3>
         <label class="tn-prazo">Prazo de entrega da simulação (dias úteis) <input type="number" min="1" max="60" data-prazo="${esc(t.ticket)}"></label>
         <p class="tn-data" id="tn-data-${esc(t.ticket)}">Digite o prazo para calcular.</p>
@@ -1664,7 +1664,7 @@
       case "pendente": return `<p class="tn-robo ambar">Na fila do robô (${modo}) desde ${quando(t.robo_pedido_em)}.</p>`;
       case "processando": return `<p class="tn-robo ambar">O robô está fazendo agora (${modo}).</p>`;
       case "testado": return `<p class="tn-robo verde">Teste ok em ${quando(t.robo_feito_em)}: o robô preencheu tudo e não salvou.${dt}${vol}</p>`;
-      case "feito": return `<p class="tn-robo verde">Feito pelo robô em ${quando(t.robo_feito_em)}.${dt}${vol} Faltam as etapas 6 e 7 (ticket).</p>`;
+      case "feito": return `<p class="tn-robo verde">Feito pelo robô em ${quando(t.robo_feito_em)}.${dt}${vol} ${t.etapas && t.etapas[7] ? "" : "Confira as etapas 6 e 7 (ticket)."}</p>`;
       case "erro": return `<p class="tn-robo vermelho">⚠ ${esc(t.robo_msg || "O robô não conseguiu.")}${t.robo_modo === "real" && t.robo_passos && Object.keys(t.robo_passos).some((k) => /^[1-5]$/.test(k)) ? ` Já tinha feito: etapa(s) ${Object.keys(t.robo_passos).filter((k) => /^[1-5]$/.test(k)).join(", ")}.` : ""}</p>`;
       default: return "";
     }
@@ -1686,7 +1686,7 @@
     const rt = e.target.closest("[data-robo-troca]"); if (rt) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rt.dataset.tk), m = t && tnMetodo(t); if (!t || !m.ok) return;
       const real = rt.dataset.roboTroca === "real";
       const pz = parseInt((document.querySelector(`input[data-prazo="${CSS.escape(t.ticket)}"]`) || {}).value, 10), prazo = pz > 0 && pz <= 60 ? pz : null;
-      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}${prazo ? `\n• prazo que você digitou: ${prazo} dias úteis → Entrega prev. ${br(TROCA.somaDiasUteis(hojeISO(), prazo))} 23:59 (sem simulação)` : "\n• simulação de cotação e Entrega prev. 23:59"}${tnParcial(t) ? "\n• volumes: não mexe (Parcial)" : `\n• todos os volumes com a nota ${t.nf_nova}`}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n\nConfirmar?`)) return;
+      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}${prazo ? `\n• prazo que você digitou: ${prazo} dias úteis → Entrega prev. ${br(TROCA.somaDiasUteis(hojeISO(), prazo))} 23:59 (sem simulação)` : "\n• simulação de cotação e Entrega prev. 23:59"}${tnParcial(t) ? "\n• volumes: não mexe (Parcial)" : `\n• todos os volumes com a nota ${t.nf_nova}`}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n• no Multi360: print do pedido + Executar ação ("Pedido atualizado na Intelipost" → Sim)\n\nConfirmar?`)) return;
       const { error } = await sb.rpc("pedir_robo_troca", { tk: t.ticket, metodo: m.ok.metodo, transp: m.ok.transp, modo: real ? "real" : "teste", prazo });
       if (error) return toast(/pedir_robo_troca|schema cache/i.test(error.message) ? "Rode de novo o supabase/schema.sql (parte 18) para usar o robô da troca." : "Não consegui mandar: " + error.message, true);
       toast(real ? "Mandado para o robô fazer na Intelipost." : "Mandado para o robô testar (não salva nada).");

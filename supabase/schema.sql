@@ -751,8 +751,8 @@ declare et jsonb; quem text := 'robô';
 begin
   if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
   select etapas into et from public.troca_notas where ticket = tk;
-  if st = 'feito' then   -- marca as etapas 1 a 5 (as da Intelipost)
-    for i in 1..5 loop
+  if st = 'feito' then   -- marca as etapas que o robô fez (1 a 5 na Intelipost, 6 e 7 no ticket do Multi360)
+    for i in 1..7 loop
       if coalesce((passos ->> i::text)::boolean, false) then et := coalesce(et, '{}'::jsonb) || jsonb_build_object(i::text, jsonb_build_object('por', quem, 'em', now())); end if;
     end loop;
   end if;

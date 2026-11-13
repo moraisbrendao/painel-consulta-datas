@@ -77,3 +77,28 @@ export async function olharTicket(p, ticket, log) {
   await p.waitForTimeout(1000);
   log("  fila depois de cancelar:", await filaAtual(p));
 }
+
+// etapas 6 e 7: anexa o print na caixinha "Executar ação no ticket" com a mensagem e clica Sim (no teste: Cancelar).
+export async function fazerTicket(p, ticket, print, real, log) {
+  await abrirTicket(p, ticket);
+  const antes = await filaAtual(p);
+  if (/aguardando entrega/i.test(antes)) return "já estava em Aguardando entrega";
+  await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().click();
+  const titulo = p.getByText(/Informa[cç][oõ]es atualizadas na Intelipost\?/i).last();
+  try { await titulo.waitFor({ timeout: 20000 }); }
+  catch { await p.keyboard.press("Escape").catch(() => {}); throw new Error('a ação do ticket não é "Informações atualizadas na Intelipost?" (confira a fila do ticket)'); }
+  const caixa = titulo.locator("xpath=ancestor::*[.//textarea and count(.//button) >= 2][1]");
+  await caixa.locator("input[type=file]").first().setInputFiles(print);
+  await p.waitForTimeout(2500);
+  await caixa.locator("textarea").first().fill("Pedido atualizado na Intelipost");
+  if (!real) { await caixa.getByRole("button", { name: /^\s*cancelar\s*$/i }).first().click(); return "teste (cancelado)"; }
+  await caixa.getByRole("button", { name: /^\s*sim\s*$/i }).first().click();
+  // 7) confere a fila (recarrega algumas vezes)
+  for (let i = 0; i < 6; i++) {
+    await p.waitForTimeout(5000);
+    await abrirTicket(p, ticket).catch(() => {});
+    const f = await filaAtual(p);
+    if (/aguardando entrega/i.test(f)) return "ok";
+    if (i === 5) throw new Error(`executei a ação, mas o ticket está na fila "${f}" (esperava Aguardando entrega)`);
+  }
+}

@@ -8,7 +8,7 @@
 // Trava da senha: se o login falhar, grava uma "impressão" da senha (16 letras de um sha256) e não tenta
 // de novo enquanto a senha guardada no GitHub for a mesma, para a Intelipost não bloquear a conta do time.
 import { chromium } from "playwright";
-import { entrarMulti360, olharTicket } from "./multi360.mjs";
+import { entrarMulti360, olharTicket, fazerTicket } from "./multi360.mjs";
 import { createHash } from "node:crypto";
 import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro } from "./supa.mjs";
 
@@ -629,7 +629,11 @@ async function fazerTroca(job) {
       }
     }
     passos[5] = true;
-    return { passos, prazo, nova };
+    // print da tela do pedido (vai só para dentro do ticket; o arquivo fica no runner e some no fim)
+    await tela.bringToFront(); await recarregar(tela).catch(() => {});
+    const print = `/tmp/pedido-${Date.now()}.png`;
+    await tela.screenshot({ path: print, fullPage: true });
+    return { passos, prazo, nova, print };
   } catch (e) {
     e.message = `Parei em "${etapa}": ${e.message.split("\n")[0]}`; e.passos = passos; throw e;
   } finally { if (aba) await aba.close().catch(() => {}); }
@@ -641,7 +645,10 @@ try {
   if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();
-  else if (MODO === "diag-ticket") { const p = await entrarMulti360(ctx, log); const t = await ultimaTrocaComErro(); if (t) await olharTicket(p, t.ticket, log); else log("Nenhuma troca para olhar."); }
+  else if (MODO === "diag-ticket") { const p = await entrarMulti360(ctx, log); const t = await ultimaTrocaComErro(); if (t) { await olharTicket(p, t.ticket, log);
+    const b = await ctx.newPage(); await b.setContent("<h1>teste do robô</h1>"); await b.screenshot({ path: "/tmp/teste.png" }); await b.close();
+    log("Teste da caixinha (Cancelar no fim):", await fazerTicket(p, t.ticket, "/tmp/teste.png", false, log).catch((e) => "erro: " + e.message.split("\n")[0]));
+    log("Fila no fim:", await p.evaluate(() => (document.body.innerText.match(/Atribu[ií]do Fila:\s*([^\n]+)/i) || [])[1] || "?")); } else log("Nenhuma troca para olhar."); }
   else if (MODO === "diag") {
     for (const [nome, caminho] of [["Busca por Lote", "/order/transactions-batch"], ["Alterar Pedidos", "/order/change-order"]]) {
       try {
@@ -679,12 +686,20 @@ try {
     // troca de notas: cada ticket já diz se é teste ou real (quem pediu no painel escolheu)
     const trocas = await pegarTroca(20).catch((e) => { log("Troca de notas:", e.message.split("\n")[0]); return []; });
     if (trocas.length) log(`${trocas.length} troca(s) de nota na passagem.`);
-    let tOk = 0, tErro = 0;
+    let tOk = 0, tErro = 0, multi = null;
     for (const job of trocas) {
       const modoJob = MODO === "real" ? job.robo_modo : "teste";   // dryrun nunca salva
       try {
         const r = await fazerTroca({ ...job, robo_modo: modoJob });
-        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", modoJob === "real" ? "Feito na Intelipost." : "Teste ok: tudo preenchido, nada salvo.", r.passos, r.prazo, r.nova);
+        let msgTicket = "";
+        try {   // etapas 6 e 7 no Multi360
+          if (!multi) multi = await entrarMulti360(ctx, log);
+          const t6 = await fazerTicket(multi, job.ticket, r.print, modoJob === "real", log);
+          if (modoJob === "real") { r.passos[6] = true; r.passos[7] = true; }
+          msgTicket = modoJob === "real" ? " Ticket: ação executada, fila Aguardando entrega." : " Ticket: caixinha preenchida e cancelada.";
+          log(`Ticket: ${t6}.`);
+        } catch (e2) { msgTicket = ` Ticket NÃO feito: ${e2.message.split("\n")[0].slice(0, 160)}`; log("Ticket:", e2.message.split("\n")[0]); }
+        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", (modoJob === "real" ? "Feito na Intelipost." : "Teste ok: tudo preenchido, nada salvo.") + msgTicket, r.passos, r.prazo, r.nova);
         tOk++; log(`Troca ${tOk + tErro}: ok (${modoJob}).`);
       } catch (e) {
         tErro++; log(`Troca ${tOk + tErro}: problema -`, e.message);
