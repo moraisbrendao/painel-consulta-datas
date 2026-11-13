@@ -288,6 +288,14 @@ if (MODO === "diag-track3r") {   // documentação pública da API da Track3r (s
 }
 if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem senha): 1 NF e lote de NFs — só contagens
   await entrarSupabase();
+  const P = await chamar("conferencia_ssw?select=nf,transportadora,situacao&situacao=in.(sem%20permissao,sem%20cte,fora%20do%20ssw)&limit=400");
+  const porT = {}; P.forEach((x) => { const t = (x.transportadora || "?").slice(0, 25); (porT[t] ||= []).length < 2 && porT[t].push(x); });
+  for (const [t, xs] of Object.entries(porT)) for (const x of xs) {
+    const [n, se] = String(x.nf).split("-").map((v) => (v || "").trim()), c = cnpjDaSerie(se); if (!c) continue;
+    const a = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: n, cnpj: c, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+    await new Promise((ok) => setTimeout(ok, 2500));
+    log(`${t} (${x.situacao}) → form1: ${lerEntrega(a.txt).situacao} · ${lerEntrega(a.txt).ultimo_evento || ""}`);
+  }
   const L = await chamar("conferencia_ssw?select=nf,transportadora,situacao&nf=like.*-7&situacao=in.(entregue,nao%20entregue)&limit=20");
   const nums = L.map((l) => String(l.nf).split("-")[0].trim());
   log("NFs de teste (série 7):", nums.length, "· situações:", JSON.stringify(L.reduce((m, x) => (m[x.situacao] = (m[x.situacao] || 0) + 1, m), {})));
