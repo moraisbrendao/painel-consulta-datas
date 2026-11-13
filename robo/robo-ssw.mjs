@@ -224,6 +224,8 @@ if (MODO === "real") {
       await dorme(ESPERAS[k] * 60000);
     }
   };
+  const pendCf = new Set(), gravaCf = [];
+  try { for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido&situacao=eq.pendente&order=pedido&limit=1000&offset=${de}`); L.forEach((x) => pendCf.add(x.pedido)); if (L.length < 1000) break; } } catch {}
   const fimEm = Date.now() + Number(process.env.SSW_MINUTOS || 80) * 60000;
   for (const l of fila) {
     if (Date.now() > fimEm) { log("Tempo da rodada acabou; o resto fica para a próxima."); break; }
@@ -235,6 +237,9 @@ if (MODO === "real") {
         const pg = await pegar("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
           body: new URLSearchParams({ cnpj: l.c, NR: l.num, chave: "" }).toString() });
         r = lerResultado(pg.txt);
+        if (pendCf.has(l.pedido)) { pendCf.delete(l.pedido); const e = lerEntrega(pg.txt);   // aproveita a mesma consulta para a aba Conferência SSW
+          gravaCf.push({ pedido: l.pedido, situacao: e.situacao, ultimo_evento: e.ultimo_evento || null, data_evento: e.data_evento || null, data_entrega: e.data_entrega || null });
+          if (gravaCf.length >= 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: gravaCf.splice(0) }).catch(() => {}); }
         // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
         const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
         if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
@@ -256,6 +261,7 @@ if (MODO === "real") {
     await salvar(false);
   }
   await salvar(true);
+  if (gravaCf.length) await chamar("rpc/gravar_conferencia", "POST", { linhas: gravaCf.splice(0) }).catch(() => {});
   log("Resultado:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
   log("Transportadoras fora do SSW (ou com senha):", Object.entries(porT).filter(([, v]) => v.n && v.fora === v.n).map(([k]) => k).join(", ") || "nenhuma");
 }
@@ -277,7 +283,7 @@ function lerEntrega(txt) {
 }
 async function conferir(minutos) {
   const lista = [];
-  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullslast,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
   log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];

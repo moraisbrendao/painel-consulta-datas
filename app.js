@@ -688,7 +688,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=55");
+        const w = new Worker("leitor-intelipost.js?v=56");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1835,7 +1835,7 @@
     $("cf-info").textContent = cfLista.length
       ? `${fmt(cfLista.length)} pedidos importados em ${new Date(imp).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${cfLista[0].importado_por ? " por " + cfLista[0].importado_por.split("@")[0] : ""}`
         + (pend ? ` · o robô está conferindo (faltam ${fmt(pend)}; ~14 por minuto)` : " · todos conferidos") + (ult ? ` · última conferência ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
-      : 'Clique em "Importar pedidos" e escolha a planilha (modelo Intelipost) com os pedidos para conferir.';
+      : 'Clique em "Importar pedidos (Intelipost)" e escolha o arquivo de transações exportado da Intelipost.';
     const tSel = $("cf-transp").value, ts = [...new Set(cfLista.map((x) => x.transportadora || "—"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     $("cf-transp").innerHTML = `<option value="">Todas</option>` + ts.map((t) => `<option ${t === tSel ? "selected" : ""}>${esc(t)}</option>`).join("");
     const F = cfFiltrados();
@@ -1844,7 +1844,7 @@
     $("cf-titulo").textContent = `${(document.querySelector(`#cf-cards [data-cf="${cfCard}"] .kpi-rot`) || {}).textContent || "Pedidos"} (${fmt(L.length)})`;
     const POR = 100, pags = Math.max(1, Math.ceil(L.length / POR)); cfPag = Math.min(cfPag, pags);
     $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[x.situacao] || [x.situacao, "cinza"];
-      return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td>
+      return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
         <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td></tr>`; }).join("");
     $("cf-vazio").hidden = L.length > 0;
     $("cf-paginacao").innerHTML = L.length > POR ? `<button class="btn" data-cfp="-1" ${cfPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cfPag} de ${pags}</span><button class="btn" data-cfp="1" ${cfPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
@@ -1854,14 +1854,10 @@
   $("cf-busca").addEventListener("input", () => { cfPag = 1; desenharConferencia(); });
   $("cf-transp").addEventListener("change", () => { cfPag = 1; desenharConferencia(); });
   $("cf-limpar").addEventListener("click", () => { $("cf-busca").value = ""; $("cf-transp").value = ""; cfPag = 1; desenharConferencia(); });
-  $("cf-modelo").addEventListener("click", () => {
-    const ws = XLSX.utils.aoa_to_sheet([["Pedido Intelipost", "NF", "Transportadora", "Status Intelipost"]]); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 18 }];
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos"); XLSX.writeFile(wb, "modelo_conferencia_ssw.xlsx");
-  });
   $("cf-exportar").addEventListener("click", () => {
     const L = cfFiltrados().filter(CF_CARD[cfCard]);
-    const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Status Intelipost", "Situação no SSW", "Último evento no SSW", "Data do evento", "Entregue em (SSW)"]]
-      .concat(L.map((x) => [x.pedido, x.nf, x.transportadora, x.status_intelipost, (CF_SIT[x.situacao] || [x.situacao])[0], x.ultimo_evento, br(x.data_evento), br(x.data_entrega)]));
+    const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Status Intelipost", "Previsão cliente", "Situação no SSW", "Último evento no SSW", "Data do evento", "Entregue em (SSW)"]]
+      .concat(L.map((x) => [x.pedido, x.nf, x.transportadora, x.status_intelipost, br(x.prev_cliente), (CF_SIT[x.situacao] || [x.situacao])[0], x.ultimo_evento, br(x.data_evento), br(x.data_entrega)]));
     const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Conferência SSW"); XLSX.writeFile(wb, `conferencia_ssw_${cfCard}_${hojeISO()}.xlsx`);
   });
@@ -1869,33 +1865,23 @@
     const arq = e.target.files[0]; e.target.value = "";
     if (!arq) return;
     if (!cfOk) return toast("Rode no Supabase a parte 21 do supabase/schema.sql para usar a Conferência SSW.", true);
-    carregando("Lendo a planilha…"); await new Promise((r) => setTimeout(r, 50));
-    let itens = [], semNf = 0;
+    let itens = [], semNf = 0, res;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
-      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c).startsWith("PEDIDO")));
-      if (iCab < 0) throw new Error('Não achei a coluna "Pedido Intelipost" na planilha.');
-      const cab = rows[iCab].map(norm);
-      const cPed = cab.findIndex((c) => c === "PEDIDO INTELIPOST") >= 0 ? cab.findIndex((c) => c === "PEDIDO INTELIPOST") : cab.findIndex((c) => c.startsWith("PEDIDO"));
-      const cNf = cab.findIndex((c) => ["NF", "NOTA", "NOTA-SERIE", "NOTA FISCAL", "NOTA SERIE"].includes(c));
-      const cNum = cab.findIndex((c) => c === "NUMERO DA NF" || c === "NUMERO NF"), cSer = cab.findIndex((c) => c === "SERIE");
-      const cT = cab.findIndex((c) => c.startsWith("TRANSPORTADORA")), cSt = cab.findIndex((c) => c === "STATUS INTELIPOST" || c === "STATUS TRANSPORTADOR" || c === "STATUS");
-      const porPed = new Map(base.map((p) => [norm(p.pedido), p]));
-      const vistos = new Set();
-      rows.slice(iCab + 1).forEach((r) => {
-        if (!r || r[cPed] == null || String(r[cPed]).trim() === "") return;
-        const pedido = String(r[cPed]).trim(); if (vistos.has(pedido)) return; vistos.add(pedido);
-        const b = porPed.get(norm(pedido)) || {};
-        let nf = cNf >= 0 && r[cNf] != null ? String(r[cNf]).trim() : cNum >= 0 && r[cNum] != null ? `${String(r[cNum]).trim()}-${cSer >= 0 && r[cSer] != null ? String(r[cSer]).trim() : ""}` : "";
-        if (!/^\d+\s*-\s*\d+$/.test(nf)) nf = b.nf || "";   // sem série: usa a NF da base
-        if (!nf) semNf++;
-        itens.push({ pedido, nf: chaveNF(nf), transportadora: (cT >= 0 && r[cT] != null ? String(r[cT]).trim() : "") || b.transportadora || "", status_intelipost: (cSt >= 0 && r[cSt] != null ? String(r[cSt]).trim() : "") || b.status_intelipost || "" });
+      const dados = await arq.arrayBuffer();
+      res = await new Promise((ok, falha) => {
+        const w = new Worker("leitor-conferencia.js?v=56");
+        w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
+        w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
+        carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
       });
-      if (!itens.length) throw new Error("A planilha não tem pedidos.");
+      const porPed = new Map(base.map((p) => [norm(p.pedido), p]));
+      itens = res.abertos.map((x) => { const b = porPed.get(norm(x.pedido)) || {}; const nf = x.nf || b.nf || ""; if (!nf) semNf++;
+        return { ...x, nf: chaveNF(nf), transportadora: x.transportadora || b.transportadora || "" }; });
+      if (!itens.length) throw new Error("O arquivo não tem pedidos em aberto (todos estão Entregue ou Cancelado).");
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    if (!confirm(`${arq.name}\n\n${fmt(itens.length)} pedidos para conferir no SSW${semNf ? ` (${fmt(semNf)} sem NF com série: não dá para conferir)` : ""}.\n\nA lista anterior da Conferência SSW será substituída e o robô começa a conferir agora (~14 pedidos por minuto). Continuar?`)) return;
+    const horas = Math.ceil(itens.length / 14 / 60);
+    if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(res.fechados)} já Entregue/Cancelado (ficam de fora) e ${fmt(itens.length)} em aberto para conferir no SSW${semNf ? ` (${fmt(semNf)} sem NF: não dá para conferir)` : ""}.\n\nO robô confere ~14 por minuto (${horas > 1 ? "umas " + horas + " horas" : "menos de 1 hora"} para todos), começando pelos de previsão mais antiga. A lista anterior será substituída. Continuar?`)) return;
     carregando("Gravando…");
     const { error } = await sb.rpc("importar_conferencia", { linhas: itens });
     carregando("");

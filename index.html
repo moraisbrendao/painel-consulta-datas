@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=55">
+  <link rel="stylesheet" href="styles.css?v=56">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -537,13 +537,11 @@
       <div class="titulo-pagina com-acoes">
         <div>
           <h1>Conferência SSW</h1>
-          <p class="sub">Importe a lista de pedidos (modelo Intelipost: <b>Pedido Intelipost</b>, <b>NF</b> ou <b>Nota-Série</b>, Transportadora).
-            O robô confere no rastreio do SSW se cada pedido já foi <b>entregue</b>: os entregues no SSW que não estão como Entregue na Intelipost são os que <b>falta atualizar na Intelipost</b>.</p>
+          <p class="sub">Importe o arquivo de <b>transações da Intelipost</b> (transactions_….xlsx). Os pedidos que ainda não estão Entregue/Cancelado na Intelipost entram na lista e o robô confere no rastreio do SSW se cada pedido já foi <b>entregue</b>: os entregues no SSW que não estão como Entregue na Intelipost são os que <b>falta atualizar na Intelipost</b>.</p>
           <p id="cf-info" class="info-base">Carregando…</p>
         </div>
         <div class="acoes-robo">
-          <label class="btn amarelo" title="Planilha com Pedido Intelipost e NF (ou Nota-Série)">Importar pedidos<input id="arquivo-cf" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label>
-          <button id="cf-modelo" class="btn contorno">Baixar modelo</button>
+          <label class="btn amarelo" title="Arquivo de transações exportado da Intelipost (transactions_….xlsx)">Importar pedidos (Intelipost)<input id="arquivo-cf" type="file" accept=".xlsx,.xls" hidden></label>
           <button id="cf-exportar" class="btn contorno">Exportar (Excel)</button>
         </div>
       </div>
@@ -560,7 +558,7 @@
         <h2 id="cf-titulo">Pedidos</h2>
         <div class="tabela-wrap">
           <table class="tabela-pedidos">
-            <thead><tr><th>Pedido</th><th>NF</th><th>Transportadora</th><th>Status Intelipost</th><th>SSW</th><th>Último evento no SSW</th><th>Entregue em</th></tr></thead>
+            <thead><tr><th>Pedido</th><th>NF</th><th>Transportadora</th><th>Status Intelipost</th><th>Prev. cliente</th><th>SSW</th><th>Último evento no SSW</th><th>Entregue em</th></tr></thead>
             <tbody id="cf-linhas"></tbody>
           </table>
           <p id="cf-vazio" class="vazio" hidden>Nenhum pedido aqui.</p>
@@ -738,9 +736,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=55"></script>
-  <script src="mapa-brasil.js?v=55"></script>
-  <script src="troca-notas.js?v=55"></script>
-  <script src="app.js?v=55"></script>
+  <script src="config.js?v=56"></script>
+  <script src="mapa-brasil.js?v=56"></script>
+  <script src="troca-notas.js?v=56"></script>
+  <script src="app.js?v=56"></script>
 </body>
 </html>

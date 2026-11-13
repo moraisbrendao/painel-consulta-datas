@@ -838,6 +838,7 @@ create table if not exists public.conferencia_ssw (
   importado_em      timestamptz not null default now(),
   importado_por     text
 );
+alter table public.conferencia_ssw add column if not exists prev_cliente date;
 alter table public.conferencia_ssw enable row level security;
 revoke all on public.conferencia_ssw from anon;
 grant select on public.conferencia_ssw to authenticated;
@@ -850,10 +851,10 @@ declare n integer;
 begin
   if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
   delete from public.conferencia_ssw where true;
-  insert into public.conferencia_ssw (pedido, nf, transportadora, status_intelipost, situacao, importado_por)
-  select distinct on (r.pedido) r.pedido, nullif(r.nf, ''), r.transportadora, r.status_intelipost,
+  insert into public.conferencia_ssw (pedido, nf, transportadora, status_intelipost, prev_cliente, situacao, importado_por)
+  select distinct on (r.pedido) r.pedido, nullif(r.nf, ''), r.transportadora, r.status_intelipost, r.prev_cliente,
          case when coalesce(r.nf, '') = '' then 'sem nf' else 'pendente' end, auth.jwt() ->> 'email'
-  from jsonb_to_recordset(linhas) as r(pedido text, nf text, transportadora text, status_intelipost text)
+  from jsonb_to_recordset(linhas) as r(pedido text, nf text, transportadora text, status_intelipost text, prev_cliente date)
   where coalesce(r.pedido, '') <> '';
   get diagnostics n = row_count;
   return n;
