@@ -13,6 +13,12 @@ async function pagina(url, opts) {
   return { status: r.status, url: r.url, txt };
 }
 
+if (MODO === "diag-form") {
+  const p = await pagina("https://ssw.inf.br/2/rastreamento?");
+  const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
+  log(f.replace(/<svg[\s\S]*?<\/svg>/gi, "").replace(/class="[^"]*"/g, "").replace(/\s+/g, " ").slice(0, 3500));
+  tags(p.txt, /<script[^>]*>[\s\S]*?<\/script>/gi).forEach((t) => log("  script:", t));
+}
 if (MODO === "diag") {
   for (const u of ["https://ssw.inf.br/ajuda/rastreamento.html", "https://ssw.inf.br/2/rastreamento", "https://ssw.inf.br/2/rastreamento_pf"]) {
     try {
