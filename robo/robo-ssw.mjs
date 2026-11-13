@@ -138,8 +138,9 @@ if (MODO === "diag-link") {
 }
 if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes (só mostra o resultado, sem dados)
   await entrarSupabase();
-  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*sua*log*&nf=not.is.null&limit=3");
-  const senha = chaveDe("Trans Sua Log");
+  const L = await chamar("conferencia_ssw?select=nf,transportadora&situacao=eq.sem%20permissao&limit=3");
+  const senha = chaveDe(L[0] && L[0].transportadora);
+  log("transportadoras:", [...new Set(L.map((x) => x.transportadora))].join(", "));
   log("pedidos Trans Sua:", L.length, "· com senha:", senha ? `sim (${senha.length} caracteres)` : "não");
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const tenta = async (rot, cnpj, nr, chave, url = "https://ssw.inf.br/2/resultSSW") => {
@@ -151,8 +152,8 @@ if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes 
   const [num, ser] = String(L[0].nf).split("-").map((x) => (x || "").trim());
   log("série:", ser, "· CNPJ final:", String(cnpjDaSerie(ser)).slice(-4));
   for (const l of L) { const [n, se] = String(l.nf).split("-").map((x) => (x || "").trim());
-    await tenta(`série ${se} · formulário da ajuda com senha`, cnpjDaSerie(se), n, senha, "https://ssw.inf.br/2/ssw_resultSSW");
-    await tenta(`série ${se} · formulário da ajuda sem senha`, cnpjDaSerie(se), n, "", "https://ssw.inf.br/2/ssw_resultSSW"); }
+    await tenta(`série ${se} · sem senha`, cnpjDaSerie(se), n, "");
+    await tenta(`série ${se} · com senha`, cnpjDaSerie(se), n, chaveDe(l.transportadora)); }
 }
 if (MODO === "diag-ajuda") {   // página pública de ajuda do SSW (sem dados de cliente)
   const p = await pagina("https://ssw.inf.br/ajuda/rastreamento.html");
