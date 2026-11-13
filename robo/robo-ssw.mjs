@@ -378,7 +378,11 @@ async function conferir(minutos) {
   // "Informação não disponível" = a transportadora ainda não emitiu o CT-e: confere de novo depois (1 vez a cada 20 h), depois dos pendentes
   { const antes = new Date(Date.now() - 20 * 3600000).toISOString();
     const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao&situacao=in.(fora%20do%20ssw,sem%20cte,sem%20permissao)&consultado_em=lt.${antes}&order=prev_cliente.asc.nullsfirst&limit=1000`).catch(() => []);
-    const de_novo = L.filter((x) => !FORA_SSW.test(x.transportadora || "") && (!/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora))); lista.push(...de_novo);
+    const de_novo = L.filter((x) => !FORA_SSW.test(x.transportadora || "") && (!/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora)));
+    // "Pede senha" de transportadora com senha cadastrada: confere já, sem esperar 20 h
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao&situacao=eq.sem%20permissao&consultado_em=gte.${antes}&order=pedido&limit=1000&offset=${de}`).catch(() => []);
+      de_novo.unshift(...P.filter((x) => chaveDe(x.transportadora))); if (P.length < 1000) break; }
+    lista.unshift(...de_novo.filter((x) => x.situacao === "sem permissao")); lista.push(...de_novo.filter((x) => x.situacao !== "sem permissao"));
     if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} sem CT-e na última consulta para conferir de novo.`); }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
   if (process.env.JADLOG_TOKEN) {   // Jadlog: pela API, antes do SSW
