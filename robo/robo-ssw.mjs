@@ -21,7 +21,41 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
 const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""], [/dominalog/i, process.env.SSW_SENHA_DOMINALOG || ""]];
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
-const FORA_SSW = /formato|transiga|tr[aâ]nsito\s*brasil/i;
+const FORA_SSW = /formato|transiga/i;
+// Trânsito Brasil não usa SSW: consulta no rastreio dela (Senior), pela NF + CNPJ (série 35 → ...1083, outras → ...0192); só vale se a série bater
+const EH_TRANSITO = /tr[aâ]nsito\s*brasil/i;
+async function transito(itens) {
+  const out = new Map(); if (!itens.length) return out;
+  const URL_T = "https://platform.senior.com.br/t/senior.com.br/bridge/1.0/anonymous/rest/tms/tck/actions/externalTenantConsultaTracking";
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
+  const dia = (v) => v ? String(v).slice(0, 10) : null;
+  for (const l of itens) {
+    const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()), sn = String(parseInt(ser, 10));
+    if (!num || sn === "NaN") { out.set(l.pedido, { situacao: "sem nf" }); continue; }
+    let j = null;
+    try {
+      const r = await fetch(URL_T, { method: "POST", headers: { "Content-Type": "application/json", "x-tenantdomain": "transitobrasil.com.br", "x-tenant": "transitobrasil" },
+        body: JSON.stringify({ documento: num, inscricaoFiscal: sn === "35" ? "00349443001083" : "00349443000192", somenteFasesExecutadas: false, pageRequest: { offset: 0, size: 10 } }) });
+      if (!r.ok) { if (++erros > 5) { log(`Trânsito Brasil respondeu ${r.status}; paro nesta rodada.`); break; } await dorme(10000); continue; }
+      erros = 0; j = await r.json();
+    } catch (e) { if (++erros > 5) break; await dorme(10000); continue; }
+    const limite = new Date(Date.now() - 180 * 86400000).toISOString().slice(0, 10);
+    const ts = (j.listaTracking || []).filter((x) => x.tracking && String(parseInt(x.tracking.serie, 10)) === sn)   // série diferente = outra nota: desconsidera
+      .map((x) => ({ x, fases: (x.listaTrackingFase || []).filter((f) => f.executada && f.dataExecucao).sort((a, b) => String(a.dataExecucao).localeCompare(String(b.dataExecucao))) }))
+      .filter(({ x, fases }) => (dia(x.tracking.dataEntrega) || dia((fases[fases.length - 1] || {}).dataExecucao) || "9999") >= limite);   // nota antiga com o mesmo número: desconsidera
+    const t = ts[ts.length - 1];
+    if (!t) out.set(l.pedido, { situacao: "sem cte" });
+    else {
+      const tr = t.x.tracking, prev = dia(tr.dataPrevisaoEntrega), ult = t.fases[t.fases.length - 1];
+      if (tr.dataEntrega) out.set(l.pedido, { situacao: "entregue", data_entrega: dia(tr.dataEntrega), data_evento: dia(tr.dataEntrega), ultimo_evento: "ENTREGUE", previsao: prev });
+      else out.set(l.pedido, { situacao: "nao entregue", data_evento: ult ? dia(ult.dataExecucao) : null, ultimo_evento: ult && ult.fase ? String(ult.fase.descricao || "").toUpperCase().slice(0, 60) : null, previsao: prev });
+    }
+    await dorme(1000);
+  }
+  const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
+  log("Trânsito Brasil (Senior):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
+  return out;
+}
 // Bento Brasil não usa SSW: consulta no rastreio do site dela (CNPJ da Multi + número da NF), 1 por vez com pausa
 const EH_BENTO = /bento/i;
 function lerBento(txt) {
@@ -340,7 +374,7 @@ if (MODO === "real") {
   const abertos = todos.filter((l) => !fechado(l));
   log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
   let fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
-  for (const [EH, fn] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null], [EH_BENTO, bento]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
+  for (const [EH, fn] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null], [EH_BENTO, bento], [EH_TRANSITO, transito]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
     const jad = fila.filter((l) => EH.test(l.transportadora || "")); fila = fila.filter((l) => !EH.test(l.transportadora || ""));
     const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
       return { pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao === "entregue" ? "entregue" : r.previsao ? "previsao" : r.situacao === "sem cte" ? "sem cte" : "sem previsao" }; });
@@ -440,7 +474,7 @@ async function conferir(minutos) {
     lista.unshift(...de_novo.filter((x) => x.situacao === "sem permissao")); lista.push(...de_novo.filter((x) => x.situacao !== "sem permissao"));
     if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} sem CT-e na última consulta para conferir de novo.`); }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
-  for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
+  for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
     const jad = lista.filter((l) => EH.test(l.transportadora || ""));
     // fora do SSW e rápido: confere de novo toda a transportadora que ainda não foi entregue
     for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*${nome}*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []);
@@ -452,7 +486,7 @@ async function conferir(minutos) {
   }
   { // transportadora fora do SSW (Bento, Formato, Transiga, Trânsito Brasil): desfaz resultados antigos do SSW (eram da first mile)
     const F = [];
-    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*formato*,transportadora.ilike.*transiga*,transportadora.ilike.*sito*brasil*)&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*formato*,transportadora.ilike.*transiga*)&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
     const fx = F.filter((x) => FORA_SSW.test(x.transportadora || "")).map((x) => ({ pedido: x.pedido, situacao: "fora do ssw", ultimo_evento: null, data_evento: null, data_entrega: null }));
     for (let i = 0; i < fx.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: fx.slice(i, i + 50) }).catch(() => {});
     if (fx.length) log(`Conferência SSW: ${fx.length.toLocaleString("pt-BR")} de transportadora fora do SSW corrigidos.`);
