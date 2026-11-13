@@ -396,7 +396,8 @@ async function conferir(minutos) {
     for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
   }
   { // transportadora fora do SSW (Bento, Formato, Transiga, Trânsito Brasil): desfaz resultados antigos do SSW (eram da first mile)
-    const F = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*bento*,transportadora.ilike.*formato*,transportadora.ilike.*transiga*,transportadora.ilike.*sito*brasil*)&limit=5000`).catch(() => []);
+    const F = [];
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*bento*,transportadora.ilike.*formato*,transportadora.ilike.*transiga*,transportadora.ilike.*sito*brasil*)&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
     const fx = F.filter((x) => FORA_SSW.test(x.transportadora || "")).map((x) => ({ pedido: x.pedido, situacao: "fora do ssw", ultimo_evento: null, data_evento: null, data_entrega: null }));
     for (let i = 0; i < fx.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: fx.slice(i, i + 50) }).catch(() => {});
     if (fx.length) log(`Conferência SSW: ${fx.length.toLocaleString("pt-BR")} de transportadora fora do SSW corrigidos.`);
