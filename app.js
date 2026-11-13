@@ -667,7 +667,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=52");
+        const w = new Worker("leitor-intelipost.js?v=53");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1617,9 +1617,10 @@
     $("tn-linhas").innerHTML = L.map((t) => {
       const m = tnMetodo(t), feitas = tnFeitas(t), aberto = tnAberto === t.ticket;
       const met = m.ok ? `<b>${esc(m.ok.metodo)}</b>${m.manual ? ' <span class="chip cinza">escolhido</span>' : ""}` : `<span class="txt-vermelho">⚠ ${esc(m.erro)}</span>`;
-      const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
+      const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span> <button class="btn mini contorno" data-voltar="${esc(t.ticket)}" title="Tira o ticket de Em andamento e volta para A fazer (o erro do robô continua aparecendo)">↩ A fazer</button>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
+      const errRobo = t.robo_status === "erro" ? `<div class="tn-err-linha txt-vermelho">⚠ ${esc(String(t.robo_msg || "O robô não conseguiu.").slice(0, 140))}</div>` : "";
       return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td>${esc(t.ticket)}</td><td><span class="chip ${tnParcial(t) ? "azul" : "cinza"}">${tnParcial(t) ? "Parcial" : "Total"}</span></td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
-        <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span></td><td>${quem}</td></tr>`
+        <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span>${errRobo}</td><td class="tn-quem">${quem}</td></tr>`
         + (aberto ? `<tr class="tn-detalhe"><td colspan="8">${detalheTroca(t, m)}</td></tr>` : "");
     }).join("");
     $("tn-vazio").hidden = L.length > 0;
@@ -1686,6 +1687,9 @@
     const pg = e.target.closest("[data-pegar]"); if (pg) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === pg.dataset.pegar);
       if (t && t.responsavel && t.responsavel !== meuEmail()) return toast(`${t.responsavel} já pegou este ticket.`, true);
       await salvarTroca(pg.dataset.pegar, { responsavel: meuEmail(), pego_em: new Date().toISOString() }); return; }
+    const vt = e.target.closest("[data-voltar]"); if (vt) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === vt.dataset.voltar); if (!t) return;
+      if (!confirm(`Tirar o ticket ${t.ticket} de Em andamento (com ${String(t.responsavel || "").split("@")[0]}) e voltar para A fazer?\n\nAs etapas marcadas e o aviso do robô continuam.`)) return;
+      if (await salvarTroca(t.ticket, { responsavel: null, pego_em: null })) toast(`Ticket ${t.ticket} voltou para A fazer.`); return; }
     const so = e.target.closest("[data-soltar]"); if (so) { e.stopPropagation(); await salvarTroca(so.dataset.soltar, { responsavel: null, pego_em: null }); return; }
     const rt = e.target.closest("[data-robo-troca]"); if (rt) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rt.dataset.tk), m = t && tnMetodo(t); if (!t || (!m.ok && !tnSerie4(t))) return;
       const real = rt.dataset.roboTroca === "real";
