@@ -180,6 +180,26 @@ if (MODO === "diag-jadlog") {   // API da Jadlog: manual público + teste com 2 
     }
   }
 }
+if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrutura do resultado (sem dados de cliente)
+  const URL_B = "https://sistema.bentobrasil.com.br/rastreamentoCarga.php";
+  const f = await pagina(URL_B);
+  log("form:", f.status, tags(f.txt, /<form[^>]*>|<input[^>]*>|<button[^>]*>|<select[^>]*>/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).join(" | ").slice(0, 1500));
+  log("scripts:", tags(f.txt, /<script[^>]*>[\s\S]{0,600}?<\/script>/gi).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 500)).join(" || ").slice(0, 2500));
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*bento*&nf=not.is.null&limit=1");
+  if (!L.length) process.exit(0);
+  const num = String(L[0].nf).split("-")[0].trim();
+  const acao = (f.txt.match(/<form[^>]*action=["']([^"']*)["']/i) || [])[1] || "";
+  const nomes = tags(f.txt, /<input[^>]*>/gi).map((x) => (x.match(/name=["']([^"']+)["']/i) || [])[1]).filter(Boolean);
+  log("action:", acao, "· campos:", nomes.join(", "));
+  const corpo = new URLSearchParams(); nomes.forEach((n, i) => corpo.set(n, /cnpj|cpf|doc/i.test(n) ? "00349443000192" : /nf|nota|num/i.test(n) ? num : ""));
+  if (nomes.length >= 2 && !/cnpj|cpf|doc/i.test(nomes.join())) { corpo.set(nomes[0], "00349443000192"); corpo.set(nomes[1], num); }
+  const r = await pagina(new URL(acao || URL_B, URL_B).href, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: corpo.toString() });
+  const ls = sohTexto(r.txt);
+  log("resultado:", r.status, "· linhas:", ls.length, "· datas:", (r.txt.match(/\d{2}\/\d{2}\/\d{2,4}/g) || []).length, "· tem previsão:", /previs/i.test(r.txt) ? "sim" : "não", "· tem entreg:", /entreg/i.test(r.txt) ? "sim" : "não");
+  log("textos:", ls.map((l) => limpo(l)).filter((l) => l.replace(/[x\s#]/g, "").length > 2).slice(0, 60).join(" | ").slice(0, 2500));
+  log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");

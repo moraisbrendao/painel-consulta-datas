@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog]
+        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
