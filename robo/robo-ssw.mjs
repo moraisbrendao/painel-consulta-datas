@@ -97,6 +97,21 @@ if (MODO === "diag-link") {
     log("linhas:", sohTexto(corpo).length, "· tem 'Previsao':", /previs/i.test(corpo) ? "sim" : "não");
   }
 }
+if (MODO === "diag-senha") {   // como o SSW pede a senha da transportadora (só nomes de campos, botões e scripts curtos)
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*sua*log*&nf=not.is.null&limit=3");
+  log("pedidos Trans Sua:", L.length);
+  for (const l of L.slice(0, 2)) {
+    const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
+    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: "" }).toString() });
+    const t = pg.txt.replace(/\d{4,}/g, "#");
+    log("status:", pg.status, "· pede permissão:", /permiss/i.test(t) ? "sim" : "não");
+    log("forms/inputs/botões:", tags(t, /<form[^>]*>|<input[^>]*>|<button[^>]*>[^<]{0,40}|<a [^>]*href=[^>]*>|onclick=["'][^"']{0,160}["']/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"')).slice(0, 25).join(" | "));
+    log("scripts:", tags(t, /<script[^>]*>[\s\S]{0,400}/gi).map((x) => x.slice(0, 300)).join(" || ").slice(0, 2500));
+    log("textos:", limpo(sohTexto(t).join(" ")).slice(0, 400));
+    await new Promise((ok) => setTimeout(ok, 3000));
+  }
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
