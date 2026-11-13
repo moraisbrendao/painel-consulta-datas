@@ -1361,12 +1361,29 @@ select public._ssw_nova_data(null) as do_preventivo, public._conf_nova_data(null
 drop trigger if exists so_email_empresa on auth.users;
 drop function if exists public._so_email_empresa();
 
+-- quem administra os logins (página Logins). Os e-mails são incluídos à mão no SQL Editor:
+--   insert into public.admins_painel(email) values ('fulano@empresa.com') on conflict do nothing;
+create table if not exists public.admins_painel (email text primary key);
+alter table public.admins_painel enable row level security;
+revoke all on public.admins_painel from anon, authenticated;
+create or replace function public.e_admin()
+returns boolean language sql stable security definer set search_path = public
+as $$ select exists (select 1 from public.admins_painel where email = lower(auth.jwt() ->> 'email')) $$;
+revoke all on function public.e_admin() from public, anon;
+grant execute on function public.e_admin() to authenticated;
+
+-- lista do SAC: só os administradores mexem (o e_sac() continua lendo, pois é security definer)
+drop policy if exists "logistica gerencia" on public.logins_sac;
+drop policy if exists "admin gerencia" on public.logins_sac;
+create policy "admin gerencia" on public.logins_sac for all to authenticated
+  using ((select public.e_admin())) with check ((select public.e_admin()));
+
 create or replace function public.listar_logins()
 returns table(email text, criado_em timestamptz, ultimo_acesso timestamptz, sac boolean, trocar_senha boolean)
 language plpgsql stable security definer set search_path = public
 as $$
 begin
-  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if auth.uid() is null or not public.e_admin() then raise exception 'sem permissão'; end if;
   return query
     select u.email::text, u.created_at, u.last_sign_in_at,
            exists (select 1 from public.logins_sac s where s.email = lower(u.email)),
@@ -1384,7 +1401,7 @@ declare
   b bytea := extensions.gen_random_bytes(8);
   nova text := '';
 begin
-  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if auth.uid() is null or not public.e_admin() then raise exception 'sem permissão'; end if;
   for i in 0..7 loop nova := nova || substr(alfa, get_byte(b, i) % length(alfa) + 1, 1); end loop;
   update auth.users
      set encrypted_password = extensions.crypt(nova, extensions.gen_salt('bf')),

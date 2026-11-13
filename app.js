@@ -125,7 +125,7 @@
     if (sessao) abrirSessao(sessao);
     else {
       usuarioId = null; perfil = "";
-      delete document.body.dataset.perfil;
+      delete document.body.dataset.perfil; delete document.body.dataset.admin;
       $("tela-painel").hidden = true;
       $("tela-login").hidden = false;
       if ($("form-login").dataset.modo === "nova") modoLogin("entrar");
@@ -145,6 +145,10 @@
     }
     perfil = r && r.data === "sac" ? "sac" : "logistica";
     document.body.dataset.perfil = perfil;
+    // página Logins: só para os administradores (tabela admins_painel)
+    let adm = { data: false };
+    try { adm = await sb.rpc("e_admin"); } catch (err) { adm = { data: false }; }
+    if (adm && adm.data === true) document.body.dataset.admin = "1"; else delete document.body.dataset.admin;
     $("tela-painel").hidden = false;
     if (perfil === "sac") {
       irPara("sac");
@@ -2559,7 +2563,6 @@
         prometido: p.prev_original || p.prev_atual, nova_data: t.nova_data, observacao: t.observacao,
         atualizado_em: t.atualizado_em, link_rastreio: p.link_rastreio };
     }));
-    carregarLoginsSac();
   }
 
   // SAC vê só os vencidos, os que vencem hoje e os que vencem amanhã
