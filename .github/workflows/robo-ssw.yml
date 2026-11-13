@@ -2,13 +2,15 @@
 name: Robô do SSW
 
 on:
+  schedule:
+    - cron: "0 9,15 * * 1-5"   # 6h e 12h (Brasília), dias úteis
   workflow_dispatch:
     inputs:
       modo:
-        description: "diag = só olhar as páginas"
+        description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [diag, diag-form, diag-nf, diag-nf2]
-        default: diag
+        options: [real, diag, diag-form, diag-nf, diag-nf2]
+        default: real
 
 concurrency:
   group: robo-ssw
@@ -20,7 +22,7 @@ permissions:
 jobs:
   robo:
     runs-on: ubuntu-latest
-    timeout-minutes: 50
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,6 +31,6 @@ jobs:
       - name: Rodar o robô
         run: node robo/robo-ssw.mjs
         env:
-          MODO: ${{ github.event.inputs.modo || 'diag' }}
+          MODO: ${{ github.event.inputs.modo || 'real' }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}

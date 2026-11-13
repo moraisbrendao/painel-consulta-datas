@@ -149,7 +149,7 @@
       info = i.data && i.data[0];
       infoFech = fi.data && fi.data[0];
       ocultos = Math.max(0, (tot.count || 0) - base.length);
-      await Promise.all([carregarOcorrencias(), carregarResponsaveis(), carregarFila(), carregarTickets()]);
+      await Promise.all([carregarOcorrencias(), carregarResponsaveis(), carregarFila(), carregarTickets(), carregarSSW()]);
       if (perfil !== "sac") carregarReposicoes();
     } catch (err) {
       $("info-base").textContent = "";
@@ -250,8 +250,29 @@
     resp: (p) => { const r = respDe(p.micro_status); return r ? r.nome : PENDENTE; },
     tk: (p) => { if (!ticketsInfo) return "(planilha de tickets não enviada)"; const t = ticketDe(p); return t ? t.fila || "(ticket sem fila)" : "Sem ticket"; },
     obs: (p) => (p._t && p._t.observacao ? "Com observação" : "Sem observação"),
+    ssw: (p) => sswClasse(p),
   };
-  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), resp: new Set(), tk: new Set(), obs: new Set() };
+  // ---- conferência SSW (robô lê a previsão da transportadora no rastreio do SSW) ----
+  let ssw = new Map();
+  async function carregarSSW() { try { ssw = new Map((await buscarTudo("previsao_ssw", "pedido")).map((x) => [x.pedido, x])); } catch (_) { ssw = new Map(); } }
+  function sswClasse(p) {
+    const x = ssw.get(p.pedido);
+    if (!x) return "Ainda não consultado";
+    if (x.situacao === "entregue") return "Entregue no SSW";
+    const venc = p._venc || p.prev_original || p.prev_atual;
+    if (x.previsao) return venc && x.previsao > String(venc).slice(0, 10) ? "SSW depois da prometida" : "SSW dentro do prometido";
+    if (x.situacao === "fora do ssw" || x.situacao === "sem permissao") return "Transportadora fora do SSW";
+    return "No SSW sem previsão";
+  }
+  function sswLinha(p) {
+    const x = ssw.get(p.pedido); if (!x) return "";
+    const quando = `consultado em ${new Date(x.consultado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`;
+    if (x.situacao === "entregue") return `<div class="s ssw verde" title="${quando}">SSW: entregue${x.previsao ? " · prev. " + br(x.previsao) : ""}</div>`;
+    if (!x.previsao) return x.situacao === "sem previsao" ? `<div class="s ssw" title="${quando}">SSW: sem previsão</div>` : "";
+    const dif = p._venc ? diasEntre(p._venc, x.previsao) : 0;
+    return `<div class="s ssw ${dif > 0 ? "vermelho" : "verde"}" title="Previsão da transportadora no SSW · ${quando}">SSW ${br(x.previsao)}${dif > 0 ? ` · ${dif} dia${dif === 1 ? "" : "s"} depois` : ""}</div>`;
+  }
+  const sel = { transp: new Set(), canal: new Set(), ms: new Set(), resp: new Set(), tk: new Set(), obs: new Set(), ssw: new Set() };
   function passaFiltros(p) {
     const busca = norm($("f-busca").value);
     if (busca && !norm(p.pedido).includes(busca) && !norm(p.nf).includes(busca)) return false;
@@ -429,7 +450,7 @@
           ${marcaTicket(p)}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div><div class="s resp-p">👤 ${nomeResp(p.micro_status)}</div>${marcaOc(p)}</td>
-        <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}</td>
+        <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}${sswLinha(p)}</td>
         <td><input type="date" data-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
         <td class="col-obs"><input data-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
           <div class="s quem">${quem}</div>
@@ -515,7 +536,7 @@
       <h3>Prazos</h3>
       <div class="det-grade">
         ${item("Prometido ao cliente", `${br(p.prev_original) || "—"} ${chipPrazo(p)}`)}${item("Previsão Intelipost atual", br(p.prev_atual))}
-        ${item("Previsão 360", br(p.prev_360))}${item("Expedição", br(p.data_expedicao))}
+        ${item("Previsão 360", br(p.prev_360))}${item("Previsão SSW (transportadora)", (() => { const x = ssw.get(p.pedido); return x ? `${br(x.previsao) || "—"} <span class="s">${esc(sswClasse(p))}</span>` : "Ainda não consultado"; })())}${item("Expedição", br(p.data_expedicao))}
       </div>
       <h3>Rastreio</h3>
       <div class="det-grade">
@@ -566,9 +587,9 @@
   // exportar o que está na lista
   $("btn-exportar").addEventListener("click", () => {
     const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Responsável", "Fila do ticket", "Dias sem movimento", "Prometido ao cliente",
-      "Previsão Intelipost atual", "Dias para vencer", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
+      "Previsão Intelipost atual", "Previsão SSW", "Conferência SSW", "Dias para vencer", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
     const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, (respDe(p.micro_status) || { nome: PENDENTE }).nome, FILTROS.tk(p), p._parado,
-      br(p.prev_original), br(p.prev_atual), p._dias, br(t.nova_data), t.observacao, t.atualizado_por,
+      br(p.prev_original), br(p.prev_atual), br((ssw.get(p.pedido) || {}).previsao), sswClasse(p), p._dias, br(t.nova_data), t.observacao, t.atualizado_por,
       t.atualizado_em ? new Date(t.atualizado_em).toLocaleString("pt-BR") : "", p.comentario_360, p.qtd_tickets, p.link_rastreio]; });
     const ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
     ws["!cols"] = cab.map((c, i) => ({ wch: [32, 12, 14, 20][i] || 16 }));
@@ -667,7 +688,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=53");
+        const w = new Worker("leitor-intelipost.js?v=54");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }

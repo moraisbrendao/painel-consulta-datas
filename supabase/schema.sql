@@ -791,3 +791,34 @@ create trigger chamar_robo_troca after update of robo_status on public.troca_not
 drop trigger if exists chamar_robo_datas on public.fila_intelipost;
 create trigger chamar_robo_datas after insert on public.fila_intelipost
   for each statement execute function public._chamar_robo_intelipost();
+
+-- 20) Conferência SSW: o robô lê no rastreio público do SSW (ssw.inf.br) a previsão de entrega da
+--     transportadora pela NF (sem a série) + CNPJ do remetente (pela série) e grava aqui.
+--     O painel mostra "SSW dd/mm" ao lado da data prometida ao cliente.
+create table if not exists public.previsao_ssw (
+  pedido        text primary key,
+  nf            text,
+  previsao      date,
+  situacao      text,          -- previsao | sem previsao | entregue | fora do ssw | sem permissao
+  consultado_em timestamptz not null default now()
+);
+alter table public.previsao_ssw enable row level security;
+revoke all on public.previsao_ssw from anon;
+grant select on public.previsao_ssw to authenticated;
+drop policy if exists "todos leem" on public.previsao_ssw;
+create policy "todos leem" on public.previsao_ssw for select to authenticated using (true);
+create or replace function public.gravar_ssw(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  insert into public.previsao_ssw (pedido, nf, previsao, situacao, consultado_em)
+  select r.pedido, r.nf, r.previsao, r.situacao, now()
+  from jsonb_to_recordset(linhas) as r(pedido text, nf text, previsao date, situacao text)
+  where coalesce(r.pedido, '') <> ''
+  on conflict (pedido) do update set nf = excluded.nf, previsao = excluded.previsao, situacao = excluded.situacao, consultado_em = now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.gravar_ssw(jsonb) from public, anon;
+grant execute on function public.gravar_ssw(jsonb) to authenticated;

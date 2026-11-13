@@ -92,3 +92,41 @@ if (MODO === "diag") {
     Object.entries(hosts).sort((a, b) => b[1] - a[1]).slice(0, 60).forEach(([k, n]) => log(`  base: ${n} × ${k}`));
   } catch (e) { log("Base:", e.message); }
 }
+
+// ---- de verdade: consulta todos os pedidos em aberto, 1 NF por vez, e grava a previsão no painel ----
+function lerResultado(txt) {
+  const ls = sohTexto(txt);
+  if (ls.some((l) => /n[ãa]o tem permiss[ãa]o/i.test(l))) return { situacao: "sem permissao" };
+  const datas = [...ls.join("\n").matchAll(/Previs[aã]o de entrega:\s*(\d{2})\/(\d{2})\/(\d{2,4})/gi)];
+  const entregue = ls.some((l) => /mercadoria entregue|entrega realizada/i.test(l));
+  if (datas.length) { const [, d, m, a] = datas[datas.length - 1]; return { situacao: entregue ? "entregue" : "previsao", previsao: `${a.length === 2 ? "20" + a : a}-${m}-${d}` }; }
+  if (entregue) return { situacao: "entregue" };
+  if (ls.some((l) => /informa[cç][aã]o n[ãa]o dispon[ií]vel/i.test(l))) return { situacao: "fora do ssw" };
+  return { situacao: "sem previsao" };
+}
+if (MODO === "real") {
+  await entrarSupabase();
+  const todos = [];
+  for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
+  const fila = todos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
+  log(`Pedidos em aberto: ${todos.length} · com série conhecida: ${fila.length}`);
+  const porT = {}, cont = {}, grava = [];
+  const salvar = async (forca) => { if (grava.length >= 100 || (forca && grava.length)) { await chamar("rpc/gravar_ssw", "POST", { linhas: grava.splice(0) }); } };
+  for (const l of fila) {
+    const t = l.transportadora || "?"; const st = (porT[t] ||= { n: 0, fora: 0 });
+    let r;
+    if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
+    else {
+      try { r = lerResultado((await consultar(l.c, [l.num])).txt); } catch (e) { r = null; log("erro na consulta:", e.message.slice(0, 80)); }
+      await new Promise((ok) => setTimeout(ok, 700));
+      if (!r) continue;
+      st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;
+    }
+    cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+    grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
+    await salvar(false);
+  }
+  await salvar(true);
+  log("Resultado:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+  log("Transportadoras fora do SSW (ou com senha):", Object.entries(porT).filter(([, v]) => v.n && v.fora === v.n).map(([k]) => k).join(", ") || "nenhuma");
+}

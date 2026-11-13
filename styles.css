@@ -489,3 +489,6 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 
 .tn-err-linha { font-size: 11px; margin-top: 4px; max-width: 220px; white-space: normal; line-height: 1.3; }
 .tn-quem { white-space: nowrap; }
+.ssw { font-weight: 600; margin-top: 3px; }
+.ssw.vermelho { color: #c0392b; }
+.ssw.verde { color: #1e8449; }
