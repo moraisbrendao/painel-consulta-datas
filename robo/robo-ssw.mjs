@@ -107,9 +107,13 @@ function lerResultado(txt) {
 if (MODO === "real") {
   await entrarSupabase();
   const todos = [];
-  for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
-  const fila = todos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
-  log(`Pedidos em aberto: ${todos.length} · com série conhecida: ${fila.length}`);
+  for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora,status_intelipost,micro_status,data_entrega&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
+  // só os pedidos em aberto: fora os entregues e cancelados (status, micro status ou data de entrega preenchida)
+  const fechado = (l) => /\bentregue\b|cancelad|entrega realizada/i.test(`${l.status_intelipost || ""} ${l.micro_status || ""}`) || !!l.data_entrega;
+  const abertos = todos.filter((l) => !fechado(l));
+  log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
+  const fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
+  log(`Pedidos em aberto: ${abertos.length.toLocaleString("pt-BR")} · com série conhecida: ${fila.length.toLocaleString("pt-BR")}`);
   const porT = {}, cont = {}, grava = [];
   const salvar = async (forca) => { if (grava.length >= 100 || (forca && grava.length)) { const lote = grava.splice(0); try { await chamar("rpc/gravar_ssw", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
   const PARALELO = Number(process.env.SSW_PARALELO || 5);
@@ -128,7 +132,7 @@ if (MODO === "real") {
       }
       cont[r.situacao] = (cont[r.situacao] || 0) + 1;
       grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
-      if (++feitos % 1000 === 0) log(`${feitos} de ${fila.length} em ${Math.round((Date.now() - t0) / 60000)} min`);
+      if (++feitos % 1000 === 0) log(`${feitos.toLocaleString("pt-BR")} de ${fila.length.toLocaleString("pt-BR")} em ${Math.round((Date.now() - t0) / 60000)} min`);
       await salvar(false);
     }
   }
