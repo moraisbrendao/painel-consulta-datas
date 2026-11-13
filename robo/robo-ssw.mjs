@@ -198,6 +198,10 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   const ls = sohTexto(r.txt);
   log("resultado:", r.status, "· linhas:", ls.length, "· datas:", (r.txt.match(/\d{2}\/\d{2}\/\d{2,4}/g) || []).length, "· tem previsão:", /previs/i.test(r.txt) ? "sim" : "não", "· tem entreg:", /entreg/i.test(r.txt) ? "sim" : "não");
   log("textos:", ls.map((l) => limpo(l)).filter((l) => l.replace(/[x\s#]/g, "").length > 2).slice(0, 60).join(" | ").slice(0, 2500));
+  const mj = r.txt.match(/dados = '([\s\S]*?)';/);
+  if (mj) { let d = null; try { d = JSON.parse(mj[1]); } catch (e) { log("JSON:", e.message); }
+    const um = Array.isArray(d) ? d[0] : d;
+    log("dados:", Array.isArray(d) ? `lista de ${d.length}` : "objeto", "·", um ? Object.entries(um).map(([k, v]) => `${k}=${v === null ? "null" : /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 16) : /status|situa|ocorr|tipo|descr|entreg|baixa/i.test(k) ? String(v).replace(/\d{5,}/g, "#").slice(0, 40) : typeof v}`).join(" | ") : ""); }
   log("scripts do resultado:", tags(r.txt, /<script[^>]*>[\s\S]*?<\/script>/gi).filter((x) => !/_gaq|jquery/i.test(x)).map((x) => x.replace(/\d{5,}/g, "#").replace(/\s+/g, " ").slice(0, 1500)).join(" || ").slice(0, 4000));
   const i0 = r.txt.search(/para a consulta/i);
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
