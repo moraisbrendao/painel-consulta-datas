@@ -7,7 +7,7 @@ on:
       modo:
         description: "diag = só olhar as páginas"
         type: choice
-        options: [diag, diag-form, diag-nf]
+        options: [diag, diag-form, diag-nf, diag-nf2]
         default: diag
 
 concurrency:

@@ -45,6 +45,21 @@ if (MODO === "diag-nf") {
     await new Promise((r) => setTimeout(r, 1500));
   }
 }
+// só deixa passar palavras "de sistema" (nada de nome, cidade ou endereço) — para os registros públicos
+const OK_PAL = /^(previs[aã]o|de|da|do|entrega|chegada|na|no|em|unidade|cidade|ct-e|nota|fiscal|notas|fiscais|nf|n[ãa]o|localizad[ao]s?|encontrad[ao]s?|nenhum[a]?|documento|documentos|para|o|a|os|as|e|ou|kg|volume|volumes|destino|entregue|entrega|realizada|situa[cç][aã]o|ocorr[eê]ncia|data|hora|remetente|destinat[aá]rio|cnpj|inv[aá]lido|rastreamento|senha|informe|consulta|resultado|mercadoria|saida|sa[ií]da|transfer[eê]ncia|em|tr[aâ]nsito|coleta|emiss[aã]o|h)$/i;
+const limpo = (l) => l.replace(/[A-Za-zÀ-ú][A-Za-zÀ-ú\-]*/g, (w) => OK_PAL.test(w) ? w : "x").replace(/\d{5,}/g, "#").replace(/(x[\s\/.,]*){2,}/g, "x ");
+if (MODO === "diag-nf2") {
+  await entrarSupabase();
+  const linhas = await chamar("base_aberta?select=transportadora,nf&nf=not.is.null&limit=6000");
+  const porT = {};
+  for (const l of linhas) { const [num, ser] = String(l.nf).split("-"); const c = cnpjDaSerie(ser); if (!c || !num) continue; (porT[l.transportadora || "?"] ||= []).push({ num: num.trim(), c }); }
+  for (const t of ["Dominalog", "Jadlog", "Tsl Transportes"]) { const x = (porT[t] || [])[0]; if (!x) continue;
+    const ls = sohTexto((await consultar(x.c, [x.num])).txt); const i = ls.findIndex((l) => /pelo pagador/i.test(l));
+    log(`${t}:`, ls.slice(i + 1).filter((l) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(l)).slice(0, 15).map(limpo).join(" / ")); }
+  const L = (porT["Prolog Transportes E Logistica Ltda"] || []).filter((x) => x.c === (porT["Prolog Transportes E Logistica Ltda"] || [{}])[0].c).slice(0, 3);
+  const ls = sohTexto((await consultar(L[0].c, L.map((x) => x.num))).txt);
+  log("Lote de 3 NFs Prolog: linhas com previsão:", ls.filter((l) => /previs/i.test(l)).length, "·", ls.filter((l) => /previs|nota|nf/i.test(l)).slice(0, 10).map(limpo).join(" / "));
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
