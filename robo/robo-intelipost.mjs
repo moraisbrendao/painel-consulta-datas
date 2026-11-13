@@ -263,7 +263,7 @@ async function simularPrazo(cep, metodo, olhar) {
     if (olhar) log("  tabelas (contract_ids):", (((rr.request().postData() || "").match(/"contract_ids":\[([^\]]*)\]/) || [])[1] || "").replace(/\d/g, (d) => d + "·"), "· ignorar regras:", ((rr.request().postData() || "").match(/"skip_quote_rules":(\w+)/) || [])[1]);
     if (olhar) log("  pedido da simulação:", mascara((rr.request().postData() || "").split(String(cep)).join("<cep>")).replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
     const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
-    const ms = (q && q.delivery_methods) || [];
+    const ms = (q && (q.delivery_methods || (q.logistic_provider && q.logistic_provider.delivery_methods))) || [];   // a resposta traz os métodos dentro de logistic_provider
     if (!ms.length) {
       const exc = (q && q.excluded_methods) || [];
       if (!q || olhar) log("  resposta da simulação:", JSON.stringify(corpo).replace(/\d{5,}/g, "#####").slice(0, 300));
@@ -272,7 +272,7 @@ async function simularPrazo(cep, metodo, olhar) {
       const msg = (corpo.errors && corpo.errors[0] && corpo.errors[0].message) || (exc[0] && (exc[0].reason || exc[0].message || exc[0].description)) || "sem opção de entrega";
       throw new Error(`a Intelipost não achou frete para esse CEP com ${metodo} (${msg.slice(0, 120)})`);
     }
-    if (olhar) ms.forEach((m) => log("  opção de envio:", m.name || m.description, "->", m.delivery_estimate_business_days, "dias úteis"));
+    if (olhar) ms.forEach((m) => log("  opção de envio:", m.name || m.description, "->", m.delivery_estimate_business_days, "dias úteis · campos:", Object.keys(m).filter((k) => /estimat|days|prazo/i.test(k)).map((k) => k + "=" + m[k]).join(", ")));
     const m = ms.find((x) => semAcento(x.name || x.description) === semAcento(metodo)) || (ms.length === 1 ? ms[0] : null);
     if (!m) throw new Error(`a simulação não trouxe o método ${metodo}`);
     prazo = Number(m.delivery_estimate_business_days);
