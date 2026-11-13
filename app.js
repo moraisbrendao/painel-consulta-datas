@@ -1273,16 +1273,16 @@
   function desenharPorTransp(L) {
     const porT = new Map(), meses = new Set();
     L.forEach((r) => {
-      const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { tot: 0, ent: 0, can: 0, ab: 0, m: new Map() };
-      x.tot++; const st = norm(r.status); if (st.startsWith("ENTREGUE")) x.ent++; else if (st.startsWith("CANCELADO")) x.can++; else x.ab++;
+      const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { tot: 0, ent: 0, ok: 0, can: 0, ab: 0, m: new Map() };
+      x.tot++; const st = norm(r.status); if (r._sit === "ent_prazo") x.ok++; if (st.startsWith("ENTREGUE")) x.ent++; else if (st.startsWith("CANCELADO")) x.can++; else x.ab++;
       const m = (r.criado || "").slice(0, 7); if (m) { x.m.set(m, (x.m.get(m) || 0) + 1); meses.add(m); }
       porT.set(t, x);
     });
     const ord = [...porT.entries()].sort((a, b) => b[1].tot - a[1].tot);
     if (gPtModo === "sit") {
-      $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th><th class="num">Total</th><th class="num">Entregues</th><th class="num">Cancelados</th><th class="num">Em trânsito</th></tr>`;
+      $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th><th class="num">Total</th><th class="num">Entregues</th><th class="num">SLA entrega</th><th class="num">Cancelados</th><th class="num">Em trânsito</th></tr>`;
       $("g-pt-linhas").innerHTML = ord.map(([t, x]) => `<tr class="clicavel" data-ptt="${esc(t)}"><td>${esc(t)}</td><td class="num neutro tot">${fmt(x.tot)}</td>
-        <td class="num verde-t">${fmt(x.ent)} <small>(${Math.round((x.ent / x.tot) * 100)}%)</small></td><td class="num neutro">${fmt(x.can)}</td><td class="num azul-t">${fmt(x.ab)}</td></tr>`).join("");
+        <td class="num verde-t">${fmt(x.ent)} <small>(${Math.round((x.ent / x.tot) * 100)}%)</small></td><td class="num ${corSla(x.ent ? x.ok / x.ent : null)}" title="entregues no prazo ÷ entregues">${pct0(x.ent ? x.ok / x.ent : null)}</td><td class="num neutro">${fmt(x.can)}</td><td class="num azul-t">${fmt(x.ab)}</td></tr>`).join("");
     } else {
       const ms = [...meses].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
       $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th>${ms.map((m) => `<th class="num">${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}</th>`).join("")}<th class="num">Total</th></tr>`;
