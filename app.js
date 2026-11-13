@@ -261,7 +261,7 @@
     if (x.situacao === "entregue") return "Entregue no SSW";
     const venc = p._venc || p.prev_original || p.prev_atual;
     if (x.previsao) return venc && x.previsao > String(venc).slice(0, 10) ? "SSW depois da prometida" : "SSW dentro do prometido";
-    if (x.situacao === "fora do ssw" || x.situacao === "sem permissao") return "Transportadora fora do SSW";
+    if (x.situacao === "fora do ssw" || x.situacao === "sem permissao") return "Sem CT-e no SSW ainda";
     return "No SSW sem previsão";
   }
   function sswLinha(p) {
@@ -688,7 +688,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=59");
+        const w = new Worker("leitor-intelipost.js?v=60");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1830,7 +1830,7 @@
     pendente: (x) => x.situacao === "pendente",
     todos: () => true,
   };
-  const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
+  const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Sem CT-e ainda", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
   async function carregarConferencia() {
     try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true; }
     catch (err) { cfOk = false; cfLista = []; }
@@ -1883,7 +1883,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=59");
+        const w = new Worker("leitor-conferencia.js?v=60");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);

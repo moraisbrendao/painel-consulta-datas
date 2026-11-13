@@ -311,13 +311,11 @@ async function conferir(minutos) {
   // confere TODOS os pendentes, os de previsão mais antiga primeiro (vencidos e urgentes saem antes)
   const lista = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
-  // transportadora com senha cadastrada: confere de novo os que antes deram "fora do SSW"/"pede senha" (1 vez a cada 20 h)
-  for (const [re, senha] of SENHAS) if (senha) {
-    const antes = new Date(Date.now() - 20 * 3600000).toISOString();
-    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=in.(fora%20do%20ssw,sem%20permissao)&consultado_em=lt.${antes}&limit=5000`).catch(() => []);
-    const novos = L.filter((x) => re.test(x.transportadora || "")); lista.unshift(...novos);
-    if (novos.length) log(`Conferência SSW: ${novos.length.toLocaleString("pt-BR")} de transportadora com senha para conferir de novo.`);
-  }
+  // "Informação não disponível" = a transportadora ainda não emitiu o CT-e: confere de novo depois (1 vez a cada 20 h), depois dos pendentes
+  { const antes = new Date(Date.now() - 20 * 3600000).toISOString();
+    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=in.(fora%20do%20ssw,sem%20permissao)&consultado_em=lt.${antes}&order=prev_cliente.asc.nullsfirst&limit=20000`).catch(() => []);
+    const de_novo = L.filter((x) => !/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora)); lista.push(...de_novo);
+    if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} sem CT-e na última consulta para conferir de novo.`); }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
   log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
