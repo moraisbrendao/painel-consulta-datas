@@ -564,6 +564,20 @@ async function printRastreio(tela, arquivo) {   // print da página pública de 
     return true;
   } finally { await p.close().catch(() => {}); }
 }
+// NF original (Nota ticket) de série 4: a Intelipost não reconhece -> não altera nada nela; só o print do rastreio para o ticket
+const serie4 = (job) => /-\s*0*4\s*$/.test(String(job.nf_ticket || ""));
+async function soPrint(job) {
+  const passos = { serie4: true, 1: true, 2: true, 3: true, 4: true, 5: true };
+  const print = `/tmp/pedido-${Date.now()}.png`;
+  let aberto = null;
+  try {
+    aberto = await abrirPedido(job.pedido, false, true, true);
+    passos.print_rastreio = await printRastreio(aberto.tela, print).catch(() => false);
+    if (!passos.print_rastreio) await aberto.tela.screenshot({ path: print, fullPage: true });
+    return { passos, prazo: null, nova: null, print };
+  } catch (e) { log("Série 4: não consegui o print na Intelipost -", mascara(e.message.split("\n")[0])); return { passos, prazo: null, nova: null, print: null };
+  } finally { if (aberto && aberto.aba) await aberto.aba.close().catch(() => {}); }
+}
 async function fazerTroca(job) {
   const real = job.robo_modo === "real";
   const parcial = job.tipo === "PARCIAL";   // reposição parcial: mesmo passo a passo, sem mexer nos volumes
@@ -756,7 +770,7 @@ try {
     for (const job of trocas) {
       const modoJob = MODO === "real" ? job.robo_modo : "teste";   // dryrun nunca salva
       try {
-        const r = await fazerTroca({ ...job, robo_modo: modoJob });
+        const r = serie4(job) ? await soPrint(job) : await fazerTroca({ ...job, robo_modo: modoJob });
         let msgTicket = "";
         try {   // etapas 6 e 7 no Multi360
           if (!multi) multi = await entrarMulti360(ctx, log);
@@ -765,7 +779,7 @@ try {
           msgTicket = modoJob === "real" ? " Ticket: ação executada, fila Aguardando entrega." : " Ticket: caixinha preenchida e cancelada.";
           log(`Ticket: ${t6}.`);
         } catch (e2) { msgTicket = ` Ticket NÃO feito: ${e2.message.split("\n")[0].slice(0, 160)}`; log("Ticket:", e2.message.split("\n")[0]); }
-        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", (modoJob === "real" ? (r.passos.so_previsao ? "Pedido Entregue (parcial): só a Entrega prev. foi alterada; transportadora e status ficam como estão." : "Feito na Intelipost.") : "Teste ok: tudo preenchido, nada salvo.") + msgTicket, r.passos, r.prazo, r.nova);
+        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", (modoJob === "real" ? (r.passos.serie4 ? "NF original série 4: nada alterado na Intelipost." : r.passos.so_previsao ? "Pedido Entregue (parcial): só a Entrega prev. foi alterada; transportadora e status ficam como estão." : "Feito na Intelipost.") : "Teste ok: tudo preenchido, nada salvo.") + msgTicket, r.passos, r.prazo, r.nova);
         tOk++; log(`Troca ${tOk + tErro}: ok (${modoJob}).`);
       } catch (e) {
         tErro++; log(`Troca ${tOk + tErro}: problema -`, e.message);

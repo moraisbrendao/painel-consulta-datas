@@ -88,8 +88,7 @@ export async function fazerTicket(p, ticket, print, real, log) {
   try { await titulo.waitFor({ timeout: 20000 }); }
   catch { await p.keyboard.press("Escape").catch(() => {}); throw new Error('a ação do ticket não é "Informações atualizadas na Intelipost?" (confira a fila do ticket)'); }
   const caixa = titulo.locator("xpath=ancestor::*[.//textarea and count(.//button) >= 2][1]");
-  await caixa.locator("input[type=file]").first().setInputFiles(print);
-  await p.waitForTimeout(2500);
+  if (print) { await caixa.locator("input[type=file]").first().setInputFiles(print); await p.waitForTimeout(2500); }
   await caixa.locator("textarea").first().fill("Pedido atualizado na Intelipost");
   if (!real) { await caixa.getByRole("button", { name: /^\s*cancelar\s*$/i }).first().click(); return "teste (cancelado)"; }
   await caixa.getByRole("button", { name: /^\s*sim\s*$/i }).first().click();
