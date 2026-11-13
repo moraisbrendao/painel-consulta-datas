@@ -17,8 +17,11 @@ export async function entrarMulti360(ctx, log) {
   if (await senha.count()) {
     const usuario = p.locator("input[type=email]:visible, input[name*=mail i]:visible, input[name*=user i]:visible, input[type=text]:visible").first();
     await usuario.fill(EMAIL); await senha.fill(SENHA);
-    const bt = p.locator("button[type=submit]:visible").first();
+    const bt = p.getByRole("button", { name: /^\s*entrar\s*$/i }).first();
     if (await bt.count()) await bt.click(); else await senha.press("Enter");
+    await p.waitForTimeout(4000);
+    const txt = await p.evaluate(() => document.body.innerText.split("\n").map((x) => x.trim()).filter((x) => x && x.length < 120 && /inv[aá]lid|incorret|erro|senha|usu[aá]rio|bloque|tente/i.test(x)).slice(0, 5));
+    if (txt.length) log("  textos na tela depois de Entrar:", txt.join(" | "));
     try { await p.waitForURL((u) => !/login|signin|auth/i.test(u.pathname), { timeout: 45000 }); }
     catch {
       const t = await p.evaluate(() => ({ campos: [...document.querySelectorAll("input")].map((e) => `${e.type}:${e.name || e.id || ""}`).join(" "),
