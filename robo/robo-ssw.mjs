@@ -286,6 +286,22 @@ if (MODO === "diag-track3r") {   // documentação pública da API da Track3r (s
     log(u, "→", r.status, "·", rotas || r.txt.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 1500));
   }
 }
+if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem senha): 1 NF e lote de NFs — só contagens
+  await entrarSupabase();
+  const L = await chamar("conferencia_ssw?select=nf,transportadora,situacao&nf=like.*-7&situacao=in.(entregue,nao%20entregue)&limit=20");
+  const nums = L.map((l) => String(l.nf).split("-")[0].trim());
+  log("NFs de teste (série 7):", nums.length, "· situações:", JSON.stringify(L.reduce((m, x) => (m[x.situacao] = (m[x.situacao] || 0) + 1, m), {})));
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  const conta = (rot, txt) => { const ls = sohTexto(txt), t = ls.join("\n");
+    log(`${rot}: linhas ${ls.length} · NFs achadas ${nums.filter((n) => new RegExp("\\b0*" + n + "\\b").test(t)).length}/${nums.length} · 'ENTREGUE' ${(t.match(/MERCADORIA ENTREGUE|ENTREGA REALIZADA/gi) || []).length} · datas ${(t.match(/\d{2}\/\d{2}\/\d{2}/g) || []).length} · previsão ${(t.match(/previs/gi) || []).length} · sem permissão ${/permiss/i.test(t) ? "sim" : "não"} · não disponível ${(t.match(/n[ãa]o dispon/gi) || []).length}`); };
+  for (const [url, rot] of [["https://ssw.inf.br/2/ssw_resultSSW", "form1"], ["https://ssw.inf.br/2/resultSSW", "atual"]]) {
+    const um = await pagina(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: nums[0], cnpj: "00349443000192", urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+    conta(`${rot} 1 NF (${um.status})`, um.txt); await dorme(3000);
+    const lote = await pagina(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: nums.join("\n"), cnpj: "00349443000192", urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+    conta(`${rot} lote ${nums.length} NFs (${lote.status})`, lote.txt); await dorme(3000);
+    if (rot === "form1") log("  estrutura lote:", tags(lote.txt, /<(table|tr|form|a)[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#").replace(/class="[^"]*"|style="[^"]*"/g, "")).slice(0, 25).join(" "));
+  }
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
