@@ -192,6 +192,13 @@
         .subscribe();
     } catch (_) { /* sem tempo real: o recarregamento a cada minuto cobre */ }
   }
+  // se alguém enviou uma base nova (em outro computador), a Visão Gerencial relê sozinha
+  setInterval(async () => {
+    if (!usuarioId || document.hidden || perfil === "sac" || gCarregando || !gDados) return;
+    const { data } = await sb.from("base_info").select("enviado_em").limit(1);
+    const em = data && data[0] ? data[0].enviado_em : null;
+    if (em && em !== gBaseEm) { carregar(); carregarGerencial(true); }
+  }, 120000);
   setInterval(async () => {
     if (!usuarioId || document.hidden) return;
     const { data, error } = await sb.from("tratativas").select("*").gte("atualizado_em", new Date(Date.now() - 5 * 60000).toISOString());
@@ -648,8 +655,8 @@
     }
     carregando("");
     toast(`Base atualizada: ${fmt(linhas.length)} pedidos.`);
-    gDados = null;
     carregar();
+    carregarGerencial(true);   // Visão Gerencial, Entregas e SLA e Atrasos por UF releem a base nova na hora
   });
   // ---------------- arquivo da Intelipost (entregues e cancelados) ----------------
   $("arquivo-intelipost").addEventListener("change", async (e) => {
@@ -660,7 +667,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=47");
+        const w = new Worker("leitor-intelipost.js?v=48");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -921,14 +928,19 @@
   // lê só as colunas que a Visão Gerencial usa, em páginas paralelas (não depende de função nova no banco)
   const G_COLS = "pedido,nf,canal,uf,cidade,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao";
   const G_COLS_NOVAS = ",data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao";
+  let gGeracao = 0, gBaseEm = null;   // gBaseEm = data de envio da base que está na tela
   async function carregarGerencial(forcar) {
-    if (gCarregando || (gDados && gDados.length && !forcar)) return;
+    if ((gCarregando && !forcar) || (gDados && gDados.length && !forcar)) return;
+    const minha = ++gGeracao;   // uma carga mais nova descarta a antiga (não deixa a base velha "ganhar")
     gCarregando = true; $("g-info").textContent = $("e-info").textContent = $("u-info").textContent = "Carregando os pedidos da base…";
     try {
       let lista, semColunas = false;
+      const inf = await sb.from("base_info").select("enviado_em").limit(1);
+      const baseEm = inf.data && inf.data[0] ? inf.data[0].enviado_em : null;
       try { lista = await buscarTudo("base_pedidos", "pedido", G_COLS + G_COLS_NOVAS); }
       catch (e1) { if (!/column|coluna|does not exist/i.test(e1.message || "")) throw e1; semColunas = true; lista = await buscarTudo("base_pedidos", "pedido", G_COLS); }
-      gAvisoColunas = semColunas;
+      if (minha !== gGeracao) return;
+      gAvisoColunas = semColunas; gBaseEm = baseEm;
       gDados = lista.map((b) => {
         const nf = String(b.nf || ""), m = nf.match(/^(.*?)-\s*(\w+)\s*$/);
         return { pedido: b.pedido, nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: b.canal, uf: b.uf, cidade: b.cidade || null, transp: b.transportadora,
@@ -937,6 +949,7 @@
           range: b.range_atrasos || null, diasAtr: b.dias_atraso ?? null, sprazo: b.status_prazo || null, semExp: b.sem_expedicao || null };
       });
     } catch (err) {
+      if (minha !== gGeracao) return;
       gDados = null; gCarregando = false;
       $("g-info").textContent = $("e-info").textContent = $("u-info").textContent = "Não consegui carregar a base: " + (err.message || err) + ". Atualize a página para tentar de novo.";
       return;
