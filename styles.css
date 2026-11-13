@@ -492,7 +492,7 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 .ssw { font-weight: 600; margin-top: 3px; }
 .ssw.vermelho { color: #c0392b; }
 .ssw.verde { color: #1e8449; }
-.kpis-cf { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.kpis-cf { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 @media (max-width: 1000px) { .kpis-cf { grid-template-columns: 1fr 1fr; } }
 .filtros-cartao.filtros-cf { grid-template-columns: auto minmax(0,2fr) minmax(0,1fr) auto; }
 @media (max-width: 800px) { .filtros-cartao.filtros-cf { grid-template-columns: 1fr; } }

@@ -255,13 +255,17 @@
   // ---- conferência SSW (robô lê a previsão da transportadora no rastreio do SSW) ----
   let ssw = new Map();
   async function carregarSSW() { try { ssw = new Map((await buscarTudo("previsao_ssw", "pedido")).map((x) => [x.pedido, x])); } catch (_) { ssw = new Map(); } }
+  // transportadoras que não usam SSW (regra da Brenda); nas outras, "Informação não disponível" = CT-e ainda não emitido
+  const FORA_SSW = /bento|jadlog|formato|transiga|tr[aâ]nsito\s*brasil/i;
+  const sitSSW = (sit, transp) => (sit === "fora do ssw" || sit === "sem cte") ? (FORA_SSW.test(transp || "") ? "fora do ssw" : "sem cte") : sit;
   function sswClasse(p) {
     const x = ssw.get(p.pedido);
     if (!x) return "Ainda não consultado";
     if (x.situacao === "entregue") return "Entregue no SSW";
     const venc = p._venc || p.prev_original || p.prev_atual;
     if (x.previsao) return venc && x.previsao > String(venc).slice(0, 10) ? "SSW depois da prometida" : "SSW dentro do prometido";
-    if (x.situacao === "fora do ssw" || x.situacao === "sem permissao") return "Sem CT-e no SSW ainda";
+    if (FORA_SSW.test(p.transportadora || "")) return "Transportadora fora do SSW";
+    if (/fora do ssw|sem cte|sem permissao/.test(x.situacao)) return "Sem CT-e no SSW ainda";
     return "No SSW sem previsão";
   }
   function sswLinha(p) {
@@ -688,7 +692,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=60");
+        const w = new Worker("leitor-intelipost.js?v=61");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1826,11 +1830,12 @@
   const CF_CARD = {
     atualizar: (x) => x.situacao === "entregue" && !cfEntregueIP(x),
     nao: (x) => x.situacao === "nao entregue",
-    fora: (x) => /fora do ssw|sem permissao|sem nf/.test(x.situacao),
+    semcte: (x) => /sem cte|sem permissao/.test(sitSSW(x.situacao, x.transportadora)),
+    fora: (x) => /fora do ssw|sem nf/.test(sitSSW(x.situacao, x.transportadora)),
     pendente: (x) => x.situacao === "pendente",
     todos: () => true,
   };
-  const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Sem CT-e ainda", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
+  const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem cte": ["Sem CT-e ainda", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
   async function carregarConferencia() {
     try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true; }
     catch (err) { cfOk = false; cfLista = []; }
@@ -1855,7 +1860,7 @@
     const L = F.filter(CF_CARD[cfCard]);
     $("cf-titulo").textContent = `${(document.querySelector(`#cf-cards [data-cf="${cfCard}"] .kpi-rot`) || {}).textContent || "Pedidos"} (${fmt(L.length)})`;
     const POR = 100, pags = Math.max(1, Math.ceil(L.length / POR)); cfPag = Math.min(cfPag, pags);
-    $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[x.situacao] || [x.situacao, "cinza"];
+    $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao, "cinza"];
       return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
         <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td>
         <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" title="Abre o rastreio dessa nota no SSW agora">Ver no SSW ↗</button>` : ""}</td></tr>`; }).join("");
@@ -1871,7 +1876,7 @@
   $("cf-exportar").addEventListener("click", () => {
     const L = cfFiltrados().filter(CF_CARD[cfCard]);
     const linhas = [["Pedido Intelipost", "NF", "Transportadora", "Status Intelipost", "Previsão cliente", "Situação no SSW", "Último evento no SSW", "Data do evento", "Entregue em (SSW)"]]
-      .concat(L.map((x) => [x.pedido, x.nf, x.transportadora, x.status_intelipost, br(x.prev_cliente), (CF_SIT[x.situacao] || [x.situacao])[0], x.ultimo_evento, br(x.data_evento), br(x.data_entrega)]));
+      .concat(L.map((x) => [x.pedido, x.nf, x.transportadora, x.status_intelipost, br(x.prev_cliente), (CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao])[0], x.ultimo_evento, br(x.data_evento), br(x.data_entrega)]));
     const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Conferência SSW"); XLSX.writeFile(wb, `conferencia_ssw_${cfCard}_${hojeISO()}.xlsx`);
   });
@@ -1883,7 +1888,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=60");
+        const w = new Worker("leitor-conferencia.js?v=61");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);

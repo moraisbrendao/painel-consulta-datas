@@ -20,6 +20,8 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
 // senha do rastreio (campo "Senha (opcional)" do SSW = chave) de transportadoras que exigem senha; fica só no segredo do GitHub
 const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""]];
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
+// transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
+const FORA_SSW = /bento|jadlog|formato|transiga|tr[aâ]nsito\s*brasil/i;
 const cnpjDaSerie = (serie) => { const n = parseInt(serie, 10); return Object.keys(CNPJ_SERIE).find((c) => CNPJ_SERIE[c].includes(n)) || null; };
 const sohTexto = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<svg[\s\S]*?<\/svg>/gi, " ").replace(/<br\s*\/?>|<\/(tr|p|div|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ")
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&nbsp;/g, " ").replace(/&([a-z]+);/gi, (m, n) => ({ amp: "&", atilde: "ã", otilde: "õ", ccedil: "ç", aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú", ecirc: "ê", acirc: "â", ocirc: "ô", agrave: "à", ordf: "ª", ordm: "º", lt: "<", gt: ">", quot: '"' })[n.toLowerCase()] ?? " ").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
@@ -215,7 +217,7 @@ function lerResultado(txt) {
   const entregue = ls.some((l) => /mercadoria entregue|entrega realizada/i.test(l));
   if (datas.length) { const [, d, m, a] = datas[datas.length - 1]; return { situacao: entregue ? "entregue" : "previsao", previsao: `${a.length === 2 ? "20" + a : a}-${m}-${d}` }; }
   if (entregue) return { situacao: "entregue" };
-  if (ls.some((l) => /informa[cç][aã]o n[ãa]o dispon[ií]vel/i.test(l))) return { situacao: "fora do ssw" };
+  if (ls.some((l) => /informa[cç][aã]o n[ãa]o dispon[ií]vel/i.test(l))) return { situacao: "sem cte" };
   return { situacao: "sem previsao" };
 }
 if (MODO === "real") {
@@ -257,7 +259,8 @@ if (MODO === "real") {
     if (Date.now() > fimEm) { log("Tempo da rodada acabou; o resto fica para a próxima."); break; }
     const t = l.transportadora || "?"; const st = (porT[t] ||= { n: 0, fora: 0 });
     let r;
-    if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
+    if (FORA_SSW.test(t)) r = { situacao: "fora do ssw" };   // transportadora que não usa SSW: nem consulta
+    else if (st.n >= 8 && st.fora === st.n) r = { situacao: "sem permissao" };   // as 8 primeiras pedem senha: pula a transportadora nesta rodada
     else {
       try {
         const pg = await pegar("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -268,7 +271,7 @@ if (MODO === "real") {
           if (gravaCf.length >= 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: gravaCf.splice(0) }).catch(() => {}); }
         // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
         const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
-        if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
+        if (det && !r.previsao && !/fora do ssw|sem cte|sem permissao/.test(r.situacao)) {
           await dorme(PAUSA);
           const r2 = lerResultado((await pegar("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
           if (r2.previsao || r2.situacao === "entregue") r = r2;
@@ -279,7 +282,7 @@ if (MODO === "real") {
       }
       await dorme(PAUSA);
       if (!r) continue;
-      st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;
+      st.n++; if (/sem permissao/.test(r.situacao)) st.fora++;
     }
     cont[r.situacao] = (cont[r.situacao] || 0) + 1;
     grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
@@ -296,7 +299,7 @@ if (MODO === "real") {
 function lerEntrega(txt) {
   const ls = sohTexto(txt);
   if (ls.some((l) => /n[ãa]o tem permiss[ãa]o/i.test(l))) return { situacao: "sem permissao" };
-  if (ls.some((l) => /informa[cç][aã]o n[ãa]o dispon[ií]vel/i.test(l))) return { situacao: "fora do ssw" };
+  if (ls.some((l) => /informa[cç][aã]o n[ãa]o dispon[ií]vel/i.test(l))) return { situacao: "sem cte" };
   const iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
   const ehData = (l) => /^\d{2}\/\d{2}\/\d{2,4}$/.test(l);
   const iEnt = ls.findIndex((l) => /MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(l) && !/previs/i.test(l));
@@ -313,8 +316,8 @@ async function conferir(minutos) {
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   // "Informação não disponível" = a transportadora ainda não emitiu o CT-e: confere de novo depois (1 vez a cada 20 h), depois dos pendentes
   { const antes = new Date(Date.now() - 20 * 3600000).toISOString();
-    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao&situacao=in.(fora%20do%20ssw,sem%20permissao)&consultado_em=lt.${antes}&order=prev_cliente.asc.nullsfirst&limit=1000`).catch(() => []);
-    const de_novo = L.filter((x) => !/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora)); lista.push(...de_novo);
+    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao&situacao=in.(fora%20do%20ssw,sem%20cte,sem%20permissao)&consultado_em=lt.${antes}&order=prev_cliente.asc.nullsfirst&limit=1000`).catch(() => []);
+    const de_novo = L.filter((x) => !FORA_SSW.test(x.transportadora || "") && (!/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora))); lista.push(...de_novo);
     if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} sem CT-e na última consulta para conferir de novo.`); }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
   log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
@@ -327,7 +330,8 @@ async function conferir(minutos) {
     const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim());
     const c = cnpjDaSerie(ser);
     let r;
-    if (!num || !c) r = { situacao: "sem nf" };
+    if (FORA_SSW.test(l.transportadora || "")) r = { situacao: "fora do ssw" };   // não usa SSW: nem consulta
+    else if (!num || !c) r = { situacao: "sem nf" };
     else {
       const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: chaveDe(l.transportadora) }).toString() }).catch(() => null);
       if (!pg) { await dorme(PAUSA); continue; }
