@@ -191,3 +191,9 @@ Aguardando entrega do Multi360 (Excel). O robô (modo `aguardando` do Robô do S
 ("NF 123-7 emitida para o pedido"), confere no rastreio (SSW, Jadlog, Bento Brasil ou Trânsito Brasil) e, se estiver entregue,
 executa a ação "Nota entregue?" → Sim com o print do rastreio. Os não entregues ficam na lista com observação (guardada até a baixa);
 os de insucesso na entrega vão para a aba *Ocorrências*. Usa os segredos MULTI360_EMAIL/MULTI360_SENHA (ou PORTAL_EMAIL/PORTAL_SENHA).
+
+## 25. Conferir tudo agora (Conferência SSW)
+
+Rode a parte 25 do `supabase/schema.sql`. O botão "Conferir tudo agora" chama o robô na hora (modo `conferencia-tudo`) para conferir
+de novo todos os pedidos da lista que não estão entregues. Enquanto essa conferência estiver em andamento, as outras rodadas do SSW
+param para não passar do limite do SSW, e o botão mostra o andamento em vez de recomeçar.

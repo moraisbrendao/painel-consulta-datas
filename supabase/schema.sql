@@ -1100,3 +1100,60 @@ begin
 end $$;
 revoke all on function public.rodar_robo_aguardando() from public, anon;
 grant execute on function public.rodar_robo_aguardando() to authenticated;
+
+-- =====================================================================
+-- 25) Conferência SSW: botão "Conferir tudo agora" — o robô confere de novo nos rastreios todos os pedidos da lista
+--     que não estão entregues. Se já tem uma conferência dessas em andamento, o botão só mostra o andamento (não recomeça).
+create table if not exists public.conferencia_pedido (
+  id integer primary key default 1, pedido_por text, pedido_em timestamptz, feito_em timestamptz
+);
+insert into public.conferencia_pedido (id) values (1) on conflict (id) do nothing;
+alter table public.conferencia_pedido enable row level security;
+revoke all on public.conferencia_pedido from anon;
+grant select on public.conferencia_pedido to authenticated;
+drop policy if exists "logistica le" on public.conferencia_pedido;
+create policy "logistica le" on public.conferencia_pedido for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public.conferir_tudo_agora()
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare c public.conferencia_pedido;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  select * into c from public.conferencia_pedido where id = 1;
+  if c.pedido_em is not null and (c.feito_em is null or c.feito_em < c.pedido_em) and c.pedido_em > now() - interval '24 hours' then
+    return jsonb_build_object('ja', true, 'pedido_em', c.pedido_em, 'pedido_por', c.pedido_por);
+  end if;
+  update public.conferencia_pedido set pedido_em = now(), pedido_por = auth.jwt() ->> 'email', feito_em = null where id = 1;
+  return jsonb_build_object('ja', false, 'pedido_em', now(), 'pedido_por', auth.jwt() ->> 'email');
+end $$;
+revoke all on function public.conferir_tudo_agora() from public, anon;
+grant execute on function public.conferir_tudo_agora() to authenticated;
+
+create or replace function public.fim_conferencia_tudo()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.conferencia_pedido set feito_em = now() where id = 1;
+end $$;
+revoke all on function public.fim_conferencia_tudo() from public, anon;
+grant execute on function public.fim_conferencia_tudo() to authenticated;
+
+create or replace function public._chamar_robo_conferir_tudo()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if new.pedido_em is not distinct from old.pedido_em then return null; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"conferencia-tudo"}}'::jsonb);
+  end if;
+  return null;
+end $$;
+drop trigger if exists chamar_robo_conferir_tudo on public.conferencia_pedido;
+create trigger chamar_robo_conferir_tudo after update on public.conferencia_pedido
+  for each row execute function public._chamar_robo_conferir_tudo();

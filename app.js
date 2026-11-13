@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=71");
+        const w = new Worker("leitor-intelipost.js?v=72");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -2043,12 +2043,32 @@
   const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem cte": ["Sem CT-e ainda", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
   async function carregarConferencia() {
     carregarSenhas().catch(() => {});
+    sb.from("conferencia_pedido").select("*").limit(1).then(({ data, error }) => { cfTudo = error ? null : (data && data[0]) || null; desenharTudo(); });
     try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true;
       // carta de correção: outra transportadora emitiu o CT-e no SSW → o pedido passa a contar para ela (regra da Brenda)
       cfLista.forEach((x) => { const em = x.detalhe && x.detalhe.emissor; if (em) { x.transp_original = x.transportadora; x.transportadora = em; } }); }
     catch (err) { cfOk = false; cfLista = []; }
-    desenharConferencia();
+    desenharConferencia(); desenharTudo();
   }
+  // botão "Conferir tudo agora" (parte 25): o robô confere de novo todos os não entregues; vários podem clicar sem recomeçar
+  let cfTudo = null;
+  const tudoAtivo = () => cfTudo && cfTudo.pedido_em && (!cfTudo.feito_em || cfTudo.feito_em < cfTudo.pedido_em) && Date.parse(cfTudo.pedido_em) > Date.now() - 24 * 3600000;
+  function desenharTudo() {
+    const el = $("cf-tudo-info"); if (!cfTudo || !cfTudo.pedido_em) { el.hidden = true; return; }
+    const quando = (d) => new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    const desde = cfTudo.pedido_em, alvo = cfLista.filter((x) => x.situacao !== "entregue" || (x.consultado_em && x.consultado_em >= desde));
+    const feitos = alvo.filter((x) => x.consultado_em && x.consultado_em >= desde).length;
+    el.hidden = false;
+    el.innerHTML = tudoAtivo() ? `🔄 <b>Conferindo tudo de novo</b> desde ${quando(desde)} (pedido por ${esc((cfTudo.pedido_por || "").split("@")[0])}): ${fmt(feitos)} de ${fmt(alvo.length)} conferidos. Jadlog, Bento e Trânsito vão rápido; o SSW confere uns 800 por hora.`
+      : `Última conferência de tudo: pedida em ${quando(desde)} por ${esc((cfTudo.pedido_por || "").split("@")[0])}${cfTudo.feito_em ? `, terminada em ${quando(cfTudo.feito_em)}` : ""}.`;
+    $("cf-tudo").textContent = tudoAtivo() ? "🔄 Conferindo tudo…" : "🔄 Conferir tudo agora";
+  }
+  $("cf-tudo").addEventListener("click", async () => {
+    const { data, error } = await sb.rpc("conferir_tudo_agora");
+    if (error) return toast("Não foi possível: " + error.message + (/conferir_tudo_agora|schema cache/i.test(error.message) ? " (rode a parte 25 do supabase/schema.sql)" : ""), true);
+    toast(data && data.ja ? `Já tem uma conferência de tudo em andamento (pedida por ${String(data.pedido_por || "").split("@")[0]}). O andamento aparece aqui em cima.` : "Robô chamado: ele começa em 1 ou 2 minutos e os status vão mudando aqui sozinhos.");
+    await carregarConferencia();
+  });
   function cfFiltrados() {
     const b = norm($("cf-busca").value), t = $("cf-transp").value;
     return cfLista.filter((x) => (!b || norm(x.pedido).includes(b) || norm(x.nf).includes(b)) && (!t || (x.transportadora || "—") === t));
@@ -2096,7 +2116,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=71");
+        const w = new Worker("leitor-conferencia.js?v=72");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
@@ -2116,7 +2136,7 @@
     toast(`${fmt(itens.length)} pedidos importados. O robô do SSW já começou a conferir.`);
     cfCard = "todos"; await carregarConferencia();
   });
-  setInterval(() => { if (paginaAtual === "conferencia" && cfLista.some(CF_CARD.pendente)) carregarConferencia(); }, 60000);
+  setInterval(() => { if (paginaAtual === "conferencia" && !document.hidden && (cfLista.some(CF_CARD.pendente) || tudoAtivo())) carregarConferencia(); }, 60000);
 
   // ---------------- menu lateral ----------------
   function irPara(pag) {

@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=71">
+  <link rel="stylesheet" href="styles.css?v=72">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -539,9 +539,11 @@
           <h1>Conferência SSW</h1>
           <p class="sub">Importe o arquivo de <b>transações da Intelipost</b> (transactions_….xlsx). Os pedidos que ainda não estão Entregue/Cancelado na Intelipost entram na lista e o robô confere no rastreio do SSW se cada pedido já foi <b>entregue</b>: os entregues no SSW que não estão como Entregue na Intelipost são os que <b>falta atualizar na Intelipost</b>.</p>
           <p id="cf-info" class="info-base">Carregando…</p>
+          <p id="cf-tudo-info" class="info-base" hidden></p>
         </div>
         <div class="acoes-robo">
           <label class="btn amarelo" title="Arquivo de transações exportado da Intelipost (transactions_….xlsx)">Importar pedidos (Intelipost)<input id="arquivo-cf" type="file" accept=".xlsx,.xls" hidden></label>
+          <button id="cf-tudo" class="btn amarelo" title="O robô confere de novo nos rastreios todos os pedidos da lista que não estão entregues">🔄 Conferir tudo agora</button>
           <button id="cf-senhas" class="btn contorno" title="Senha de rastreio do SSW de cada transportadora">Senhas do SSW</button>
           <button id="cf-exportar" class="btn contorno">Exportar (Excel)</button>
         </div>
@@ -781,9 +783,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=71"></script>
-  <script src="mapa-brasil.js?v=71"></script>
-  <script src="troca-notas.js?v=71"></script>
-  <script src="app.js?v=71"></script>
+  <script src="config.js?v=72"></script>
+  <script src="mapa-brasil.js?v=72"></script>
+  <script src="troca-notas.js?v=72"></script>
+  <script src="app.js?v=72"></script>
 </body>
 </html>
