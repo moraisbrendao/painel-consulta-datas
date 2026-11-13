@@ -688,7 +688,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=57");
+        const w = new Worker("leitor-intelipost.js?v=58");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1823,14 +1823,17 @@
     document.body.appendChild(f); f.submit(); f.remove();
   }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
+  // o robô confere só os urgentes: previsão do cliente vencida ou vencendo em até 2 dias (os outros: botão "Ver no SSW")
+  const cfUrgente = (x) => { const d = new Date(); d.setDate(d.getDate() + 2); return !x.prev_cliente || x.prev_cliente <= d.toISOString().slice(0, 10); };
   const CF_CARD = {
     atualizar: (x) => x.situacao === "entregue" && !cfEntregueIP(x),
     nao: (x) => x.situacao === "nao entregue",
     fora: (x) => /fora do ssw|sem permissao|sem nf/.test(x.situacao),
-    pendente: (x) => x.situacao === "pendente",
+    pendente: (x) => x.situacao === "pendente" && cfUrgente(x),
+    outros: (x) => x.situacao === "pendente" && !cfUrgente(x),
     todos: () => true,
   };
-  const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
+  const CF_SIT = { naourg: ["Não urgente", "cinza"], entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
   async function carregarConferencia() {
     try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true; }
     catch (err) { cfOk = false; cfLista = []; }
@@ -1846,7 +1849,7 @@
     const pend = cfLista.filter(CF_CARD.pendente).length, ult = cfLista.reduce((m, x) => (x.consultado_em && x.consultado_em > m ? x.consultado_em : m), "");
     $("cf-info").textContent = cfLista.length
       ? `${fmt(cfLista.length)} pedidos importados em ${new Date(imp).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${cfLista[0].importado_por ? " por " + cfLista[0].importado_por.split("@")[0] : ""}`
-        + (pend ? ` · o robô está conferindo (faltam ${fmt(pend)}; ~14 por minuto)` : " · todos conferidos") + (ult ? ` · última conferência ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
+        + (pend ? ` · o robô está conferindo os urgentes (faltam ${fmt(pend)}; ~14 por minuto)` : " · urgentes conferidos") + (ult ? ` · última conferência ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
       : 'Clique em "Importar pedidos (Intelipost)" e escolha o arquivo de transações exportado da Intelipost.';
     const tSel = $("cf-transp").value, ts = [...new Set(cfLista.map((x) => x.transportadora || "—"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     $("cf-transp").innerHTML = `<option value="">Todas</option>` + ts.map((t) => `<option ${t === tSel ? "selected" : ""}>${esc(t)}</option>`).join("");
@@ -1855,7 +1858,7 @@
     const L = F.filter(CF_CARD[cfCard]);
     $("cf-titulo").textContent = `${(document.querySelector(`#cf-cards [data-cf="${cfCard}"] .kpi-rot`) || {}).textContent || "Pedidos"} (${fmt(L.length)})`;
     const POR = 100, pags = Math.max(1, Math.ceil(L.length / POR)); cfPag = Math.min(cfPag, pags);
-    $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[x.situacao] || [x.situacao, "cinza"];
+    $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[x.situacao === "pendente" && !cfUrgente(x) ? "naourg" : x.situacao] || [x.situacao, "cinza"];
       return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
         <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td>
         <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" title="Abre o rastreio dessa nota no SSW agora">Ver no SSW ↗</button>` : ""}</td></tr>`; }).join("");
@@ -1883,7 +1886,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=57");
+        const w = new Worker("leitor-conferencia.js?v=58");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
@@ -1894,8 +1897,8 @@
       if (!itens.length) throw new Error("O arquivo não tem pedidos em aberto (todos estão Entregue ou Cancelado).");
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    const horas = Math.ceil(itens.length / 14 / 60);
-    if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(res.fechados)} já Entregue/Cancelado (ficam de fora) e ${fmt(itens.length)} em aberto para conferir no SSW${semNf ? ` (${fmt(semNf)} sem NF: não dá para conferir)` : ""}.\n\nO robô confere ~14 por minuto (${horas > 1 ? "umas " + horas + " horas" : "menos de 1 hora"} para todos), começando pelos de previsão mais antiga. A lista anterior será substituída. Continuar?`)) return;
+    const nUrg = itens.filter(cfUrgente).length, minUrg = Math.ceil(nUrg / 14);
+    if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(res.fechados)} já Entregue/Cancelado (ficam de fora) e ${fmt(itens.length)} em aberto${semNf ? ` (${fmt(semNf)} sem NF)` : ""}.\n\nO robô confere no SSW os ${fmt(nUrg)} urgentes (previsão vencida ou vencendo em até 2 dias), em ~${minUrg < 60 ? minUrg + " min" : Math.round(minUrg / 60 * 10) / 10 + " h"}, os mais atrasados primeiro. Os outros ficam na lista com o botão "Ver no SSW". A lista anterior será substituída. Continuar?`)) return;
     carregando("Gravando…");
     const { error } = await sb.rpc("importar_conferencia", { linhas: itens });
     carregando("");

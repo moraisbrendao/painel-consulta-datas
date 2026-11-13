@@ -282,10 +282,10 @@ function lerEntrega(txt) {
   return { situacao: "nao entregue", data_evento: iso(ls[iD]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{4,60}$/.test(ev) ? ev : null };
 }
 async function conferir(minutos) {
-  const lista = [];
-  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullslast,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  const lista = [], ateUrg = new Date(Date.now() - 3 * 3600000 + 2 * 86400000).toISOString().slice(0, 10);   // urgentes: previsão até daqui a 2 dias
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&or=(prev_cliente.is.null,prev_cliente.lte.${ateUrg})&order=prev_cliente.asc.nullslast,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
-  log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
+  log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) urgentes para conferir.`);
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const salvar = async () => { if (grava.length) { const lote = grava.splice(0); try { await chamar("rpc/gravar_conferencia", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
