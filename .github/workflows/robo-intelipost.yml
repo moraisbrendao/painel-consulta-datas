@@ -16,7 +16,11 @@ on:
         options: [diag, diag-troca, diag-cep, diag-status, diag-ticket, diag-data, dryrun, real]
         default: diag
       ticket:
-        description: "Número do ticket (só para diag-data)"
+        description: "Número do ticket (só para diag-data e diag-cep)"
+        type: string
+        default: ""
+      metodo:
+        description: "Método de entrega (só para diag-cep)"
         type: string
         default: ""
 
@@ -35,6 +39,7 @@ jobs:
     env:
       MODO: ${{ github.event.inputs.modo || 'real' }}
       TICKET: ${{ github.event.inputs.ticket || '' }}
+      METODO: ${{ github.event.inputs.metodo || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

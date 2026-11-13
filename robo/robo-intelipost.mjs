@@ -261,12 +261,12 @@ async function simularPrazo(cep, metodo, olhar) {
     const rr = await resp;
     const corpo = await rr.json();
     if (olhar) log("  tabelas (contract_ids):", (((rr.request().postData() || "").match(/"contract_ids":\[([^\]]*)\]/) || [])[1] || "").replace(/\d/g, (d) => d + "·"), "· ignorar regras:", ((rr.request().postData() || "").match(/"skip_quote_rules":(\w+)/) || [])[1]);
-    if (false) log("  pedido da simulação:", (rr.request().postData() || "").split(String(cep)).join("<cep>").replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
+    if (olhar) log("  pedido da simulação:", mascara((rr.request().postData() || "").split(String(cep)).join("<cep>")).replace(/\\n/g, " ").replace(/\s+/g, " ").slice(0, 900));
     const q = corpo && corpo.data && corpo.data.quoteFreightVolume;
     const ms = (q && q.delivery_methods) || [];
     if (!ms.length) {
       const exc = (q && q.excluded_methods) || [];
-      if (!q) log("  resposta da simulação sem quoteFreightVolume:", JSON.stringify(corpo).replace(/\d{5,}/g, "#####").slice(0, 300));
+      if (!q || olhar) log("  resposta da simulação:", JSON.stringify(corpo).replace(/\d{5,}/g, "#####").slice(0, 300));
       else log("  simulação voltou vazia. Chaves:", Object.keys(q).join(", "));
       if (exc.length) log("  métodos excluídos na simulação:", JSON.stringify(exc).slice(0, 400));
       const msg = (corpo.errors && corpo.errors[0] && corpo.errors[0].message) || (exc[0] && (exc[0].reason || exc[0].message || exc[0].description)) || "sem opção de entrega";
@@ -383,7 +383,9 @@ async function diagCep() {   // por que a simulação volta vazia: refaz a da ú
   const modo = await pagina.evaluate(() => { const t = document.body.innerText; const i = t.search(/\bLive\b/); return i >= 0 ? t.slice(i, i + 20).replace(/\s+/g, " ") : "não achei"; });
   log("Topo (Live/Teste):", modo, "· chaves marcadas no topo:", await pagina.evaluate(() => [...document.querySelectorAll("header input[type=checkbox], nav input[type=checkbox]")].map((e) => e.checked).join(",")));
   await controle("logo depois do login");
-  const t = await ultimaTrocaComErro();
+  const t = process.env.TICKET ? await trocaDoTicket(process.env.TICKET) : await ultimaTrocaComErro();
+  if (t && process.env.METODO) t.robo_metodo = process.env.METODO;
+  log("Método do ticket:", t && t.robo_metodo);
   if (!t) { log("Nenhuma troca com erro."); return; }
   { const { aba } = await abrirPedido(t.pedido, false, true); if (aba) await aba.close(); }
   await controle("depois de abrir um pedido");
