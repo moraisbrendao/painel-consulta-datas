@@ -13,7 +13,7 @@ on:
       modo:
         description: "diag = só olhar as telas · diag-troca = olhar as telas da troca de notas · dryrun = preencher sem salvar · real = alterar"
         type: choice
-        options: [diag, diag-troca, diag-cep, dryrun, real]
+        options: [diag, diag-troca, diag-cep, diag-status, dryrun, real]
         default: diag
 
 concurrency:

@@ -327,6 +327,19 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
   } else await tela.keyboard.press("Escape").catch(() => {});
   await tela.waitForTimeout(1500);
 }
+async function diagStatus() {   // confere, sem salvar nada, como ficou o pedido da última troca com erro
+  const t = await ultimaTrocaComErro();
+  if (!t) { log("Nenhuma troca com erro."); return; }
+  const { tela, aba } = await abrirPedido(t.pedido, false, true);
+  await tela.waitForTimeout(3000);
+  const r = await tela.evaluate(() => { const x = document.body.innerText; return {
+    s920: /\b920\b|nova nota fiscal/i.test(x), troca: /troca de notas/i.test(x), metodo: (x.match(/M[eé]todo de entrega:\s*([^\n]+)/) || [])[1] || "?",
+    prev: /Entrega prev\.:\s*\d{2}\/\d{2}\/\d{4}\s*23:59/.test(x), cab: (x.match(/Pedido:[^(]{0,80}\(\s*([^)]+)\)/) || [])[1] || "?" }; });
+  log(`Tela do pedido: status ${r.cab} · método ${r.metodo} · Entrega prev. 23:59: ${r.prev ? "sim" : "não"} · aparece 920/nova nota: ${r.s920 ? "sim" : "não"} · aparece "Troca de notas": ${r.troca ? "sim" : "não"}`);
+  const vols = await tela.locator("[ng-click^='edit_volume_modal']").count();
+  log("Volumes:", vols);
+  if (aba) await aba.close();
+}
 async function diagCep() {   // por que a simulação volta vazia: refaz a da última troca com erro, mostrando cada passo
   const controle = async (q) => { try { log(`== controle (CEP público SP, Transiga) ${q}: prazo ${await simularPrazo("01310100", "Transiga Standard", false)}`); } catch (e) { log(`== controle ${q}:`, e.message.split("\n")[0]); } };
   const modo = await pagina.evaluate(() => { const t = document.body.innerText; const i = t.search(/\bLive\b/); return i >= 0 ? t.slice(i, i + 20).replace(/\s+/g, " ") : "não achei"; });
@@ -619,6 +632,7 @@ try {
   await entrar();
   if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
+  else if (MODO === "diag-status") await diagStatus();
   else if (MODO === "diag") {
     for (const [nome, caminho] of [["Busca por Lote", "/order/transactions-batch"], ["Alterar Pedidos", "/order/change-order"]]) {
       try {
