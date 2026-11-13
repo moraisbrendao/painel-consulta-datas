@@ -10,7 +10,7 @@ async function pagina(url, opts) {
   const r = await fetch(url, { redirect: "follow", ...opts, headers: { "User-Agent": "Mozilla/5.0", ...(opts && opts.headers) } });
   const buf = Buffer.from(await r.arrayBuffer());
   const txt = new TextDecoder(/8859|latin/i.test(r.headers.get("content-type") || "") ? "latin1" : "utf-8").decode(buf);
-  return { status: r.status, url: r.url, txt };
+  return { status: r.status, url: r.url, txt, cookie: (r.headers.getSetCookie ? r.headers.getSetCookie() : []).map((c) => c.split(";")[0]).join("; ") };
 }
 
 // CNPJ do remetente pela série da NF (tabela da Logística)
@@ -300,7 +300,11 @@ if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem sen
     const lote = await pagina(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: nums.join("\n"), cnpj: "00349443000192", urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
     conta(`${rot} lote ${nums.length} NFs (${lote.status})`, lote.txt); await dorme(3000);
     if (rot === "form1") { const csvL = (lote.txt.match(/href="(\/2\/ssw_resultSSW\?[^"]*output=csv[^"]*)"/) || [])[1];
-      if (csvL) { await dorme(3000); const c = await pagina("https://ssw.inf.br" + csvL.replace(/&amp;/g, "&")); const lin = c.txt.split(/\r?\n/).filter(Boolean);
+      if (csvL) { await dorme(3000); log("  cookie do lote:", lote.cookie ? "sim" : "não", "· link csv params:", [...new URL("https://ssw.inf.br" + csvL.replace(/&amp;/g, "&")).searchParams.keys()].join(","));
+        let c = await pagina("https://ssw.inf.br" + csvL.replace(/&amp;/g, "&"), { headers: { Cookie: lote.cookie || "", Referer: "https://ssw.inf.br/2/ssw_resultSSW" } });
+        if (c.txt.split(/\r?\n/).filter(Boolean).length <= 1) { await dorme(3000); const u = new URL("https://ssw.inf.br" + csvL.replace(/&amp;/g, "&"));
+          c = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded", Cookie: lote.cookie || "" }, body: new URLSearchParams({ NR: nums.join("\n"), cnpj: "00349443000192", output: "csv" }).toString() });
+          log("  (tentei por POST com output=csv)"); } const lin = c.txt.split(/\r?\n/).filter(Boolean);
         log(`  CSV (${c.status}): ${lin.length} linhas · cabeçalho: ${limpo(lin[0] || "").slice(0, 400)} · 'ENTREGUE' ${(c.txt.match(/ENTREGUE/gi) || []).length} · datas ${(c.txt.match(/\d{2}\/\d{2}\/\d{2}/g) || []).length} · previsão ${(c.txt.match(/previs/gi) || []).length}`);
         log("  colunas por linha:", lin.slice(0, 5).map((l) => l.split(/;|,|\t/).length).join(","), "· separador:", (lin[0] || "").includes(";") ? ";" : (lin[0] || "").includes("\t") ? "tab" : ","); } }
     if (rot === "form1") log("  estrutura lote:", tags(lote.txt, /<(table|tr|form|a)[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#").replace(/class="[^"]*"|style="[^"]*"/g, "")).slice(0, 25).join(" "));
