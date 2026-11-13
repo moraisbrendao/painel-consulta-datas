@@ -516,3 +516,29 @@ body:not([data-admin]) .so-admin { display: none !important; }
 #visoes { grid-template-columns: repeat(7, minmax(0, 1fr)); }
 @media (max-width: 1300px) { #visoes { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 @media (max-width: 700px) { #visoes { grid-template-columns: 1fr 1fr; } }
+
+/* transportadoras */
+.lbl-linha { flex-direction: row; align-items: center; gap: 8px; }
+.lbl-linha select { padding: 6px 8px; border: 1px solid var(--borda); border-radius: 8px; font: inherit; background: #fff; }
+.tabela-det th.cmp, .tabela-det td.cmp { width: 84px; text-align: center; white-space: nowrap; }
+.tabela-det td.cmp input { width: 16px; height: 16px; vertical-align: middle; cursor: pointer; }
+.tabela-range td.num.neutro { color: var(--texto); }
+.tabela-range td.num.vermelho-t { color: #b91c1c; }
+.tabela-range td.num.laranja-t { color: #c2410c; }
+.tabela-range td.num.verde-t { color: #15803d; }
+.tabela-cmp td.melhor { font-weight: 800; background: #f0f9f2; }
+.tabela-cmp th { white-space: normal; }
+.t-bola { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin: 0 6px 0 4px; vertical-align: middle; }
+.t-chips { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.t-chip { display: inline-flex; align-items: center; gap: 2px; padding: 4px 6px 4px 4px; border: 1px solid var(--borda); border-radius: 999px; font-size: 13px; background: #fff; }
+.t-chip button { border: 0; background: none; font-size: 16px; line-height: 1; cursor: pointer; color: var(--texto-2); padding: 0 4px; }
+.t-sub3 { font-size: 14px; margin: 18px 0 6px; }
+.t-graf { width: 100%; max-width: 900px; }
+.gr-legenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--texto-2); margin-bottom: 4px; }
+.gr-area { position: relative; }
+.gr-area svg { width: 100%; height: auto; display: block; }
+.gr-grade { stroke: #e5e7eb; stroke-width: 1; }
+.gr-eixo { font-size: 11px; fill: #6b7280; }
+.gr-rot { font-size: 12px; fill: #374151; }
+.gr-mira { stroke: #9ca3af; stroke-width: 1; stroke-dasharray: 3 3; }
+.gr-dica { position: absolute; background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); pointer-events: none; min-width: 160px; }

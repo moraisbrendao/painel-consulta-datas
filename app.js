@@ -1139,8 +1139,8 @@
     prepararG(); montarFiltrosG(); desenharGAtual();
   }
   // Visão Gerencial e Entregas e SLA usam os mesmos dados e os mesmos filtros
-  const G_PAGINAS = ["gerencial", "entregas", "uf"];
-  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else desenharGerencial(); }
+  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp"];
+  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else desenharGerencial(); }
   function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
 
   function desenharGerencial() {
@@ -1336,8 +1336,12 @@
     selecionar(`${c} · ${{ v: "todos", a: "em aberto", t: "atrasados" }[k]}`, (L) => L.filter((r) => (r.canal || "(sem canal)") === c && (k === "v" || (k === "a" ? !r._fechado : r._atraso > 0)))); });
   $("g-perf-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-pt]"); if (!tr) return; const t = tr.dataset.pt;
     selecionar(`Atrasados · ${t}`, (L) => L.filter((r) => r._atraso && (r.transp || "(sem transportadora)") === t)); });
-  $("g-pt-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-ptt]"); if (!tr) return; const t = tr.dataset.ptt;
-    selecionar(`Todos os pedidos · ${t}`, (L) => L.filter((r) => (r.transp || "(sem transportadora)") === t)); });
+  $("g-pt-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-ptt]"); if (!tr) return; verPedidosTransp(tr.dataset.ptt); });
+  // a lista de pedidos fica na Visão Gerencial: abre ela já filtrada pela transportadora
+  function verPedidosTransp(t) {
+    if (paginaAtual !== "gerencial") { irPara("gerencial"); montarGerencial(); }
+    selecionar(`Todos os pedidos · ${t}`, (L) => L.filter((r) => (r.transp || "(sem transportadora)") === t));
+  }
   $("g-pt-modo").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; gPtModo = b.dataset.m;
     $("g-pt-modo").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharPorTransp(gFiltradosCache); });
   $("g-pt-extrair").addEventListener("click", () => {
@@ -1359,6 +1363,143 @@
     XLSX.writeFile(wb, `visao_gerencial_${hojeISO()}.xlsx`);
   }
   $("g-exportar").addEventListener("click", baixarGLista);
+
+  // ---------------- transportadoras ----------------
+  // Fonte: a mesma base da Visão Gerencial (botão "Enviar base"), com os mesmos filtros do topo.
+  // Volume = pedidos sem os cancelados. Atraso médio = dias entre a data prometida e a entrega, nos entregues com atraso.
+  // SLA entrega = entregues no prazo ÷ entregues.
+  const T_CORES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"];   // até 4 transportadoras na comparação (cor fica com a transportadora)
+  let tStats = [], tOrdem = "vol";
+  const tCmp = new Map();   // transportadora -> índice da cor
+  const tNome = (r) => r.transp || "(sem transportadora)";
+  function statsTransp(L) {
+    const m = new Map();
+    L.forEach((r) => {
+      const t = tNome(r);
+      const x = m.get(t) || { t, vol: 0, ab: 0, atr: 0, risco: 0, ent: 0, entOk: 0, entAtr: 0, somaAtr: 0, nAtr: 0, can: 0, meses: new Map() };
+      if (r._sit === "cancelado") { x.can++; m.set(t, x); return; }
+      x.vol++;
+      if (!r._fechado) x.ab++;
+      if (r._atraso > 0) x.atr++;
+      if (G_CARD.risco(r)) x.risco++;
+      if (r._sit === "ent_prazo" || r._sit === "ent_atraso") x.ent++;
+      if (r._sit === "ent_prazo") x.entOk++;
+      if (r._sit === "ent_atraso") { x.entAtr++; if (r.entrega && r._prom) { const d = diasEntre(r._prom, r.entrega); if (d > 0) { x.somaAtr += d; x.nAtr++; } } }
+      const mes = (r.criado || "").slice(0, 7); if (mes) x.meses.set(mes, (x.meses.get(mes) || 0) + 1);
+      m.set(t, x);
+    });
+    return [...m.values()].map((x) => ({ ...x, med: x.nAtr ? x.somaAtr / x.nAtr : null, sla: x.ent ? x.entOk / x.ent : null }));
+  }
+  const pct0 = (x) => (x === null ? "—" : Math.round(x * 100) + "%");
+  const diasTxt = (x) => (x === null ? "—" : x.toFixed(1).replace(".", ",") + " d");
+  function corSla(x) { if (x === null) return "neutro"; const meta = (parseFloat($("g-meta").value) || 97) / 100; return x >= meta ? "verde-t" : x >= 0.85 ? "laranja-t" : "vermelho-t"; }
+  function desenharTransp() {
+    if (!gDados) return;
+    const L = gFiltrados(); gFiltradosCache = L;
+    tStats = statsTransp(L);
+    $("t-info").textContent = !info ? 'Envie a base ("Enviar base") para montar esta página.'
+      : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos nos filtros`;
+    const soma = (k) => tStats.reduce((a, x) => a + x[k], 0);
+    const ent = soma("ent"), ab = soma("ab");
+    $("t-k-qtd").textContent = fmt(tStats.filter((x) => x.vol).length);
+    $("t-k-vol").textContent = fmt(soma("vol"));
+    $("t-k-atr").textContent = fmt(soma("atr")); $("t-k-atr-s").textContent = `de ${fmt(ab)} em aberto`;
+    $("t-k-sla").textContent = ent ? pct0(soma("entOk") / ent) : "—";
+    // tira da comparação quem sumiu com os filtros
+    [...tCmp.keys()].forEach((t) => { if (!tStats.some((x) => x.t === t)) tCmp.delete(t); });
+    desenharDetalhe(); desenharPorTransp(L); desenharComparacao();
+  }
+  function desenharDetalhe() {
+    const ord = { vol: (a, b) => b.vol - a.vol, ab: (a, b) => b.ab - a.ab, atr: (a, b) => b.atr - a.atr, risco: (a, b) => b.risco - a.risco, entAtr: (a, b) => b.entAtr - a.entAtr,
+      med: (a, b) => (b.med ?? -1) - (a.med ?? -1), sla: (a, b) => (a.sla ?? 2) - (b.sla ?? 2), nome: (a, b) => a.t.localeCompare(b.t, "pt-BR") }[tOrdem];
+    const linhas = tStats.filter((x) => x.vol).sort((a, b) => ord(a, b) || b.vol - a.vol);
+    $("t-det-sub").textContent = `${fmt(linhas.length)} transportadoras na base`;
+    const cheio = tCmp.size >= 4;
+    $("t-det-linhas").innerHTML = linhas.map((x) => { const c = tCmp.has(x.t);
+      return `<tr><td class="cmp"><input type="checkbox" data-cmp="${esc(x.t)}" ${c ? "checked" : ""} ${!c && cheio ? "disabled" : ""} aria-label="Comparar ${esc(x.t)}">${c ? `<i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>` : ""}</td>
+        <td class="clic" data-ver="${esc(x.t)}">${esc(x.t)}</td><td class="num neutro">${fmt(x.vol)}</td><td class="num neutro">${fmt(x.ab)}</td>
+        <td class="num vermelho-t">${fmt(x.atr)}</td><td class="num laranja-t">${fmt(x.risco)}</td><td class="num neutro">${fmt(x.entAtr)}</td>
+        <td class="num neutro">${diasTxt(x.med)}</td><td class="num ${corSla(x.sla)}">${pct0(x.sla)}</td></tr>`; }).join("");
+  }
+  const T_METRICAS = [
+    ["Volume", (x) => x.vol, fmt, "max"], ["Em aberto", (x) => x.ab, fmt, null], ["Atrasados (em aberto)", (x) => x.atr, fmt, "min"],
+    ["% atrasados do em aberto", (x) => (x.ab ? x.atr / x.ab : null), (v) => (v === null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%"), "min"],
+    ["Em risco (vencem hoje/amanhã)", (x) => x.risco, fmt, null], ["Entregues", (x) => x.ent, fmt, "max"], ["Entregues com atraso", (x) => x.entAtr, fmt, "min"],
+    ["Atraso médio", (x) => x.med, diasTxt, "min"], ["SLA entrega", (x) => x.sla, pct0, "max"], ["Cancelados", (x) => x.can, fmt, "min"],
+  ];
+  function desenharComparacao() {
+    const sel = [...tCmp.keys()].map((t) => tStats.find((x) => x.t === t)).filter(Boolean);
+    $("t-cmp-chips").innerHTML = sel.map((x) => `<span class="t-chip"><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}<button type="button" data-tirar-cmp="${esc(x.t)}" aria-label="Tirar ${esc(x.t)}">×</button></span>`).join("");
+    const livres = tStats.filter((x) => x.vol && !tCmp.has(x.t)).sort((a, b) => b.vol - a.vol);
+    $("t-cmp-add").innerHTML = `<option value="">${tCmp.size >= 4 ? "Máximo de 4" : "Escolha…"}</option>` + (tCmp.size >= 4 ? "" : livres.map((x) => `<option>${esc(x.t)}</option>`).join(""));
+    $("t-cmp-add").disabled = tCmp.size >= 4;
+    $("t-cmp-vazio").hidden = sel.length >= 2; $("t-cmp-corpo").hidden = sel.length < 2;
+    if (sel.length < 2) return;
+    $("t-cmp-cab").innerHTML = `<tr><th></th>${sel.map((x) => `<th class="num"><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</th>`).join("")}</tr>`;
+    $("t-cmp-linhas").innerHTML = T_METRICAS.map(([nome, f, fm, melhor]) => {
+      const vs = sel.map(f), ok = vs.filter((v) => v !== null);
+      const alvo = melhor && ok.length > 1 ? (melhor === "max" ? Math.max(...ok) : Math.min(...ok)) : null;
+      const unico = alvo !== null && ok.filter((v) => v === alvo).length < ok.length;
+      return `<tr><td>${nome}</td>${vs.map((v) => `<td class="num neutro${unico && v === alvo ? " melhor" : ""}">${fm(v)}</td>`).join("")}</tr>`;
+    }).join("");
+    grafMeses(sel);
+  }
+  // linhas: volume por mês (últimos 6 meses com pedidos), uma linha por transportadora
+  function grafMeses(sel) {
+    const todos = new Set(); sel.forEach((x) => x.meses.forEach((_, m) => todos.add(m)));
+    const ms = [...todos].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+    const box = $("t-cmp-graf");
+    if (ms.length < 2) { box.innerHTML = `<p class="vazio">Sem meses suficientes para o gráfico (precisa da Data de Criação na base).</p>`; return; }
+    const W = 760, H = 260, E = 44, D = 150, T = 16, B = 30, pw = W - E - D, ph = H - T - B;
+    const max = Math.max(1, ...sel.flatMap((x) => ms.map((m) => x.meses.get(m) || 0)));
+    const bruto = max / 4, p10 = Math.pow(10, Math.floor(Math.log10(bruto)));
+    const passo = Math.max(1, [1, 2, 2.5, 5, 10].map((k) => k * p10).find((k) => k >= bruto)), topo = passo * 4;
+    const X = (i) => E + (pw * i) / (ms.length - 1), Y = (v) => T + ph - (ph * v) / topo;
+    const rot = (m) => `${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}`;
+    let g = "";
+    for (let k = 0; k <= 4; k++) { const v = (topo * k) / 4, y = Y(v); g += `<line x1="${E}" x2="${E + pw}" y1="${y}" y2="${y}" class="gr-grade"/><text x="${E - 6}" y="${y + 4}" class="gr-eixo" text-anchor="end">${fmt(Math.round(v))}</text>`; }
+    ms.forEach((m, i) => { g += `<text x="${X(i)}" y="${H - 8}" class="gr-eixo" text-anchor="middle">${rot(m)}</text>`; });
+    // rótulos diretos no fim da linha, sem encavalar
+    const fins = sel.map((x) => ({ x, y: Y(x.meses.get(ms[ms.length - 1]) || 0) })).sort((a, b) => a.y - b.y);
+    for (let k = 1; k < fins.length; k++) if (fins[k].y - fins[k - 1].y < 14) fins[k].y = fins[k - 1].y + 14;
+    sel.forEach((x) => {
+      const cor = T_CORES[tCmp.get(x.t)], pts = ms.map((m, i) => `${X(i)},${Y(x.meses.get(m) || 0)}`);
+      g += `<polyline points="${pts.join(" ")}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round"/>`;
+      ms.forEach((m, i) => { g += `<circle cx="${X(i)}" cy="${Y(x.meses.get(m) || 0)}" r="4" fill="${cor}" stroke="#fff" stroke-width="2"/>`; });
+    });
+    fins.forEach(({ x, y }) => { const nome = x.t.length > 20 ? x.t.slice(0, 19) + "…" : x.t; g += `<text x="${E + pw + 10}" y="${y + 4}" class="gr-rot">${esc(nome)}</text>`; });
+    ms.forEach((m, i) => { const w = pw / (ms.length - 1); g += `<rect class="gr-alvo" data-mes="${m}" x="${X(i) - w / 2}" y="${T}" width="${w}" height="${ph}" fill="transparent"/>`; });
+    const legenda = sel.map((x) => `<span><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</span>`).join("");
+    box.innerHTML = `<div class="gr-legenda">${legenda}</div><div class="gr-area"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Volume por mês das transportadoras comparadas">${g}<line class="gr-mira" x1="0" x2="0" y1="${T}" y2="${T + ph}" visibility="hidden"/></svg><div class="gr-dica" hidden></div></div>`;
+    const svg = box.querySelector("svg"), dica = box.querySelector(".gr-dica"), mira = box.querySelector(".gr-mira");
+    svg.addEventListener("mousemove", (e) => {
+      const a = e.target.closest(".gr-alvo"); if (!a) { dica.hidden = true; mira.setAttribute("visibility", "hidden"); return; }
+      const m = a.dataset.mes, i = ms.indexOf(m);
+      mira.setAttribute("x1", X(i)); mira.setAttribute("x2", X(i)); mira.setAttribute("visibility", "visible");
+      dica.innerHTML = `<b>${rot(m)}</b>` + sel.map((x) => `<div><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}: <b>${fmt(x.meses.get(m) || 0)}</b></div>`).join("");
+      dica.hidden = false;
+      const r = box.querySelector(".gr-area").getBoundingClientRect(), px = (X(i) / W) * r.width;
+      dica.style.left = Math.min(px + 12, r.width - dica.offsetWidth - 4) + "px"; dica.style.top = "8px";
+    });
+    svg.addEventListener("mouseleave", () => { dica.hidden = true; mira.setAttribute("visibility", "hidden"); });
+  }
+  function corLivre() { const usadas = new Set(tCmp.values()); return [0, 1, 2, 3].find((i) => !usadas.has(i)); }
+  function alternarCmp(t, ligar) {
+    if (ligar && !tCmp.has(t) && tCmp.size < 4) tCmp.set(t, corLivre());
+    if (!ligar) tCmp.delete(t);
+    desenharDetalhe(); desenharComparacao();
+  }
+  $("t-det-linhas").addEventListener("change", (e) => { const c = e.target.closest("input[data-cmp]"); if (c) alternarCmp(c.dataset.cmp, c.checked); });
+  $("t-det-linhas").addEventListener("click", (e) => { const td = e.target.closest("td[data-ver]"); if (td) verPedidosTransp(td.dataset.ver); });
+  $("t-cmp-add").addEventListener("change", (e) => { if (e.target.value) alternarCmp(e.target.value, true); });
+  $("t-cmp-chips").addEventListener("click", (e) => { const b = e.target.closest("button[data-tirar-cmp]"); if (b) alternarCmp(b.dataset.tirarCmp, false); });
+  $("t-ordem").addEventListener("change", (e) => { tOrdem = e.target.value; desenharDetalhe(); });
+  $("t-extrair").addEventListener("click", () => {
+    const linhas = [["Transportadora", "Volume", "Em aberto", "Atrasados", "Em risco", "Entregues", "Entregues com atraso", "Atraso médio (dias)", "SLA entrega", "Cancelados"]]
+      .concat(tStats.filter((x) => x.vol).sort((a, b) => b.vol - a.vol).map((x) => [x.t, x.vol, x.ab, x.atr, x.risco, x.ent, x.entAtr, x.med === null ? "" : +x.med.toFixed(1), x.sla === null ? "" : +(x.sla * 100).toFixed(1), x.can]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Transportadoras");
+    XLSX.writeFile(wb, `transportadoras_${hojeISO()}.xlsx`);
+  });
 
   // ---------------- entregas e SLA ----------------
   // Fonte: a mesma base da Visão Gerencial, só os pedidos com status Entregue.
@@ -2207,7 +2348,7 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", transp: "Transportadoras", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }

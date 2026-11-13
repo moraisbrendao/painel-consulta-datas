@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=78">
+  <link rel="stylesheet" href="styles.css?v=79">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -35,6 +35,7 @@
       <div class="marca"><b>E-loggia 2.0</b><span>Multimóveis</span></div>
       <button class="menu-item so-log" data-pagina="gerencial"><span class="menu-icone">▦</span>Visão Gerencial</button>
       <button class="menu-item so-log" data-pagina="entregas"><span class="menu-icone">✓</span>Entregas e SLA</button>
+      <button class="menu-item so-log" data-pagina="transp"><span class="menu-icone">🚚</span>Transportadoras</button>
       <button class="menu-item so-log" data-pagina="uf"><span class="menu-icone">⌖</span>Atrasos por UF</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
@@ -156,19 +157,6 @@
         <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-perf"><thead><tr><th>Transportadora</th><th class="num">Performance</th><th class="num">Qtd em aberto</th><th class="num">Atrasado</th></tr></thead><tbody id="g-perf-linhas"></tbody></table></div>
       </section>
 
-      <section class="cartao">
-        <div class="cartao-topo">
-          <div>
-            <h2>Pedidos por transportadora</h2>
-            <p class="sub">Cada pedido conta uma vez só. O mês é o da criação do pedido.</p>
-          </div>
-          <div class="acoes-robo">
-            <div class="seg" id="g-pt-modo"><button data-m="sit" class="ativo">Por situação</button><button data-m="mes">Por mês</button></div>
-            <button id="g-pt-extrair" class="btn primario">Extrair</button>
-          </div>
-        </div>
-        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-pt"><thead id="g-pt-cab"></thead><tbody id="g-pt-linhas"></tbody></table></div>
-      </section>
 
       <section class="cartao" id="g-lista-cartao">
         <div class="cartao-topo">
@@ -244,6 +232,78 @@
           <p id="e-vazio" class="vazio" hidden>Nenhuma entrega.</p>
         </div>
         <nav id="e-paginacao" class="paginacao"></nav>
+      </section>
+    </main>
+
+    <main class="conteudo" id="pagina-transp" hidden>
+      <!-- o cartão de filtros da Visão Gerencial é colocado aqui quando esta página abre (mesmos filtros) -->
+      <div class="titulo-pagina">
+        <div>
+          <h1>Transportadoras</h1>
+          <p class="sub">Tudo da base enviada no botão "Enviar base", de todas as transportadoras. Os filtros do topo (transportadora, canal, UF…) mudam tudo aqui.</p>
+          <p id="t-info" class="info-base">Carregando…</p>
+        </div>
+      </div>
+
+      <section class="kpis" id="t-cards">
+        <div class="kpi"><span class="kpi-rot">Transportadoras</span><b class="kpi-num" id="t-k-qtd">–</b><small>com pedidos nos filtros</small></div>
+        <div class="kpi"><span class="kpi-rot">Pedidos</span><b class="kpi-num" id="t-k-vol">–</b><small>sem os cancelados</small></div>
+        <div class="kpi vermelho"><span class="kpi-rot">Atrasados (em aberto)</span><b class="kpi-num" id="t-k-atr">–</b><small id="t-k-atr-s"></small></div>
+        <div class="kpi"><span class="kpi-rot">SLA de entrega</span><b class="kpi-num" id="t-k-sla">–</b><small>entregues no prazo ÷ entregues</small></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Detalhe por transportadora</h2>
+            <p class="sub" id="t-det-sub"></p>
+          </div>
+          <div class="acoes-robo">
+            <label class="lbl-linha">Ordenar por
+              <select id="t-ordem">
+                <option value="vol">Volume</option><option value="ab">Em aberto</option><option value="atr">Atrasados</option>
+                <option value="risco">Em risco</option><option value="entAtr">Entregues com atraso</option><option value="med">Atraso médio</option>
+                <option value="sla">SLA (pior primeiro)</option><option value="nome">Nome</option>
+              </select></label>
+            <button id="t-extrair" class="btn primario">Extrair</button>
+          </div>
+        </div>
+        <p class="sub">Marque até 4 na coluna <b>Comparar</b> para ver lado a lado. Clique no nome para ver os pedidos.</p>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-det">
+          <thead><tr><th class="cmp">Comparar</th><th>Transportadora</th><th class="num">Volume</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">Em risco</th>
+            <th class="num">Entreg. c/ atraso</th><th class="num">Atraso médio</th><th class="num">SLA entrega</th></tr></thead>
+          <tbody id="t-det-linhas"></tbody></table></div>
+      </section>
+
+      <section class="cartao" id="t-cmp-cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Comparar transportadoras</h2>
+            <p class="sub">Escolha até 4. Em negrito, a melhor de cada linha.</p>
+          </div>
+          <label class="lbl-linha">Adicionar <select id="t-cmp-add"></select></label>
+        </div>
+        <div id="t-cmp-chips" class="t-chips"></div>
+        <div id="t-cmp-vazio" class="vazio">Marque pelo menos 2 transportadoras para comparar.</div>
+        <div id="t-cmp-corpo" hidden>
+          <div class="tabela-wrap"><table class="tabela-range tabela-cmp"><thead id="t-cmp-cab"></thead><tbody id="t-cmp-linhas"></tbody></table></div>
+          <h3 class="t-sub3">Volume por mês (criação do pedido)</h3>
+          <div id="t-cmp-graf" class="t-graf"></div>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Pedidos por transportadora</h2>
+            <p class="sub">Cada pedido conta uma vez só. O mês é o da criação do pedido. Clique numa linha para ver os pedidos na Visão Gerencial.</p>
+          </div>
+          <div class="acoes-robo">
+            <div class="seg" id="g-pt-modo"><button data-m="sit" class="ativo">Por situação</button><button data-m="mes">Por mês</button></div>
+            <button id="g-pt-extrair" class="btn primario">Extrair</button>
+          </div>
+        </div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-pt"><thead id="g-pt-cab"></thead><tbody id="g-pt-linhas"></tbody></table></div>
       </section>
     </main>
 
@@ -819,9 +879,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=78"></script>
-  <script src="mapa-brasil.js?v=78"></script>
-  <script src="troca-notas.js?v=78"></script>
-  <script src="app.js?v=78"></script>
+  <script src="config.js?v=79"></script>
+  <script src="mapa-brasil.js?v=79"></script>
+  <script src="troca-notas.js?v=79"></script>
+  <script src="app.js?v=79"></script>
 </body>
 </html>
