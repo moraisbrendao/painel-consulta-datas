@@ -21,7 +21,35 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
 const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""], [/dominalog/i, process.env.SSW_SENHA_DOMINALOG || ""]];
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
-const FORA_SSW = /bento|formato|transiga|tr[aâ]nsito\s*brasil/i;
+const FORA_SSW = /formato|transiga|tr[aâ]nsito\s*brasil/i;
+// Bento Brasil não usa SSW: consulta no rastreio do site dela (CNPJ da Multi + número da NF), 1 por vez com pausa
+const EH_BENTO = /bento/i;
+function lerBento(txt) {
+  const m = String(txt || "").match(/dados = '([\s\S]*?)';/); let d = null; try { d = m && JSON.parse(m[1]); } catch {}
+  if (Array.isArray(d)) d = d[d.length - 1];
+  if (!d || !d.dtemissao) return { situacao: "sem cte" };
+  const dia = (v) => v ? String(v).slice(0, 10) : null, prev = dia(d.dtagendamentoentrega || d.dtprevisaoentrega || d.dtprevchegadaredespacho);
+  if (d.dtentrega) return { situacao: "entregue", data_entrega: dia(d.dtentrega), data_evento: dia(d.dtentrega), ultimo_evento: "ENTREGUE", previsao: prev };
+  const ev = [["dtsaidadistribuicao", "SAIU PARA ENTREGA"], ["dtemissaoredespacho", "REDESPACHO"], ["dtchegada", "CHEGOU NA UNIDADE DE ENTREGA"], ["dtsaida", "EM TRANSFERENCIA"], ["dtemissao", "EMITIDO"]].find(([k]) => d[k]);
+  return { situacao: "nao entregue", data_evento: dia(d[ev[0]]), ultimo_evento: ev[1], previsao: prev };
+}
+async function bento(itens) {
+  const out = new Map(); if (!itens.length) return out;
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
+  for (const l of itens) {
+    const num = String(l.nf || "").split("-")[0].trim();
+    if (!num) { out.set(l.pedido, { situacao: "sem nf" }); continue; }
+    try {
+      const r = await pagina("https://sistema.bentobrasil.com.br/consultaNotas.php", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ nr: "00349443000192", nrNota: num }).toString() });
+      if (r.status !== 200) { if (++erros > 5) { log(`Bento Brasil respondeu ${r.status}; paro a Bento nesta rodada.`); break; } await dorme(10000); continue; }
+      erros = 0; out.set(l.pedido, lerBento(r.txt));
+    } catch (e) { if (++erros > 5) break; await dorme(10000); continue; }
+    await dorme(1500);
+  }
+  const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
+  log("Bento Brasil (site):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
+  return out;
+}
 // Jadlog não usa SSW: consulta pela API dela (segredo JADLOG_TOKEN), por NF + série + CNPJ do remetente, 10 por vez
 const EH_JADLOG = /jadlog/i;
 const isoBR = (d) => !d ? null : /^\d{4}-\d{2}-\d{2}/.test(d) ? d.slice(0, 10) : (() => { const [dd, mm, aa] = String(d).split(" ")[0].split("/"); return aa ? `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}` : null; })();
@@ -201,7 +229,7 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   const mj = r.txt.match(/dados = '([\s\S]*?)';/);
   if (mj) { let d = null; try { d = JSON.parse(mj[1]); } catch (e) { log("JSON:", e.message); }
     const um = Array.isArray(d) ? d[0] : d;
-    log("dados:", Array.isArray(d) ? `lista de ${d.length}` : "objeto", "·", um ? Object.entries(um).map(([k, v]) => `${k}=${v === null ? "null" : /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 16) : /status|situa|ocorr|tipo|descr|entreg|baixa/i.test(k) ? String(v).replace(/\d{5,}/g, "#").slice(0, 40) : typeof v}`).join(" | ") : ""); }
+    log("dados:", Array.isArray(d) ? `lista de ${d.length}` : "objeto", "·", um ? Object.entries(um).map(([k, v]) => `${k}=${v === null ? "null" : /^\d{4}-\d{2}-\d{2}/.test(String(v)) ? String(v).slice(0, 16) : typeof v}`).join(" | ") : ""); }
   log("scripts do resultado:", tags(r.txt, /<script[^>]*>[\s\S]*?<\/script>/gi).filter((x) => !/_gaq|jquery/i.test(x)).map((x) => x.replace(/\d{5,}/g, "#").replace(/\s+/g, " ").slice(0, 1500)).join(" || ").slice(0, 4000));
   const i0 = r.txt.search(/para a consulta/i);
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
@@ -312,9 +340,9 @@ if (MODO === "real") {
   const abertos = todos.filter((l) => !fechado(l));
   log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
   let fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
-  if (process.env.JADLOG_TOKEN) {   // Jadlog: pela API, rápido, antes do SSW
-    const jad = fila.filter((l) => EH_JADLOG.test(l.transportadora || "")); fila = fila.filter((l) => !EH_JADLOG.test(l.transportadora || ""));
-    const m = await jadlog(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
+  for (const [EH, fn] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null], [EH_BENTO, bento]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
+    const jad = fila.filter((l) => EH.test(l.transportadora || "")); fila = fila.filter((l) => !EH.test(l.transportadora || ""));
+    const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
       return { pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao === "entregue" ? "entregue" : r.previsao ? "previsao" : r.situacao === "sem cte" ? "sem cte" : "sem previsao" }; });
     for (let i = 0; i < linhas.length; i += 100) await chamar("rpc/gravar_ssw", "POST", { linhas: linhas.slice(i, i + 100) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
   }
@@ -412,19 +440,19 @@ async function conferir(minutos) {
     lista.unshift(...de_novo.filter((x) => x.situacao === "sem permissao")); lista.push(...de_novo.filter((x) => x.situacao !== "sem permissao"));
     if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} sem CT-e na última consulta para conferir de novo.`); }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
-  if (process.env.JADLOG_TOKEN) {   // Jadlog: pela API, antes do SSW
-    const jad = lista.filter((l) => EH_JADLOG.test(l.transportadora || ""));
-    // a API é rápida: confere de novo toda a Jadlog que ainda não foi entregue
-    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*jadlog*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []);
+  for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
+    const jad = lista.filter((l) => EH.test(l.transportadora || ""));
+    // fora do SSW e rápido: confere de novo toda a transportadora que ainda não foi entregue
+    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*${nome}*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []);
       L.forEach((x) => { if (!jad.some((y) => y.pedido === x.pedido)) jad.push(x); }); if (L.length < 1000) break; }
-    for (let i = lista.length - 1; i >= 0; i--) if (EH_JADLOG.test(lista[i].transportadora || "")) lista.splice(i, 1);
-    const m = await jadlog(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
+    for (let i = lista.length - 1; i >= 0; i--) if (EH.test(lista[i].transportadora || "")) lista.splice(i, 1);
+    const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
       return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null }; });
     for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
   }
   { // transportadora fora do SSW (Bento, Formato, Transiga, Trânsito Brasil): desfaz resultados antigos do SSW (eram da first mile)
     const F = [];
-    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*bento*,transportadora.ilike.*formato*,transportadora.ilike.*transiga*,transportadora.ilike.*sito*brasil*)&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*formato*,transportadora.ilike.*transiga*,transportadora.ilike.*sito*brasil*)&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
     const fx = F.filter((x) => FORA_SSW.test(x.transportadora || "")).map((x) => ({ pedido: x.pedido, situacao: "fora do ssw", ultimo_evento: null, data_evento: null, data_entrega: null }));
     for (let i = 0; i < fx.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: fx.slice(i, i + 50) }).catch(() => {});
     if (fx.length) log(`Conferência SSW: ${fx.length.toLocaleString("pt-BR")} de transportadora fora do SSW corrigidos.`);
