@@ -1,0 +1,34 @@
+# Robô da conferência SSW: lê a previsão da transportadora no rastreio público do SSW.
+name: Robô do SSW
+
+on:
+  workflow_dispatch:
+    inputs:
+      modo:
+        description: "diag = só olhar as páginas"
+        type: choice
+        options: [diag]
+        default: diag
+
+concurrency:
+  group: robo-ssw
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  robo:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Rodar o robô
+        run: node robo/robo-ssw.mjs
+        env:
+          MODO: ${{ github.event.inputs.modo || 'diag' }}
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}

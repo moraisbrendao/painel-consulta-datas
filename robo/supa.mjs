@@ -64,3 +64,4 @@ export const pegarTroca = async (limite = 20) => (await chamar("rpc/pegar_troca"
 export const resultadoTroca = (tk, st, msg, passos, prazo = null, nova = null) => chamar("rpc/resultado_troca", "POST", { tk, st, msg, passos, prazo, nova });
 export async function ultimaTrocaComErro() { const r = await chamar("troca_notas?select=ticket,pedido,robo_metodo,tipo,robo_passos,robo_msg,robo_iniciado_em&robo_status=eq.erro&order=robo_feito_em.desc&limit=1"); return r && r[0] ? r[0] : null; }
 export async function trocaDoTicket(tk) { const r = await chamar(`troca_notas?select=ticket,pedido,tipo,robo_metodo,robo_passos,robo_status&ticket=eq.${encodeURIComponent(tk)}&limit=1`); return r && r[0] ? r[0] : null; }
+export { chamar };
