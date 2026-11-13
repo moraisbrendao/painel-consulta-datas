@@ -13,6 +13,38 @@ async function pagina(url, opts) {
   return { status: r.status, url: r.url, txt };
 }
 
+// CNPJ do remetente pela série da NF (tabela da Logística)
+const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 22, 34], "00349443000516": [10],
+  "00349443000788": [11, 24, 25, 27, 301, 302, 303], "00349443001083": [14, 35], "00349443001245": [17], "00349443001407": [21],
+  "00349443001750": [23], "00349443001679": [26] };
+const cnpjDaSerie = (serie) => { const n = parseInt(serie, 10); return Object.keys(CNPJ_SERIE).find((c) => CNPJ_SERIE[c].includes(n)) || null; };
+const sohTexto = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<svg[\s\S]*?<\/svg>/gi, " ").replace(/<br\s*\/?>|<\/(tr|p|div|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ")
+  .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
+async function consultar(cnpj, nfs) {
+  return pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({ cnpj, NR: nfs.join("\n"), chave: "" }).toString() });
+}
+if (MODO === "diag-nf") {
+  await entrarSupabase();
+  const linhas = await chamar("base_aberta?select=transportadora,nf,prev_original&nf=not.is.null&limit=6000");
+  log("Pedidos em aberto lidos:", linhas.length, "· exemplo do formato da NF:", String((linhas[0] || {}).nf || "").replace(/\d/g, "9"));
+  const porT = {};
+  for (const l of linhas) { const [num, ser] = String(l.nf).split("-"); const c = cnpjDaSerie(ser); if (!c || !num) continue; (porT[l.transportadora || "?"] ||= []).push({ num: num.trim(), c }); }
+  let mostrou = false;
+  for (const [t, L] of Object.entries(porT)) {
+    const x = L[0];
+    try {
+      const p = await consultar(x.c, [x.num]);
+      const ls = sohTexto(p.txt);
+      const prev = ls.filter((l) => /previs/i.test(l)).map((l) => l.replace(/[A-Za-zÀ-ú]{3,}/g, (w) => /previs|entrega|prevista|data|de|em/i.test(w) ? w : "x").slice(0, 80));
+      const nao = ls.some((l) => /n[ãa]o (localizad|encontrad)|nenhum/i.test(l));
+      log(`${t}: ${L.length} pedido(s) · resposta ${p.status} · ${nao ? "NÃO localizado" : "achou"} · linhas com previsão: ${prev.length ? prev.slice(0, 3).join(" | ") : "nenhuma"}`);
+      if (!mostrou && !nao && prev.length) { mostrou = true;
+        log("  rótulos da página (só palavras sem números, curtas):", ls.filter((l) => !/\d/.test(l) && l.length < 40).slice(0, 40).join(" / ")); }
+    } catch (e) { log(`${t}: erro ${e.message}`); }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
