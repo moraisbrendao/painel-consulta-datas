@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=70");
+        const w = new Worker("leitor-intelipost.js?v=71");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -759,6 +759,14 @@
   let ocKeys = new Set(), ocSoNF = new Set(), ocInfo = null, ocOk = true;
   // mesmos pedidos da tabela de range: vencidos e a vencer (com data prometida)
   const precisaOc = (p) => !!p._faixa && MS_OC.has(norm(p.micro_status));
+  // insucesso na entrega achado pelo robô na Fila Aguardando entrega (nova NF de reposição): entra na fila do robô do portal
+  let agOc = [];
+  function alvoOc() {
+    const naBase = new Set(base.map((p) => { const { nf, serie } = nfSerie(p); return nf + "-" + serie; }));
+    const extra = agOc.filter((t) => { const { nf, serie } = nfSerie({ nf: t.nf_nova }); return nf && !naBase.has(nf + "-" + serie); })
+      .map((t) => ({ nf: t.nf_nova, micro_status: t.insucesso, transportadora: t.transp_chat || String(t.transportadora || "").split(" / ")[0], _faixa: "ag", _ag: t.ticket }));
+    return base.filter(precisaOc).concat(extra);
+  }
   function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
   function marcaOc(p) {
     if (!precisaOc(p)) return "";
@@ -768,6 +776,8 @@
   async function carregarOcorrencias() {
     try {
       const [lista, inf] = await Promise.all([buscarTudo("ocorrencias_cadastradas", "nf"), sb.from("ocorrencias_info").select("*").limit(1)]);
+      const ag = await sb.from("aguardando_entrega").select("ticket,nf_nova,insucesso,transp_chat,transportadora").eq("na_planilha", true).not("insucesso", "is", null).neq("situacao", "entregue");
+      agOc = ag.error ? [] : ag.data;
       ocKeys = new Set(); ocSoNF = new Set();
       lista.forEach((o) => (o.serie ? ocKeys.add(semZero(o.nf) + "-" + semZero(o.serie)) : ocSoNF.add(semZero(o.nf))));
       ocInfo = inf.data && inf.data[0]; ocOk = true;
@@ -776,7 +786,7 @@
 
   function desenharOcorrencias() {
     desenharRobo();
-    const alvo = base.filter(precisaOc);
+    const alvo = alvoOc();
     const falta = alvo.filter((p) => !ocCadastrada(p));
     $("oc-info").textContent = !ocOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase."
       : ocInfo ? `Última planilha de ocorrências: ${ocInfo.arquivo || ""} · ${new Date(ocInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${ocInfo.enviado_por ? " por " + ocInfo.enviado_por : ""} · ${fmt(ocKeys.size + ocSoNF.size)} notas cadastradas no total`
@@ -820,7 +830,7 @@
   }
   function gruposParaRobo() {
     const naFila = notasNaFila(), mapa = new Map(), semMotivo = new Set();
-    base.filter((p) => precisaOc(p) && !ocCadastrada(p)).forEach((p) => {
+    alvoOc().filter((p) => !ocCadastrada(p)).forEach((p) => {
       const { nf, serie } = nfSerie(p); if (!nf || naFila.has(nf + "-" + serie)) return;
       const motivo = MOTIVO_ROBO[norm(p.micro_status)]; if (!motivo) { semMotivo.add(p.micro_status); return; }
       const tp = transpPortal(p.transportadora), transportadora = TRANSP_ROBO[tp] || tp;
@@ -882,7 +892,7 @@
   $("oc-grupos").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-template]"); if (!b) return;
     const [ms, tp] = b.dataset.template.split("|");
-    const ps = base.filter((p) => precisaOc(p) && !ocCadastrada(p) && norm(p.micro_status) === norm(ms) && transpPortal(p.transportadora) === tp);
+    const ps = alvoOc().filter((p) => !ocCadastrada(p) && norm(p.micro_status) === norm(ms) && transpPortal(p.transportadora) === tp);
     const linhas = [["Nota", "Serie"]].concat(ps.map((p) => { const { nf, serie } = nfSerie(p); return [/^\d+$/.test(nf) ? Number(nf) : nf, /^\d+$/.test(serie) ? Number(serie) : serie]; }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Planilha1");
     const limpa = (t) => t.normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^\w -]+/g, "").trim();
@@ -918,7 +928,7 @@
       if (!linhas.length) throw new Error("A planilha não tem notas.");
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    const antes = base.filter((p) => precisaOc(p) && !ocCadastrada(p)).length;
+    const antes = alvoOc().filter((p) => !ocCadastrada(p)).length;
     if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} notas com ocorrência encontradas.\nElas serão somadas às já enviadas antes.\n\nEnviar?`)) return;
     try {
       for (let i = 0; i < linhas.length; i += 5000) {
@@ -929,7 +939,7 @@
     } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
     await carregarOcorrencias();
     carregando("");
-    const depois = base.filter((p) => precisaOc(p) && !ocCadastrada(p)).length;
+    const depois = alvoOc().filter((p) => !ocCadastrada(p)).length;
     toast(`Ocorrências atualizadas: ${fmt(antes - depois)} nota${antes - depois === 1 ? "" : "s"} saíram da lista "a cadastrar".`);
     desenharOcorrencias(); redesenhar(true);
   });
@@ -1590,8 +1600,8 @@
   });
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca";
-    if (b.dataset.ap === "troca") carregarTrocas(); });
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = b.dataset.ap !== "ag";
+    if (b.dataset.ap === "troca") carregarTrocas(); if (b.dataset.ap === "ag") carregarAguardando(); });
   setInterval(() => { if (paginaAtual === "alterar" && !document.hidden) carregarAlterar(true); }, 60000);
 
   // ---------------- troca de notas (reposição TOTAL e PARCIAL) ----------------
@@ -1806,6 +1816,136 @@
     XLSX.writeFile(wb, `troca_de_notas_${hojeISO()}.xlsx`);
   });
   setInterval(() => { if (paginaAtual === "alterar" && !$("ap-sec-troca").hidden && !document.hidden && tnAberto === null) carregarTrocas(); }, 60000);
+
+  // ---------------- Fila Aguardando entrega (relatório de tickets do Multi360) ----------------
+  // O robô (modo "aguardando" do Robô do SSW) lê a nova NF no chat do ticket, confere no rastreio e dá a baixa ("Nota entregue?" → Sim).
+  let agLista = [], agObs = new Map(), agInfo = null, agCard = "tratar", agBusca = "";
+  const agTransp = (t) => t.transp_chat || String(t.transportadora || "").split(" / ")[0] || "";
+  function agGrupo(t) {
+    if (t.baixa_status === "feita") return "baixa";
+    if (t.baixa_status === "conferir" || t.baixa_status === "erro") return "conferir";
+    if (t.situacao === "pendente" || t.situacao === "entregue") return "robo";
+    if (t.insucesso) return "insucesso";
+    if (t.situacao === "nao entregue" || t.situacao === "sem cte") return "tratar";
+    return "conferir";
+  }
+  const AG_NOME = { tratar: "Não entregues — para tratar", insucesso: "Insucesso na entrega (vão para Ocorrências)", conferir: "Conferir à mão", baixa: "Entregues · baixa feita", robo: "Aguardando o robô", todos: "Todos" };
+  function agStatus(t) {
+    const ev = t.ultimo_evento ? esc(t.ultimo_evento) + (t.data_evento ? ` <span class="s">${br(t.data_evento)}</span>` : "") : "";
+    const fonte = t.fonte ? `<div class="s">${esc(t.fonte)}</div>` : "";
+    switch (t.situacao) {
+      case "entregue": return `<span class="chip verde">Entregue${t.data_entrega ? " " + br(t.data_entrega) : ""}</span>${fonte}`;
+      case "nao entregue": return `${t.insucesso ? `<span class="chip vermelho">${esc(t.insucesso)}</span><div class="s">${ev}</div>` : `<span class="chip ambar">Não entregue</span><div>${ev}</div>`}${fonte}`;
+      case "sem cte": return `<span class="chip cinza">Sem CT-e ainda</span><div class="s">não achei a NF em nenhum rastreio</div>`;
+      case "sem rastreio": return `<span class="chip cinza">Sem rastreio automático</span><div class="s">Transiga/Formato: ver no site</div>`;
+      case "sem permissao": return `<span class="chip ambar">Pede senha no SSW</span><div class="s">cadastre em Conferência SSW → Senhas</div>`;
+      case "sem nf nova": return `<span class="chip ambar">NF nova não achada</span><div class="s">${t.fila_360 && !/aguardando entrega/i.test(t.fila_360) ? "ticket: " + esc(t.fila_360) : "sem \"NF … emitida\" no chat"}</div>`;
+      case "sem nf": return `<span class="chip ambar">Série sem CNPJ</span>`;
+      default: return `<span class="s">o robô ainda não olhou</span>`;
+    }
+  }
+  function agRobo(t) {
+    const q = t.baixa_em ? `<div class="s">${new Date(t.baixa_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>` : "";
+    if (t.baixa_status === "feita") return `<span class="chip verde">✓ Baixa feita</span>${q}`;
+    if (t.baixa_status === "teste") return `<span class="chip cinza">Testado (Cancelar)</span>${q}`;
+    if (t.baixa_status === "conferir") return `<span class="chip ambar">Conferir</span><div class="s">${esc(t.baixa_msg || "")}</div>`;
+    if (t.baixa_status === "erro") return `<span class="txt-vermelho">⚠ ${esc(t.baixa_msg || "O robô não conseguiu.")}</span>`;
+    return t.situacao === "entregue" ? `<span class="s">baixa na próxima rodada</span>` : `<span class="s">—</span>`;
+  }
+  async function carregarAguardando() {
+    try {
+      const [lista, obs, inf] = await Promise.all([buscarTudo("aguardando_entrega", "ticket"), buscarTudo("aguardando_obs", "ticket"), sb.from("aguardando_info").select("*").limit(1)]);
+      agLista = lista.filter((t) => t.na_planilha); agObs = new Map(obs.map((o) => [o.ticket, o])); agInfo = (inf.data && inf.data[0]) || null;
+      agOc = agLista.filter((t) => t.insucesso && t.situacao !== "entregue");   // aba Ocorrências já vê os novos insucessos
+    } catch (err) {
+      $("ag-info").textContent = /aguardando|does not exist|schema cache/i.test(err.message || "") ? "Para usar a Fila Aguardando entrega, rode a parte 24 do supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
+      return;
+    }
+    desenharAguardando();
+  }
+  function desenharAguardando() {
+    $("ag-info").textContent = agInfo ? `${agInfo.arquivo || "relatório"} · enviado em ${new Date(agInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${agInfo.enviado_por ? " por " + agInfo.enviado_por : ""} · ${fmt(agLista.length)} tickets`
+      : "Suba o relatório de tickets da fila Aguardando entrega para começar.";
+    const ult = agLista.reduce((m, t) => (t.consultado_em && t.consultado_em > m ? t.consultado_em : m), "");
+    $("ag-robo").textContent = ult ? `Robô olhou pela última vez em ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "";
+    document.querySelectorAll("#ag-cards .kpi[data-ag]").forEach((b) => { const k = b.dataset.ag; b.querySelector(".kpi-num").textContent = fmt(k === "todos" ? agLista.length : agLista.filter((t) => agGrupo(t) === k).length); b.classList.toggle("ativa", k === agCard); });
+    const q = norm(agBusca);
+    const L = agLista.filter((t) => agCard === "todos" || agGrupo(t) === agCard)
+      .filter((t) => !q || [t.ticket, t.pedido, t.pedido_promob, t.nf_nova, t.nf_original].some((v) => norm(v).includes(q)))
+      .sort((a, b) => String(a.ticket_criado || "").localeCompare(String(b.ticket_criado || "")) || String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
+    $("ag-titulo").textContent = `${AG_NOME[agCard]} (${fmt(L.length)})`;
+    $("ag-linhas").innerHTML = L.slice(0, 500).map((t) => {
+      const o = agObs.get(t.ticket);
+      return `<tr><td><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}" target="_blank" rel="noopener">${esc(t.ticket)}</a>${t.ticket_criado ? `<div class="s">${br(t.ticket_criado)}</div>` : ""}</td>
+        <td>${esc(t.tipo || "")}${t.tipo_reposicao ? `<div class="s">${esc(t.tipo_reposicao)}</div>` : ""}</td>
+        <td class="mono">${esc(t.pedido || "")}<div class="s">NF antiga ${esc(t.nf_original || "—")}</div></td>
+        <td>${t.nf_nova ? `<b>${esc(t.nf_nova)}</b> <button class="link" data-ag-rastreio="${esc(t.ticket)}">rastreio</button>${t.nf_emitida_em ? `<div class="s">emitida ${br(t.nf_emitida_em)}</div>` : ""}` : "—"}</td>
+        <td>${esc(agTransp(t))}</td><td>${agStatus(t)}</td><td>${agRobo(t)}</td>
+        <td class="col-obs"><input data-ag-obs="${esc(t.ticket)}" value="${esc(o ? o.observacao : "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s quem">${o ? esc((o.atualizado_por || "").split("@")[0]) + " · " + new Date(o.atualizado_em).toLocaleDateString("pt-BR") : ""}</div></td></tr>`;
+    }).join("") + (L.length > 500 ? `<tr><td colspan="8" class="s">Mostrando 500 de ${fmt(L.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
+    $("ag-vazio").hidden = L.length > 0;
+  }
+  $("ag-cards").addEventListener("click", (e) => { const b = e.target.closest("[data-ag]"); if (!b) return; agCard = b.dataset.ag; desenharAguardando(); });
+  $("ag-busca").addEventListener("input", (e) => { agBusca = e.target.value; desenharAguardando(); });
+  $("ag-linhas").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-ag-rastreio]"); if (!b) return;
+    const t = agLista.find((x) => x.ticket === b.dataset.agRastreio); if (t) abrirSSW(t.nf_nova, agTransp(t), null);
+  });
+  $("ag-linhas").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.dataset.agObs) e.target.blur(); });
+  $("ag-linhas").addEventListener("change", async (e) => {
+    const inp = e.target.closest("input[data-ag-obs]"); if (!inp) return;
+    const tk = inp.dataset.agObs, quem = inp.parentElement.querySelector(".quem"), v = inp.value.trim();
+    quem.textContent = "salvando…";
+    const { error } = await sb.rpc("salvar_obs_aguardando", { p_ticket: tk, p_obs: v });
+    if (error) { quem.textContent = ""; return toast("Não salvou: " + error.message, true); }
+    if (v) agObs.set(tk, { ticket: tk, observacao: v, atualizado_por: meuEmail(), atualizado_em: new Date().toISOString() }); else agObs.delete(tk);
+    quem.innerHTML = v ? `<span class="salvo">✓ salvo</span>` : "";
+  });
+  $("ag-rodar").addEventListener("click", async () => {
+    const { error } = await sb.rpc("rodar_robo_aguardando");
+    if (error) return toast("Não foi possível: " + error.message, true);
+    toast("Robô chamado. Ele começa em 1 ou 2 minutos e o resultado aparece aqui sozinho.");
+  });
+  $("ag-arquivo").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+    carregando("Lendo o relatório…"); await new Promise((r) => setTimeout(r, 50));
+    let itens = [], foraFila = 0;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
+      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "ID DO TICKET" || norm(c) === "ID TICKET"));
+      if (iCab < 0) throw new Error('Não achei a coluna "ID do Ticket". Use o relatório de tickets do Multi360.');
+      const cab = rows[iCab].map(norm), col = (...n) => cab.findIndex((c) => n.includes(c));
+      const c = { tk: col("ID DO TICKET", "ID TICKET"), tipo: col("TIPO"), rep: col("TIPO DE REPOSICAO"), mot: col("MOTIVO"), fila: col("FILA"), ped: col("PEDIDO CANAL"),
+        pp: col("PEDIDO PROMOB"), nf: col("NOTA FISCAL"), tp: col("TRANSPORTADORA DO TICKET"), tpp: col("TRANSPORTADOR PROMOB"), cri: col("CRIACAO DO TICKET") };
+      const iso = (v) => v instanceof Date ? v.toISOString() : typeof v === "number" ? (() => { const d = XLSX.SSF.parse_date_code(v); return d ? new Date(d.y, d.m - 1, d.d, d.H, d.M, d.S).toISOString() : null; })() : null;
+      const porTk = new Map();
+      rows.slice(iCab + 1).forEach((r) => {
+        if (!r) return; const tk = String(r[c.tk] ?? "").trim().replace(/\.0+$/, ""); if (!tk) return;
+        if (c.fila >= 0 && r[c.fila] && norm(r[c.fila]) !== "AGUARDANDO ENTREGA") { foraFila++; return; }
+        const v = (i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : "");
+        const ant = porTk.get(tk); if (ant) { const t = v(c.tp); if (t && !ant.transportadora.split(" / ").includes(t)) ant.transportadora += " / " + t; return; }
+        porTk.set(tk, { ticket: tk, tipo: v(c.tipo), tipo_reposicao: v(c.rep), motivo: v(c.mot), pedido: v(c.ped), pedido_promob: v(c.pp), nf_original: v(c.nf),
+          transportadora: v(c.tp), transp_promob: v(c.tpp), ticket_criado: c.cri >= 0 ? iso(r[c.cri]) : null });
+      });
+      itens = [...porTk.values()];
+      if (!itens.length) throw new Error("O relatório não tem tickets da fila Aguardando entrega.");
+    } catch (err) { carregando(""); toast(err.message, true); return; }
+    carregando("");
+    if (!confirm(`${arq.name}\n\n${fmt(itens.length)} ticket(s) na fila Aguardando entrega${foraFila ? ` (${fmt(foraFila)} linha(s) de outra fila ficam de fora)` : ""}.\n\nO robô vai abrir os tickets, conferir o rastreio da nova NF e dar baixa nos entregues. As observações continuam salvas. Enviar?`)) return;
+    const { error } = await sb.rpc("importar_aguardando", { itens, arquivo: arq.name });
+    if (error) return toast("Erro ao enviar: " + error.message + (/importar_aguardando|schema cache/i.test(error.message) ? " (rode a parte 24 do supabase/schema.sql)" : ""), true);
+    toast(`${fmt(itens.length)} ticket(s) enviados. O robô começa em 1 ou 2 minutos.`); await carregarAguardando();
+  });
+  $("ag-baixar").addEventListener("click", () => {
+    const L = agLista.filter((t) => agCard === "todos" || agGrupo(t) === agCard); if (!L.length) return toast("Nada para exportar.", true);
+    const SIT = { entregue: "Entregue", "nao entregue": "Não entregue", "sem cte": "Sem CT-e ainda", "sem rastreio": "Sem rastreio automático", "sem permissao": "Pede senha no SSW", "sem nf nova": "NF nova não achada", pendente: "Robô ainda não olhou" };
+    const linhas = [["Ticket", "Tipo", "Tipo de reposição", "Pedido", "Pedido Promob", "NF antiga", "Nova NF", "NF emitida em", "Transportadora", "Status no rastreio", "Último evento", "Data do evento", "Data de entrega", "Insucesso", "Fonte", "Robô", "Observação", "Observação por"]]
+      .concat(L.map((t) => { const o = agObs.get(t.ticket) || {}; return [t.ticket, t.tipo, t.tipo_reposicao, t.pedido, t.pedido_promob, t.nf_original, t.nf_nova, br(t.nf_emitida_em), agTransp(t), SIT[t.situacao] || t.situacao, t.ultimo_evento, br(t.data_evento), br(t.data_entrega), t.insucesso, t.fonte, [t.baixa_status, t.baixa_msg].filter(Boolean).join(" · "), o.observacao || "", o.atualizado_por || ""]; }));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Aguardando entrega");
+    XLSX.writeFile(wb, `aguardando_entrega_${hojeISO()}.xlsx`);
+  });
+  setInterval(() => { if (paginaAtual === "alterar" && !$("ap-sec-ag").hidden && !document.hidden && !(document.activeElement && document.activeElement.dataset && document.activeElement.dataset.agObs)) carregarAguardando(); }, 60000);
   $("e-transp-exportar").addEventListener("click", () => {
     if (!eLinhasTransp.length) return toast("Nada para exportar.", true);
     const linhas = [["Transportadora", "Entregues", "No prazo", "Com atraso", "SLA"]].concat(eLinhasTransp.map((x) => [x.t, x.ent, x.ok, x.atr, Math.round(x.sla * 1000) / 10 + "%"]));
@@ -1956,7 +2096,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=70");
+        const w = new Worker("leitor-conferencia.js?v=71");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
@@ -1994,6 +2134,7 @@
     if (G_PAGINAS.includes(b.dataset.pagina)) montarGerencial();
     if (b.dataset.pagina === "alterar") carregarAlterar();
     if (b.dataset.pagina === "conferencia") carregarConferencia();
+    if (b.dataset.pagina === "ocorrencias") desenharOcorrencias();
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------

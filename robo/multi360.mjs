@@ -101,3 +101,47 @@ export async function fazerTicket(p, ticket, print, real, log) {
     if (i === 5) throw new Error(`executei a ação, mas o ticket está na fila "${f}" (esperava Aguardando entrega)`);
   }
 }
+
+// Fila Aguardando entrega: lê no chat do ticket a última "NF 123-7 emitida para o pedido" (com a data da mensagem)
+// e a última "Transportadora definida: X". Abre o ticket antes. Nada disso vai para o registro público.
+export async function lerChatTicket(p, ticket) {
+  await abrirTicket(p, ticket);
+  // o chat pode carregar as mensagens antigas só ao rolar para cima
+  for (let i = 0; i < 6; i++) {
+    const subiu = await p.evaluate(() => { let s = false; for (const e of document.querySelectorAll("*")) { if (e.scrollHeight > e.clientHeight + 50 && e.scrollTop > 0 && /auto|scroll/.test(getComputedStyle(e).overflowY)) { e.scrollTop = 0; s = true; } } return s; });
+    if (!subiu) break; await p.waitForTimeout(1200);
+  }
+  const r = await p.evaluate(() => {
+    const ls = document.body.innerText.split("\n").map((x) => x.trim()).filter(Boolean);
+    let nf = null, em = null, transp = null, nfs = 0;
+    ls.forEach((l, i) => {
+      const m = l.match(/NF\s*(\d+)\s*-\s*(\d+)\s+emitida\s+para\s+o\s+pedido/i);
+      if (m) { nfs++; nf = `${m[1]}-${m[2]}`; em = null;
+        for (let k = i - 1; k >= Math.max(0, i - 4); k--) { const d = ls[k].match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/); if (d) { em = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; break; } } }
+      const t = l.match(/Transportadora definida:\s*(.+?)(?:\s*\(Intelipost|$)/i); if (t) transp = t[1].trim().slice(0, 80);
+    });
+    return { nf, em, transp, nfs };
+  });
+  return { ...r, fila: await filaAtual(p) };
+}
+
+// executa a ação do ticket cuja caixinha tem o título esperado (ex.: "Nota entregue?"), com mensagem e print; real=false clica Cancelar
+export async function executarAcao(p, ticket, { titulo, msg, print, real }) {
+  await abrirTicket(p, ticket);
+  await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().click();
+  const t = p.getByText(titulo).last();
+  try { await t.waitFor({ timeout: 20000 }); }
+  catch {
+    const outro = await p.evaluate(() => { const h = [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && /\?\s*$/.test((e.textContent || "").trim()) && e.getBoundingClientRect().width > 0); return h ? h.textContent.trim().slice(0, 60) : ""; }).catch(() => "");
+    const c = p.getByRole("button", { name: /^\s*cancelar\s*$/i }).last(); if (await c.count()) await c.click().catch(() => {}); else await p.keyboard.press("Escape").catch(() => {});
+    throw new Error(`a ação do ticket é "${outro || "outra"}", não a esperada (o ticket mudou de fila?)`);
+  }
+  const caixa = t.locator("xpath=ancestor::*[.//textarea and count(.//button) >= 2][1]");
+  if (print) { await caixa.locator("input[type=file]").first().setInputFiles(print); await p.waitForTimeout(2500); }
+  await caixa.locator("textarea").first().fill(msg);
+  if (!real) { await caixa.getByRole("button", { name: /^\s*cancelar\s*$/i }).first().click(); return { ok: true, teste: true }; }
+  await caixa.getByRole("button", { name: /^\s*sim\s*$/i }).first().click();
+  await p.waitForTimeout(6000);
+  await abrirTicket(p, ticket).catch(() => {});
+  return { ok: true, fila: await filaAtual(p).catch(() => "") };
+}

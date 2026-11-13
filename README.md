@@ -183,3 +183,11 @@ e o botão "Ver na <transportadora>" abre uma janela no painel com status, previ
 
 Rode a parte 23 do `supabase/schema.sql`. Na aba *Conferência SSW*, o botão "Senhas do SSW" guarda a senha de rastreio de cada
 transportadora (Trans Sua, VM, Aceville…). O botão "Ver no SSW" já abre com a senha, e o robô também usa (os segredos do GitHub continuam valendo).
+
+## 24. Fila Aguardando entrega
+
+Rode a parte 24 do `supabase/schema.sql`. Em *Alterar pedidos* → "Fila Aguardando entrega", suba o relatório de tickets da fila
+Aguardando entrega do Multi360 (Excel). O robô (modo `aguardando` do Robô do SSW) abre cada ticket, lê no chat a nova NF
+("NF 123-7 emitida para o pedido"), confere no rastreio (SSW, Jadlog, Bento Brasil ou Trânsito Brasil) e, se estiver entregue,
+executa a ação "Nota entregue?" → Sim com o print do rastreio. Os não entregues ficam na lista com observação (guardada até a baixa);
+os de insucesso na entrega vão para a aba *Ocorrências*. Usa os segredos MULTI360_EMAIL/MULTI360_SENHA (ou PORTAL_EMAIL/PORTAL_SENHA).

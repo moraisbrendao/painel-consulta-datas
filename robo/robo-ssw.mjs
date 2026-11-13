@@ -72,8 +72,8 @@ async function transito(itens) {
       const tr = t.x.tracking, prev = dia(tr.dataPrevisaoEntrega), ult = t.fases[t.fases.length - 1];
       const detalhe = { fonte: "Trânsito Brasil", codigo: tr.codigo || null, status: tr.situacao && tr.situacao.descricao || null, previsao: prev,
         eventos: t.fases.map((f) => ({ data: String(f.dataExecucao).replace("T", " ").slice(0, 16), status: f.fase && f.fase.descricao || "", unidade: "" })) };
-      if (tr.dataEntrega) out.set(l.pedido, { situacao: "entregue", data_entrega: dia(tr.dataEntrega), data_evento: dia(tr.dataEntrega), ultimo_evento: "ENTREGUE", previsao: prev });
-      else out.set(l.pedido, { situacao: "nao entregue", data_evento: ult ? dia(ult.dataExecucao) : null, ultimo_evento: ult && ult.fase ? String(ult.fase.descricao || "").toUpperCase().slice(0, 60) : null, previsao: prev });
+      if (tr.dataEntrega) out.set(l.pedido, { situacao: "entregue", data_entrega: dia(tr.dataEntrega), data_evento: dia(tr.dataEntrega), ultimo_evento: "ENTREGUE", previsao: prev, detalhe });
+      else out.set(l.pedido, { situacao: "nao entregue", data_evento: ult ? dia(ult.dataExecucao) : null, ultimo_evento: ult && ult.fase ? String(ult.fase.descricao || "").toUpperCase().slice(0, 60) : null, previsao: prev, detalhe });
     }
     await dorme(1000);
   }
@@ -645,4 +645,8 @@ if (MODO === "transportadora") {   // confere de novo agora todos os não entreg
 }
 if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no SSW
   await entrarSupabase(); process.env.SSW_MINUTOS = "0"; await conferir(0);
+}
+if (MODO === "aguardando" || MODO === "aguardando-teste") {   // aba Alterar pedidos → Fila Aguardando entrega (robo/aguardando.mjs)
+  await entrarSupabase();
+  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, pagina, lerEntrega, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
 }

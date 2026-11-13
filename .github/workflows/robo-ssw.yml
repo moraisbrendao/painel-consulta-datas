@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, conferencia, jadlog, transito-cte, transportadora, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-emissor, diag-senior-js]
+        options: [real, conferencia, aguardando, aguardando-teste, jadlog, transito-cte, transportadora, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-emissor, diag-senior-js]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -29,7 +29,7 @@ on:
         default: ""
 
 concurrency:
-  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
+  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora' || startsWith(github.event.inputs.modo || '', 'aguardando')) && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
   cancel-in-progress: false
 
 permissions:
@@ -45,8 +45,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Navegador (só no diagnóstico da Trânsito Brasil)
-        if: ${{ github.event.inputs.modo == 'diag-transito' || github.event.inputs.modo == 'diag-transiga' || github.event.inputs.modo == 'diag-senior-js' }}
+      - name: Navegador (Fila Aguardando entrega e diagnósticos)
+        if: ${{ github.event.inputs.modo == 'diag-transito' || github.event.inputs.modo == 'diag-transiga' || github.event.inputs.modo == 'diag-senior-js' || startsWith(github.event.inputs.modo || '', 'aguardando') }}
         run: |
           cd robo
           npm install --no-audit --no-fund
@@ -88,6 +88,10 @@ jobs:
           SSW_SENHA_ACEVILLE: ${{ secrets.SSW_SENHA_ACEVILLE }}
           SSW_SENHA_DOMINALOG: ${{ secrets.SSW_SENHA_DOMINALOG }}
           SSW_SENHA_FLOG: ${{ secrets.SSW_SENHA_FLOG || secrets.SSW_SENHA_FLOG_TRANSPORTES || secrets.FLOG_SENHA || secrets.SENHA_FLOG }}
+          MULTI360_EMAIL: ${{ secrets.MULTI360_EMAIL }}
+          MULTI360_SENHA: ${{ secrets.MULTI360_SENHA }}
+          PORTAL_EMAIL: ${{ secrets.PORTAL_EMAIL }}
+          PORTAL_SENHA: ${{ secrets.PORTAL_SENHA }}
           JADLOG_TOKEN: ${{ secrets.JADLOG_TOKEN || secrets.TOKEN }}
           JADLOG_USUARIO: ${{ secrets.JADLOG_USUARIO || secrets.USUARIO_JADLOG }}
           JADLOG_CODIGO: ${{ secrets.JADLOG_CODIGO_CLIENTE || secrets.CODIGO_CLIENTE_JADLOG }}

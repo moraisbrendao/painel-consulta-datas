@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=70">
+  <link rel="stylesheet" href="styles.css?v=71">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -579,6 +579,7 @@
         <div class="acoes-titulo" id="ap-abas">
           <button class="btn amarelo" data-ap="data">📅 Nova previsão de entrega</button>
           <button class="btn contorno" data-ap="troca">⇄ Troca de notas</button>
+          <button class="btn contorno" data-ap="ag">🚚 Fila Aguardando entrega</button>
         </div>
       </div>
 
@@ -667,6 +668,48 @@
           </div>
         </section>
       </div>
+
+      <div id="ap-sec-ag" hidden>
+        <section class="cartao ap-cartao">
+          <div class="ap-cab">
+            <span class="ap-ic">🚚</span>
+            <div>
+              <h2>Fila Aguardando entrega</h2>
+              <p class="sub">Suba o relatório de tickets da fila "Aguardando entrega" do Multi360. O robô abre cada ticket, pega no chat a nova NF ("NF … emitida para o pedido"), confere no rastreio e, se já foi entregue, executa a ação "Nota entregue?" → Sim com o print do rastreio. Os não entregues ficam aqui para tratar; a observação fica guardada até a baixa, mesmo subindo o relatório de novo. Insucesso na entrega vai para a aba Ocorrências.</p>
+              <p id="ag-info" class="info-base"></p>
+            </div>
+          </div>
+          <div class="ap-acoes">
+            <label class="btn amarelo">⇪ Subir relatório (Excel)<input id="ag-arquivo" type="file" accept=".xlsx,.xls,.xlsm" hidden></label>
+            <button id="ag-rodar" class="btn contorno" type="button">🤖 Rodar o robô agora</button>
+            <span class="s" id="ag-robo"></span>
+          </div>
+        </section>
+
+        <section class="kpis kpis-cf" id="ag-cards">
+          <button class="kpi ativa" data-ag="tratar"><span class="kpi-rot">Não entregues</span><b class="kpi-num"></b><small>para tratar</small><i>↗</i></button>
+          <button class="kpi vermelho" data-ag="insucesso"><span class="kpi-rot">Insucesso na entrega</span><b class="kpi-num"></b><small>vão para Ocorrências</small><i>↗</i></button>
+          <button class="kpi laranja" data-ag="conferir"><span class="kpi-rot">Conferir à mão</span><b class="kpi-num"></b><small>sem NF nova, sem rastreio ou erro</small><i>↗</i></button>
+          <button class="kpi verde" data-ag="baixa"><span class="kpi-rot">Entregues · baixa feita</span><b class="kpi-num"></b><small>Nota entregue → Sim</small><i>↗</i></button>
+          <button class="kpi" data-ag="robo"><span class="kpi-rot">Aguardando o robô</span><b class="kpi-num"></b><small>ainda não olhados</small><i>↗</i></button>
+          <button class="kpi" data-ag="todos"><span class="kpi-rot">Todos</span><b class="kpi-num"></b><small>do último relatório</small><i>↗</i></button>
+        </section>
+
+        <section class="cartao">
+          <div class="cartao-topo">
+            <div><h2 id="ag-titulo">Tickets</h2><p class="sub">Digite a observação e clique fora (ou Enter) para salvar. Todos veem.</p></div>
+            <div class="tn-topo-acoes"><input id="ag-busca" type="search" placeholder="Procurar ticket, pedido ou NF">
+            <button id="ag-baixar" class="btn contorno">Baixar Excel</button></div>
+          </div>
+          <div class="tabela-wrap">
+            <table class="tabela-pedidos tabela-ag">
+              <thead><tr><th>Ticket</th><th>Tipo</th><th>Pedido</th><th>Nova NF</th><th>Transportadora</th><th>Status no rastreio</th><th>Robô</th><th>Observação</th></tr></thead>
+              <tbody id="ag-linhas"></tbody>
+            </table>
+            <p id="ag-vazio" class="vazio" hidden>Nenhum ticket.</p>
+          </div>
+        </section>
+      </div>
     </main>
 
     <main class="conteudo" id="pagina-sac" hidden>
@@ -738,9 +781,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=70"></script>
-  <script src="mapa-brasil.js?v=70"></script>
-  <script src="troca-notas.js?v=70"></script>
-  <script src="app.js?v=70"></script>
+  <script src="config.js?v=71"></script>
+  <script src="mapa-brasil.js?v=71"></script>
+  <script src="troca-notas.js?v=71"></script>
+  <script src="app.js?v=71"></script>
 </body>
 </html>

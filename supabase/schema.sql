@@ -940,3 +940,163 @@ begin
 end $$;
 revoke all on function public.salvar_senha_rastreio(text, text) from public, anon;
 grant execute on function public.salvar_senha_rastreio(text, text) to authenticated;
+
+-- =====================================================================
+-- 24) Fila Aguardando entrega (aba Alterar pedidos): a Logística sobe o relatório de tickets da fila
+--     "Aguardando entrega" do Multi360; o robô lê no chat do ticket a nova NF ("NF 123-7 emitida para o pedido"),
+--     confere no rastreio se foi entregue e, se foi, executa a ação "Nota entregue?" → Sim com o print do rastreio.
+--     A observação de cada ticket fica guardada até a baixa (não some quando o relatório é enviado de novo).
+create table if not exists public.aguardando_entrega (
+  ticket          text primary key,
+  tipo            text,
+  tipo_reposicao  text,
+  motivo          text,
+  pedido          text,            -- pedido canal
+  pedido_promob   text,
+  nf_original     text,
+  transportadora  text,            -- "Transportadora do Ticket" (todas as linhas do ticket, separadas por " / ")
+  transp_promob   text,
+  ticket_criado   timestamptz,
+  na_planilha     boolean not null default true,
+  nf_nova         text,            -- lida pelo robô no chat do ticket
+  nf_emitida_em   timestamptz,
+  transp_chat     text,            -- "Transportadora definida: ..." do chat
+  fila_360        text,            -- fila em que o robô achou o ticket
+  situacao        text not null default 'pendente',  -- pendente | sem nf nova | entregue | nao entregue | sem cte | sem rastreio | sem permissao
+  fonte           text,            -- SSW | Jadlog | Bento Brasil | Trânsito Brasil
+  ultimo_evento   text,
+  data_evento     date,
+  data_entrega    date,
+  insucesso       text,            -- micro status de insucesso (vai para a aba Ocorrências)
+  detalhe         jsonb,
+  consultado_em   timestamptz,
+  baixa_status    text,            -- feita | teste | conferir | erro
+  baixa_msg       text,
+  baixa_em        timestamptz,
+  importado_em    timestamptz not null default now(),
+  importado_por   text
+);
+alter table public.aguardando_entrega enable row level security;
+revoke all on public.aguardando_entrega from anon;
+grant select on public.aguardando_entrega to authenticated;
+drop policy if exists "logistica le" on public.aguardando_entrega;
+create policy "logistica le" on public.aguardando_entrega for select to authenticated using ((select not public.e_sac()));
+
+create table if not exists public.aguardando_obs (
+  ticket         text primary key,
+  observacao     text not null,
+  atualizado_por text,
+  atualizado_em  timestamptz not null default now()
+);
+alter table public.aguardando_obs enable row level security;
+revoke all on public.aguardando_obs from anon;
+grant select on public.aguardando_obs to authenticated;
+drop policy if exists "logistica le" on public.aguardando_obs;
+create policy "logistica le" on public.aguardando_obs for select to authenticated using ((select not public.e_sac()));
+
+create table if not exists public.aguardando_info (
+  id integer primary key default 1, arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.aguardando_info enable row level security;
+revoke all on public.aguardando_info from anon;
+grant select on public.aguardando_info to authenticated;
+drop policy if exists "logistica le" on public.aguardando_info;
+create policy "logistica le" on public.aguardando_info for select to authenticated using ((select not public.e_sac()));
+
+-- o relatório atualiza os dados do ticket e mantém o que o robô já achou; ticket que saiu do relatório fica escondido
+create or replace function public.importar_aguardando(itens jsonb, arquivo text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.aguardando_entrega set na_planilha = false
+  where ticket not in (select x ->> 'ticket' from jsonb_array_elements(itens) x);
+  insert into public.aguardando_entrega (ticket, tipo, tipo_reposicao, motivo, pedido, pedido_promob, nf_original, transportadora,
+    transp_promob, ticket_criado, na_planilha, importado_por)
+  select x ->> 'ticket', x ->> 'tipo', x ->> 'tipo_reposicao', x ->> 'motivo', x ->> 'pedido', x ->> 'pedido_promob', x ->> 'nf_original',
+         x ->> 'transportadora', x ->> 'transp_promob', nullif(x ->> 'ticket_criado', '')::timestamptz, true, auth.jwt() ->> 'email'
+  from jsonb_array_elements(itens) x where coalesce(x ->> 'ticket', '') <> ''
+  on conflict (ticket) do update set tipo = excluded.tipo, tipo_reposicao = excluded.tipo_reposicao, motivo = excluded.motivo,
+    pedido = excluded.pedido, pedido_promob = excluded.pedido_promob, nf_original = excluded.nf_original,
+    transportadora = excluded.transportadora, transp_promob = excluded.transp_promob, ticket_criado = excluded.ticket_criado,
+    na_planilha = true, importado_em = now(), importado_por = excluded.importado_por;
+  get diagnostics n = row_count;
+  insert into public.aguardando_info (id, arquivo, linhas, enviado_por, enviado_em)
+  values (1, arquivo, jsonb_array_length(itens), auth.jwt() ->> 'email', now())
+  on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  return n;
+end $$;
+revoke all on function public.importar_aguardando(jsonb, text) from public, anon;
+grant execute on function public.importar_aguardando(jsonb, text) to authenticated;
+
+-- o robô grava o que achou (só os campos que mandar); baixa feita = a observação sai
+create or replace function public.gravar_aguardando(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.aguardando_entrega a set
+    nf_nova       = case when x ? 'nf_nova'       then x ->> 'nf_nova'                            else a.nf_nova end,
+    nf_emitida_em = case when x ? 'nf_emitida_em' then nullif(x ->> 'nf_emitida_em', '')::timestamptz else a.nf_emitida_em end,
+    transp_chat   = case when x ? 'transp_chat'   then x ->> 'transp_chat'                        else a.transp_chat end,
+    fila_360      = case when x ? 'fila_360'      then x ->> 'fila_360'                           else a.fila_360 end,
+    situacao      = case when x ? 'situacao'      then x ->> 'situacao'                           else a.situacao end,
+    fonte         = case when x ? 'fonte'         then x ->> 'fonte'                              else a.fonte end,
+    ultimo_evento = case when x ? 'ultimo_evento' then x ->> 'ultimo_evento'                      else a.ultimo_evento end,
+    data_evento   = case when x ? 'data_evento'   then nullif(x ->> 'data_evento', '')::date      else a.data_evento end,
+    data_entrega  = case when x ? 'data_entrega'  then nullif(x ->> 'data_entrega', '')::date     else a.data_entrega end,
+    insucesso     = case when x ? 'insucesso'     then x ->> 'insucesso'                          else a.insucesso end,
+    detalhe       = case when x ? 'detalhe'       then x -> 'detalhe'                             else a.detalhe end,
+    consultado_em = case when x ? 'situacao'      then now()                                      else a.consultado_em end,
+    baixa_status  = case when x ? 'baixa_status'  then x ->> 'baixa_status'                       else a.baixa_status end,
+    baixa_msg     = case when x ? 'baixa_status'  then x ->> 'baixa_msg'                          else a.baixa_msg end,
+    baixa_em      = case when x ? 'baixa_status'  then now()                                      else a.baixa_em end
+  from jsonb_array_elements(linhas) x
+  where a.ticket = x ->> 'ticket';
+  get diagnostics n = row_count;
+  delete from public.aguardando_obs o using jsonb_array_elements(linhas) x
+  where o.ticket = x ->> 'ticket' and x ->> 'baixa_status' = 'feita';
+  return n;
+end $$;
+revoke all on function public.gravar_aguardando(jsonb) from public, anon;
+grant execute on function public.gravar_aguardando(jsonb) to authenticated;
+
+create or replace function public.salvar_obs_aguardando(p_ticket text, p_obs text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if coalesce(trim(p_obs), '') = '' then delete from public.aguardando_obs where ticket = p_ticket; return; end if;
+  insert into public.aguardando_obs (ticket, observacao, atualizado_por, atualizado_em)
+  values (p_ticket, trim(p_obs), auth.jwt() ->> 'email', now())
+  on conflict (ticket) do update set observacao = excluded.observacao, atualizado_por = excluded.atualizado_por, atualizado_em = now();
+end $$;
+revoke all on function public.salvar_obs_aguardando(text, text) from public, anon;
+grant execute on function public.salvar_obs_aguardando(text, text) to authenticated;
+
+-- ao subir o relatório (ou clicar em "Rodar o robô agora"), chama o robô na hora (mesmo token da parte 13)
+create or replace function public._chamar_robo_aguardando()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"aguardando"}}'::jsonb);
+  end if;
+  return null;
+end $$;
+drop trigger if exists chamar_robo_aguardando on public.aguardando_info;
+create trigger chamar_robo_aguardando after insert or update on public.aguardando_info
+  for each statement execute function public._chamar_robo_aguardando();
+create or replace function public.rodar_robo_aguardando()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.aguardando_info set enviado_em = enviado_em where id = 1;
+end $$;
+revoke all on function public.rodar_robo_aguardando() from public, anon;
+grant execute on function public.rodar_robo_aguardando() to authenticated;

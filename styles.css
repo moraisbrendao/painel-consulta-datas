@@ -498,3 +498,7 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 @media (max-width: 800px) { .filtros-cartao.filtros-cf { grid-template-columns: 1fr; } }
 .cf-h3 { font-size: 14px; margin: 16px 0 8px; }
 .cf-hist td, .cf-hist th { font-size: 12px; }
+.tabela-ag td { vertical-align: top; }
+.tabela-ag .col-obs input { width: 100%; }
+#ag-busca { min-width: 220px; }
+.tag-ag { font-size: 11px; color: var(--texto-2); }
