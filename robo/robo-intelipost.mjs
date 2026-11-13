@@ -379,15 +379,17 @@ async function diagData() {   // por que a Entrega prev. não mudou: abre o pedi
   if (aba) await aba.close();
 }
 async function diagCep() {   // por que a simulação volta vazia: refaz a da última troca com erro, mostrando cada passo
-  const controle = async (q) => { try { log(`== controle (CEP público SP, Transiga) ${q}: prazo ${await simularPrazo("01310100", "Transiga Standard", false)}`); } catch (e) { log(`== controle ${q}:`, e.message.split("\n")[0]); } };
+  const controle = async (q) => { try { log(`== controle (CEP público SP, Transiga) ${q}: prazo ${await simularPrazo("01310100", "Transiga Standard", true)}`); } catch (e) { log(`== controle ${q}:`, e.message.split("\n")[0]); } };
   const modo = await pagina.evaluate(() => { const t = document.body.innerText; const i = t.search(/\bLive\b/); return i >= 0 ? t.slice(i, i + 20).replace(/\s+/g, " ") : "não achei"; });
+  log("Chave Live/Teste:", JSON.stringify(await pagina.evaluate(() => { const e = [...document.querySelectorAll("body *")].filter((x) => x.children.length < 6 && /^\s*Live\s*Teste/i.test(x.innerText || "")).pop();
+    if (!e) return null; return { html: e.outerHTML.replace(/\d{5,}/g, "#").slice(0, 700) }; })));
   log("Topo (Live/Teste):", modo, "· chaves marcadas no topo:", await pagina.evaluate(() => [...document.querySelectorAll("header input[type=checkbox], nav input[type=checkbox]")].map((e) => e.checked).join(",")));
   await controle("logo depois do login");
   const t = process.env.TICKET ? await trocaDoTicket(process.env.TICKET) : await ultimaTrocaComErro();
   if (t && process.env.METODO) t.robo_metodo = process.env.METODO;
   log("Método do ticket:", t && t.robo_metodo);
   if (!t) { log("Nenhuma troca com erro."); return; }
-  { const { aba } = await abrirPedido(t.pedido, false, true); if (aba) await aba.close(); }
+  { const { aba } = await abrirPedido(t.pedido, false, true, true); if (aba) await aba.close(); }
   await controle("depois de abrir um pedido");
   // CEP na Busca por Lote (linha do pedido) — compara com o do quadro Destinatário, sem mostrar
   await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
@@ -403,7 +405,7 @@ async function diagCep() {   // por que a simulação volta vazia: refaz a da ú
     return { th, cep: i >= 0 ? (td[i] || "").replace(/\D/g, "") : "", qtd: ceps.length, todos: ceps.map((c) => c.replace(/\D/g, "")) };
   });
   log("Busca por Lote · colunas:", lote.th.join(" / "), `· coluna CEP ${lote.cep ? "com valor" : "não achei"} · CEPs na linha: ${lote.qtd}`);
-  const { tela, aba } = await abrirPedido(t.pedido, false, true);
+  const { tela, aba } = await abrirPedido(t.pedido, false, true, true);
   const info = await tela.evaluate(() => { const txt = document.body.innerText; const m = txt.match(/Destinat[aá]rio[\s\S]{0,2000}?CEP:\s*([^\n]{0,20})/i); return { bruto: m ? m[1] : "", uf: (txt.match(/Destinat[aá]rio[\s\S]{0,2500}?Estado:\s*([A-Z]{2})/i) || [])[1] || "?" }; });
   if (aba) await aba.close();
   const cep = info.bruto.replace(/\D/g, "");
