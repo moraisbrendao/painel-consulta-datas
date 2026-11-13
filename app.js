@@ -236,9 +236,10 @@
     amanha: (p) => p._diasEf === 1,
     vencem: (p) => p._diasEf !== null && p._diasEf >= 0 && p._diasEf <= 5,
     parados: (p) => p._parado !== null && p._parado > DIAS_PARADO,
+    ssw: (p) => !!(p._t && p._t.nova_data && p._t.nova_data_fonte === "ssw"),
     todos: () => true,
   };  const filtroVisao = (v) => { const ks = v.split("+"); return (p) => ks.some((k) => naVisao[k](p)); };
-  const NOMES_VISAO = { vencem: "Vencem em até 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", todos: "Pedidos em aberto" };
+  const NOMES_VISAO = { vencem: "Vencem em até 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", ssw: "Nova data do SSW", todos: "Pedidos em aberto" };
   const nomeVisao = () => visao.split("+").map((k) => NOMES_VISAO[k]).join(" + ");
 
 
@@ -694,7 +695,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=74");
+        const w = new Worker("leitor-intelipost.js?v=75");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -2122,7 +2123,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=74");
+        const w = new Worker("leitor-conferencia.js?v=75");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
