@@ -1376,7 +1376,7 @@
     const m = new Map();
     L.forEach((r) => {
       const t = tNome(r);
-      const x = m.get(t) || { t, vol: 0, ab: 0, atr: 0, risco: 0, ent: 0, entOk: 0, entAtr: 0, somaAtr: 0, nAtr: 0, can: 0, meses: new Map() };
+      const x = m.get(t) || { t, vol: 0, ab: 0, atr: 0, risco: 0, ent: 0, entOk: 0, entAtr: 0, somaAtr: 0, nAtr: 0, can: 0, meses: new Map(), ufs: new Map() };
       if (r._sit === "cancelado") { x.can++; m.set(t, x); return; }
       x.vol++;
       if (!r._fechado) x.ab++;
@@ -1386,6 +1386,10 @@
       if (r._sit === "ent_prazo") x.entOk++;
       if (r._sit === "ent_atraso") { x.entAtr++; if (r.entrega && r._prom) { const d = diasEntre(r._prom, r.entrega); if (d > 0) { x.somaAtr += d; x.nAtr++; } } }
       const mes = (r.criado || "").slice(0, 7); if (mes) x.meses.set(mes, (x.meses.get(mes) || 0) + 1);
+      const uf = r.uf || "(sem UF)", u = x.ufs.get(uf) || { vol: 0, ab: 0, atr: 0, ent: 0, ok: 0 };
+      u.vol++; if (!r._fechado) u.ab++; if (r._atraso > 0) u.atr++;
+      if (r._sit === "ent_prazo" || r._sit === "ent_atraso") u.ent++; if (r._sit === "ent_prazo") u.ok++;
+      x.ufs.set(uf, u);
       m.set(t, x);
     });
     return [...m.values()].map((x) => ({ ...x, med: x.nAtr ? x.somaAtr / x.nAtr : null, sla: x.ent ? x.entOk / x.ent : null }));
@@ -1437,13 +1441,36 @@
     if (sel.length < 2) return;
     $("t-cmp-cab").innerHTML = `<tr><th></th>${sel.map((x) => `<th class="num"><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</th>`).join("")}</tr>`;
     $("t-cmp-linhas").innerHTML = T_METRICAS.map(([nome, f, fm, melhor]) => {
-      const vs = sel.map(f), ok = vs.filter((v) => v !== null);
-      const alvo = melhor && ok.length > 1 ? (melhor === "max" ? Math.max(...ok) : Math.min(...ok)) : null;
-      const unico = alvo !== null && ok.filter((v) => v === alvo).length < ok.length;
-      return `<tr><td>${nome}</td>${vs.map((v) => `<td class="num neutro${unico && v === alvo ? " melhor" : ""}">${fm(v)}</td>`).join("")}</tr>`;
+      return `<tr><td>${nome}</td>${celulasMelhor(sel.map(f), fm, melhor)}</tr>`;
     }).join("");
-    grafMeses(sel);
+    grafMeses(sel); tabelaUF(sel);
   }
+  // células de uma linha da comparação, com a melhor em negrito (pelo valor que aparece; empate de todas = nenhuma)
+  function celulasMelhor(vs, fm, melhor) {
+    const ok = vs.filter((v) => v !== null);
+    const alvo = melhor && ok.length > 1 ? (melhor === "max" ? Math.max(...ok) : Math.min(...ok)) : null;
+    const txtAlvo = alvo === null ? null : fm(alvo), iguais = ok.filter((v) => fm(v) === txtAlvo).length;
+    const marca = alvo !== null && iguais < ok.length;
+    return vs.map((v) => `<td class="num neutro${marca && v !== null && fm(v) === txtAlvo ? " melhor" : ""}">${fm(v)}</td>`).join("");
+  }
+  // por UF: um estado por linha, as transportadoras comparadas nas colunas
+  let tUfMet = "vol";
+  const T_UF_MET = {
+    vol: ["Volume", (u) => (u ? u.vol : null), fmt, "max"], ab: ["Em aberto", (u) => (u ? u.ab : null), fmt, null],
+    atr: ["Atrasados", (u) => (u ? u.atr : null), fmt, "min"],
+    patr: ["% atrasados", (u) => (u && u.ab ? u.atr / u.ab : null), (v) => (v === null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%"), "min"],
+    sla: ["SLA entrega", (u) => (u && u.ent ? u.ok / u.ent : null), pct0, "max"],
+  };
+  function tabelaUF(sel) {
+    const [, f, fm, melhor] = T_UF_MET[tUfMet];
+    const tot = new Map(); sel.forEach((x) => x.ufs.forEach((u, uf) => tot.set(uf, (tot.get(uf) || 0) + u.vol)));
+    const ufs = [...tot.entries()].sort((a, b) => b[1] - a[1]).map(([uf]) => uf);
+    $("t-uf-met").querySelectorAll("button").forEach((b) => b.classList.toggle("ativo", b.dataset.m === tUfMet));
+    $("t-uf-cab").innerHTML = `<tr><th>UF</th>${sel.map((x) => `<th class="num"><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</th>`).join("")}</tr>`;
+    $("t-uf-linhas").innerHTML = ufs.map((uf) => `<tr><td>${esc(uf)}</td>${celulasMelhor(sel.map((x) => f(x.ufs.get(uf))), fm, melhor)}</tr>`).join("");
+  }
+  $("t-uf-met").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; tUfMet = b.dataset.m; desenharComparacao(); });
+
   // linhas: volume por mês (últimos 6 meses com pedidos), uma linha por transportadora
   function grafMeses(sel) {
     const todos = new Set(); sel.forEach((x) => x.meses.forEach((_, m) => todos.add(m)));

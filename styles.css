@@ -542,3 +542,5 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .gr-rot { font-size: 12px; fill: #374151; }
 .gr-mira { stroke: #9ca3af; stroke-width: 1; stroke-dasharray: 3 3; }
 .gr-dica { position: absolute; background: #fff; border: 1px solid var(--borda); border-radius: 8px; padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,.12); pointer-events: none; min-width: 160px; }
+.t-uf-topo { margin: 18px 0 6px; align-items: center; }
+.t-uf-topo .t-sub3 { margin: 0; }
