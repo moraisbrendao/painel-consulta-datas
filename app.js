@@ -1368,7 +1368,8 @@
   // Fonte: a mesma base da Visão Gerencial (botão "Enviar base"), com os mesmos filtros do topo.
   // Volume = pedidos sem os cancelados. Atraso médio = dias entre a data prometida e a entrega, nos entregues com atraso.
   // SLA entrega = entregues no prazo ÷ entregues.
-  const T_CORES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"];   // até 4 transportadoras na comparação (cor fica com a transportadora)
+  const T_CORES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];   // até 8 transportadoras na comparação (cor fica com a transportadora)
+  const T_MAX = T_CORES.length;
   let tStats = [], tOrdem = "vol";
   const tCmp = new Map();   // transportadora -> índice da cor
   const tNome = (r) => r.transp || "(sem transportadora)";
@@ -1418,7 +1419,7 @@
       med: (a, b) => (b.med ?? -1) - (a.med ?? -1), sla: (a, b) => (a.sla ?? 2) - (b.sla ?? 2), nome: (a, b) => a.t.localeCompare(b.t, "pt-BR") }[tOrdem];
     const linhas = tStats.filter((x) => x.vol).sort((a, b) => ord(a, b) || b.vol - a.vol);
     $("t-det-sub").textContent = `${fmt(linhas.length)} transportadoras na base`;
-    const cheio = tCmp.size >= 4;
+    const cheio = tCmp.size >= T_MAX;
     $("t-det-linhas").innerHTML = linhas.map((x) => { const c = tCmp.has(x.t);
       return `<tr><td class="cmp"><input type="checkbox" data-cmp="${esc(x.t)}" ${c ? "checked" : ""} ${!c && cheio ? "disabled" : ""} aria-label="Comparar ${esc(x.t)}">${c ? `<i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>` : ""}</td>
         <td class="clic" data-ver="${esc(x.t)}">${esc(x.t)}</td><td class="num neutro">${fmt(x.vol)}</td><td class="num neutro">${fmt(x.ab)}</td>
@@ -1435,8 +1436,8 @@
     const sel = [...tCmp.keys()].map((t) => tStats.find((x) => x.t === t)).filter(Boolean);
     $("t-cmp-chips").innerHTML = sel.map((x) => `<span class="t-chip"><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}<button type="button" data-tirar-cmp="${esc(x.t)}" aria-label="Tirar ${esc(x.t)}">×</button></span>`).join("");
     const livres = tStats.filter((x) => x.vol && !tCmp.has(x.t)).sort((a, b) => b.vol - a.vol);
-    $("t-cmp-add").innerHTML = `<option value="">${tCmp.size >= 4 ? "Máximo de 4" : "Escolha…"}</option>` + (tCmp.size >= 4 ? "" : livres.map((x) => `<option>${esc(x.t)}</option>`).join(""));
-    $("t-cmp-add").disabled = tCmp.size >= 4;
+    $("t-cmp-add").innerHTML = `<option value="">${tCmp.size >= T_MAX ? "Máximo de " + T_MAX : "Escolha…"}</option>` + (tCmp.size >= T_MAX ? "" : livres.map((x) => `<option>${esc(x.t)}</option>`).join(""));
+    $("t-cmp-add").disabled = tCmp.size >= T_MAX;
     $("t-cmp-vazio").hidden = sel.length >= 2; $("t-cmp-corpo").hidden = sel.length < 2;
     if (sel.length < 2) return;
     $("t-cmp-cab").innerHTML = `<tr><th></th>${sel.map((x) => `<th class="num"><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</th>`).join("")}</tr>`;
@@ -1477,7 +1478,7 @@
     const ms = [...todos].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
     const box = $("t-cmp-graf");
     if (ms.length < 2) { box.innerHTML = `<p class="vazio">Sem meses suficientes para o gráfico (precisa da Data de Criação na base).</p>`; return; }
-    const W = 760, H = 260, E = 44, D = 150, T = 16, B = 30, pw = W - E - D, ph = H - T - B;
+    const W = 760, H = 260, E = 44, D = sel.length <= 4 ? 150 : 20, T = 16, B = 30, pw = W - E - D, ph = H - T - B;
     const max = Math.max(1, ...sel.flatMap((x) => ms.map((m) => x.meses.get(m) || 0)));
     const bruto = max / 4, p10 = Math.pow(10, Math.floor(Math.log10(bruto)));
     const passo = Math.max(1, [1, 2, 2.5, 5, 10].map((k) => k * p10).find((k) => k >= bruto)), topo = passo * 4;
@@ -1494,7 +1495,7 @@
       g += `<polyline points="${pts.join(" ")}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round"/>`;
       ms.forEach((m, i) => { g += `<circle cx="${X(i)}" cy="${Y(x.meses.get(m) || 0)}" r="4" fill="${cor}" stroke="#fff" stroke-width="2"/>`; });
     });
-    fins.forEach(({ x, y }) => { const nome = x.t.length > 20 ? x.t.slice(0, 19) + "…" : x.t; g += `<text x="${E + pw + 10}" y="${y + 4}" class="gr-rot">${esc(nome)}</text>`; });
+    if (sel.length <= 4) fins.forEach(({ x, y }) => { const nome = x.t.length > 20 ? x.t.slice(0, 19) + "…" : x.t; g += `<text x="${E + pw + 10}" y="${y + 4}" class="gr-rot">${esc(nome)}</text>`; });
     ms.forEach((m, i) => { const w = pw / (ms.length - 1); g += `<rect class="gr-alvo" data-mes="${m}" x="${X(i) - w / 2}" y="${T}" width="${w}" height="${ph}" fill="transparent"/>`; });
     const legenda = sel.map((x) => `<span><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</span>`).join("");
     box.innerHTML = `<div class="gr-legenda">${legenda}</div><div class="gr-area"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Volume por mês das transportadoras comparadas">${g}<line class="gr-mira" x1="0" x2="0" y1="${T}" y2="${T + ph}" visibility="hidden"/></svg><div class="gr-dica" hidden></div></div>`;
@@ -1510,9 +1511,9 @@
     });
     svg.addEventListener("mouseleave", () => { dica.hidden = true; mira.setAttribute("visibility", "hidden"); });
   }
-  function corLivre() { const usadas = new Set(tCmp.values()); return [0, 1, 2, 3].find((i) => !usadas.has(i)); }
+  function corLivre() { const usadas = new Set(tCmp.values()); return T_CORES.findIndex((_, i) => !usadas.has(i)); }
   function alternarCmp(t, ligar) {
-    if (ligar && !tCmp.has(t) && tCmp.size < 4) tCmp.set(t, corLivre());
+    if (ligar && !tCmp.has(t) && tCmp.size < T_MAX) tCmp.set(t, corLivre());
     if (!ligar) tCmp.delete(t);
     desenharDetalhe(); desenharComparacao();
   }
