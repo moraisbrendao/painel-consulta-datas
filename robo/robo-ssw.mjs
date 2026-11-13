@@ -88,7 +88,8 @@ if (MODO === "diag-st") {
 }
 if (MODO === "diag-link") {
   await entrarSupabase();
-  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=eq.Vm%20Transportes&micro_status=eq.ENTRADA%20FILIAL&limit=3");
+  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.vm*&limit=3");
+  log("pedidos VM:", L.length);
   for (const l of L) {
     const [num, ser] = String(l.nf).split("-"); const p = await consultar(cnpjDaSerie(ser), [num.trim()]);
     const corpo = p.txt.slice(p.txt.search(/N Fiscal/i));
