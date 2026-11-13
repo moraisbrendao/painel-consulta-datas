@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=72">
+  <link rel="stylesheet" href="styles.css?v=73">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -582,6 +582,7 @@
           <button class="btn amarelo" data-ap="data">📅 Nova previsão de entrega</button>
           <button class="btn contorno" data-ap="troca">⇄ Troca de notas</button>
           <button class="btn contorno" data-ap="ag">🚚 Fila Aguardando entrega</button>
+          <button class="btn contorno" data-ap="at">🔧 Aguardando entrega AT</button>
         </div>
       </div>
 
@@ -676,8 +677,8 @@
           <div class="ap-cab">
             <span class="ap-ic">🚚</span>
             <div>
-              <h2>Fila Aguardando entrega</h2>
-              <p class="sub">Suba o relatório de tickets da fila "Aguardando entrega" do Multi360. O robô abre cada ticket, pega no chat a nova NF ("NF … emitida para o pedido"), confere no rastreio e, se já foi entregue, executa a ação "Nota entregue?" → Sim com o print do rastreio. Os não entregues ficam aqui para tratar; a observação fica guardada até a baixa, mesmo subindo o relatório de novo. Insucesso na entrega vai para a aba Ocorrências.</p>
+              <h2 id="ag-h2">Fila Aguardando entrega</h2>
+              <p class="sub"><span id="ag-qual">Suba o relatório de tickets da fila "Aguardando entrega" do Multi360.</span> O robô abre cada ticket, pega no chat a nova NF ("NF … emitida para o pedido"), confere no rastreio e, se já foi entregue, executa a ação "Nota entregue?" → Sim com o print do rastreio. Os não entregues ficam aqui para tratar; a observação fica guardada até a baixa, mesmo subindo o relatório de novo. Insucesso na entrega vai para a aba Ocorrências.</p>
               <p id="ag-info" class="info-base"></p>
             </div>
           </div>
@@ -783,9 +784,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=72"></script>
-  <script src="mapa-brasil.js?v=72"></script>
-  <script src="troca-notas.js?v=72"></script>
-  <script src="app.js?v=72"></script>
+  <script src="config.js?v=73"></script>
+  <script src="mapa-brasil.js?v=73"></script>
+  <script src="troca-notas.js?v=73"></script>
+  <script src="app.js?v=73"></script>
 </body>
 </html>

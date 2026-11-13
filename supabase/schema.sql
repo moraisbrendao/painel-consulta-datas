@@ -1157,3 +1157,39 @@ end $$;
 drop trigger if exists chamar_robo_conferir_tudo on public.conferencia_pedido;
 create trigger chamar_robo_conferir_tudo after update on public.conferencia_pedido
   for each row execute function public._chamar_robo_conferir_tudo();
+
+-- =====================================================================
+-- 26) Fila Aguardando entrega (AT): mesmo fluxo da parte 24 para o relatório da fila "Aguardando entrega (AT)"
+--     (Assistência Técnica). Cada relatório só mexe nos tickets da própria fila.
+alter table public.aguardando_entrega add column if not exists fila_rel text not null default 'AE';   -- AE | AT
+drop function if exists public.importar_aguardando(jsonb, text);
+create or replace function public.importar_aguardando(itens jsonb, arquivo text, p_fila text default 'AE')
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer; f text := case when p_fila = 'AT' then 'AT' else 'AE' end;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.aguardando_entrega set na_planilha = false
+  where fila_rel = f and ticket not in (select x ->> 'ticket' from jsonb_array_elements(itens) x);
+  insert into public.aguardando_entrega (ticket, tipo, tipo_reposicao, motivo, pedido, pedido_promob, nf_original, transportadora,
+    transp_promob, ticket_criado, na_planilha, importado_por, fila_rel)
+  select x ->> 'ticket', x ->> 'tipo', x ->> 'tipo_reposicao', x ->> 'motivo', x ->> 'pedido', x ->> 'pedido_promob', x ->> 'nf_original',
+         x ->> 'transportadora', x ->> 'transp_promob', nullif(x ->> 'ticket_criado', '')::timestamptz, true, auth.jwt() ->> 'email', f
+  from jsonb_array_elements(itens) x where coalesce(x ->> 'ticket', '') <> ''
+  on conflict (ticket) do update set tipo = excluded.tipo, tipo_reposicao = excluded.tipo_reposicao, motivo = excluded.motivo,
+    pedido = excluded.pedido, pedido_promob = excluded.pedido_promob, nf_original = excluded.nf_original,
+    transportadora = excluded.transportadora, transp_promob = excluded.transp_promob, ticket_criado = excluded.ticket_criado,
+    na_planilha = true, importado_em = now(), importado_por = excluded.importado_por, fila_rel = excluded.fila_rel;
+  get diagnostics n = row_count;
+  insert into public.aguardando_info (id, arquivo, linhas, enviado_por, enviado_em)
+  values (case when f = 'AT' then 2 else 1 end, arquivo, jsonb_array_length(itens), auth.jwt() ->> 'email', now())
+  on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  return n;
+end $$;
+revoke all on function public.importar_aguardando(jsonb, text, text) from public, anon;
+grant execute on function public.importar_aguardando(jsonb, text, text) to authenticated;
+create or replace function public.rodar_robo_aguardando()
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.aguardando_info set enviado_em = enviado_em where true;
+end $$;

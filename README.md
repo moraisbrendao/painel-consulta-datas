@@ -197,3 +197,8 @@ os de insucesso na entrega vão para a aba *Ocorrências*. Usa os segredos MULTI
 Rode a parte 25 do `supabase/schema.sql`. O botão "Conferir tudo agora" chama o robô na hora (modo `conferencia-tudo`) para conferir
 de novo todos os pedidos da lista que não estão entregues. Enquanto essa conferência estiver em andamento, as outras rodadas do SSW
 param para não passar do limite do SSW, e o botão mostra o andamento em vez de recomeçar.
+
+## 26. Fila Aguardando entrega (AT)
+
+Rode a parte 26 do `supabase/schema.sql`. Em *Alterar pedidos*, o botão "Aguardando entrega AT" faz o mesmo da Fila Aguardando
+entrega com o relatório da fila "Aguardando entrega (AT)" (Assistência Técnica). Cada relatório só mexe nos tickets da própria fila.

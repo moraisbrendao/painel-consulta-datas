@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=72");
+        const w = new Worker("leitor-intelipost.js?v=73");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1600,8 +1600,12 @@
   });
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = b.dataset.ap !== "ag";
-    if (b.dataset.ap === "troca") carregarTrocas(); if (b.dataset.ap === "ag") carregarAguardando(); });
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap);
+    if (b.dataset.ap === "troca") carregarTrocas();
+    if (b.dataset.ap === "ag" || b.dataset.ap === "at") { agFila = b.dataset.ap === "at" ? "AT" : "AE"; agCard = "tratar"; agBusca = ""; $("ag-busca").value = "";
+      $("ag-h2").textContent = agFila === "AT" ? "Aguardando entrega AT" : "Fila Aguardando entrega";
+      $("ag-qual").textContent = `Suba o relatório de tickets da fila "${agFila === "AT" ? "Aguardando entrega (AT)" : "Aguardando entrega"}" do Multi360.`;
+      $("ag-linhas").innerHTML = ""; carregarAguardando(); } });
   setInterval(() => { if (paginaAtual === "alterar" && !document.hidden) carregarAlterar(true); }, 60000);
 
   // ---------------- troca de notas (reposição TOTAL e PARCIAL) ----------------
@@ -1819,7 +1823,7 @@
 
   // ---------------- Fila Aguardando entrega (relatório de tickets do Multi360) ----------------
   // O robô (modo "aguardando" do Robô do SSW) lê a nova NF no chat do ticket, confere no rastreio e dá a baixa ("Nota entregue?" → Sim).
-  let agLista = [], agObs = new Map(), agInfo = null, agCard = "tratar", agBusca = "";
+  let agLista = [], agObs = new Map(), agInfo = null, agCard = "tratar", agBusca = "", agFila = "AE";   // AE = Aguardando entrega · AT = Aguardando entrega (AT)
   const agTransp = (t) => t.transp_chat || String(t.transportadora || "").split(" / ")[0] || "";
   function agGrupo(t) {
     if (t.baixa_status === "feita") return "baixa";
@@ -1854,9 +1858,11 @@
   }
   async function carregarAguardando() {
     try {
-      const [lista, obs, inf] = await Promise.all([buscarTudo("aguardando_entrega", "ticket"), buscarTudo("aguardando_obs", "ticket"), sb.from("aguardando_info").select("*").limit(1)]);
-      agLista = lista.filter((t) => t.na_planilha); agObs = new Map(obs.map((o) => [o.ticket, o])); agInfo = (inf.data && inf.data[0]) || null;
-      agOc = agLista.filter((t) => t.insucesso && t.situacao !== "entregue");   // aba Ocorrências já vê os novos insucessos
+      const [lista, obs, inf] = await Promise.all([buscarTudo("aguardando_entrega", "ticket"), buscarTudo("aguardando_obs", "ticket"), sb.from("aguardando_info").select("*")]);
+      const ativos = lista.filter((t) => t.na_planilha);
+      agLista = ativos.filter((t) => (t.fila_rel || "AE") === agFila); agObs = new Map(obs.map((o) => [o.ticket, o]));
+      agInfo = ((inf.data || []).find((x) => x.id === (agFila === "AT" ? 2 : 1))) || null;
+      agOc = ativos.filter((t) => t.insucesso && t.situacao !== "entregue");   // aba Ocorrências já vê os novos insucessos (das duas filas)
     } catch (err) {
       $("ag-info").textContent = /aguardando|does not exist|schema cache/i.test(err.message || "") ? "Para usar a Fila Aguardando entrega, rode a parte 24 do supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
       return;
@@ -1922,19 +1928,19 @@
       const porTk = new Map();
       rows.slice(iCab + 1).forEach((r) => {
         if (!r) return; const tk = String(r[c.tk] ?? "").trim().replace(/\.0+$/, ""); if (!tk) return;
-        if (c.fila >= 0 && r[c.fila] && norm(r[c.fila]) !== "AGUARDANDO ENTREGA") { foraFila++; return; }
+        if (c.fila >= 0 && r[c.fila] && norm(r[c.fila]) !== (agFila === "AT" ? "AGUARDANDO ENTREGA (AT)" : "AGUARDANDO ENTREGA")) { foraFila++; return; }
         const v = (i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : "");
         const ant = porTk.get(tk); if (ant) { const t = v(c.tp); if (t && !ant.transportadora.split(" / ").includes(t)) ant.transportadora += " / " + t; return; }
         porTk.set(tk, { ticket: tk, tipo: v(c.tipo), tipo_reposicao: v(c.rep), motivo: v(c.mot), pedido: v(c.ped), pedido_promob: v(c.pp), nf_original: v(c.nf),
           transportadora: v(c.tp), transp_promob: v(c.tpp), ticket_criado: c.cri >= 0 ? iso(r[c.cri]) : null });
       });
       itens = [...porTk.values()];
-      if (!itens.length) throw new Error("O relatório não tem tickets da fila Aguardando entrega.");
+      if (!itens.length) throw new Error(`O relatório não tem tickets da fila ${agFila === "AT" ? "Aguardando entrega (AT)" : "Aguardando entrega"}${foraFila ? " (as linhas são de outra fila: confira se subiu no botão certo)" : ""}.`);
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    if (!confirm(`${arq.name}\n\n${fmt(itens.length)} ticket(s) na fila Aguardando entrega${foraFila ? ` (${fmt(foraFila)} linha(s) de outra fila ficam de fora)` : ""}.\n\nO robô vai abrir os tickets, conferir o rastreio da nova NF e dar baixa nos entregues. As observações continuam salvas. Enviar?`)) return;
-    const { error } = await sb.rpc("importar_aguardando", { itens, arquivo: arq.name });
-    if (error) return toast("Erro ao enviar: " + error.message + (/importar_aguardando|schema cache/i.test(error.message) ? " (rode a parte 24 do supabase/schema.sql)" : ""), true);
+    if (!confirm(`${arq.name}\n\n${fmt(itens.length)} ticket(s) na fila ${agFila === "AT" ? "Aguardando entrega (AT)" : "Aguardando entrega"}${foraFila ? ` (${fmt(foraFila)} linha(s) de outra fila ficam de fora)` : ""}.\n\nO robô vai abrir os tickets, conferir o rastreio da nova NF e dar baixa nos entregues. As observações continuam salvas. Enviar?`)) return;
+    const { error } = await sb.rpc("importar_aguardando", agFila === "AT" ? { itens, arquivo: arq.name, p_fila: "AT" } : { itens, arquivo: arq.name });
+    if (error) return toast("Erro ao enviar: " + error.message + (/importar_aguardando|schema cache|p_fila/i.test(error.message) ? ` (rode a parte ${agFila === "AT" ? "26" : "24"} do supabase/schema.sql)` : ""), true);
     toast(`${fmt(itens.length)} ticket(s) enviados. O robô começa em 1 ou 2 minutos.`); await carregarAguardando();
   });
   $("ag-baixar").addEventListener("click", () => {
@@ -1943,7 +1949,7 @@
     const linhas = [["Ticket", "Tipo", "Tipo de reposição", "Pedido", "Pedido Promob", "NF antiga", "Nova NF", "NF emitida em", "Transportadora", "Status no rastreio", "Último evento", "Data do evento", "Data de entrega", "Insucesso", "Fonte", "Robô", "Observação", "Observação por"]]
       .concat(L.map((t) => { const o = agObs.get(t.ticket) || {}; return [t.ticket, t.tipo, t.tipo_reposicao, t.pedido, t.pedido_promob, t.nf_original, t.nf_nova, br(t.nf_emitida_em), agTransp(t), SIT[t.situacao] || t.situacao, t.ultimo_evento, br(t.data_evento), br(t.data_entrega), t.insucesso, t.fonte, [t.baixa_status, t.baixa_msg].filter(Boolean).join(" · "), o.observacao || "", o.atualizado_por || ""]; }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Aguardando entrega");
-    XLSX.writeFile(wb, `aguardando_entrega_${hojeISO()}.xlsx`);
+    XLSX.writeFile(wb, `aguardando_entrega${agFila === "AT" ? "_AT" : ""}_${hojeISO()}.xlsx`);
   });
   setInterval(() => { if (paginaAtual === "alterar" && !$("ap-sec-ag").hidden && !document.hidden && !(document.activeElement && document.activeElement.dataset && document.activeElement.dataset.agObs)) carregarAguardando(); }, 60000);
   $("e-transp-exportar").addEventListener("click", () => {
@@ -2116,7 +2122,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=72");
+        const w = new Worker("leitor-conferencia.js?v=73");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);

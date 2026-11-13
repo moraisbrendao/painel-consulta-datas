@@ -25,11 +25,12 @@ export async function rodar(R) {
   const { chamar, log, jadlog, bento, transito, pagina, lerEntrega, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
   const REAL = MODO === "aguardando" && LIBERADO;
   const LIMITE = Number(process.env.SSW_LIMITE || 0);
+  const FILA = /^(AE|AT)$/i.test(process.env.TRANSP || "") ? process.env.TRANSP.toUpperCase() : "";   // teste: só uma fila (AE = Aguardando entrega, AT = Aguardando entrega (AT))
   await carregarSenhasDB();
   let L = [];
-  for (let de = 0; ; de += 1000) { const P = await chamar(`aguardando_entrega?select=*&na_planilha=eq.true&or=(baixa_status.is.null,baixa_status.neq.feita)&order=ticket_criado.asc.nullslast,ticket&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
+  for (let de = 0; ; de += 1000) { const P = await chamar(`aguardando_entrega?select=*&na_planilha=eq.true${FILA ? `&fila_rel=eq.${FILA}` : ""}&or=(baixa_status.is.null,baixa_status.neq.feita)&order=ticket_criado.asc.nullslast,ticket&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
   if (LIMITE) L = L.slice(0, LIMITE);
-  log(`Aguardando entrega: ${L.length} ticket(s) para olhar · ${REAL ? "DE VERDADE (clica Sim)" : "TESTE (clica Cancelar)"}`);
+  log(`Aguardando entrega${FILA ? " " + FILA : ""}: ${L.length} ticket(s) para olhar · ${REAL ? "DE VERDADE (clica Sim)" : "TESTE (clica Cancelar)"}`);
   if (!L.length) return;
   const grava = async (linhas) => { for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_aguardando", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
 

@@ -20,7 +20,7 @@ on:
         type: string
         default: ""
       transp:
-        description: "Modo transportadora: nome (ou parte) da transportadora para conferir de novo"
+        description: "Modo transportadora: nome da transportadora · modos aguardando: AE ou AT (só uma fila)"
         type: string
         default: ""
       limite:
