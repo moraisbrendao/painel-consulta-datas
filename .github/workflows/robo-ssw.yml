@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, diag, diag-form, diag-nf, diag-nf2, diag-st]
+        options: [real, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link]
         default: real
 
 concurrency:

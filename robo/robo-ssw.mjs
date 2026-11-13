@@ -86,6 +86,16 @@ if (MODO === "diag-st") {
   }
   Object.entries(resumo).forEach(([k, v]) => log("  ", v, "×", k));
 }
+if (MODO === "diag-link") {
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=eq.Vm%20Transportes&micro_status=eq.ENTRADA%20FILIAL&limit=3");
+  for (const l of L) {
+    const [num, ser] = String(l.nf).split("-"); const p = await consultar(cnpjDaSerie(ser), [num.trim()]);
+    const corpo = p.txt.slice(p.txt.search(/N Fiscal/i));
+    log("links/onclick:", tags(corpo, /<a [^>]*>|onclick=["'][^"']{0,200}["']|<form[^>]*>|<input type=.?hidden[^>]*>/gi).map((t) => t.replace(/\d{4,}/g, "#").replace(/value=["'][^"']{12,}["']/g, 'value="…"')).slice(0, 15).join(" | "));
+    log("linhas:", sohTexto(corpo).length, "· tem 'Previsao':", /previs/i.test(corpo) ? "sim" : "não");
+  }
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
