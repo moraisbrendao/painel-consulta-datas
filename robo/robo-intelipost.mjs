@@ -10,7 +10,7 @@
 import { chromium } from "playwright";
 import { entrarMulti360, olharTicket, fazerTicket } from "./multi360.mjs";
 import { createHash } from "node:crypto";
-import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro } from "./supa.mjs";
+import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro, trocaDoTicket } from "./supa.mjs";
 
 const MODO = (process.env.MODO || "diag").toLowerCase();
 const BASE = (process.env.INTELIPOST_URL || "https://secure.intelipost.com.br").replace(/\/$/, "");
@@ -342,6 +342,41 @@ async function diagStatus() {   // confere, sem salvar nada, como ficou o pedido
   log("Volumes:", vols);
   if (aba) await aba.close();
 }
+async function diagData() {   // por que a Entrega prev. não mudou: abre o pedido do ticket, tenta salvar a data e mostra o que a Intelipost respondeu
+  const t = await trocaDoTicket(process.env.TICKET || "");
+  if (!t) { log("Ticket não encontrado na troca de notas."); return; }
+  const nova = (t.robo_passos || {}).nova_data;
+  log("Tipo:", t.tipo, "· status no painel:", t.robo_status, "· tem nova data gravada:", nova ? "sim" : "não");
+  const { tela, aba } = await abrirPedido(t.pedido, false, true, true);
+  await tela.waitForTimeout(3000);
+  const ler = () => tela.evaluate(() => { const x = document.body.innerText; return {
+    cab: (x.match(/Pedido:[^(]{0,80}\(\s*([^)]+)\)/) || [])[1] || "?",
+    prev: (x.match(/Entrega prev\.:\s*([^\n]{0,25})/) || [])[1] || "?",
+    links: [...document.querySelectorAll("a[href]")].map((a) => a.href).filter((h) => /rastre|track|status|onde/i.test(h)).map((h) => { try { const u = new URL(h); return u.host + u.pathname.replace(/[^/]{5,}/g, "*"); } catch { return "?"; } }) }; });
+  const a = await ler();
+  log(`Antes: status ${a.cab} · Entrega prev. ${a.prev} · links de rastreio: ${a.links.join(" | ") || "nenhum"}`);
+  log("Botões/links com rastreio:", JSON.stringify(await tela.evaluate(() => [...document.querySelectorAll("a,button")].map((e) => (e.innerText || "").trim()).filter((x) => /rastre|track/i.test(x)).slice(0, 10))));
+  if (!nova) { if (aba) await aba.close(); return; }
+  const respostas = [];
+  tela.on("response", (r) => { if (["PUT", "POST", "PATCH"].includes(r.request().method())) respostas.push(`${r.request().method()} ${mascara(new URL(r.url()).host + new URL(r.url()).pathname)} ${r.status()}`); });
+  await tela.locator("a[ng-click^='edit_estimated_delivery_date']").first().click();
+  const campo = tela.locator("input#estimated_delivery_date").first();
+  const abriu = await campo.waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+  log("Campo de data abriu:", abriu ? "sim" : "não");
+  if (abriu) {
+    await campo.fill(`${nova}T23:59`);
+    const bt = campo.locator("xpath=ancestor::form[1]//button[@type='submit']").first();
+    log("Botão salvar:", (await bt.innerText().catch(() => "?")).trim(), "· visível:", await bt.isVisible().catch(() => false));
+    await bt.click();
+    await tela.waitForTimeout(8000);
+    log("Avisos na tela:", JSON.stringify(await tela.evaluate(() => [...document.querySelectorAll(".toast,.alert,.notification,[class*=toast],[class*=alert],.sweet-alert,.swal2-popup")].map((e) => e.innerText.trim()).filter(Boolean).slice(0, 5))));
+  }
+  log("Respostas de gravação:", respostas.length ? respostas.join(" | ") : "nenhuma");
+  await recarregar(tela);
+  const d = await ler();
+  log(`Depois: Entrega prev. ${d.prev} · mudou: ${d.prev !== a.prev ? "sim" : "não"}`);
+  if (aba) await aba.close();
+}
 async function diagCep() {   // por que a simulação volta vazia: refaz a da última troca com erro, mostrando cada passo
   const controle = async (q) => { try { log(`== controle (CEP público SP, Transiga) ${q}: prazo ${await simularPrazo("01310100", "Transiga Standard", false)}`); } catch (e) { log(`== controle ${q}:`, e.message.split("\n")[0]); } };
   const modo = await pagina.evaluate(() => { const t = document.body.innerText; const i = t.search(/\bLive\b/); return i >= 0 ? t.slice(i, i + 20).replace(/\s+/g, " ") : "não achei"; });
@@ -653,6 +688,7 @@ try {
   if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();
+  else if (MODO === "diag-data") await diagData();
   else if (MODO === "diag-ticket") { const p = await entrarMulti360(ctx, log); const t = await ultimaTrocaComErro(); if (t) { await olharTicket(p, t.ticket, log);
     const b = await ctx.newPage(); await b.setContent("<h1>teste do robô</h1>"); await b.screenshot({ path: "/tmp/teste.png" }); await b.close();
     log("Teste da caixinha (Cancelar no fim):", await fazerTicket(p, t.ticket, "/tmp/teste.png", false, log).catch((e) => "erro: " + e.message.split("\n")[0]));

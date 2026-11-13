@@ -13,8 +13,12 @@ on:
       modo:
         description: "diag = só olhar as telas · diag-troca = olhar as telas da troca de notas · dryrun = preencher sem salvar · real = alterar"
         type: choice
-        options: [diag, diag-troca, diag-cep, diag-status, diag-ticket, dryrun, real]
+        options: [diag, diag-troca, diag-cep, diag-status, diag-ticket, diag-data, dryrun, real]
         default: diag
+      ticket:
+        description: "Número do ticket (só para diag-data)"
+        type: string
+        default: ""
 
 concurrency:
   group: robo-intelipost
@@ -30,6 +34,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' || vars.INTELIPOST_ATIVO == 'sim'
     env:
       MODO: ${{ github.event.inputs.modo || 'real' }}
+      TICKET: ${{ github.event.inputs.ticket || '' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
