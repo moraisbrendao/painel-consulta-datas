@@ -118,7 +118,7 @@ export async function rodar(R) {
         const r = await executarAcao(p, t.ticket, { titulo: /Nota entregue\?/i, msg, print: arq, real: REAL });
         soma(REAL ? "baixa feita (Sim)" : "teste da baixa ok (Cancelar)");
         lote.push({ ticket: t.ticket, baixa_status: REAL ? "feita" : "teste", baixa_msg: REAL ? `Nota entregue → Sim${r.fila ? ` · fila agora: ${r.fila}` : ""}` : "Teste: caixinha \"Nota entregue?\" achada, print anexado e Cancelar." });
-      } catch (e) { soma("baixa com erro"); lote.push({ ticket: t.ticket, baixa_status: "erro", baixa_msg: String(e.message || e).split("\n")[0].replace(/\d{5,}/g, "#").slice(0, 200) }); }
+      } catch (e) { soma("baixa com erro"); log("  erro na baixa:", String(e.message || e).split("\n")[0].replace(/\d{5,}/g, "#").slice(0, 200)); lote.push({ ticket: t.ticket, baixa_status: "erro", baixa_msg: String(e.message || e).split("\n")[0].replace(/\d{5,}/g, "#").slice(0, 200) }); }
       if (lote.length >= 10) await grava(lote.splice(0));
     }
     await grava(lote);
