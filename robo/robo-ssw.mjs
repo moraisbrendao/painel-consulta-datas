@@ -568,13 +568,13 @@ async function conferir(minutos) {
   if (await cederParaTudo()) return;
   // confere TODOS os pendentes, os de previsão mais antiga primeiro (vencidos e urgentes saem antes)
   const lista = [];
-  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   // "Informação não disponível" (CT-e ainda não emitido) e "não entregue": confere de novo 1 vez a cada 20 h, depois dos pendentes (Brenda, 13/11)
   { const antes = new Date(Date.now() - 20 * 3600000).toISOString();
-    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao&situacao=in.(fora%20do%20ssw,sem%20cte,sem%20permissao,nao%20entregue)&consultado_em=lt.${antes}&order=prev_cliente.asc.nullsfirst&limit=2000`).catch(() => []);
+    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao&situacao=in.(fora%20do%20ssw,sem%20cte,sem%20permissao,nao%20entregue)&consultado_em=lt.${antes}&order=prev_cliente.asc.nullsfirst&limit=2000`).catch(() => []);
     const de_novo = L.filter((x) => !FORA_SSW.test(x.transportadora || "") && (!/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora)));
     // "Pede senha" de transportadora com senha cadastrada: confere já, sem esperar 20 h
-    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao&situacao=eq.sem%20permissao&consultado_em=gte.${antes}&order=pedido&limit=1000&offset=${de}`).catch(() => []);
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao&situacao=eq.sem%20permissao&consultado_em=gte.${antes}&order=pedido&limit=1000&offset=${de}`).catch(() => []);
       de_novo.unshift(...P.filter((x) => chaveDe(x.transportadora))); if (P.length < 1000) break; }
     lista.unshift(...de_novo.filter((x) => x.situacao === "sem permissao")); lista.push(...de_novo.filter((x) => x.situacao !== "sem permissao"));
     if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} para conferir de novo (sem CT-e, pede senha ou não entregue há mais de 20 h).`); }
@@ -591,7 +591,7 @@ async function conferirLista(lista, minutos) {
     for (let i = jad.length - 1; i >= 0; i--) if (jad[i].detalhe && jad[i].detalhe.emissor) jad.splice(i, 1);
     for (let i = lista.length - 1; i >= 0; i--) if (EH.test(lista[i].transportadora || "")) lista.splice(i, 1);
     const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
-      return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : null }; });
+      return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : r.previsao ? { fonte: nome, previsao: r.previsao } : null }; });
     for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
   }
   { // transportadora fora do SSW (Bento, Formato, Transiga, Trânsito Brasil): desfaz resultados antigos do SSW (eram da first mile)
@@ -606,7 +606,7 @@ async function conferirLista(lista, minutos) {
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
   const salvar = async () => { if (grava.length) { const lote = grava.splice(0); try { await chamar("rpc/gravar_conferencia", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
-  let bloq = 0, nCiclo = 0;
+  let bloq = 0, nCiclo = 0, nPrev = 0;
   const desde = TUDO ? await pedidoTudo() : null;
   const mudouTudo = async () => { const t = await pedidoTudo(); return !!(t && desde && t.em !== desde.em); };
   for (const l of lista) {
@@ -625,20 +625,28 @@ async function conferirLista(lista, minutos) {
         log(`SSW bloqueou; espero ${bloq * 5} min.`); await dorme(bloq * 5 * 60000); continue;
       }
       bloq = 0; r = lerEntrega(pg.txt); await dorme(PAUSA);
+      // não entregue e vence de hoje a 5 dias: guarda a previsão do SSW (o painel grava na Nova data se for depois da prometida)
+      const hj = new Date(Date.now() - 3 * 3600000).toISOString().slice(0, 10), lim = new Date(Date.now() - 3 * 3600000 + 5 * 86400000).toISOString().slice(0, 10);
+      if (r.situacao === "nao entregue" && l.prev_cliente && l.prev_cliente >= hj && l.prev_cliente <= lim) {
+        let pv = lerResultado(pg.txt).previsao;
+        const det = !pv && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+        if (det) { const d = await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&")).catch(() => null); if (d && d.status === 200) pv = lerResultado(d.txt).previsao; await dorme(PAUSA); }
+        if (pv) { r.detalhe = { fonte: "SSW", previsao: pv }; nPrev++; }
+      }
     }
     cont[r.situacao] = (cont[r.situacao] || 0) + 1;
-    grava.push({ pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null });
+    grava.push({ pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe || null });
     if (grava.length >= 50) await salvar();
   }
   await salvar();
-  log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+  log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), nPrev ? `· previsão do SSW guardada (vencem em até 5 dias) ${nPrev}` : "");
   if (TUDO) { const { existsSync } = await import("node:fs"); if (!existsSync("continuar") && !(await mudouTudo())) { await chamar("rpc/fim_conferencia_tudo", "POST", {}).catch(() => {}); log("Conferência de tudo terminada."); } }
 }
 // "Conferir tudo agora": todos os pedidos da lista que não estão entregues e ainda não foram conferidos desde o clique
 async function conferirTudo(minutos) {
   const t = await pedidoTudo(); if (!t) { log("Ninguém pediu conferência de tudo."); return; }
   const lista = [];
-  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao,detalhe&situacao=neq.entregue&or=(consultado_em.is.null,consultado_em.lt.${encodeURIComponent(t.iso)})&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=neq.entregue&or=(consultado_em.is.null,consultado_em.lt.${encodeURIComponent(t.iso)})&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   log(`Conferir tudo: ${lista.length.toLocaleString("pt-BR")} pedido(s) ainda não conferidos desde o clique.`);
   return conferirLista(lista, minutos);
 }

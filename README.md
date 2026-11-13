@@ -207,3 +207,8 @@ entrega com o relatório da fila "Aguardando entrega (AT)" (Assistência Técnic
 
 Rode a parte 27 do `supabase/schema.sql`. Pedido que vence de hoje até 5 dias com previsão do SSW depois da prometida recebe
 a data do SSW na Nova data (marcada como automática). Se alguém mudar a nova data à mão, o robô não mexe mais nela.
+
+## 28. Nova data automática pela Conferência SSW
+
+Rode a parte 28 do `supabase/schema.sql`. A conferência passa a guardar a previsão do rastreio dos não entregues que vencem de hoje
+a 5 dias; se for depois da data prometida ao cliente, vai sozinha para a Nova data (card "Data do SSW" no Preventivo).

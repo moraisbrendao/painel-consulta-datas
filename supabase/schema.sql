@@ -1254,3 +1254,49 @@ grant execute on function public.gravar_ssw(jsonb) to authenticated;
 
 -- já aplica nos pedidos que hoje estão assim
 select public._ssw_nova_data(null) as novas_datas_do_ssw;
+
+-- =====================================================================
+-- 28) Nova data automática também pela aba Conferência SSW: o robô guarda a previsão do rastreio (SSW, Jadlog,
+--     Bento Brasil, Trânsito Brasil) dos não entregues; se vence de hoje a 5 dias e a previsão é depois da
+--     prometida ao cliente, a Nova data recebe a previsão (mesmas regras da parte 27).
+create or replace function public._conf_nova_data(p_pedidos text[])
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  perform set_config('painel.ssw', '1', true);
+  insert into public.tratativas (pedido, nova_data, nova_data_fonte, atualizado_por)
+  select c.pedido, (c.detalhe ->> 'previsao')::date, 'ssw', 'SSW (automático)'
+  from public.conferencia_ssw c
+  left join public.tratativas t on t.pedido = c.pedido
+  where (p_pedidos is null or c.pedido = any(p_pedidos))
+    and c.situacao <> 'entregue'
+    and coalesce(c.detalhe ->> 'previsao', '') ~ '^\d{4}-\d{2}-\d{2}$'
+    and coalesce(c.transportadora, '') !~* '(formato|transiga)'
+    and c.prev_cliente between current_date and current_date + 5
+    and (c.detalhe ->> 'previsao')::date > c.prev_cliente
+    and (t.pedido is null or t.nova_data is null or (t.nova_data_fonte = 'ssw' and t.nova_data <> (c.detalhe ->> 'previsao')::date))
+  on conflict (pedido) do update set nova_data = excluded.nova_data, nova_data_fonte = 'ssw';
+  get diagnostics n = row_count;
+  perform set_config('painel.ssw', '', true);
+  return n;
+end $$;
+revoke all on function public._conf_nova_data(text[]) from public, anon, authenticated;
+
+create or replace function public.gravar_conferencia(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.conferencia_ssw c set situacao = r.situacao, ultimo_evento = r.ultimo_evento, data_evento = r.data_evento,
+    data_entrega = r.data_entrega, detalhe = r.detalhe, consultado_em = now()
+  from jsonb_to_recordset(linhas) as r(pedido text, situacao text, ultimo_evento text, data_evento date, data_entrega date, detalhe jsonb)
+  where c.pedido = r.pedido;
+  get diagnostics n = row_count;
+  perform public._conf_nova_data(array(select r.pedido from jsonb_to_recordset(linhas) as r(pedido text)));
+  return n;
+end $$;
+revoke all on function public.gravar_conferencia(jsonb) from public, anon;
+grant execute on function public.gravar_conferencia(jsonb) to authenticated;
+
+-- já aplica no que a conferência tem hoje (Jadlog, Bento e Trânsito já trazem a previsão)
+select public._conf_nova_data(null) as novas_datas_da_conferencia;
