@@ -178,3 +178,8 @@ As rodadas agendadas também conferem os pendentes antes das previsões.
 
 Rode a parte 22 do `supabase/schema.sql`. O robô passa a guardar o histórico da Jadlog, da Bento Brasil e da Trânsito Brasil,
 e o botão "Ver na <transportadora>" abre uma janela no painel com status, previsão e todos os eventos.
+
+## 23. Senhas de rastreio do SSW
+
+Rode a parte 23 do `supabase/schema.sql`. Na aba *Conferência SSW*, o botão "Senhas do SSW" guarda a senha de rastreio de cada
+transportadora (Trans Sua, VM, Aceville…). O botão "Ver no SSW" já abre com a senha, e o robô também usa (os segredos do GitHub continuam valendo).

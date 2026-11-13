@@ -915,3 +915,28 @@ begin
 end $$;
 revoke all on function public.gravar_conferencia(jsonb) from public, anon;
 grant execute on function public.gravar_conferencia(jsonb) to authenticated;
+
+-- =====================================================================
+-- 23) Senhas de rastreio do SSW por transportadora (campo "Senha (opcional)" do SSW), cadastradas no painel
+--     Usadas pelo botão "Ver no SSW" e pelo robô. Quem está logado na Logística vê; o login do SAC não.
+create table if not exists public.senhas_rastreio (
+  transportadora text primary key,
+  senha          text not null,
+  atualizado_por text,
+  atualizado_em  timestamptz not null default now()
+);
+alter table public.senhas_rastreio enable row level security;
+drop policy if exists senhas_rastreio_ler on public.senhas_rastreio;
+create policy senhas_rastreio_ler on public.senhas_rastreio for select to authenticated using (not public.e_sac());
+create or replace function public.salvar_senha_rastreio(p_transportadora text, p_senha text)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if coalesce(trim(p_transportadora), '') = '' then raise exception 'Informe a transportadora.'; end if;
+  if coalesce(p_senha, '') = '' then delete from public.senhas_rastreio where transportadora = trim(p_transportadora); return; end if;
+  insert into public.senhas_rastreio (transportadora, senha, atualizado_por, atualizado_em)
+  values (trim(p_transportadora), p_senha, (select email from auth.users where id = auth.uid()), now())
+  on conflict (transportadora) do update set senha = excluded.senha, atualizado_por = excluded.atualizado_por, atualizado_em = now();
+end $$;
+revoke all on function public.salvar_senha_rastreio(text, text) from public, anon;
+grant execute on function public.salvar_senha_rastreio(text, text) to authenticated;

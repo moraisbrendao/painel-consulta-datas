@@ -19,6 +19,14 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
   "00349443001750": [23], "00349443001679": [26] };
 // senha do rastreio (campo "Senha (opcional)" do SSW = chave) de transportadoras que exigem senha; fica só no segredo do GitHub
 const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""], [/dominalog/i, process.env.SSW_SENHA_DOMINALOG || ""]];
+// senhas cadastradas no painel (parte 23) completam as dos segredos do GitHub
+const normT = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+async function carregarSenhasDB() {
+  if (carregarSenhasDB.ok) return; carregarSenhasDB.ok = true;
+  const L = await chamar("senhas_rastreio?select=transportadora,senha").catch(() => []);
+  for (const x of L || []) { const k = normT(x.transportadora); if (k && x.senha) SENHAS.push([{ test: (t) => { const n = normT(t); return !!n && (n.includes(k) || k.includes(n)); } }, x.senha]); }
+  if ((L || []).length) log("Senhas de rastreio do painel:", L.length);
+}
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
 const FORA_SSW = /formato|transiga/i;
@@ -544,6 +552,7 @@ function lerEntrega(txt) {
   return { situacao: "nao entregue", data_evento: iso(ls[iD]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{4,60}$/.test(ev) ? ev : null };
 }
 async function conferir(minutos) {
+  await carregarSenhasDB();
   // confere TODOS os pendentes, os de previsão mais antiga primeiro (vencidos e urgentes saem antes)
   const lista = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }

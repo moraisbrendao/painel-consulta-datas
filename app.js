@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=69");
+        const w = new Worker("leitor-intelipost.js?v=70");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1855,6 +1855,30 @@
       <p class="s">Dados trazidos pelo robô do sistema da transportadora na última conferência.</p>`;
     $("modal").hidden = false; document.body.classList.add("sem-rolagem");
   }
+  // senhas de rastreio do SSW cadastradas no painel (parte 23)
+  let senhasSSW = [], senhasOk = false;
+  async function carregarSenhas() { const { data, error } = await sb.from("senhas_rastreio").select("transportadora,senha"); senhasOk = !error; senhasSSW = error ? [] : data || []; }
+  const senhaDe = (transp) => { const t = norm(transp || ""); const x = senhasSSW.find((s) => t && (t.includes(norm(s.transportadora)) || norm(s.transportadora).includes(t))); return x ? x.senha : ""; };
+  function janelaSenhas() {
+    $("modal-titulo").textContent = "Senhas de rastreio do SSW";
+    if (!senhasOk) { $("modal-corpo").innerHTML = `<p>Para guardar as senhas, rode no Supabase a parte 23 do supabase/schema.sql.</p>`; $("modal").hidden = false; return; }
+    const linhas = [...senhasSSW, { transportadora: "", senha: "" }];
+    $("modal-corpo").innerHTML = `<p class="s">Senha do campo "Senha (opcional)" do rastreio do SSW. O botão "Ver no SSW" e o robô usam a senha da transportadora com esse nome (ou parte dele). Para apagar, deixe a senha vazia e salve.</p>
+      <div class="tabela-wrap"><table class="tabela-range"><thead><tr><th>Transportadora</th><th>Senha</th><th></th></tr></thead><tbody>
+      ${linhas.map((x, i) => `<tr><td><input class="cf-sn-t" value="${esc(x.transportadora)}" placeholder="ex.: Trans Sua Log" ${x.transportadora ? "readonly" : ""}></td>
+        <td><input class="cf-sn-s" type="password" value="${esc(x.senha)}" autocomplete="off"></td><td><button class="btn mini primario" data-sn="${i}">Salvar</button></td></tr>`).join("")}
+      </tbody></table></div>`;
+    $("modal").hidden = false; document.body.classList.add("sem-rolagem");
+  }
+  $("cf-senhas").addEventListener("click", async () => { await carregarSenhas(); janelaSenhas(); });
+  $("modal-corpo").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-sn]"); if (!b) return;
+    const tr = b.closest("tr"), t = tr.querySelector(".cf-sn-t").value.trim(), sn = tr.querySelector(".cf-sn-s").value;
+    if (!t) return toast("Escreva o nome da transportadora.", true);
+    const { error } = await sb.rpc("salvar_senha_rastreio", { p_transportadora: t, p_senha: sn });
+    if (error) return toast("Não salvei: " + error.message, true);
+    toast(sn ? "Senha salva." : "Senha apagada."); await carregarSenhas(); janelaSenhas();
+  });
   function abrirSSW(nf, transp, pedido) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
     const x = pedido && cfLista.find((y) => y.pedido === pedido);
@@ -1864,7 +1888,7 @@
     const c = cnpjDaSerie(ser);
     if (!num || !c) return toast("Essa NF não tem série com CNPJ conhecido.", true);
     const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/resultSSW"; f.target = "_blank"; f.rel = "noopener";
-    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", ""]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
+    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", senhaDe(transp)]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
     document.body.appendChild(f); f.submit(); f.remove();
   }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
@@ -1878,6 +1902,7 @@
   };
   const CF_SIT = { entregue: ["Entregue", "verde"], "nao entregue": ["Não entregue", "ambar"], "fora do ssw": ["Fora do SSW", "cinza"], "sem cte": ["Sem CT-e ainda", "cinza"], "sem permissao": ["Pede senha", "cinza"], "sem nf": ["Sem NF", "cinza"], pendente: ["Aguardando", "cinza"] };
   async function carregarConferencia() {
+    carregarSenhas().catch(() => {});
     try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true;
       // carta de correção: outra transportadora emitiu o CT-e no SSW → o pedido passa a contar para ela (regra da Brenda)
       cfLista.forEach((x) => { const em = x.detalhe && x.detalhe.emissor; if (em) { x.transp_original = x.transportadora; x.transportadora = em; } }); }
@@ -1931,7 +1956,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=69");
+        const w = new Worker("leitor-conferencia.js?v=70");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
