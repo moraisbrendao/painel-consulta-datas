@@ -181,6 +181,11 @@ if (MODO === "real") {
           // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
           const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
           if (det) cont._det = (cont._det || 0) + 1;
+          else if (process.env.SSW_LIMITE && !/fora do ssw|sem permissao/.test(r.situacao) && (cont._amostra = (cont._amostra || 0) + 1) <= 4) {
+            const corpo = pg.txt.slice(Math.max(0, pg.txt.search(/Remetente/i)));
+            log("  sem link:", tags(corpo, /<a [^>]*>|onclick=["'][^"']{0,160}["']|<form[^>]*>/gi).map((t) => t.replace(/\d{4,}/g, "#").replace(/(id|md)=[^&'"]{6,}/g, "$1=…")).slice(0, 8).join(" | "));
+            log("  rótulos:", sohTexto(corpo).filter((x) => !/\d{3,}/.test(x) && x.length < 40).slice(0, 20).map(limpo).join(" / "));
+          }
           if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
             await new Promise((ok) => setTimeout(ok, 200));
             const r2 = lerResultado((await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
