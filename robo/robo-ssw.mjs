@@ -106,9 +106,10 @@ if (MODO === "diag-senha") {   // como o SSW pede a senha da transportadora (só
     const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: "" }).toString() });
     const t = pg.txt.replace(/\d{4,}/g, "#");
     log("status:", pg.status, "· pede permissão:", /permiss/i.test(t) ? "sim" : "não");
-    log("forms/inputs/botões:", tags(t, /<form[^>]*>|<input[^>]*>|<button[^>]*>[^<]{0,40}|<a [^>]*href=[^>]*>|onclick=["'][^"']{0,160}["']/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"')).slice(0, 25).join(" | "));
-    log("scripts:", tags(t, /<script[^>]*>[\s\S]{0,400}/gi).map((x) => x.slice(0, 300)).join(" || ").slice(0, 2500));
-    log("textos:", limpo(sohTexto(t).join(" ")).slice(0, 400));
+    const corpo = t.slice(Math.max(0, t.search(/<main|N Fiscal|Informa|permiss|senha/i)));
+    log("situação:", lerEntrega(pg.txt).situacao, "· tem 'senha':", /senha/i.test(t) ? "sim" : "não", "· não disponível:", /n[ãa]o dispon/i.test(t) ? "sim" : "não");
+    log("inputs:", tags(t, /<input[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/value=["'][^"']*["']/g, 'value="…"').replace(/class="[^"]*"/g, "")).join(" | ").slice(0, 1500));
+    log("textos senha:", tags(t, /[^<>]{0,80}senha[^<>]{0,80}/gi).map((x) => limpo(x)).slice(0, 8).join(" | "));
     await new Promise((ok) => setTimeout(ok, 3000));
   }
 }
