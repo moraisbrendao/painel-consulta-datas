@@ -18,7 +18,7 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
   "00349443000788": [11, 24, 25, 27, 301, 302, 303], "00349443001083": [14, 35], "00349443001245": [17], "00349443001407": [21],
   "00349443001750": [23], "00349443001679": [26] };
 // senha do rastreio (campo "Senha (opcional)" do SSW = chave) de transportadoras que exigem senha; fica só no segredo do GitHub
-const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""]];
+const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""]];
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
 const FORA_SSW = /bento|jadlog|formato|transiga|tr[aâ]nsito\s*brasil/i;

@@ -55,6 +55,8 @@ jobs:
           DOMINALOG_SENHA: ${{ secrets.DOMINALOG_SENHA }}
           DOMINALOG_CNPJ: ${{ secrets.DOMINALOG_CNPJ }}
           SSW_SENHA_TRANSSUA: ${{ secrets.SSW_SENHA_TRANSSUA }}
+          SSW_SENHA_VM: ${{ secrets.SSW_SENHA_VM }}
+          SSW_SENHA_ACEVILLE: ${{ secrets.SSW_SENHA_ACEVILLE }}
       - name: Continuar a conferência (se ainda falta)
         if: ${{ hashFiles('continuar') != '' }}
         run: |
