@@ -684,5 +684,5 @@ if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no
 }
 if (MODO === "aguardando" || MODO === "aguardando-teste") {   // aba Alterar pedidos → Fila Aguardando entrega (robo/aguardando.mjs)
   await entrarSupabase();
-  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, pagina, lerEntrega, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
+  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
 }

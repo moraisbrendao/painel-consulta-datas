@@ -21,7 +21,7 @@ const BR = (iso) => iso ? iso.split("-").reverse().join("/") : "";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export async function rodar(R) {
-  const { chamar, log, jadlog, bento, transito, pagina, lerEntrega, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
+  const { chamar, log, jadlog, bento, transito, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
   const REAL = MODO === "aguardando" && LIBERADO;
   const LIMITE = Number(process.env.SSW_LIMITE || 0);
   const FILA = /^(AE|AT)$/i.test(process.env.TRANSP || "") ? process.env.TRANSP.toUpperCase() : "";   // teste: só uma fila (AE = Aguardando entrega, AT = Aguardando entrega (AT))
@@ -74,6 +74,12 @@ export async function rodar(R) {
             const det = r.situacao === "entregue" && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
             if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det).catch(() => null);
               r.emissor = d && ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; }
+            // não entregue: guarda a previsão de entrega do SSW (na página do resultado ou, se não tiver, no detalhe)
+            if (r.situacao === "nao entregue" && lerResultado) {
+              r.previsao = lerResultado(pg.txt).previsao || null;
+              const det2 = !r.previsao && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+              if (det2) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det2.replace(/&amp;/g, "&")).catch(() => null); if (d && d.status === 200) r.previsao = lerResultado(d.txt).previsao || null; }
+            }
             out.set(l.pedido, r); }
           else if (pg && (pg.status === 403 || pg.status === 429)) { log("SSW bloqueou; espero 5 min."); await new Promise((ok) => setTimeout(ok, 300000)); }
           await new Promise((ok) => setTimeout(ok, 3000)); }
@@ -98,7 +104,9 @@ export async function rodar(R) {
       const r = resultado.get(t.ticket) || t._primeiro || { situacao: FORA.test(tp(t)) ? "sem rastreio" : "sem cte" };
       const ev = r.ultimo_evento || (r.detalhe && r.detalhe.eventos && r.detalhe.eventos.length ? r.detalhe.eventos[r.detalhe.eventos.length - 1].status : null);
       const ins = r.situacao === "nao entregue" ? insucessoDe(ev) : null;
-      Object.assign(t, { situacao: r.situacao, fonte: r.fonte || null, ultimo_evento: ev || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, insucesso: ins, detalhe: r.detalhe || null, _r: r });
+      const pv = r.previsao || (r.detalhe && r.detalhe.previsao) || null;   // previsão de entrega do rastreio (aparece no painel)
+      const detalhe = r.detalhe ? { ...r.detalhe, previsao: pv } : pv ? { fonte: r.fonte || null, previsao: pv } : null;
+      Object.assign(t, { situacao: r.situacao, fonte: r.fonte || null, ultimo_evento: ev || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, insucesso: ins, detalhe, _r: r });
       soma(`rastreio: ${r.situacao}${r.fonte ? " (" + r.fonte + ")" : ""}`); if (ins) soma("insucesso na entrega → Ocorrências");
       linhas.push({ ticket: t.ticket, situacao: t.situacao, fonte: t.fonte, ultimo_evento: t.ultimo_evento, data_evento: t.data_evento, data_entrega: t.data_entrega, insucesso: ins, detalhe: t.detalhe });
     }

@@ -2064,10 +2064,12 @@
   const AG_NOME = { tratar: "Não entregues — para tratar", insucesso: "Insucesso na entrega (vão para Ocorrências)", conferir: "Conferir à mão", baixa: "Entregues · baixa feita", robo: "Aguardando o robô", todos: "Todos" };
   function agStatus(t) {
     const ev = t.ultimo_evento ? esc(t.ultimo_evento) + (t.data_evento ? ` <span class="s">${br(t.data_evento)}</span>` : "") : "";
+    const pv = t.situacao === "nao entregue" && t.detalhe && t.detalhe.previsao ? String(t.detalhe.previsao).slice(0, 10) : null;
+    const prev = pv ? `<div class="ag-prev ${pv < hojeISO() ? "vencida" : ""}">Previsão de entrega: <b>${br(pv)}</b>${pv < hojeISO() ? " (já passou)" : ""}</div>` : "";
     const fonte = t.fonte ? `<div class="s">${esc(t.fonte)}</div>` : "";
     switch (t.situacao) {
       case "entregue": return `<span class="chip verde">Entregue${t.data_entrega ? " " + br(t.data_entrega) : ""}</span>${fonte}`;
-      case "nao entregue": return `${t.insucesso ? `<span class="chip vermelho">${esc(t.insucesso)}</span><div class="s">${ev}</div>` : `<span class="chip ambar">Não entregue</span><div>${ev}</div>`}${fonte}`;
+      case "nao entregue": return `${t.insucesso ? `<span class="chip vermelho">${esc(t.insucesso)}</span><div class="s">${ev}</div>` : `<span class="chip ambar">Não entregue</span><div>${ev}</div>`}${prev}${fonte}`;
       case "sem cte": return `<span class="chip cinza">Sem CT-e ainda</span><div class="s">não achei a NF em nenhum rastreio</div>`;
       case "sem rastreio": return `<span class="chip cinza">Sem rastreio automático</span><div class="s">Transiga/Formato: ver no site</div>`;
       case "sem permissao": return `<span class="chip ambar">Pede senha no SSW</span><div class="s">cadastre em Conferência SSW → Senhas</div>`;
