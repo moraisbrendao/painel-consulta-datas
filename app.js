@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=65");
+        const w = new Worker("leitor-intelipost.js?v=66");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1821,8 +1821,25 @@
     "00349443000788": [11, 24, 25, 27, 301, 302, 303], "00349443001083": [14, 35], "00349443001245": [17], "00349443001407": [21],
     "00349443001750": [23], "00349443001679": [26] };
   const cnpjDaSerie = (ser) => { const n = parseInt(ser, 10); return Object.keys(CNPJ_SERIE).find((c) => CNPJ_SERIE[c].includes(n)) || null; };
-  function abrirSSW(nf) {   // abre o rastreio do SSW numa aba nova (consulta feita pelo navegador de quem clicou)
-    const [num, ser] = String(nf || "").split("-").map((x) => x.trim()); const c = cnpjDaSerie(ser);
+  const postarNovaAba = (url, campos) => { const f = document.createElement("form"); f.method = "POST"; f.action = url; f.target = "_blank"; f.rel = "noopener";
+    for (const [k, v] of campos) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
+    document.body.appendChild(f); f.submit(); f.remove(); };
+  const copiar = (t) => { try { navigator.clipboard.writeText(t); } catch {} };
+  // transportadoras que não usam SSW: abre o rastreio delas (já com a NF quando o site aceita; senão a NF vai copiada)
+  const RASTREIO_PROPRIO = [
+    [/bento/i, "Bento Brasil", (num) => postarNovaAba("https://sistema.bentobrasil.com.br/consultaNotas.php", [["nr", "00349443000192"], ["nrNota", num]])],
+    [/tr[aâ]nsito\s*brasil/i, "Trânsito Brasil", (num, ser) => { copiar(num); window.open("https://platform.senior.com.br/logistica-tck/tms/tck-frontend/#/login/signup?tenant=ZEhKaGJuTnBkRzlpY21GemFXdz0%3D", "_blank", "noopener");
+      return `NF ${num} copiada. Entre com o CNPJ ${parseInt(ser, 10) === 35 ? "00349443001083" : "00349443000192"} e cole a NF no filtro (confira a série ${ser}).`; }],
+    [/jadlog/i, "Jadlog", (num) => { copiar(num); window.open("https://www.jadlog.com.br/jadlog/home", "_blank", "noopener"); return `NF ${num} copiada. No rastreio da Jadlog, escolha Nota Fiscal e cole.`; }],
+    [/transiga/i, "Transiga", (num) => { copiar(num); window.open("https://www.track3r.com.br/auth/login", "_blank", "noopener"); return `NF ${num} copiada. Entre na Track3r e cole a NF em Tracking > Nº da Nota Fiscal.`; }],
+    [/formato/i, "Formato", (num) => { copiar(num); return `NF ${num} copiada. Ainda não tenho o link de rastreio da Formato.`; }],
+  ];
+  const rastreioDe = (transp) => RASTREIO_PROPRIO.find(([re]) => re.test(transp || ""));
+  function abrirSSW(nf, transp) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
+    const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
+    const prop = rastreioDe(transp);
+    if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
+    const c = cnpjDaSerie(ser);
     if (!num || !c) return toast("Essa NF não tem série com CNPJ conhecido.", true);
     const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/resultSSW"; f.target = "_blank"; f.rel = "noopener";
     for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", ""]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
@@ -1865,12 +1882,12 @@
     $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao, "cinza"];
       return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
         <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td>
-        <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" title="Abre o rastreio dessa nota no SSW agora">Ver no SSW ↗</button>` : ""}</td></tr>`; }).join("");
+        <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" data-transp="${esc(x.transportadora || "")}" title="Abre o rastreio dessa nota agora">${rastreioDe(x.transportadora) ? "Ver na " + esc(rastreioDe(x.transportadora)[1]) : "Ver no SSW"} ↗</button>` : ""}</td></tr>`; }).join("");
     $("cf-vazio").hidden = L.length > 0;
     $("cf-paginacao").innerHTML = L.length > POR ? `<button class="btn" data-cfp="-1" ${cfPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cfPag} de ${pags}</span><button class="btn" data-cfp="1" ${cfPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
   $("cf-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-cf]"); if (!b) return; cfCard = b.dataset.cf; cfPag = 1; desenharConferencia(); });
-  $("cf-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw); });
+  $("cf-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp); });
   $("cf-paginacao").addEventListener("click", (e) => { const b = e.target.closest("[data-cfp]"); if (!b) return; cfPag += Number(b.dataset.cfp); desenharConferencia(); });
   $("cf-busca").addEventListener("input", () => { cfPag = 1; desenharConferencia(); });
   $("cf-transp").addEventListener("change", () => { cfPag = 1; desenharConferencia(); });
@@ -1890,7 +1907,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=65");
+        const w = new Worker("leitor-conferencia.js?v=66");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
