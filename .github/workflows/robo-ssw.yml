@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento]
+        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -41,7 +41,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Navegador (só no diagnóstico da Trânsito Brasil)
+        if: ${{ github.event.inputs.modo == 'diag-transito' }}
+        run: |
+          cd robo
+          npm install --no-audit --no-fund
+          npx playwright install --with-deps chromium
+      - name: Diagnóstico Trânsito Brasil
+        if: ${{ github.event.inputs.modo == 'diag-transito' }}
+        run: node robo/diag-transito.mjs
+        env:
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
       - name: Rodar o robô
+        if: ${{ github.event.inputs.modo != 'diag-transito' }}
         run: node robo/robo-ssw.mjs
         env:
           MODO: ${{ github.event.inputs.modo || 'real' }}
