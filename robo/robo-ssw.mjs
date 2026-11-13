@@ -97,6 +97,22 @@ if (MODO === "diag-link") {
     log("linhas:", sohTexto(corpo).length, "· tem 'Previsao':", /previs/i.test(corpo) ? "sim" : "não");
   }
 }
+if (MODO === "diag-det") {
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
+  const vistos = {};
+  for (const l of L) {
+    if ((vistos[l.transportadora] || 0) >= 1) continue;
+    const [num, ser] = String(l.nf).split("-"); const c = cnpjDaSerie(ser); if (!c) continue;
+    const pg = await consultar(c, [num.trim()]);
+    const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1]; if (!det) continue;
+    vistos[l.transportadora] = 1;
+    const ls = sohTexto((await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
+    const comData = ls.filter((x) => /prev|prazo|estimad|agend/i.test(x)).map(limpo).slice(0, 6);
+    log(`${l.transportadora}: ${ls.length} linhas · com prev/prazo: ${comData.join(" | ") || "nenhuma"}`);
+    log("   rótulos:", ls.filter((x) => !/\d/.test(x) && x.length < 30).slice(-25).map(limpo).join(" / "));
+  }
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
