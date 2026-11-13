@@ -47,8 +47,10 @@ async function transito(itens) {
     if (!t) out.set(l.pedido, { situacao: "sem cte" });
     else {
       const tr = t.x.tracking, prev = dia(tr.dataPrevisaoEntrega), ult = t.fases[t.fases.length - 1];
-      if (tr.dataEntrega) out.set(l.pedido, { situacao: "entregue", data_entrega: dia(tr.dataEntrega), data_evento: dia(tr.dataEntrega), ultimo_evento: "ENTREGUE", previsao: prev });
-      else out.set(l.pedido, { situacao: "nao entregue", data_evento: ult ? dia(ult.dataExecucao) : null, ultimo_evento: ult && ult.fase ? String(ult.fase.descricao || "").toUpperCase().slice(0, 60) : null, previsao: prev });
+      const detalhe = { fonte: "Trânsito Brasil", codigo: tr.codigo || null, status: tr.situacao && tr.situacao.descricao || null, previsao: prev,
+        eventos: t.fases.map((f) => ({ data: String(f.dataExecucao).replace("T", " ").slice(0, 16), status: f.fase && f.fase.descricao || "", unidade: "" })) };
+      if (tr.dataEntrega) out.set(l.pedido, { situacao: "entregue", data_entrega: dia(tr.dataEntrega), data_evento: dia(tr.dataEntrega), ultimo_evento: "ENTREGUE", previsao: prev, detalhe });
+      else out.set(l.pedido, { situacao: "nao entregue", data_evento: ult ? dia(ult.dataExecucao) : null, ultimo_evento: ult && ult.fase ? String(ult.fase.descricao || "").toUpperCase().slice(0, 60) : null, previsao: prev, detalhe });
     }
     await dorme(1000);
   }
@@ -63,9 +65,13 @@ function lerBento(txt) {
   if (Array.isArray(d)) d = d[d.length - 1];
   if (!d || !d.dtemissao) return { situacao: "sem cte" };
   const dia = (v) => v ? String(v).slice(0, 10) : null, prev = dia(d.dtagendamentoentrega || d.dtprevisaoentrega || d.dtprevchegadaredespacho);
-  if (d.dtentrega) return { situacao: "entregue", data_entrega: dia(d.dtentrega), data_evento: dia(d.dtentrega), ultimo_evento: "ENTREGUE", previsao: prev };
+  const NOMES = [["dtemissao", "Emitido"], ["dtsaida", "Saiu da origem"], ["dtprevchegcarregamento", "Previsão de chegada do carregamento"], ["dtchegada", "Chegou na unidade de entrega"],
+    ["dtemissaoredespacho", "Redespacho emitido"], ["dtprevchegadaredespacho", "Previsão de chegada do redespacho"], ["dtsaidadistribuicao", "Saiu para entrega"],
+    ["dtdistribuicaopreventrega", "Previsão de entrega na rota"], ["dtagendamentoentrega", "Entrega agendada"], ["dtprevisaoentrega", "Previsão de entrega"], ["dtentrega", "Entregue"]];
+  const detalhe = { fonte: "Bento Brasil", previsao: prev, eventos: NOMES.filter(([k]) => d[k]).map(([k, n]) => ({ data: String(d[k]).slice(0, 16), status: n, unidade: "" })).sort((a, b) => a.data.localeCompare(b.data)) };
+  if (d.dtentrega) return { situacao: "entregue", data_entrega: dia(d.dtentrega), data_evento: dia(d.dtentrega), ultimo_evento: "ENTREGUE", previsao: prev, detalhe };
   const ev = [["dtsaidadistribuicao", "SAIU PARA ENTREGA"], ["dtemissaoredespacho", "REDESPACHO"], ["dtchegada", "CHEGOU NA UNIDADE DE ENTREGA"], ["dtsaida", "EM TRANSFERENCIA"], ["dtemissao", "EMITIDO"]].find(([k]) => d[k]);
-  return { situacao: "nao entregue", data_evento: dia(d[ev[0]]), ultimo_evento: ev[1], previsao: prev };
+  return { situacao: "nao entregue", data_evento: dia(d[ev[0]]), ultimo_evento: ev[1], previsao: prev, detalhe };
 }
 async function bento(itens) {
   const out = new Map(); if (!itens.length) return out;
@@ -91,9 +97,12 @@ function lerJadlog(c) {
   const t = c && c.tracking, prev = c && isoBR(c.previsaoEntrega);
   if (!t || (!t.status && !(t.eventos || []).length)) return { situacao: "sem cte", previsao: prev };
   const ev = t.eventos || [], ult = ev[ev.length - 1] || {}, st = String(t.status || ult.status || "").toUpperCase().trim();
+  // detalhe para a janela do painel (só dados do envio: códigos, datas, status e unidades da Jadlog — nada do destinatário)
+  const detalhe = { fonte: "Jadlog", codigo: t.shipmentId || t.codigo || null, cte: t.dacte || null, emissao: isoBR(t.dtEmissao), status: st || null, previsao: prev,
+    eventos: ev.map((e) => ({ data: String(e.data || "").slice(0, 16), status: e.status || "", unidade: e.unidade || "" })) };
   if (/^ENTREGUE|ENTREGA REALIZADA/.test(st)) { const e = [...ev].reverse().find((x) => /ENTREGUE|ENTREGA REALIZADA/i.test(x.status || "")) || ult;
-    return { situacao: "entregue", data_entrega: isoBR(e.data), data_evento: isoBR(e.data), ultimo_evento: "ENTREGUE", previsao: prev }; }
-  return { situacao: "nao entregue", data_evento: isoBR(ult.data), ultimo_evento: st.slice(0, 60) || null, previsao: prev };
+    return { situacao: "entregue", data_entrega: isoBR(e.data), data_evento: isoBR(e.data), ultimo_evento: "ENTREGUE", previsao: prev, detalhe }; }
+  return { situacao: "nao entregue", data_evento: isoBR(ult.data), ultimo_evento: st.slice(0, 60) || null, previsao: prev, detalhe };
 }
 async function jadlog(itens) {
   const tok = process.env.JADLOG_TOKEN, out = new Map(); if (!tok || !itens.length) return out;
@@ -481,7 +490,7 @@ async function conferir(minutos) {
       L.forEach((x) => { if (!jad.some((y) => y.pedido === x.pedido)) jad.push(x); }); if (L.length < 1000) break; }
     for (let i = lista.length - 1; i >= 0; i--) if (EH.test(lista[i].transportadora || "")) lista.splice(i, 1);
     const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
-      return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null }; });
+      return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : null }; });
     for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
   }
   { // transportadora fora do SSW (Bento, Formato, Transiga, Trânsito Brasil): desfaz resultados antigos do SSW (eram da first mile)

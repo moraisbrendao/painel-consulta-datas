@@ -694,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=66");
+        const w = new Worker("leitor-intelipost.js?v=67");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1835,8 +1835,30 @@
     [/formato/i, "Formato", (num) => { copiar(num); return `NF ${num} copiada. Ainda não tenho o link de rastreio da Formato.`; }],
   ];
   const rastreioDe = (transp) => RASTREIO_PROPRIO.find(([re]) => re.test(transp || ""));
-  function abrirSSW(nf, transp) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
+  // janela com o rastreio que o robô trouxe do sistema da transportadora (Jadlog, Bento Brasil, Trânsito Brasil)
+  function cfJanela(x) {
+    const d = x.detalhe || {}, item = (rot, val) => `<div class="det-item"><span>${rot}</span><b>${val || "—"}</b></div>`;
+    const dh = (v) => { const m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}:\d{2}))?/); return m ? `${m[3]}/${m[2]}/${m[1]}${m[4] ? " " + m[4] : ""}` : esc(v || ""); };
+    const sit = (CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao])[0];
+    $("modal-titulo").textContent = `Rastreio ${d.fonte || x.transportadora || ""} · Pedido ${x.pedido}`;
+    $("modal-corpo").innerHTML = `
+      <div class="det-grade">
+        ${item("NF", esc(x.nf))}${item("Situação", esc(sit))}${item("Status na transportadora", esc(d.status || x.ultimo_evento))}
+        ${item("Previsão de entrega", d.previsao ? dh(d.previsao) : "")}${item("Entregue em", x.data_entrega ? dh(x.data_entrega) : "")}${item("Emissão", d.emissao ? dh(d.emissao) : "")}
+        ${d.codigo ? item("Código na transportadora", esc(d.codigo)) : ""}${d.cte ? item("CT-e / DACTE", esc(d.cte)) : ""}
+        ${item("Consultado em", x.consultado_em ? new Date(x.consultado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "")}
+      </div>
+      <h3 class="cf-h3">Histórico</h3>
+      ${(d.eventos || []).length ? `<div class="tabela-wrap"><table class="tabela-range cf-hist"><thead><tr><th>Data/hora</th><th>Evento</th><th>Unidade</th></tr></thead><tbody>
+        ${[...d.eventos].reverse().map((e) => `<tr><td>${dh(e.data)}</td><td>${esc(e.status)}</td><td>${esc(e.unidade || "")}</td></tr>`).join("")}</tbody></table></div>`
+        : `<p class="s">A transportadora ainda não mostra eventos para essa nota.</p>`}
+      <p class="s">Dados trazidos pelo robô do sistema da transportadora na última conferência.</p>`;
+    $("modal").hidden = false; document.body.classList.add("sem-rolagem");
+  }
+  function abrirSSW(nf, transp, pedido) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
+    const x = pedido && cfLista.find((y) => y.pedido === pedido);
+    if (x && x.detalhe) return cfJanela(x);
     const prop = rastreioDe(transp);
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
     const c = cnpjDaSerie(ser);
@@ -1882,12 +1904,12 @@
     $("cf-linhas").innerHTML = L.slice((cfPag - 1) * POR, cfPag * POR).map((x) => { const [rot, cor] = CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao, "cinza"];
       return `<tr><td class="mono">${esc(x.pedido)}</td><td>${esc(x.nf || "—")}</td><td>${esc(x.transportadora || "—")}</td><td>${esc(x.status_intelipost || "—")}</td><td>${br(x.prev_cliente) || "—"}</td>
         <td><span class="chip ${cor}">${rot}</span></td><td>${esc(x.ultimo_evento || "")}${x.data_evento ? `<div class="s">${br(x.data_evento)}</div>` : ""}</td><td>${br(x.data_entrega) || "—"}</td>
-        <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" data-transp="${esc(x.transportadora || "")}" title="Abre o rastreio dessa nota agora">${rastreioDe(x.transportadora) ? "Ver na " + esc(rastreioDe(x.transportadora)[1]) : "Ver no SSW"} ↗</button>` : ""}</td></tr>`; }).join("");
+        <td>${x.nf ? `<button class="btn mini contorno" data-ssw="${esc(x.nf)}" data-transp="${esc(x.transportadora || "")}" data-pedido="${esc(x.pedido)}" title="Abre o rastreio dessa nota agora">${rastreioDe(x.transportadora) ? "Ver na " + esc(rastreioDe(x.transportadora)[1]) : "Ver no SSW"} ↗</button>` : ""}</td></tr>`; }).join("");
     $("cf-vazio").hidden = L.length > 0;
     $("cf-paginacao").innerHTML = L.length > POR ? `<button class="btn" data-cfp="-1" ${cfPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cfPag} de ${pags}</span><button class="btn" data-cfp="1" ${cfPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
   $("cf-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-cf]"); if (!b) return; cfCard = b.dataset.cf; cfPag = 1; desenharConferencia(); });
-  $("cf-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp); });
+  $("cf-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido); });
   $("cf-paginacao").addEventListener("click", (e) => { const b = e.target.closest("[data-cfp]"); if (!b) return; cfPag += Number(b.dataset.cfp); desenharConferencia(); });
   $("cf-busca").addEventListener("input", () => { cfPag = 1; desenharConferencia(); });
   $("cf-transp").addEventListener("change", () => { cfPag = 1; desenharConferencia(); });
@@ -1907,7 +1929,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=66");
+        const w = new Worker("leitor-conferencia.js?v=67");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);

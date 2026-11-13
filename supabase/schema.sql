@@ -896,3 +896,22 @@ end $$;
 drop trigger if exists chamar_robo_conferencia on public.conferencia_ssw;
 create trigger chamar_robo_conferencia after insert on public.conferencia_ssw
   for each statement execute function public._chamar_robo_conferencia();
+
+-- =====================================================================
+-- 22) Conferência SSW: detalhe do rastreio (Jadlog, Bento Brasil, Trânsito Brasil) para a janela do painel
+--     (histórico de eventos com datas, status e unidades da transportadora; nada do destinatário)
+alter table public.conferencia_ssw add column if not exists detalhe jsonb;
+create or replace function public.gravar_conferencia(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.conferencia_ssw c set situacao = r.situacao, ultimo_evento = r.ultimo_evento, data_evento = r.data_evento,
+    data_entrega = r.data_entrega, detalhe = r.detalhe, consultado_em = now()
+  from jsonb_to_recordset(linhas) as r(pedido text, situacao text, ultimo_evento text, data_evento date, data_entrega date, detalhe jsonb)
+  where c.pedido = r.pedido;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.gravar_conferencia(jsonb) from public, anon;
+grant execute on function public.gravar_conferencia(jsonb) to authenticated;

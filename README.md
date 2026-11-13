@@ -173,3 +173,8 @@ Rode a parte 21 do `supabase/schema.sql`. Na aba *Conferência SSW*, "Importar p
 (ou Nota-Série; sem NF, usa a da base) e substitui a lista. O robô do SSW começa na hora (modo `conferencia`) e confere, um por vez,
 se o SSW mostra MERCADORIA ENTREGUE. Card "Falta atualizar a Intelipost" = entregue no SSW e status da Intelipost diferente de Entregue.
 As rodadas agendadas também conferem os pendentes antes das previsões.
+
+## 22. Histórico do rastreio na Conferência SSW
+
+Rode a parte 22 do `supabase/schema.sql`. O robô passa a guardar o histórico da Jadlog, da Bento Brasil e da Trânsito Brasil,
+e o botão "Ver na <transportadora>" abre uma janela no painel com status, previsão e todos os eventos.

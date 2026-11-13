@@ -496,3 +496,5 @@ body[data-perfil="sac"] .so-log { display: none !important; }
 @media (max-width: 1000px) { .kpis-cf { grid-template-columns: 1fr 1fr; } }
 .filtros-cartao.filtros-cf { grid-template-columns: auto minmax(0,2fr) minmax(0,1fr) auto; }
 @media (max-width: 800px) { .filtros-cartao.filtros-cf { grid-template-columns: 1fr; } }
+.cf-h3 { font-size: 14px; margin: 16px 0 8px; }
+.cf-hist td, .cf-hist th { font-size: 12px; }
