@@ -143,6 +143,13 @@ async function printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina }) {
       await pg.setViewportSize({ width: 1100, height: 700 });
       await pg.setContent(r.txt.replace(/<head[^>]*>/i, (h) => h + '<base href="https://ssw.inf.br/2/">'), { waitUntil: "load", timeout: 30000 }).catch(() => {});
       await pg.waitForTimeout(1500);
+      // só a parte de cima (remetente + a tabela com a situação), como a Brenda pediu
+      const caixa = await pg.evaluate(() => {
+        const td = [...document.querySelectorAll("td")].filter((e) => /MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(e.innerText || "")).pop();
+        const tb = td && td.closest("table"); if (!tb) return null; const r = tb.getBoundingClientRect();
+        return { x: 0, y: 0, width: Math.ceil(Math.min(document.documentElement.scrollWidth, r.right + 12)), height: Math.ceil(r.bottom + window.scrollY + 3) };
+      }).catch(() => null);
+      if (caixa && caixa.height > 50) { await pg.screenshot({ path: arq, clip: caixa, fullPage: true }); return; }
     } else if (t.fonte === "Bento Brasil") {
       await posta("https://sistema.bentobrasil.com.br/consultaNotas.php", { nr: "00349443000192", nrNota: num });
     } else {
