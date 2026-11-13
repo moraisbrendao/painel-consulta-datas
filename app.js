@@ -2132,7 +2132,10 @@
   $("ag-busca").addEventListener("input", (e) => { agBusca = e.target.value; desenharAguardando(); });
   $("ag-linhas").addEventListener("click", (e) => {
     const b = e.target.closest("[data-ag-rastreio]"); if (!b) return;
-    const t = agLista.find((x) => x.ticket === b.dataset.agRastreio); if (t) abrirSSW(t.nf_nova, t.fonte && t.fonte !== "SSW" ? t.fonte : agTransp(t), null);
+    const t = agLista.find((x) => x.ticket === b.dataset.agRastreio); if (!t) return;
+    const tr = t.fonte && t.fonte !== "SSW" ? t.fonte : agTransp(t);
+    abrirSSW(t.nf_nova, tr, null, /jadlog/i.test(tr) ? { titulo: `Ticket ${t.ticket}`, pedido: t.pedido, nf: t.nf_nova, transportadora: "Jadlog", situacao: t.situacao, ultimo_evento: t.ultimo_evento,
+      data_entrega: t.data_entrega, consultado_em: t.consultado_em, detalhe: t.detalhe } : null);
   });
   $("ag-linhas").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.dataset.agObs) e.target.blur(); });
   $("ag-linhas").addEventListener("change", async (e) => {
@@ -2223,7 +2226,7 @@
     const d = x.detalhe || {}, item = (rot, val) => `<div class="det-item"><span>${rot}</span><b>${val || "—"}</b></div>`;
     const dh = (v) => { const m = String(v || "").match(/^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}:\d{2}))?/); return m ? `${m[3]}/${m[2]}/${m[1]}${m[4] ? " " + m[4] : ""}` : esc(v || ""); };
     const sit = (CF_SIT[sitSSW(x.situacao, x.transportadora)] || [x.situacao])[0];
-    $("modal-titulo").textContent = `Rastreio ${d.fonte || x.transportadora || ""} · Pedido ${x.pedido}`;
+    $("modal-titulo").textContent = `Rastreio ${d.fonte || x.transportadora || ""} · ${x.titulo || "Pedido " + x.pedido}`;
     $("modal-corpo").innerHTML = `
       <div class="det-grade">
         ${item("NF", esc(x.nf))}${item("Situação", esc(sit))}${item("Status na transportadora", esc(d.status || x.ultimo_evento))}
@@ -2234,8 +2237,11 @@
       <h3 class="cf-h3">Histórico</h3>
       ${(d.eventos || []).length ? `<div class="tabela-wrap"><table class="tabela-range cf-hist"><thead><tr><th>Data/hora</th><th>Evento</th><th>Unidade</th></tr></thead><tbody>
         ${[...d.eventos].reverse().map((e) => `<tr><td>${dh(e.data)}</td><td>${esc(e.status)}</td><td>${esc(e.unidade || "")}</td></tr>`).join("")}</tbody></table></div>`
-        : `<p class="s">A transportadora ainda não mostra eventos para essa nota.</p>`}
-      <p class="s">Dados trazidos pelo robô do sistema da transportadora na última conferência.</p>`;
+        : `<p class="s">${x.detalhe ? "A transportadora ainda não mostra eventos para essa nota." : "O robô ainda não consultou essa nota na Jadlog."}</p>`}
+      <div class="cartao-topo" style="margin-top:10px"><p class="s" style="margin:0">Dados trazidos pelo robô do sistema da transportadora na última conferência.</p>
+        ${/jadlog/i.test(d.fonte || x.transportadora || "") && x.nf ? `<button class="btn mini contorno" id="cf-site-jadlog">Abrir no site da Jadlog ↗</button>` : ""}</div>`;
+    const bs = $("cf-site-jadlog");
+    if (bs) bs.addEventListener("click", () => { const msg = rastreioDe("Jadlog")[2](String(x.nf).split("-")[0].trim()); if (msg) toast(msg); });
     $("modal").hidden = false; document.body.classList.add("sem-rolagem");
   }
   // senhas de rastreio do SSW cadastradas no painel (parte 23)
@@ -2262,10 +2268,11 @@
     if (error) return toast("Não salvei: " + error.message, true);
     toast(sn ? "Senha salva." : "Senha apagada."); await carregarSenhas(); janelaSenhas();
   });
-  function abrirSSW(nf, transp, pedido) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
+  function abrirSSW(nf, transp, pedido, dados) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
-    const x = pedido && cfLista.find((y) => y.pedido === pedido);
-    if (x && x.detalhe && /jadlog/i.test(x.transportadora || "")) return cfJanela(x);   // janela só para a Jadlog (pedido da Brenda)
+    const x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));
+    // Jadlog: sempre a janela com os dados do robô (pedido da Brenda); o site da Jadlog fica num botão dentro dela
+    if (/jadlog/i.test(transp || "") || (x && /jadlog/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
     const prop = rastreioDe(transp);
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
     const c = cnpjDaSerie(ser);
