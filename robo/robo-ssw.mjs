@@ -25,7 +25,7 @@ const FORA_SSW = /formato|transiga/i;
 // Trânsito Brasil não usa SSW: consulta no rastreio dela (Senior), pela NF + CNPJ (série 35 → ...1083, outras → ...0192); só vale se a série bater
 const EH_TRANSITO = /tr[aâ]nsito\s*brasil/i;
 async function transito(itens) {
-  const out = new Map(); if (!itens.length) return out;
+  const out = new Map(); if (!itens.length) return out; let ssw_emissor = 0;
   const URL_T = "https://platform.senior.com.br/t/senior.com.br/bridge/1.0/anonymous/rest/tms/tck/actions/externalTenantConsultaTracking";
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
   const dia = (v) => v ? String(v).slice(0, 10) : null;
@@ -44,7 +44,22 @@ async function transito(itens) {
       .map((x) => ({ x, fases: (x.listaTrackingFase || []).filter((f) => f.executada && f.dataExecucao).sort((a, b) => String(a.dataExecucao).localeCompare(String(b.dataExecucao))) }))
       .filter(({ x, fases }) => (dia(x.tracking.dataEntrega) || dia((fases[fases.length - 1] || {}).dataExecucao) || "9999") >= limite);   // nota antiga com o mesmo número: desconsidera
     const t = ts[ts.length - 1];
-    if (!t) out.set(l.pedido, { situacao: "sem cte" });
+    if (!t && MODO === "transito-cte") {   // AJUSTE ÚNICO (13/11): não está na Senior: pode ter tido carta de correção e outra transportadora emitiu o CT-e no SSW (regra da Brenda)
+      const c = cnpjDaSerie(ser); let r = { situacao: "sem cte" };
+      if (c) {
+        await dorme(2500);
+        const a = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: "" }).toString() }).catch(() => null);
+        const e = a && a.status === 200 ? lerEntrega(a.txt) : null;
+        if (e && !/sem cte|sem permissao/.test(e.situacao)) {
+          const det = (a.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1]; let emissor = null;
+          if (det) { await dorme(2500); const d = await pagina("https://ssw.inf.br" + det).catch(() => null); emissor = d && ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; }
+          r = { ...e, detalhe: { fonte: "SSW", emissor } };
+          ssw_emissor++;
+        }
+      }
+      out.set(l.pedido, r);
+    }
+    else if (!t) out.set(l.pedido, { situacao: "sem cte" });
     else {
       const tr = t.x.tracking, prev = dia(tr.dataPrevisaoEntrega), ult = t.fases[t.fases.length - 1];
       const detalhe = { fonte: "Trânsito Brasil", codigo: tr.codigo || null, status: tr.situacao && tr.situacao.descricao || null, previsao: prev,
@@ -55,7 +70,7 @@ async function transito(itens) {
     await dorme(1000);
   }
   const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
-  log("Trânsito Brasil (Senior):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
+  log("Trânsito Brasil (Senior):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada", MODO === "transito-cte" ? `· CT-e de outra transportadora no SSW: ${ssw_emissor}` : "");
   return out;
 }
 // Bento Brasil não usa SSW: consulta no rastreio do site dela (CNPJ da Multi + número da NF), 1 por vez com pausa
@@ -591,6 +606,13 @@ async function conferir(minutos) {
   log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
 }
 if (MODO === "conferencia") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 320)); }
+if (MODO === "transito-cte") {   // AJUSTE ÚNICO (13/11): Trânsito Brasil sem registro na Senior → transportadora que emitiu o CT-e no SSW
+  await entrarSupabase();
+  const L = await chamar("conferencia_ssw?select=pedido,nf,transportadora,detalhe&transportadora=ilike.*sito*brasil*&situacao=eq.sem%20cte&limit=1000");
+  const m = await transito(L.filter((x) => !(x.detalhe && x.detalhe.emissor)));
+  const linhas = [...m].map(([pedido, r]) => ({ pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe || null }));
+  for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) });
+}
 if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no SSW
   await entrarSupabase(); process.env.SSW_MINUTOS = "0"; await conferir(0);
 }

@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, conferencia, jadlog, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-emissor]
+        options: [real, conferencia, jadlog, transito-cte, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-emissor]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -25,7 +25,7 @@ on:
         default: ""
 
 concurrency:
-  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
+  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
   cancel-in-progress: false
 
 permissions:
