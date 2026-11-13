@@ -335,7 +335,7 @@ async function diagStatus() {   // confere, sem salvar nada, como ficou o pedido
   const r = await tela.evaluate(() => { const x = document.body.innerText; return {
     s920: /\b920\b|nova nota fiscal/i.test(x), troca: /troca de notas/i.test(x), metodo: (x.match(/M[eé]todo de entrega:\s*([^\n]+)/) || [])[1] || "?",
     prev: /Entrega prev\.:\s*\d{2}\/\d{2}\/\d{4}\s*23:59/.test(x), cab: (x.match(/Pedido:[^(]{0,80}\(\s*([^)]+)\)/) || [])[1] || "?" }; });
-  log("Tipo do ticket no painel:", t.tipo || "?");
+  log("Tipo do ticket no painel:", t.tipo || "?", "· passos gravados na última passagem:", JSON.stringify(t.robo_passos || {}).replace(/"nova_data":"[^"]+",?/, ""), "· começou:", t.robo_iniciado_em);
   log(`Tela do pedido: status ${r.cab} · método ${r.metodo} · Entrega prev. 23:59: ${r.prev ? "sim" : "não"} · aparece 920/nova nota: ${r.s920 ? "sim" : "não"} · aparece "Troca de notas": ${r.troca ? "sim" : "não"}`);
   const vols = await tela.locator("[ng-click^='edit_volume_modal']").count();
   log("Volumes:", vols);
