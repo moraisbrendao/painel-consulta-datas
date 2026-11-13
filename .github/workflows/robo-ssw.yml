@@ -82,6 +82,7 @@ jobs:
           SSW_SENHA_VM: ${{ secrets.SSW_SENHA_VM }}
           SSW_SENHA_ACEVILLE: ${{ secrets.SSW_SENHA_ACEVILLE }}
           SSW_SENHA_DOMINALOG: ${{ secrets.SSW_SENHA_DOMINALOG }}
+          SSW_SENHA_FLOG: ${{ secrets.SSW_SENHA_FLOG || secrets.SSW_SENHA_FLOG_TRANSPORTES || secrets.FLOG_SENHA || secrets.SENHA_FLOG }}
           JADLOG_TOKEN: ${{ secrets.JADLOG_TOKEN || secrets.TOKEN }}
           JADLOG_USUARIO: ${{ secrets.JADLOG_USUARIO || secrets.USUARIO_JADLOG }}
           JADLOG_CODIGO: ${{ secrets.JADLOG_CODIGO_CLIENTE || secrets.CODIGO_CLIENTE_JADLOG }}

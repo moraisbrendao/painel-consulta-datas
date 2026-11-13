@@ -18,7 +18,7 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
   "00349443000788": [11, 24, 25, 27, 301, 302, 303], "00349443001083": [14, 35], "00349443001245": [17], "00349443001407": [21],
   "00349443001750": [23], "00349443001679": [26] };
 // senha do rastreio (campo "Senha (opcional)" do SSW = chave) de transportadoras que exigem senha; fica só no segredo do GitHub
-const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""], [/dominalog/i, process.env.SSW_SENHA_DOMINALOG || ""]];
+const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""], [/dominalog/i, process.env.SSW_SENHA_DOMINALOG || ""], [/flog/i, process.env.SSW_SENHA_FLOG || ""]];
 // senhas cadastradas no painel (parte 23) completam as dos segredos do GitHub
 const normT = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
 async function carregarSenhasDB() {
@@ -232,7 +232,7 @@ if (MODO === "diag-link") {
 }
 if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes (só mostra o resultado, sem dados)
   await entrarSupabase();
-  const L = await chamar("conferencia_ssw?select=nf,transportadora&situacao=eq.sem%20permissao&limit=3");
+  const L = await chamar(`conferencia_ssw?select=nf,transportadora&transportadora=ilike.*${process.env.TRANSP_TESTE || "flog"}*&limit=4`);
   const senha = chaveDe(L[0] && L[0].transportadora);
   log("transportadoras:", [...new Set(L.map((x) => x.transportadora))].join(", "));
   log("pedidos Trans Sua:", L.length, "· com senha:", senha ? `sim (${senha.length} caracteres)` : "não");
