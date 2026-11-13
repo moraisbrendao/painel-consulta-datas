@@ -667,7 +667,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=50");
+        const w = new Worker("leitor-intelipost.js?v=51");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1642,7 +1642,7 @@
           <button class="btn contorno" data-robo-troca="teste" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Testar com o robô (não salva)</button>
           <button class="btn" data-robo-troca="real" data-tk="${esc(t.ticket)}" ${!m.ok || /pendente|processando/.test(t.robo_status || "") ? "disabled" : ""}>Fazer com o robô</button>
         </div>
-        <p class="s"><b>Antes de clicar, digite o prazo da simulação no campo abaixo</b> (a simulação automática ainda não funciona).</p>
+        <p class="s">O robô faz a simulação de cotação na Intelipost e pega o prazo sozinho. Só digite o prazo abaixo se quiser usar outro.</p>
         <p class="s">${tnParcial(t) ? "Parcial: o robô troca transportadora e método, faz a simulação de cotação, a Entrega prev. 23:59, o status Micro 920 (não mexe nos volumes) e executa a ação no ticket do Multi360." : "O robô faz as 7 etapas: transportadora e método, simulação de cotação, Entrega prev. 23:59, todos os volumes, status Micro 920 e, no Multi360, o print + Executar ação no ticket e a conferência da fila."} Ele passa de 30 em 30 minutos.</p>
         <h3 class="tn-mao">Ou na mão: prazo da cotação → nova data</h3>
         <label class="tn-prazo">Prazo de entrega da simulação (dias úteis) <input type="number" min="1" max="60" data-prazo="${esc(t.ticket)}"></label>
@@ -1686,9 +1686,7 @@
     const rt = e.target.closest("[data-robo-troca]"); if (rt) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === rt.dataset.tk), m = t && tnMetodo(t); if (!t || !m.ok) return;
       const real = rt.dataset.roboTroca === "real";
       const pz = parseInt((document.querySelector(`input[data-prazo="${CSS.escape(t.ticket)}"]`) || {}).value, 10), prazo = pz > 0 && pz <= 60 ? pz : null;
-      // enquanto a simulação automática não funciona, o prazo digitado é obrigatório
-      if (!prazo) { toast('Digite o prazo da simulação (dias úteis) no campo "Prazo de entrega da simulação" antes de mandar para o robô.', true); const i = document.querySelector(`input[data-prazo="${CSS.escape(t.ticket)}"]`); if (i) i.focus(); return; }
-      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}${prazo ? `\n• prazo que você digitou: ${prazo} dias úteis → Entrega prev. ${br(TROCA.somaDiasUteis(hojeISO(), prazo))} 23:59 (sem simulação)` : "\n• simulação de cotação e Entrega prev. 23:59"}${tnParcial(t) ? "\n• volumes: não mexe (Parcial)" : `\n• todos os volumes com a nota ${t.nf_nova}`}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n• no Multi360: print do pedido + Executar ação ("Pedido atualizado na Intelipost" → Sim)\n\nConfirmar?`)) return;
+      if (real && !confirm(`O robô vai fazer na Intelipost, de verdade, o pedido ${t.pedido}:\n\n• transportadora ${m.ok.transp} · método ${m.ok.metodo}${prazo ? `\n• prazo que você digitou: ${prazo} dias úteis → Entrega prev. ${br(TROCA.somaDiasUteis(hojeISO(), prazo))} 23:59 (sem simulação)` : "\n• simulação de cotação e Entrega prev. 23:59"}${tnParcial(t) ? "\n• volumes: não mexe (Parcial)" : `\n• todos os volumes com a nota ${t.nf_nova}`}\n• status Macro 12 · Micro 920 · Equipe_04 Troca de notas\n• no Multi360: print do rastreio + Executar ação ("Pedido atualizado na Intelipost" → Sim)\n\nConfirmar?`)) return;
       const { error } = await sb.rpc("pedir_robo_troca", { tk: t.ticket, metodo: m.ok.metodo, transp: m.ok.transp, modo: real ? "real" : "teste", prazo });
       if (error) return toast(/pedir_robo_troca|schema cache/i.test(error.message) ? "Rode de novo o supabase/schema.sql (parte 18) para usar o robô da troca." : "Não consegui mandar: " + error.message, true);
       toast(real ? "Mandado para o robô fazer na Intelipost." : "Mandado para o robô testar (não salva nada).");
