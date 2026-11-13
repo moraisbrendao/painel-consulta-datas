@@ -725,7 +725,7 @@ try {
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();
   else if (MODO === "diag-data") await diagData();
-  else if (MODO === "diag-ticket") { const p = await entrarMulti360(ctx, log); const t = await ultimaTrocaComErro(); if (t) { await olharTicket(p, t.ticket, log);
+  else if (MODO === "diag-ticket") { const p = await entrarMulti360(ctx, log); const t = process.env.TICKET ? { ticket: process.env.TICKET } : await ultimaTrocaComErro(); if (t) { await olharTicket(p, t.ticket, log);
     const b = await ctx.newPage(); await b.setContent("<h1>teste do robô</h1>"); await b.screenshot({ path: "/tmp/teste.png" }); await b.close();
     log("Teste da caixinha (Cancelar no fim):", await fazerTicket(p, t.ticket, "/tmp/teste.png", false, log).catch((e) => "erro: " + e.message.split("\n")[0]));
     log("Fila no fim:", await p.evaluate(() => (document.body.innerText.match(/Atribu[ií]do Fila:\s*([^\n]+)/i) || [])[1] || "?")); } else log("Nenhuma troca para olhar."); }
