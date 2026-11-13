@@ -278,6 +278,14 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
+if (MODO === "diag-track3r") {   // documentação pública da API da Track3r (sem token): lista os métodos
+  for (const u of ["https://api.track3r.com.br/", "https://api.track3r.com.br/swagger/index.html", "https://api.track3r.com.br/swagger/v2/swagger.json", "https://api.track3r.com.br/swagger/v1/swagger.json", "https://api.track3r.com.br/help", "https://api.track3r.com.br/v2/help", "https://api.track3r.com.br/swagger/docs/v2", "https://api.track3r.com.br/swagger/docs/v1"]) {
+    const r = await pagina(u).catch((e) => ({ status: e.message, txt: "" }));
+    let rotas = "";
+    try { const j = JSON.parse(r.txt); rotas = Object.entries(j.paths || {}).map(([k, v]) => `${Object.keys(v).join("/").toUpperCase()} ${k}`).join(" | "); } catch {}
+    log(u, "→", r.status, "·", rotas || r.txt.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 1500));
+  }
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
