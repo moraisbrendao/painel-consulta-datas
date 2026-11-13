@@ -32,7 +32,7 @@ if (estado.falhou === impressao) {
 }
 
 const navegador = await chromium.launch({ headless: false });   // a Intelipost recusa navegador sem janela (o workflow usa xvfb)
-const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR" });
+const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
 let pagina = await ctx.newPage();
 pagina.setDefaultTimeout(30000);
 
@@ -355,6 +355,7 @@ async function diagData() {   // por que a Entrega prev. não mudou: abre o pedi
     links: [...document.querySelectorAll("a[href]")].map((a) => a.href).filter((h) => /rastre|track|status|onde/i.test(h)).map((h) => { try { const u = new URL(h); return u.host + u.pathname.replace(/[^/]{5,}/g, "*"); } catch { return "?"; } }) }; });
   const a = await ler();
   log(`Antes: status ${a.cab} · Entrega prev. ${a.prev} · links de rastreio: ${a.links.join(" | ") || "nenhum"}`);
+  log("Página de rastreio abre e mostra o histórico:", await printRastreio(tela, "/tmp/rastreio.png").catch((e) => "não: " + mascara(e.message.split("\n")[0])));
   log("Botões/links com rastreio:", JSON.stringify(await tela.evaluate(() => [...document.querySelectorAll("a,button")].map((e) => (e.innerText || "").trim()).filter((x) => /rastre|track/i.test(x)).slice(0, 10))));
   if (!nova) { if (aba) await aba.close(); return; }
   const respostas = [];
@@ -544,6 +545,21 @@ async function recarregar(tela) {
   await tela.waitForTimeout(1500);
 }
 
+async function printRastreio(tela, arquivo) {   // print da página pública de rastreio (Status de Rastreamento), como a Logística mostra ao cliente
+  const href = await tela.evaluate(() => (([...document.querySelectorAll("a[href]")].find((a) => /ondeestameupedido/i.test(a.href)) || {}).href) || "");
+  if (!href) return false;
+  const p = await ctx.newPage();
+  try {
+    await p.setViewportSize({ width: 700, height: 1000 });
+    await p.goto(href, { waitUntil: "domcontentloaded", timeout: 60000 });
+    await p.getByText(/hist[oó]rico completo do pedido/i).first().waitFor({ timeout: 45000 });
+    await p.waitForLoadState("networkidle", { timeout: 15000 }).catch(() => {});
+    await p.getByText(/hist[oó]rico completo do pedido/i).first().click().catch(() => {});   // abre o histórico
+    await p.waitForTimeout(2500);
+    await p.screenshot({ path: arquivo, fullPage: true });
+    return true;
+  } finally { await p.close().catch(() => {}); }
+}
 async function fazerTroca(job) {
   const real = job.robo_modo === "real";
   const parcial = job.tipo === "PARCIAL";   // reposição parcial: mesmo passo a passo, sem mexer nos volumes
@@ -675,7 +691,9 @@ async function fazerTroca(job) {
     // print da tela do pedido (vai só para dentro do ticket; o arquivo fica no runner e some no fim)
     await tela.bringToFront(); await recarregar(tela).catch(() => {});
     const print = `/tmp/pedido-${Date.now()}.png`;
-    await tela.screenshot({ path: print, fullPage: true });
+    const rastreio = await printRastreio(tela, print).catch(() => false);
+    if (!rastreio) await tela.screenshot({ path: print, fullPage: true });   // sem a página de rastreio: vai a tela do pedido
+    passos.print_rastreio = rastreio;
     return { passos, prazo, nova, print };
   } catch (e) {
     e.message = `Parei em "${etapa}": ${e.message.split("\n")[0]}`; e.passos = passos; throw e;
