@@ -69,9 +69,9 @@ function lerBento(txt) {
     ["dtemissaoredespacho", "Redespacho emitido"], ["dtprevchegadaredespacho", "Previsão de chegada do redespacho"], ["dtsaidadistribuicao", "Saiu para entrega"],
     ["dtdistribuicaopreventrega", "Previsão de entrega na rota"], ["dtagendamentoentrega", "Entrega agendada"], ["dtprevisaoentrega", "Previsão de entrega"], ["dtentrega", "Entregue"]];
   const detalhe = { fonte: "Bento Brasil", previsao: prev, eventos: NOMES.filter(([k]) => d[k]).map(([k, n]) => ({ data: String(d[k]).slice(0, 16), status: n, unidade: "" })).sort((a, b) => a.data.localeCompare(b.data)) };
-  if (d.dtentrega) return { situacao: "entregue", data_entrega: dia(d.dtentrega), data_evento: dia(d.dtentrega), ultimo_evento: "ENTREGUE", previsao: prev, detalhe };
+  if (d.dtentrega) return { situacao: "entregue", data_entrega: dia(d.dtentrega), data_evento: dia(d.dtentrega), ultimo_evento: "ENTREGUE", previsao: prev };
   const ev = [["dtsaidadistribuicao", "SAIU PARA ENTREGA"], ["dtemissaoredespacho", "REDESPACHO"], ["dtchegada", "CHEGOU NA UNIDADE DE ENTREGA"], ["dtsaida", "EM TRANSFERENCIA"], ["dtemissao", "EMITIDO"]].find(([k]) => d[k]);
-  return { situacao: "nao entregue", data_evento: dia(d[ev[0]]), ultimo_evento: ev[1], previsao: prev, detalhe };
+  return { situacao: "nao entregue", data_evento: dia(d[ev[0]]), ultimo_evento: ev[1], previsao: prev };
 }
 async function bento(itens) {
   const out = new Map(); if (!itens.length) return out;
