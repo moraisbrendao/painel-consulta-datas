@@ -85,7 +85,7 @@ async function esqueleto(titulo) {
 // abre o pedido pela "Busca por Lote" (a Gestão de Pedidos tem filtro de data e esconde pedido antigo).
 // Clicar no pedido da lista abre a tela dele em ABA NOVA. Essa tela (/ng#/order-number/) nunca "termina"
 // de carregar: espera o CAMPO aparecer, não a página.
-async function abrirPedido(pedido, olhar, soAbrir) {
+async function abrirPedido(pedido, olhar, soAbrir, aceitarEntregue) {
   await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
   const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
   await caixa.waitFor({ timeout: 45000 });
@@ -118,7 +118,7 @@ async function abrirPedido(pedido, olhar, soAbrir) {
   await tela.waitForFunction(() => /Pedido:[^(]{0,80}\(\s*\S/.test(document.body.innerText), null, { timeout: 20000 }).catch(() => {});
   const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
   if (olhar) log("Cabeçalho do pedido:", await tela.evaluate(() => (document.body.innerText.match(/Pedido:[\s\S]{0,60}/) || [""])[0].replace(/\s+/g, " ")));
-  if (fechado) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
+  if (fechado && !(aceitarEntregue && /entregue/i.test(fechado))) { if (olhar) log(`O pedido está ${fechado} na Intelipost.`); if (aba) await aba.close(); throw new Error(`O pedido já está ${fechado.toLowerCase()} na Intelipost: não dá para mudar a previsão.`); }
   if (soAbrir) return { tela, aba };
   const assinatura = () => tela.evaluate(() => [...document.querySelectorAll("input, select, textarea, button, [contenteditable=true]")]
     .filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; })
@@ -518,12 +518,16 @@ async function fazerTroca(job) {
   if (!num || !serie) throw new Error("Falta a nova nota (NF emitida Promob) ou a série na planilha.");
   if (!parcial && (!job.chave || String(job.chave).replace(/\D/g, "").length !== 44)) throw new Error("A chave da nova nota não tem 44 números.");
   if (!parcial && !job.data_emissao) throw new Error("Falta a data de emissão da nova nota.");
-  const { tela, aba } = await abrirPedido(job.pedido, false, true);
+  const { tela, aba } = await abrirPedido(job.pedido, false, true, parcial);   // parcial entregue: só a previsão
   let etapa = "abrir o pedido";
+  let soData = false;
   try {
     // status do pedido e CEP do destinatário (o CEP só é usado na simulação; não vai para registro nem painel)
     const fechado = await tela.evaluate(() => { const m = document.body.innerText.match(/Pedido:[^(]{0,80}\(\s*(Entregue|Cancelado)\s*\)/i); return m ? m[1] : ""; });
-    if (fechado) throw new Error(`O pedido está ${fechado.toLowerCase()} na Intelipost.`);
+    if (fechado && !(parcial && /entregue/i.test(fechado))) throw new Error(`O pedido está ${fechado.toLowerCase()} na Intelipost.`);
+    // regra da Logística: reposição PARCIAL com pedido ENTREGUE -> altera SOMENTE a previsão de entrega
+    // (a Intelipost não deixa mudar o status; transportadora e volumes também ficam como estão)
+    if (fechado) { soData = true; passos.so_previsao = true; passos[1] = true; passos[5] = true; }   // 1 e 5 não se aplicam
     const cep = await tela.evaluate(() => { const m = document.body.innerText.match(/Destinat[aá]rio[\s\S]{0,2000}?CEP:\s*([\d.\-]{8,10})/i); return m ? m[1].replace(/\D/g, "") : ""; });
     if (cep.length !== 8) throw new Error("Não achei o CEP do destinatário na tela do pedido.");
     if (job.ticket === "diag") log(`CEP lido: ${cep.length} dígitos, começa com ${cep[0]} (a loja começa com 9) · CEPs na tela: ${await tela.evaluate(() => (document.body.innerText.match(/CEP:/gi) || []).length)}`);
@@ -542,6 +546,7 @@ async function fazerTroca(job) {
 
     // 1) transportadora e método de entrega
     etapa = "trocar a transportadora";
+    if (!soData) {
     await tela.bringToFront();
     await tela.locator("a[ng-click^='edit_logistic_provider_modal']:visible").first().click();
     const selMet = tela.locator("select[ng-model='delivery_method_id']:visible").first();
@@ -558,6 +563,7 @@ async function fazerTroca(job) {
     passos[1] = true;
     if (!real) await recarregar(tela);
 
+    }
     // 3) Entrega prev. = hoje + prazo (dias úteis) 23:59
     etapa = "mudar a Entrega prev.";
     await tela.locator("a[ng-click^='edit_estimated_delivery_date']").first().click();
@@ -594,8 +600,9 @@ async function fazerTroca(job) {
     }
     if (!parcial) passos[4] = true;
 
-    // 5) status: Entregas > Alterar Pedidos > Micro
+    // 5) status: Entregas > Alterar Pedidos > Micro (não no parcial entregue)
     etapa = "mudar o status (Alterar Pedidos)";
+    if (!soData) {
     await pagina.bringToFront();
     await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
     const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
@@ -629,6 +636,7 @@ async function fazerTroca(job) {
       }
     }
     passos[5] = true;
+    }
     // print da tela do pedido (vai só para dentro do ticket; o arquivo fica no runner e some no fim)
     await tela.bringToFront(); await recarregar(tela).catch(() => {});
     const print = `/tmp/pedido-${Date.now()}.png`;
@@ -699,7 +707,7 @@ try {
           msgTicket = modoJob === "real" ? " Ticket: ação executada, fila Aguardando entrega." : " Ticket: caixinha preenchida e cancelada.";
           log(`Ticket: ${t6}.`);
         } catch (e2) { msgTicket = ` Ticket NÃO feito: ${e2.message.split("\n")[0].slice(0, 160)}`; log("Ticket:", e2.message.split("\n")[0]); }
-        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", (modoJob === "real" ? "Feito na Intelipost." : "Teste ok: tudo preenchido, nada salvo.") + msgTicket, r.passos, r.prazo, r.nova);
+        await resultadoTroca(job.ticket, modoJob === "real" ? "feito" : "testado", (modoJob === "real" ? (r.passos.so_previsao ? "Pedido Entregue (parcial): só a Entrega prev. foi alterada; transportadora e status ficam como estão." : "Feito na Intelipost.") : "Teste ok: tudo preenchido, nada salvo.") + msgTicket, r.passos, r.prazo, r.nova);
         tOk++; log(`Troca ${tOk + tErro}: ok (${modoJob}).`);
       } catch (e) {
         tErro++; log(`Troca ${tOk + tErro}: problema -`, e.message);
