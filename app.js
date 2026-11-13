@@ -5,6 +5,8 @@
 //   aparecer como entregue ou cancelado no arquivo da Intelipost)
 (function () {
   const CFG = window.PAINEL_CONFIG;
+  // link de "redefinir senha" do e-mail: a página abre com #...type=recovery (o Supabase limpa isso ao iniciar)
+  let recuperando = /type=recovery/.test(location.hash);
   const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -50,30 +52,96 @@
   }
   function carregando(txt) { $("carregando").hidden = !txt; if (txt) $("carregando-texto").textContent = txt; }
 
-  // ---------------- login ----------------
+  // ---------------- login, criar conta e esqueci a senha ----------------
+  const DOMINIOS = ["multimoveis.com"];   // só e-mails desses domínios criam conta (o banco confere também: parte 30 do schema.sql)
+  const LINK_VOLTA = location.origin + location.pathname;
+  const TXT_LOGIN = {
+    entrar: ["E-loggia", "Entre com seu e-mail e senha.", "Senha", "Entrar"],
+    criar: ["Criar conta", "Use seu e-mail de trabalho. Vamos mandar um link para confirmar.", "Crie uma senha (mínimo 6)", "Criar conta"],
+    esqueci: ["Esqueci minha senha", "Digite seu e-mail. Vamos mandar um link para criar uma senha nova.", "Senha", "Enviar link"],
+    nova: ["Nova senha", "Digite a senha nova (mínimo 6 caracteres).", "Senha nova", "Salvar senha"],
+  };
+  function modoLogin(m) {
+    const f = $("form-login"); f.dataset.modo = m;
+    const [t, sub, rot, btn] = TXT_LOGIN[m];
+    $("login-titulo").textContent = t; $("login-sub").textContent = sub; $("rot-senha").textContent = rot; $("btn-entrar").textContent = btn;
+    $("senha").autocomplete = m === "entrar" ? "current-password" : "new-password";
+    $("erro-login").textContent = ""; $("ok-login").hidden = true;
+    $("senha").value = ""; $("senha2").value = "";
+  }
+  document.querySelectorAll("#form-login [data-ir]").forEach((b) => b.addEventListener("click", () => modoLogin(b.dataset.ir)));
+  function okLogin(msg) { $("ok-login").textContent = msg; $("ok-login").hidden = false; }
+  function erroAuth(error) {
+    const m = String(error.message || "");
+    if (/invalid login/i.test(m)) return "E-mail ou senha incorretos.";
+    if (/not confirmed/i.test(m)) return "Falta confirmar o e-mail: clique no link que mandamos para você (veja também o spam).";
+    if (/already registered|already been registered/i.test(m)) return "Esse e-mail já tem conta. Volte e entre, ou use \"Esqueci minha senha\".";
+    if (/signups? not allowed|signup is disabled/i.test(m)) return "A criação de contas ainda não foi liberada.";
+    if (/database error saving new user|dominio/i.test(m)) return "Esse e-mail não pode criar conta. Use o e-mail de trabalho.";
+    if (/rate limit|too many|security purposes/i.test(m)) return "Muitas tentativas seguidas. Espere alguns minutos e tente de novo.";
+    if (/at least|weak|password should/i.test(m)) return "Senha fraca: use pelo menos 6 caracteres.";
+    if (/same.*password|different from the old/i.test(m)) return "A senha nova precisa ser diferente da antiga.";
+    return "Não deu certo: " + m;
+  }
+
   $("form-login").addEventListener("submit", async (e) => {
     e.preventDefault();
-    $("erro-login").textContent = "";
+    const modo = $("form-login").dataset.modo;
+    const email = $("email").value.trim().toLowerCase(), senha = $("senha").value;
+    $("erro-login").textContent = ""; $("ok-login").hidden = true;
+    const falha = (t) => ($("erro-login").textContent = t);
+    if (modo !== "nova" && !/^\S+@\S+\.\S+$/.test(email)) return falha("Digite um e-mail válido.");
+    if (modo !== "esqueci" && senha.length < 6) return falha("A senha precisa ter pelo menos 6 caracteres.");
+    if ((modo === "criar" || modo === "nova") && senha !== $("senha2").value) return falha("As duas senhas não são iguais.");
+    if (modo === "criar" && DOMINIOS.length && !DOMINIOS.some((d) => email.endsWith("@" + d))) return falha("Use seu e-mail de trabalho (@" + DOMINIOS.join(" ou @") + ").");
     $("btn-entrar").disabled = true;
-    const { error } = await sb.auth.signInWithPassword({ email: $("email").value.trim(), password: $("senha").value });
+    let r;
+    try {
+      if (modo === "entrar") r = await sb.auth.signInWithPassword({ email, password: senha });
+      else if (modo === "criar") r = await sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: LINK_VOLTA } });
+      else if (modo === "esqueci") r = await sb.auth.resetPasswordForEmail(email, { redirectTo: LINK_VOLTA });
+      else r = await sb.auth.updateUser({ password: senha });
+    } catch (err) { r = { error: err }; }
     $("btn-entrar").disabled = false;
-    if (error) $("erro-login").textContent = /invalid/i.test(error.message) ? "E-mail ou senha incorretos." : "Não foi possível entrar: " + error.message;
-    else $("senha").value = "";
+    if (r.error) return falha(erroAuth(r.error));
+    $("senha").value = ""; $("senha2").value = "";
+    if (modo === "criar") {
+      // com confirmação de e-mail ligada não vem sessão; o Supabase também não avisa se o e-mail já existia
+      if (!r.data || !r.data.session) { modoLogin("entrar"); okLogin("Conta criada! Mandamos um link para " + email + ". Clique nele para ativar e depois entre aqui (veja também o spam)."); }
+    } else if (modo === "esqueci") {
+      modoLogin("entrar"); okLogin("Se " + email + " tiver conta, chegou um link para criar a senha nova (veja também o spam).");
+    } else if (modo === "nova") {
+      recuperando = false;
+      toast("Senha nova salva.");
+      const { data } = await sb.auth.getSession();
+      if (data && data.session) abrirSessao(data.session);
+    }
   });
   $("btn-sair").addEventListener("click", () => sb.auth.signOut());
 
-  sb.auth.onAuthStateChange((_ev, sessao) => {
-    if (sessao) {
-      if (usuarioId === sessao.user.id) return;
-      usuarioId = sessao.user.id;
-      $("usuario").textContent = sessao.user.email;
-      $("tela-login").hidden = true;
-      setTimeout(entrar, 0);
-    } else {
+  function abrirSessao(sessao) {
+    if (usuarioId === sessao.user.id) return;
+    usuarioId = sessao.user.id;
+    $("usuario").textContent = sessao.user.email;
+    $("tela-login").hidden = true;
+    setTimeout(entrar, 0);
+  }
+  sb.auth.onAuthStateChange((ev, sessao) => {
+    if (ev === "PASSWORD_RECOVERY") recuperando = true;
+    if (sessao && recuperando) {
+      // veio do link de "esqueci a senha": pede a senha nova antes de abrir o painel
+      $("tela-painel").hidden = true; $("tela-login").hidden = false;
+      if ($("form-login").dataset.modo !== "nova") modoLogin("nova");
+      return;
+    }
+    if (sessao) abrirSessao(sessao);
+    else {
       usuarioId = null; perfil = "";
+      if (ev === "SIGNED_OUT") recuperando = false;
       delete document.body.dataset.perfil;
       $("tela-painel").hidden = true;
       $("tela-login").hidden = false;
+      if ($("form-login").dataset.modo === "nova") modoLogin("entrar");
     }
   });
 

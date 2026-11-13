@@ -1353,3 +1353,21 @@ end $$;
 revoke all on function public._conf_nova_data(text[]) from public, anon, authenticated;
 
 select public._ssw_nova_data(null) as do_preventivo, public._conf_nova_data(null) as da_conferencia;
+
+-- ============ PARTE 30: criar conta só com e-mail @multimoveis.com ============
+-- Quem se cadastra pela tela de login precisa ter e-mail da empresa.
+-- Exceção: e-mails que a Logística colocou na lista do SAC (logins_sac) podem ser de outro domínio.
+-- Contas que já existem não mudam.
+create or replace function public._so_email_empresa()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+begin
+  if lower(coalesce(new.email, '')) like '%@multimoveis.com' then return new; end if;
+  if exists (select 1 from public.logins_sac where email = lower(new.email)) then return new; end if;
+  raise exception 'dominio nao permitido: use o e-mail @multimoveis.com';
+end $$;
+revoke all on function public._so_email_empresa() from public, anon, authenticated;
+
+drop trigger if exists so_email_empresa on auth.users;
+create trigger so_email_empresa before insert on auth.users
+  for each row execute function public._so_email_empresa();

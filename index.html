@@ -7,19 +7,26 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=75">
+  <link rel="stylesheet" href="styles.css?v=76">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
   <main id="tela-login" class="login" hidden>
-    <form id="form-login" class="login-caixa">
+    <form id="form-login" class="login-caixa" data-modo="entrar">
       <img src="assets/logo.png" alt="Multimóveis" class="login-logo">
-      <h1>E-loggia</h1>
-      <p class="sub">Entre com seu e-mail e senha.</p>
-      <label>E-mail<input id="email" type="email" autocomplete="username" required></label>
-      <label>Senha<input id="senha" type="password" autocomplete="current-password" required></label>
+      <h1 id="login-titulo">E-loggia</h1>
+      <p class="sub" id="login-sub">Entre com seu e-mail e senha.</p>
+      <label class="lg-email">E-mail<input id="email" type="email" autocomplete="username"></label>
+      <label class="lg-senha"><span id="rot-senha">Senha</span><input id="senha" type="password" autocomplete="current-password" minlength="6"></label>
+      <label class="lg-senha2">Repita a senha<input id="senha2" type="password" autocomplete="new-password" minlength="6"></label>
       <button id="btn-entrar" class="btn primario" type="submit">Entrar</button>
       <p id="erro-login" class="erro" role="alert"></p>
+      <p id="ok-login" class="ok-login" role="status" hidden></p>
+      <div class="login-links">
+        <button type="button" class="link-btn lk-entrar" data-ir="esqueci">Esqueci minha senha</button>
+        <button type="button" class="link-btn lk-entrar" data-ir="criar">Criar conta</button>
+        <button type="button" class="link-btn lk-voltar" data-ir="entrar">← Voltar para entrar</button>
+      </div>
     </form>
   </main>
 
@@ -785,9 +792,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=75"></script>
-  <script src="mapa-brasil.js?v=75"></script>
-  <script src="troca-notas.js?v=75"></script>
-  <script src="app.js?v=75"></script>
+  <script src="config.js?v=76"></script>
+  <script src="mapa-brasil.js?v=76"></script>
+  <script src="troca-notas.js?v=76"></script>
+  <script src="app.js?v=76"></script>
 </body>
 </html>
