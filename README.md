@@ -162,7 +162,7 @@ Usa o mesmo token do cofre da parte 13 (`github_robo_token`); sem ele, o robô s
 
 ## 20. Conferência SSW
 
-Rode a parte 20 do `supabase/schema.sql`. O robô do SSW (`.github/workflows/robo-ssw.yml`) roda às 6h e às 12h nos dias úteis
+Rode a parte 20 do `supabase/schema.sql`. O robô do SSW (`.github/workflows/robo-ssw.yml`) roda de 2 em 2 horas (6h às 20h) nos dias úteis, ~1.000 pedidos por rodada (o SSW bloqueia consultas rápidas), os que vencem antes primeiro
 (ou à mão em *Actions › Robô do SSW › Run workflow*): para cada pedido em aberto, consulta o rastreio público do SSW pela NF
 (sem a série) + CNPJ do remetente escolhido pela série, e grava a "Previsão de entrega" da transportadora. No Preventivo aparece
 "SSW dd/mm" embaixo da data prometida (vermelho se for depois) e o filtro "Conferência SSW".

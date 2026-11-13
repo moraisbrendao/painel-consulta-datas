@@ -3,7 +3,7 @@ name: Robô do SSW
 
 on:
   schedule:
-    - cron: "0 9,15 * * 1-5"   # 6h e 12h (Brasília), dias úteis
+    - cron: "0 9-23/2 * * 1-5"   # de 2 em 2 horas, das 6h às 20h (Brasília), dias úteis
   workflow_dispatch:
     inputs:
       modo:
