@@ -256,7 +256,7 @@
   let ssw = new Map();
   async function carregarSSW() { try { ssw = new Map((await buscarTudo("previsao_ssw", "pedido")).map((x) => [x.pedido, x])); } catch (_) { ssw = new Map(); } }
   // transportadoras que não usam SSW (regra da Brenda); nas outras, "Informação não disponível" = CT-e ainda não emitido
-  const FORA_SSW = /bento|jadlog|formato|transiga|tr[aâ]nsito\s*brasil/i;
+  const FORA_SSW = /bento|formato|transiga|tr[aâ]nsito\s*brasil/i;   // Jadlog: o robô consulta pela API dela
   const sitSSW = (sit, transp) => (sit === "fora do ssw" || sit === "sem cte") ? (FORA_SSW.test(transp || "") ? "fora do ssw" : "sem cte") : sit;
   function sswClasse(p) {
     const x = ssw.get(p.pedido);
@@ -692,7 +692,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=61");
+        const w = new Worker("leitor-intelipost.js?v=62");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1888,7 +1888,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=61");
+        const w = new Worker("leitor-conferencia.js?v=62");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);

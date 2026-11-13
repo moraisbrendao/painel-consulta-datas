@@ -21,7 +21,41 @@ const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 
 const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""], [/^\s*vm\b|vm transportes/i, process.env.SSW_SENHA_VM || ""], [/aceville/i, process.env.SSW_SENHA_ACEVILLE || ""]];
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
-const FORA_SSW = /bento|jadlog|formato|transiga|tr[aâ]nsito\s*brasil/i;
+const FORA_SSW = /bento|formato|transiga|tr[aâ]nsito\s*brasil/i;
+// Jadlog não usa SSW: consulta pela API dela (segredo JADLOG_TOKEN), por NF + série + CNPJ do remetente, 10 por vez
+const EH_JADLOG = /jadlog/i;
+const isoBR = (d) => !d ? null : /^\d{4}-\d{2}-\d{2}/.test(d) ? d.slice(0, 10) : (() => { const [dd, mm, aa] = String(d).split(" ")[0].split("/"); return aa ? `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}` : null; })();
+function lerJadlog(c) {
+  const t = c && c.tracking, prev = c && isoBR(c.previsaoEntrega);
+  if (!t || (!t.status && !(t.eventos || []).length)) return { situacao: "sem cte", previsao: prev };
+  const ev = t.eventos || [], ult = ev[ev.length - 1] || {}, st = String(t.status || ult.status || "").toUpperCase().trim();
+  if (/^ENTREGUE|ENTREGA REALIZADA/.test(st)) { const e = [...ev].reverse().find((x) => /ENTREGUE|ENTREGA REALIZADA/i.test(x.status || "")) || ult;
+    return { situacao: "entregue", data_entrega: isoBR(e.data), data_evento: isoBR(e.data), ultimo_evento: "ENTREGUE", previsao: prev }; }
+  return { situacao: "nao entregue", data_evento: isoBR(ult.data), ultimo_evento: st.slice(0, 60) || null, previsao: prev };
+}
+async function jadlog(itens) {
+  const tok = process.env.JADLOG_TOKEN, out = new Map(); if (!tok || !itens.length) return out;
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  for (let i = 0; i < itens.length; i += 10) {
+    const lote = itens.slice(i, i + 10).map((l) => { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()); return { l, num, ser, c: cnpjDaSerie(ser) }; });
+    lote.filter((x) => !x.num || !x.c).forEach((x) => out.set(x.l.pedido, { situacao: "sem nf" }));
+    const ok = lote.filter((x) => x.num && x.c); if (!ok.length) continue;
+    let j = null;
+    try {
+      const r = await fetch("https://www.jadlog.com.br/embarcador/api/tracking/consultar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` },
+        body: JSON.stringify({ consulta: ok.map((x) => ({ df: { nf: x.num, serie: x.ser, tpDocumento: 2, cnpjRemetente: x.c } })) }) });
+      if (r.status === 401 || r.status === 403) { log(`Jadlog recusou o token (${r.status}); paro a Jadlog nesta rodada.`); break; }
+      if (!r.ok) { log(`Jadlog respondeu ${r.status}; espero e sigo.`); await dorme(5000); continue; }
+      j = await r.json();
+    } catch (e) { log("Jadlog:", String(e.message).slice(0, 80)); await dorme(5000); continue; }
+    const res = (j && j.consulta) || [];
+    ok.forEach((x, k) => { const c = res.find((z) => z && z.df && String(z.df.nf) === x.num && String(z.df.serie) === x.ser) || res[k]; out.set(x.l.pedido, lerJadlog(c)); });
+    await dorme(700);
+  }
+  const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
+  log("Jadlog (API):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
+  return out;
+}
 const cnpjDaSerie = (serie) => { const n = parseInt(serie, 10); return Object.keys(CNPJ_SERIE).find((c) => CNPJ_SERIE[c].includes(n)) || null; };
 const sohTexto = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<svg[\s\S]*?<\/svg>/gi, " ").replace(/<br\s*\/?>|<\/(tr|p|div|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ")
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&nbsp;/g, " ").replace(/&([a-z]+);/gi, (m, n) => ({ amp: "&", atilde: "ã", otilde: "õ", ccedil: "ç", aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú", ecirc: "ê", acirc: "â", ocirc: "ô", agrave: "à", ordf: "ª", ordm: "º", lt: "<", gt: ">", quot: '"' })[n.toLowerCase()] ?? " ").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
@@ -249,7 +283,13 @@ if (MODO === "real") {
   const fechado = (l) => /\bentregue\b|cancelad|entrega realizada/i.test(`${l.status_intelipost || ""} ${l.micro_status || ""}`) || !!l.data_entrega;
   const abertos = todos.filter((l) => !fechado(l));
   log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
-  const fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
+  let fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
+  if (process.env.JADLOG_TOKEN) {   // Jadlog: pela API, rápido, antes do SSW
+    const jad = fila.filter((l) => EH_JADLOG.test(l.transportadora || "")); fila = fila.filter((l) => !EH_JADLOG.test(l.transportadora || ""));
+    const m = await jadlog(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
+      return { pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao === "entregue" ? "entregue" : r.previsao ? "previsao" : r.situacao === "sem cte" ? "sem cte" : "sem previsao" }; });
+    for (let i = 0; i < linhas.length; i += 100) await chamar("rpc/gravar_ssw", "POST", { linhas: linhas.slice(i, i + 100) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
+  }
   const ja = new Map();
   for (let de = 0; ; de += 1000) { const L = await chamar(`previsao_ssw?select=pedido,consultado_em,situacao&order=pedido&limit=1000&offset=${de}`); L.forEach((x) => ja.set(x.pedido, x)); if (L.length < 1000) break; }
   const recente = (l) => { const x = ja.get(l.pedido); return x && x.situacao !== "sem previsao" && Date.now() - Date.parse(x.consultado_em) < 20 * 3600000; };
@@ -340,6 +380,16 @@ async function conferir(minutos) {
     const de_novo = L.filter((x) => !FORA_SSW.test(x.transportadora || "") && (!/sem permissao/.test(x.situacao || "") || chaveDe(x.transportadora))); lista.push(...de_novo);
     if (de_novo.length) log(`Conferência SSW: ${de_novo.length.toLocaleString("pt-BR")} sem CT-e na última consulta para conferir de novo.`); }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
+  if (process.env.JADLOG_TOKEN) {   // Jadlog: pela API, antes do SSW
+    const jad = lista.filter((l) => EH_JADLOG.test(l.transportadora || ""));
+    // a API é rápida: confere de novo toda a Jadlog que ainda não foi entregue
+    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*jadlog*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []);
+      L.forEach((x) => { if (!jad.some((y) => y.pedido === x.pedido)) jad.push(x); }); if (L.length < 1000) break; }
+    for (let i = lista.length - 1; i >= 0; i--) if (EH_JADLOG.test(lista[i].transportadora || "")) lista.splice(i, 1);
+    const m = await jadlog(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
+      return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null }; });
+    for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
+  }
   log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
@@ -369,3 +419,6 @@ async function conferir(minutos) {
   log("Conferência SSW:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
 }
 if (MODO === "conferencia") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 320)); }
+if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no SSW
+  await entrarSupabase(); process.env.SSW_MINUTOS = "0"; await conferir(0);
+}
