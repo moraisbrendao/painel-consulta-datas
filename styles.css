@@ -33,9 +33,10 @@ label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-w
 .login-links { display: flex; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
 .link-btn { background: none; border: 0; padding: 0; color: var(--marinho); font: inherit; font-size: 13px; text-decoration: underline; cursor: pointer; }
 .ok-login { margin: 0; padding: 10px 12px; border-radius: 8px; background: #e8f6ec; color: #17603a; font-size: 13px; }
-.login-caixa[data-modo="entrar"] .lg-senha2, .login-caixa[data-modo="esqueci"] .lg-senha, .login-caixa[data-modo="esqueci"] .lg-senha2,
-.login-caixa[data-modo="nova"] .lg-email, .login-caixa:not([data-modo="entrar"]) .lk-entrar, .login-caixa[data-modo="entrar"] .lk-voltar,
-.login-caixa[data-modo="nova"] .login-links { display: none; }
+.login-caixa[data-modo="entrar"] .lg-senha2, .login-caixa[data-modo="nova"] .lg-email,
+.login-caixa[data-modo="nova"] .lk-entrar, .login-caixa[data-modo="entrar"] .lk-cancelar, .login-caixa:not([data-voluntario]) .lk-cancelar { display: none; }
+.lg-nova { margin: 0 0 12px; padding: 12px 14px; border-radius: 10px; background: #fff8db; border: 1px solid var(--amarelo); font-size: 14px; }
+.lg-nova code { font-size: 18px; font-weight: 700; letter-spacing: 1px; background: #fff; padding: 2px 8px; border-radius: 6px; }
 .erro { color: var(--vermelho); margin: 0; min-height: 1em; font-size: 13px; }
 
 /* topo */

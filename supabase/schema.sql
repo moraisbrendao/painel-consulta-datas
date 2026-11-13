@@ -1354,20 +1354,45 @@ revoke all on function public._conf_nova_data(text[]) from public, anon, authent
 
 select public._ssw_nova_data(null) as do_preventivo, public._conf_nova_data(null) as da_conferencia;
 
--- ============ PARTE 30: criar conta só com e-mail @multimoveis.com ============
--- Quem se cadastra pela tela de login precisa ter e-mail da empresa.
--- Exceção: e-mails que a Logística colocou na lista do SAC (logins_sac) podem ser de outro domínio.
--- Contas que já existem não mudam.
-create or replace function public._so_email_empresa()
-returns trigger language plpgsql security definer set search_path = public
+-- ============ PARTE 30: logins do painel (trocar senha sem e-mail) ============
+-- As contas são criadas pela Logística no Supabase (Authentication › Users › Add user).
+-- No painel a Logística vê os logins e gera uma senha provisória para quem esqueceu;
+-- a pessoa troca por uma dela no primeiro acesso.
+drop trigger if exists so_email_empresa on auth.users;
+drop function if exists public._so_email_empresa();
+
+create or replace function public.listar_logins()
+returns table(email text, criado_em timestamptz, ultimo_acesso timestamptz, sac boolean, trocar_senha boolean)
+language plpgsql stable security definer set search_path = public
 as $$
 begin
-  if lower(coalesce(new.email, '')) like '%@multimoveis.com' then return new; end if;
-  if exists (select 1 from public.logins_sac where email = lower(new.email)) then return new; end if;
-  raise exception 'dominio nao permitido: use o e-mail @multimoveis.com';
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  return query
+    select u.email::text, u.created_at, u.last_sign_in_at,
+           exists (select 1 from public.logins_sac s where s.email = lower(u.email)),
+           coalesce((u.raw_user_meta_data ->> 'trocar_senha')::boolean, false)
+    from auth.users u order by lower(u.email);
 end $$;
-revoke all on function public._so_email_empresa() from public, anon, authenticated;
+revoke all on function public.listar_logins() from public, anon;
+grant execute on function public.listar_logins() to authenticated;
 
-drop trigger if exists so_email_empresa on auth.users;
-create trigger so_email_empresa before insert on auth.users
-  for each row execute function public._so_email_empresa();
+create or replace function public.senha_provisoria(p_email text)
+returns text language plpgsql volatile security definer set search_path = public
+as $$
+declare
+  alfa constant text := 'abcdefghjkmnpqrstuvwxyz23456789';
+  b bytea := extensions.gen_random_bytes(8);
+  nova text := '';
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  for i in 0..7 loop nova := nova || substr(alfa, get_byte(b, i) % length(alfa) + 1, 1); end loop;
+  update auth.users
+     set encrypted_password = extensions.crypt(nova, extensions.gen_salt('bf')),
+         raw_user_meta_data = coalesce(raw_user_meta_data, '{}'::jsonb) || '{"trocar_senha": true}'::jsonb,
+         updated_at = now()
+   where lower(email) = lower(trim(p_email));
+  if not found then raise exception 'login não encontrado'; end if;
+  return nova;
+end $$;
+revoke all on function public.senha_provisoria(text) from public, anon;
+grant execute on function public.senha_provisoria(text) to authenticated;

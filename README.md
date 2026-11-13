@@ -218,9 +218,7 @@ a 5 dias; se for depois da data prometida ao cliente, vai sozinha para a Nova da
 Rode a parte 29 do `supabase/schema.sql`. A nova data automática (partes 27 e 28) passa a valer também para pedidos já vencidos,
 quando o rastreio tem previsão de hoje em diante e depois da prometida.
 
-## 30. Criar conta e esqueci a senha
-- A tela de login tem "Criar conta" e "Esqueci minha senha".
-- Só e-mails @multimoveis.com criam conta (o banco recusa os outros; e-mails da lista do SAC são exceção).
-- No Supabase: Authentication → Sign In / Providers → ligar "Allow new users to sign up" e "Confirm email".
-- Authentication → URL Configuration → Site URL = https://eloggia-multimoveis.vercel.app (e o mesmo em Redirect URLs).
-- Os e-mails de confirmação e de senha nova precisam de um SMTP próprio (Authentication → Emails → SMTP Settings); o e-mail padrão do Supabase só manda para quem é da equipe do projeto.
+## 30. Logins do painel e senha esquecida
+- As contas continuam sendo criadas no Supabase: Authentication › Users › Add user › Create new user (marque "Auto Confirm User"). "Allow new users to sign up" fica desligado.
+- Na página Consulta SAC, o cartão "Logins do painel" lista todo mundo e tem "Gerar senha provisória" para quem esqueceu. A pessoa troca por uma senha dela no primeiro acesso.
+- Qualquer pessoa logada troca a própria senha no botão "Trocar senha" do topo.

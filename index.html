@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=76">
+  <link rel="stylesheet" href="styles.css?v=77">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -23,9 +23,8 @@
       <p id="erro-login" class="erro" role="alert"></p>
       <p id="ok-login" class="ok-login" role="status" hidden></p>
       <div class="login-links">
-        <button type="button" class="link-btn lk-entrar" data-ir="esqueci">Esqueci minha senha</button>
-        <button type="button" class="link-btn lk-entrar" data-ir="criar">Criar conta</button>
-        <button type="button" class="link-btn lk-voltar" data-ir="entrar">← Voltar para entrar</button>
+        <button type="button" class="link-btn lk-entrar" id="lk-esqueci">Esqueci minha senha</button>
+        <button type="button" class="link-btn lk-cancelar" id="lk-cancelar">← Voltar para o painel</button>
       </div>
     </form>
   </main>
@@ -44,6 +43,7 @@
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
+      <button class="menu-item so-log" data-pagina="logins"><span class="menu-icone">🔑</span>Logins</button>
     </nav>
     <div class="lado">
     <header class="topo">
@@ -61,6 +61,7 @@
           Enviar tickets<input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
         </label>
         <span id="usuario" class="usuario"></span>
+        <button id="btn-trocar-senha" class="btn contorno">Trocar senha</button>
         <button id="btn-sair" class="btn contorno">Sair</button>
       </div>
     </header>
@@ -765,10 +766,36 @@
         <nav id="sac-paginacao" class="paginacao"></nav>
       </section>
 
-      <section class="cartao so-log">
+    </main>
+
+    <main class="conteudo" id="pagina-logins" hidden>
+      <div class="titulo-pagina">
+        <div>
+          <h1>Logins</h1>
+          <p class="sub">Quem entra no E-loggia. Para criar um login novo: Supabase › <b>Authentication › Users › Add user › Create new user</b> (marque <b>Auto Confirm User</b>) e passe o e-mail e a senha para a pessoa.</p>
+        </div>
+      </div>
+      <section class="kpis">
+        <div class="kpi"><span class="kpi-rot">Logins</span><span class="kpi-num" id="lg-total">–</span><small>contas que entram no painel</small></div>
+        <div class="kpi"><span class="kpi-rot">Só Consulta SAC</span><span class="kpi-num" id="lg-sac">–</span><small>veem só a consulta</small></div>
+        <div class="kpi"><span class="kpi-rot">Com senha provisória</span><span class="kpi-num" id="lg-prov">–</span><small>ainda não trocaram</small></div>
+      </section>
+      <section class="cartao">
+        <h2>Logins do painel</h2>
+        <p class="sub">Esqueceu a senha? Clique em <b>Gerar senha provisória</b> e passe a senha para a pessoa. No primeiro acesso ela cria uma senha dela.</p>
+        <div id="lg-nova" class="lg-nova" hidden></div>
+        <div class="tabela-wrap">
+          <table class="tabela-ms">
+            <thead><tr><th>E-mail</th><th>Perfil</th><th>Criado em</th><th>Último acesso</th><th></th></tr></thead>
+            <tbody id="lg-linhas"></tbody>
+          </table>
+        </div>
+        <p id="lg-msg" class="vazio" hidden></p>
+      </section>
+      <section class="cartao">
         <h2>Logins do SAC</h2>
         <p class="sub">Quem estiver nesta lista entra no painel vendo <b>só</b> esta consulta (sem editar nada).
-          O login em si é criado no Supabase, em <b>Authentication › Users › Add user</b>.</p>
+         </p>
         <form id="form-sac" class="form-sac">
           <label class="cresce">E-mail do login do SAC<input id="sac-email" type="email" required placeholder="sac@empresa.com.br"></label>
           <button class="btn primario" type="submit">Adicionar</button>
@@ -792,9 +819,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=76"></script>
-  <script src="mapa-brasil.js?v=76"></script>
-  <script src="troca-notas.js?v=76"></script>
-  <script src="app.js?v=76"></script>
+  <script src="config.js?v=77"></script>
+  <script src="mapa-brasil.js?v=77"></script>
+  <script src="troca-notas.js?v=77"></script>
+  <script src="app.js?v=77"></script>
 </body>
 </html>

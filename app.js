@@ -5,8 +5,6 @@
 //   aparecer como entregue ou cancelado no arquivo da Intelipost)
 (function () {
   const CFG = window.PAINEL_CONFIG;
-  // link de "redefinir senha" do e-mail: a página abre com #...type=recovery (o Supabase limpa isso ao iniciar)
-  let recuperando = /type=recovery/.test(location.hash);
   const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -52,69 +50,59 @@
   }
   function carregando(txt) { $("carregando").hidden = !txt; if (txt) $("carregando-texto").textContent = txt; }
 
-  // ---------------- login, criar conta e esqueci a senha ----------------
-  const DOMINIOS = ["multimoveis.com"];   // só e-mails desses domínios criam conta (o banco confere também: parte 30 do schema.sql)
-  const LINK_VOLTA = location.origin + location.pathname;
+  // ---------------- login e troca de senha ----------------
+  // As contas são criadas pela Logística no Supabase. Quem esquece a senha recebe uma provisória
+  // (página Logins) e troca por uma dela no primeiro acesso (user_metadata.trocar_senha).
   const TXT_LOGIN = {
     entrar: ["E-loggia", "Entre com seu e-mail e senha.", "Senha", "Entrar"],
-    criar: ["Criar conta", "Use seu e-mail de trabalho. Vamos mandar um link para confirmar.", "Crie uma senha (mínimo 6)", "Criar conta"],
-    esqueci: ["Esqueci minha senha", "Digite seu e-mail. Vamos mandar um link para criar uma senha nova.", "Senha", "Enviar link"],
-    nova: ["Nova senha", "Digite a senha nova (mínimo 6 caracteres).", "Senha nova", "Salvar senha"],
+    nova: ["Crie sua senha", "Digite uma senha nova, só sua (mínimo 6 caracteres).", "Senha nova", "Salvar senha"],
   };
-  function modoLogin(m) {
+  function modoLogin(m, voluntario) {
     const f = $("form-login"); f.dataset.modo = m;
+    if (voluntario) f.dataset.voluntario = "1"; else delete f.dataset.voluntario;
     const [t, sub, rot, btn] = TXT_LOGIN[m];
-    $("login-titulo").textContent = t; $("login-sub").textContent = sub; $("rot-senha").textContent = rot; $("btn-entrar").textContent = btn;
+    $("login-titulo").textContent = voluntario ? "Trocar senha" : t; $("login-sub").textContent = sub; $("rot-senha").textContent = rot; $("btn-entrar").textContent = btn;
     $("senha").autocomplete = m === "entrar" ? "current-password" : "new-password";
     $("erro-login").textContent = ""; $("ok-login").hidden = true;
     $("senha").value = ""; $("senha2").value = "";
   }
-  document.querySelectorAll("#form-login [data-ir]").forEach((b) => b.addEventListener("click", () => modoLogin(b.dataset.ir)));
   function okLogin(msg) { $("ok-login").textContent = msg; $("ok-login").hidden = false; }
+  $("lk-esqueci").addEventListener("click", () => okLogin("Peça para a Logística gerar uma senha provisória para você (página Logins do painel). No primeiro acesso você cria uma senha sua."));
+  $("lk-cancelar").addEventListener("click", () => { modoLogin("entrar"); $("tela-login").hidden = true; $("tela-painel").hidden = false; });
+  $("btn-trocar-senha").addEventListener("click", () => { modoLogin("nova", true); $("tela-painel").hidden = true; $("tela-login").hidden = false; $("senha").focus(); });
   function erroAuth(error) {
     const m = String(error.message || "");
     if (/invalid login/i.test(m)) return "E-mail ou senha incorretos.";
-    if (/not confirmed/i.test(m)) return "Falta confirmar o e-mail: clique no link que mandamos para você (veja também o spam).";
-    if (/already registered|already been registered/i.test(m)) return "Esse e-mail já tem conta. Volte e entre, ou use \"Esqueci minha senha\".";
-    if (/signups? not allowed|signup is disabled/i.test(m)) return "A criação de contas ainda não foi liberada.";
-    if (/database error saving new user|dominio/i.test(m)) return "Esse e-mail não pode criar conta. Use o e-mail de trabalho.";
+    if (/not confirmed/i.test(m)) return "Esse login ainda não foi confirmado no Supabase (Auto Confirm User).";
     if (/rate limit|too many|security purposes/i.test(m)) return "Muitas tentativas seguidas. Espere alguns minutos e tente de novo.";
     if (/at least|weak|password should/i.test(m)) return "Senha fraca: use pelo menos 6 caracteres.";
-    if (/same.*password|different from the old/i.test(m)) return "A senha nova precisa ser diferente da antiga.";
+    if (/same.*password|different from the old/i.test(m)) return "A senha nova precisa ser diferente da atual.";
     return "Não deu certo: " + m;
   }
 
   $("form-login").addEventListener("submit", async (e) => {
     e.preventDefault();
-    const modo = $("form-login").dataset.modo;
+    const modo = $("form-login").dataset.modo, voluntario = !!$("form-login").dataset.voluntario;
     const email = $("email").value.trim().toLowerCase(), senha = $("senha").value;
     $("erro-login").textContent = ""; $("ok-login").hidden = true;
     const falha = (t) => ($("erro-login").textContent = t);
-    if (modo !== "nova" && !/^\S+@\S+\.\S+$/.test(email)) return falha("Digite um e-mail válido.");
-    if (modo !== "esqueci" && senha.length < 6) return falha("A senha precisa ter pelo menos 6 caracteres.");
-    if ((modo === "criar" || modo === "nova") && senha !== $("senha2").value) return falha("As duas senhas não são iguais.");
-    if (modo === "criar" && DOMINIOS.length && !DOMINIOS.some((d) => email.endsWith("@" + d))) return falha("Use seu e-mail de trabalho (@" + DOMINIOS.join(" ou @") + ").");
+    if (modo === "entrar" && !/^\S+@\S+\.\S+$/.test(email)) return falha("Digite um e-mail válido.");
+    if (senha.length < 6) return falha("A senha precisa ter pelo menos 6 caracteres.");
+    if (modo === "nova" && senha !== $("senha2").value) return falha("As duas senhas não são iguais.");
     $("btn-entrar").disabled = true;
     let r;
     try {
-      if (modo === "entrar") r = await sb.auth.signInWithPassword({ email, password: senha });
-      else if (modo === "criar") r = await sb.auth.signUp({ email, password: senha, options: { emailRedirectTo: LINK_VOLTA } });
-      else if (modo === "esqueci") r = await sb.auth.resetPasswordForEmail(email, { redirectTo: LINK_VOLTA });
-      else r = await sb.auth.updateUser({ password: senha });
+      r = modo === "entrar" ? await sb.auth.signInWithPassword({ email, password: senha })
+        : await sb.auth.updateUser({ password: senha, data: { trocar_senha: false } });
     } catch (err) { r = { error: err }; }
     $("btn-entrar").disabled = false;
     if (r.error) return falha(erroAuth(r.error));
     $("senha").value = ""; $("senha2").value = "";
-    if (modo === "criar") {
-      // com confirmação de e-mail ligada não vem sessão; o Supabase também não avisa se o e-mail já existia
-      if (!r.data || !r.data.session) { modoLogin("entrar"); okLogin("Conta criada! Mandamos um link para " + email + ". Clique nele para ativar e depois entre aqui (veja também o spam)."); }
-    } else if (modo === "esqueci") {
-      modoLogin("entrar"); okLogin("Se " + email + " tiver conta, chegou um link para criar a senha nova (veja também o spam).");
-    } else if (modo === "nova") {
-      recuperando = false;
+    if (modo === "nova") {
+      modoLogin("entrar");
       toast("Senha nova salva.");
-      const { data } = await sb.auth.getSession();
-      if (data && data.session) abrirSessao(data.session);
+      if (voluntario) { $("tela-login").hidden = true; $("tela-painel").hidden = false; }
+      else { const { data } = await sb.auth.getSession(); if (data && data.session) abrirSessao(data.session); }
     }
   });
   $("btn-sair").addEventListener("click", () => sb.auth.signOut());
@@ -127,9 +115,9 @@
     setTimeout(entrar, 0);
   }
   sb.auth.onAuthStateChange((ev, sessao) => {
-    if (ev === "PASSWORD_RECOVERY") recuperando = true;
-    if (sessao && recuperando) {
-      // veio do link de "esqueci a senha": pede a senha nova antes de abrir o painel
+    const prov = sessao && sessao.user && sessao.user.user_metadata && sessao.user.user_metadata.trocar_senha;
+    if (sessao && (prov || ev === "PASSWORD_RECOVERY")) {
+      // senha provisória: pede a senha nova antes de abrir o painel
       $("tela-painel").hidden = true; $("tela-login").hidden = false;
       if ($("form-login").dataset.modo !== "nova") modoLogin("nova");
       return;
@@ -137,7 +125,6 @@
     if (sessao) abrirSessao(sessao);
     else {
       usuarioId = null; perfil = "";
-      if (ev === "SIGNED_OUT") recuperando = false;
       delete document.body.dataset.perfil;
       $("tela-painel").hidden = true;
       $("tela-login").hidden = false;
@@ -2216,7 +2203,7 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
@@ -2230,6 +2217,7 @@
     if (b.dataset.pagina === "alterar") carregarAlterar();
     if (b.dataset.pagina === "conferencia") carregarConferencia();
     if (b.dataset.pagina === "ocorrencias") desenharOcorrencias();
+    if (b.dataset.pagina === "logins") { carregarLogins(); carregarLoginsSac(); }
   });
 
   // ---------------- retornos em massa (modelo: Pedido Intelipost, NF, Transportadora, Nova Data, Observação) ----------------
@@ -2658,6 +2646,38 @@
     XLSX.writeFile(wb, `consulta_sac_${sacVisao.replace(/\+/g, "-")}_${hojeISO()}.xlsx`);
   });
 
+  // ---------------- logins do painel ----------------
+  const dataHora = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "nunca entrou");
+  async function carregarLogins() {
+    const { data, error } = await sb.rpc("listar_logins");
+    const msg = $("lg-msg");
+    if (error) { $("lg-linhas").innerHTML = ""; msg.hidden = false; msg.textContent = /listar_logins|function/i.test(error.message) ? "Falta rodar a parte 30 do schema.sql no Supabase." : "Não consegui ler os logins: " + error.message; return; }
+    msg.hidden = data.length > 0; msg.textContent = "Nenhum login.";
+    $("lg-total").textContent = fmt(data.length);
+    $("lg-sac").textContent = fmt(data.filter((x) => x.sac).length);
+    $("lg-prov").textContent = fmt(data.filter((x) => x.trocar_senha).length);
+    const eu = $("usuario").textContent;
+    $("lg-linhas").innerHTML = data.map((x) => `<tr>
+      <td>${esc(x.email)}${x.email === eu ? ' <span class="chip verde">você</span>' : ""}${x.trocar_senha ? ' <span class="chip ambar">senha provisória</span>' : ""}</td>
+      <td>${x.sac ? "Só Consulta SAC" : "Logística (tudo)"}</td>
+      <td>${esc(dataHora(x.criado_em))}</td><td>${esc(dataHora(x.ultimo_acesso))}</td>
+      <td>${x.email === eu ? "" : `<button class="btn contorno" data-prov="${esc(x.email)}">Gerar senha provisória</button>`}</td></tr>`).join("");
+  }
+  $("lg-linhas").addEventListener("click", async (e) => {
+    const b = e.target.closest("button[data-prov]"); if (!b) return;
+    const email = b.dataset.prov;
+    if (!confirm(`Gerar uma senha provisória para ${email}?\n\nA senha atual dessa pessoa deixa de funcionar.`)) return;
+    b.disabled = true;
+    const { data, error } = await sb.rpc("senha_provisoria", { p_email: email });
+    b.disabled = false;
+    if (error) return toast("Não consegui trocar a senha: " + error.message, true);
+    const box = $("lg-nova");
+    box.innerHTML = `Senha provisória de <b>${esc(email)}</b>: <code>${esc(data)}</code> <button class="btn contorno" id="lg-copiar">Copiar</button><br><small>Passe para a pessoa. Ela vai criar uma senha dela ao entrar. Esta senha não aparece de novo.</small>`;
+    box.hidden = false;
+    $("lg-copiar").addEventListener("click", () => navigator.clipboard.writeText(data).then(() => toast("Senha copiada.")));
+    carregarLogins();
+  });
+
   // lista de logins do SAC (só a Logística mexe)
   async function carregarLoginsSac() {
     const { data, error } = await sb.from("logins_sac").select("email").order("email");
@@ -2671,13 +2691,13 @@
     const email = $("sac-email").value.trim().toLowerCase(); if (!email) return;
     const { error } = await sb.from("logins_sac").upsert({ email, incluido_por: $("usuario").textContent }, { onConflict: "email" });
     if (error) return toast("Não foi possível adicionar: " + error.message, true);
-    $("sac-email").value = ""; toast(`${email} agora entra vendo só a Consulta SAC.`); carregarLoginsSac();
+    $("sac-email").value = ""; toast(`${email} agora entra vendo só a Consulta SAC.`); carregarLoginsSac(); if (paginaAtual === "logins") carregarLogins();
   });
   $("lista-sac").addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-tirar]"); if (!b) return;
     if (!confirm(`Tirar ${b.dataset.tirar} da lista do SAC? Esse login passa a ver o painel inteiro.`)) return;
     const { error } = await sb.from("logins_sac").delete().eq("email", b.dataset.tirar);
     if (error) return toast("Erro: " + error.message, true);
-    carregarLoginsSac();
+    carregarLoginsSac(); if (paginaAtual === "logins") carregarLogins();
   });
 })();
