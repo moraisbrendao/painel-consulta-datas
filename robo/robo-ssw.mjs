@@ -156,54 +156,65 @@ function lerResultado(txt) {
 if (MODO === "real") {
   await entrarSupabase();
   const todos = [];
-  for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora,status_intelipost,micro_status,data_entrega&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
+  for (let de = 0; ; de += 1000) { const L = await chamar(`base_aberta?select=pedido,nf,transportadora,status_intelipost,micro_status,data_entrega,prev_original,prev_atual&nf=not.is.null&order=pedido&limit=1000&offset=${de}`); todos.push(...L); if (L.length < 1000) break; }
   // só os pedidos em aberto: fora os entregues e cancelados (status, micro status ou data de entrega preenchida)
   const fechado = (l) => /\bentregue\b|cancelad|entrega realizada/i.test(`${l.status_intelipost || ""} ${l.micro_status || ""}`) || !!l.data_entrega;
   const abertos = todos.filter((l) => !fechado(l));
   log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
   const fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
+  const ja = new Map();
+  for (let de = 0; ; de += 1000) { const L = await chamar(`previsao_ssw?select=pedido,consultado_em,situacao&order=pedido&limit=1000&offset=${de}`); L.forEach((x) => ja.set(x.pedido, x)); if (L.length < 1000) break; }
+  const recente = (l) => { const x = ja.get(l.pedido); return x && x.situacao !== "sem previsao" && Date.now() - Date.parse(x.consultado_em) < 20 * 3600000; };
+  fila.sort((a, b) => (recente(a) - recente(b)) || String(a.prev_original || a.prev_atual || "9999").localeCompare(String(b.prev_original || b.prev_atual || "9999")));
   if (Number(process.env.SSW_LIMITE) > 0) fila.splice(Number(process.env.SSW_LIMITE));   // teste: só os N primeiros
   log(`Pedidos em aberto: ${abertos.length.toLocaleString("pt-BR")} · com série conhecida: ${fila.length.toLocaleString("pt-BR")}`);
   const porT = {}, cont = {}, grava = [];
   const salvar = async (forca) => { if (grava.length >= 100 || (forca && grava.length)) { const lote = grava.splice(0); try { await chamar("rpc/gravar_ssw", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
-  const PARALELO = Number(process.env.SSW_PARALELO || 5);
-  let i = 0, feitos = 0; const t0 = Date.now();
-  async function trabalhador() {
-    while (i < fila.length) {
-      const l = fila[i++];
-      const t = l.transportadora || "?"; const st = (porT[t] ||= { n: 0, fora: 0 });
-      let r;
-      if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
-      else {
-        try {
-          const pg = await consultar(l.c, [l.num]);
-          r = lerResultado(pg.txt);
-          // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
-          const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
-          if (det) cont._det = (cont._det || 0) + 1;
-          else if (process.env.SSW_LIMITE && !/fora do ssw|sem permissao/.test(r.situacao) && (cont._amostra = (cont._amostra || 0) + 1) <= 4) {
-            log("  página:", pg.status, pg.url.replace(/\?.*/, ""), pg.txt.length, "letras ·", limpo(sohTexto(pg.txt).filter((x) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(x)).slice(0, 12).join(" / ")).slice(0, 300), "· raw:", pg.txt.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\d{4,}/g, "#").slice(0, 200));
-            const corpo = pg.txt.slice(Math.max(0, pg.txt.search(/Remetente/i)));
-            log("  sem link:", tags(corpo, /<a [^>]*>|onclick=["'][^"']{0,160}["']|<form[^>]*>/gi).map((t) => t.replace(/\d{4,}/g, "#").replace(/(id|md)=[^&'"]{6,}/g, "$1=…")).slice(0, 8).join(" | "));
-            log("  rótulos:", sohTexto(corpo).filter((x) => !/\d{3,}/.test(x) && x.length < 40).slice(0, 20).map(limpo).join(" / "));
-          }
-          if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
-            await new Promise((ok) => setTimeout(ok, 200));
-            const r2 = lerResultado((await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
-            if (r2.previsao || r2.situacao === "entregue") r = r2; else cont._detSem = (cont._detSem || 0) + 1;
-          }
-        } catch (e) { r = null; }
-        await new Promise((ok) => setTimeout(ok, 300));
-        if (!r) continue;
-        st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;
-      }
-      cont[r.situacao] = (cont[r.situacao] || 0) + 1;
-      grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
-      if (++feitos % 1000 === 0) log(`${feitos.toLocaleString("pt-BR")} de ${fila.length.toLocaleString("pt-BR")} em ${Math.round((Date.now() - t0) / 60000)} min`);
-      await salvar(false);
+  // o SSW bloqueia (403) quem consulta rápido demais: 1 consulta por vez, com pausa; se bloquear, espera e tenta de novo
+  const PAUSA = Number(process.env.SSW_PAUSA || 2500);
+  const ESPERAS = [3, 10, 20];   // minutos de espera a cada bloqueio seguido; depois disso para e continua na próxima rodada
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  let feitos = 0, bloqueios = 0; const t0 = Date.now();
+  const pegar = async (url, opts) => {
+    for (let k = 0; ; k++) {
+      const pg = await pagina(url, opts);
+      if (pg.status !== 403 && pg.status !== 429) { bloqueios = 0; return pg; }
+      if (k >= ESPERAS.length) throw Object.assign(new Error("bloqueado"), { bloqueado: true });
+      log(`SSW bloqueou (${pg.status}) depois de ${feitos.toLocaleString("pt-BR")} consultas em ${Math.round((Date.now() - t0) / 60000)} min; espero ${ESPERAS[k]} min.`);
+      await dorme(ESPERAS[k] * 60000);
     }
+  };
+  const fimEm = Date.now() + Number(process.env.SSW_MINUTOS || 80) * 60000;
+  for (const l of fila) {
+    if (Date.now() > fimEm) { log("Tempo da rodada acabou; o resto fica para a próxima."); break; }
+    const t = l.transportadora || "?"; const st = (porT[t] ||= { n: 0, fora: 0 });
+    let r;
+    if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
+    else {
+      try {
+        const pg = await pegar("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: new URLSearchParams({ cnpj: l.c, NR: l.num, chave: "" }).toString() });
+        r = lerResultado(pg.txt);
+        // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
+        const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+        if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
+          await dorme(PAUSA);
+          const r2 = lerResultado((await pegar("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
+          if (r2.previsao || r2.situacao === "entregue") r = r2;
+        }
+      } catch (e) {
+        if (e.bloqueado) { log("O SSW continua bloqueando; paro aqui e continuo na próxima rodada."); break; }
+        r = null;
+      }
+      await dorme(PAUSA);
+      if (!r) continue;
+      st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;
+    }
+    cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+    grava.push({ pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao });
+    if (++feitos % 250 === 0) log(`${feitos.toLocaleString("pt-BR")} de ${fila.length.toLocaleString("pt-BR")} em ${Math.round((Date.now() - t0) / 60000)} min · com previsão ${cont.previsao || 0}`);
+    await salvar(false);
   }
-  await Promise.all(Array.from({ length: PARALELO }, trabalhador));
   await salvar(true);
   log("Resultado:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
   log("Transportadoras fora do SSW (ou com senha):", Object.entries(porT).filter(([, v]) => v.n && v.fora === v.n).map(([k]) => k).join(", ") || "nenhuma");
