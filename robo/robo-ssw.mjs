@@ -25,7 +25,7 @@ const FORA_SSW = /formato|transiga/i;
 // Trânsito Brasil não usa SSW: consulta no rastreio dela (Senior), pela NF + CNPJ (série 35 → ...1083, outras → ...0192); só vale se a série bater
 const EH_TRANSITO = /tr[aâ]nsito\s*brasil/i;
 async function transito(itens) {
-  const out = new Map(); if (!itens.length) return out; let ssw_emissor = 0;
+  const out = new Map(); if (!itens.length) return out;
   const URL_T = "https://platform.senior.com.br/t/senior.com.br/bridge/1.0/anonymous/rest/tms/tck/actions/externalTenantConsultaTracking";
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
   const dia = (v) => v ? String(v).slice(0, 10) : null;
@@ -44,21 +44,7 @@ async function transito(itens) {
       .map((x) => ({ x, fases: (x.listaTrackingFase || []).filter((f) => f.executada && f.dataExecucao).sort((a, b) => String(a.dataExecucao).localeCompare(String(b.dataExecucao))) }))
       .filter(({ x, fases }) => (dia(x.tracking.dataEntrega) || dia((fases[fases.length - 1] || {}).dataExecucao) || "9999") >= limite);   // nota antiga com o mesmo número: desconsidera
     const t = ts[ts.length - 1];
-    if (!t) {   // não está na Senior: pode ter tido carta de correção e outra transportadora emitiu o CT-e no SSW (regra da Brenda)
-      const c = cnpjDaSerie(ser); let r = { situacao: "sem cte" };
-      if (c) {
-        await dorme(2500);
-        const a = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: "" }).toString() }).catch(() => null);
-        const e = a && a.status === 200 ? lerEntrega(a.txt) : null;
-        if (e && !/sem cte|sem permissao/.test(e.situacao)) {
-          const det = (a.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1]; let emissor = null;
-          if (det) { await dorme(2500); const d = await pagina("https://ssw.inf.br" + det).catch(() => null); emissor = d && ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; }
-          r = { ...e, detalhe: { fonte: "SSW", emissor } };
-          ssw_emissor = (ssw_emissor || 0) + 1;
-        }
-      }
-      out.set(l.pedido, r);
-    }
+    if (!t) out.set(l.pedido, { situacao: "sem cte" });
     else {
       const tr = t.x.tracking, prev = dia(tr.dataPrevisaoEntrega), ult = t.fases[t.fases.length - 1];
       const detalhe = { fonte: "Trânsito Brasil", codigo: tr.codigo || null, status: tr.situacao && tr.situacao.descricao || null, previsao: prev,
@@ -69,7 +55,7 @@ async function transito(itens) {
     await dorme(1000);
   }
   const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
-  log("Trânsito Brasil (Senior):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada", `· achados no SSW com outra transportadora: ${ssw_emissor}`);
+  log("Trânsito Brasil (Senior):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
   return out;
 }
 // Bento Brasil não usa SSW: consulta no rastreio do site dela (CNPJ da Multi + número da NF), 1 por vez com pausa
@@ -559,8 +545,10 @@ async function conferir(minutos) {
   for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
     const jad = lista.filter((l) => EH.test(l.transportadora || ""));
     // fora do SSW e rápido: confere de novo toda a transportadora que ainda não foi entregue
-    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&transportadora=ilike.*${nome}*&${nome === "jadlog" ? "or=(situacao.neq.entregue,detalhe.is.null)" : "situacao=neq.entregue"}&order=pedido&limit=1000&offset=${de}`).catch(() => []);
-      L.forEach((x) => { if (!jad.some((y) => y.pedido === x.pedido)) jad.push(x); }); if (L.length < 1000) break; }
+    for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe&transportadora=ilike.*${nome}*&${nome === "jadlog" ? "or=(situacao.neq.entregue,detalhe.is.null)" : "situacao=neq.entregue"}&order=pedido&limit=1000&offset=${de}`).catch(() => []);
+      L.forEach((x) => { if (!(x.detalhe && x.detalhe.emissor) && !jad.some((y) => y.pedido === x.pedido)) jad.push(x); }); if (L.length < 1000) break; }
+    // ajuste único de 13/11 (carta de correção): pedidos já passados para a transportadora que emitiu o CT-e não são mais mexidos aqui
+    for (let i = jad.length - 1; i >= 0; i--) if (jad[i].detalhe && jad[i].detalhe.emissor) jad.splice(i, 1);
     for (let i = lista.length - 1; i >= 0; i--) if (EH.test(lista[i].transportadora || "")) lista.splice(i, 1);
     const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
       return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : null }; });
