@@ -198,6 +198,10 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   const ls = sohTexto(r.txt);
   log("resultado:", r.status, "· linhas:", ls.length, "· datas:", (r.txt.match(/\d{2}\/\d{2}\/\d{2,4}/g) || []).length, "· tem previsão:", /previs/i.test(r.txt) ? "sim" : "não", "· tem entreg:", /entreg/i.test(r.txt) ? "sim" : "não");
   log("textos:", ls.map((l) => limpo(l)).filter((l) => l.replace(/[x\s#]/g, "").length > 2).slice(0, 60).join(" | ").slice(0, 2500));
+  const js = await pagina("https://sistema.bentobrasil.com.br/static/js/formConsultaNota.js").catch(() => ({ txt: "" }));
+  log("formConsultaNota.js:", js.txt.replace(/\s+/g, " ").slice(0, 2500));
+  const i0 = r.txt.search(/para a consulta/i);
+  log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
 if (MODO === "diag-det") {
