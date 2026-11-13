@@ -100,21 +100,24 @@ if (MODO === "diag-link") {
     log("linhas:", sohTexto(corpo).length, "· tem 'Previsao':", /previs/i.test(corpo) ? "sim" : "não");
   }
 }
-if (MODO === "diag-senha") {   // como o SSW pede a senha da transportadora (só nomes de campos, botões e scripts curtos)
+if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes (só mostra o resultado, sem dados)
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*sua*log*&nf=not.is.null&limit=3");
-  log("pedidos Trans Sua:", L.length, "· com senha:", chaveDe("Trans Sua Log") ? "sim" : "não");
-  for (const l of L.slice(0, 2)) {
-    const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
-    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: chaveDe(l.transportadora) }).toString() });
-    const t = pg.txt.replace(/\d{4,}/g, "#");
-    log("status:", pg.status, "· pede permissão:", /permiss/i.test(t) ? "sim" : "não");
-    const corpo = t.slice(Math.max(0, t.search(/<main|N Fiscal|Informa|permiss|senha/i)));
-    log("situação:", lerEntrega(pg.txt).situacao, "· tem 'senha':", /senha/i.test(t) ? "sim" : "não", "· não disponível:", /n[ãa]o dispon/i.test(t) ? "sim" : "não");
-    log("inputs:", tags(t, /<input[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/value=["'][^"']*["']/g, 'value="…"').replace(/class="[^"]*"/g, "")).join(" | ").slice(0, 1500));
-    log("textos senha:", tags(t, /[^<>]{0,80}senha[^<>]{0,80}/gi).map((x) => limpo(x)).slice(0, 8).join(" | "));
-    await new Promise((ok) => setTimeout(ok, 3000));
-  }
+  const senha = chaveDe("Trans Sua Log");
+  log("pedidos Trans Sua:", L.length, "· com senha:", senha ? `sim (${senha.length} caracteres)` : "não");
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  const tenta = async (rot, cnpj, nr, chave) => {
+    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj, NR: nr, chave }).toString() });
+    const ls = sohTexto(pg.txt), txt = ls.join(" ");
+    log(`${rot}: ${pg.status} · ${lerEntrega(pg.txt).situacao} · NF na página: ${(txt.match(/N Fiscal/gi) || []).length} · datas: ${(txt.match(/\d{2}\/\d{2}\/\d{2}/g) || []).length} · senha inválida: ${/senha (inv|incorr)/i.test(txt) ? "sim" : "não"} · avisos: ${limpo(ls.filter((l) => /senha|permiss|dispon|inv[aá]lid|localiz/i.test(l)).join(" | ")).slice(0, 200)}`);
+    await dorme(3000);
+  };
+  const [num, ser] = String(L[0].nf).split("-").map((x) => (x || "").trim());
+  log("série:", ser, "· CNPJ final:", String(cnpjDaSerie(ser)).slice(-4));
+  await tenta("NF sem senha", cnpjDaSerie(ser), num, "");
+  await tenta("NF com senha", cnpjDaSerie(ser), num, senha);
+  await tenta("só CNPJ + senha (sem NF)", cnpjDaSerie(ser), "", senha);
+  for (const c of Object.keys(CNPJ_SERIE).filter((c) => c !== cnpjDaSerie(ser))) await tenta(`NF com senha no CNPJ ...${c.slice(-4)}`, c, num, senha);
 }
 if (MODO === "diag-det") {
   await entrarSupabase();
