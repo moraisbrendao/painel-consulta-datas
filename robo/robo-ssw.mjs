@@ -138,6 +138,20 @@ if (MODO === "diag-api") {   // API do SSW com login da transportadora (Dominalo
     }
   }
 }
+if (MODO === "diag-ent") {   // como o SSW mostra a entrega (só datas e palavras de sistema)
+  await entrarSupabase();
+  const L = await chamar("previsao_ssw?select=nf&situacao=eq.entregue&limit=3");
+  for (const l of L) {
+    const [num, ser] = String(l.nf).split("-").map((x) => x.trim());
+    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: "" }).toString() });
+    const ls1 = sohTexto(pg.txt); const i1 = ls1.findIndex((x) => /entreg/i.test(x) && !/previs/i.test(x));
+    log("1ª página, perto de ENTREG:", ls1.slice(Math.max(0, i1 - 4), i1 + 3).map(limpo).join(" / "));
+    const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+    if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const ls = sohTexto((await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
+      ls.forEach((x, i) => { if (/entreg/i.test(x) && !/previs/i.test(x)) log("  detalhe:", ls.slice(Math.max(0, i - 3), i + 2).map(limpo).join(" / ")); }); }
+    await new Promise((ok) => setTimeout(ok, 2500));
+  }
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
