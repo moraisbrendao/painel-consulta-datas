@@ -17,6 +17,9 @@ async function pagina(url, opts) {
 const CNPJ_SERIE = { "00349443000192": [4, 6, 7, 31, 94], "00349443000435": [9, 22, 34], "00349443000516": [10],
   "00349443000788": [11, 24, 25, 27, 301, 302, 303], "00349443001083": [14, 35], "00349443001245": [17], "00349443001407": [21],
   "00349443001750": [23], "00349443001679": [26] };
+// senha do rastreio (campo "Senha (opcional)" do SSW = chave) de transportadoras que exigem senha; fica só no segredo do GitHub
+const SENHAS = [[/sua\s*log/i, process.env.SSW_SENHA_TRANSSUA || ""]];
+const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 const cnpjDaSerie = (serie) => { const n = parseInt(serie, 10); return Object.keys(CNPJ_SERIE).find((c) => CNPJ_SERIE[c].includes(n)) || null; };
 const sohTexto = (html) => html.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>|<svg[\s\S]*?<\/svg>/gi, " ").replace(/<br\s*\/?>|<\/(tr|p|div|li|h\d)>/gi, "\n").replace(/<[^>]+>/g, " ")
   .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n)).replace(/&nbsp;/g, " ").replace(/&([a-z]+);/gi, (m, n) => ({ amp: "&", atilde: "ã", otilde: "õ", ccedil: "ç", aacute: "á", eacute: "é", iacute: "í", oacute: "ó", uacute: "ú", ecirc: "ê", acirc: "â", ocirc: "ô", agrave: "à", ordf: "ª", ordm: "º", lt: "<", gt: ">", quot: '"' })[n.toLowerCase()] ?? " ").split("\n").map((l) => l.replace(/\s+/g, " ").trim()).filter(Boolean);
@@ -100,10 +103,10 @@ if (MODO === "diag-link") {
 if (MODO === "diag-senha") {   // como o SSW pede a senha da transportadora (só nomes de campos, botões e scripts curtos)
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*sua*log*&nf=not.is.null&limit=3");
-  log("pedidos Trans Sua:", L.length);
+  log("pedidos Trans Sua:", L.length, "· com senha:", chaveDe("Trans Sua Log") ? "sim" : "não");
   for (const l of L.slice(0, 2)) {
     const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
-    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: "" }).toString() });
+    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: chaveDe(l.transportadora) }).toString() });
     const t = pg.txt.replace(/\d{4,}/g, "#");
     log("status:", pg.status, "· pede permissão:", /permiss/i.test(t) ? "sim" : "não");
     const corpo = t.slice(Math.max(0, t.search(/<main|N Fiscal|Informa|permiss|senha/i)));
@@ -251,7 +254,7 @@ if (MODO === "real") {
     else {
       try {
         const pg = await pegar("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
-          body: new URLSearchParams({ cnpj: l.c, NR: l.num, chave: "" }).toString() });
+          body: new URLSearchParams({ cnpj: l.c, NR: l.num, chave: chaveDe(l.transportadora) }).toString() });
         r = lerResultado(pg.txt);
         if (pendCf.has(l.pedido)) { pendCf.delete(l.pedido); const e = lerEntrega(pg.txt);   // aproveita a mesma consulta para a aba Conferência SSW
           gravaCf.push({ pedido: l.pedido, situacao: e.situacao, ultimo_evento: e.ultimo_evento || null, data_evento: e.data_evento || null, data_entrega: e.data_entrega || null });
@@ -301,6 +304,13 @@ async function conferir(minutos) {
   // confere TODOS os pendentes, os de previsão mais antiga primeiro (vencidos e urgentes saem antes)
   const lista = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=eq.pendente&order=prev_cliente.asc.nullsfirst,pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  // transportadora com senha cadastrada: confere de novo os que antes deram "fora do SSW"/"pede senha" (1 vez a cada 20 h)
+  for (const [re, senha] of SENHAS) if (senha) {
+    const antes = new Date(Date.now() - 20 * 3600000).toISOString();
+    const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora&situacao=in.(fora%20do%20ssw,sem%20permissao)&consultado_em=lt.${antes}&limit=5000`).catch(() => []);
+    const novos = L.filter((x) => re.test(x.transportadora || "")); lista.unshift(...novos);
+    if (novos.length) log(`Conferência SSW: ${novos.length.toLocaleString("pt-BR")} de transportadora com senha para conferir de novo.`);
+  }
   if (!lista.length) { log("Conferência SSW: nada pendente."); return; }
   log(`Conferência SSW: ${lista.length.toLocaleString("pt-BR")} pedido(s) para conferir.`);
   const PAUSA = Number(process.env.SSW_PAUSA || 2500), fim = Date.now() + minutos * 60000, cont = {}, grava = [];
@@ -314,7 +324,7 @@ async function conferir(minutos) {
     let r;
     if (!num || !c) r = { situacao: "sem nf" };
     else {
-      const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: "" }).toString() }).catch(() => null);
+      const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: chaveDe(l.transportadora) }).toString() }).catch(() => null);
       if (!pg) { await dorme(PAUSA); continue; }
       if (pg.status === 403 || pg.status === 429) {
         if (++bloq > 3) { log("O SSW continua bloqueando; paro e continuo na próxima rodada."); break; }
