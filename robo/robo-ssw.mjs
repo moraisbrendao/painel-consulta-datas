@@ -146,6 +146,7 @@ if (MODO === "real") {
   const abertos = todos.filter((l) => !fechado(l));
   log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
   const fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
+  if (Number(process.env.SSW_LIMITE) > 0) fila.splice(Number(process.env.SSW_LIMITE));   // teste: só os N primeiros
   log(`Pedidos em aberto: ${abertos.length.toLocaleString("pt-BR")} · com série conhecida: ${fila.length.toLocaleString("pt-BR")}`);
   const porT = {}, cont = {}, grava = [];
   const salvar = async (forca) => { if (grava.length >= 100 || (forca && grava.length)) { const lote = grava.splice(0); try { await chamar("rpc/gravar_ssw", "POST", { linhas: lote }); } catch (e) { log("Não gravei um lote:", e.message.slice(0, 120)); } } };
@@ -158,7 +159,17 @@ if (MODO === "real") {
       let r;
       if (st.n >= 8 && st.fora === st.n) r = { situacao: "fora do ssw" };   // as 8 primeiras não estão no SSW: a transportadora não usa (ou pede senha)
       else {
-        try { r = lerResultado((await consultar(l.c, [l.num])).txt); } catch (e) { r = null; }
+        try {
+          const pg = await consultar(l.c, [l.num]);
+          r = lerResultado(pg.txt);
+          // a 1ª página mostra só o último evento: a previsão fica no histórico completo (link "ssw_SSWDetalhado")
+          const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+          if (det && !r.previsao && !/fora do ssw|sem permissao/.test(r.situacao)) {
+            await new Promise((ok) => setTimeout(ok, 200));
+            const r2 = lerResultado((await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&"))).txt);
+            if (r2.previsao || r2.situacao === "entregue") r = r2;
+          }
+        } catch (e) { r = null; }
         await new Promise((ok) => setTimeout(ok, 300));
         if (!r) continue;
         st.n++; if (/fora do ssw|sem permissao/.test(r.situacao)) st.fora++;

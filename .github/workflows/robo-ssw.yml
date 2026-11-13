@@ -11,6 +11,10 @@ on:
         type: choice
         options: [real, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link]
         default: real
+      limite:
+        description: "Teste: consultar só os N primeiros pedidos (vazio = todos)"
+        type: string
+        default: ""
 
 concurrency:
   group: robo-ssw
@@ -32,5 +36,6 @@ jobs:
         run: node robo/robo-ssw.mjs
         env:
           MODO: ${{ github.event.inputs.modo || 'real' }}
+          SSW_LIMITE: ${{ github.event.inputs.limite || '' }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
