@@ -11,14 +11,22 @@ export async function entrarMulti360(ctx, log) {
   const p = await ctx.newPage(); p.setDefaultTimeout(30000);
   await p.goto(BASE + "/tickets", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  log(`Multi360: usando o login de ${process.env.MULTI360_EMAIL ? "MULTI360_EMAIL" : "PORTAL_EMAIL"}; tela: ${new URL(p.url()).pathname}`);
   const senha = p.locator("input[type=password]:visible").first();
+  await senha.waitFor({ timeout: 15000 }).catch(() => {});
   if (await senha.count()) {
     const usuario = p.locator("input[type=email]:visible, input[name*=mail i]:visible, input[name*=user i]:visible, input[type=text]:visible").first();
     await usuario.fill(EMAIL); await senha.fill(SENHA);
     const bt = p.locator("button[type=submit]:visible").first();
     if (await bt.count()) await bt.click(); else await senha.press("Enter");
-    try { await senha.waitFor({ state: "detached", timeout: 45000 }); }
-    catch { throw new Error("O Multi360 recusou o login do robô (confira o login guardado no GitHub)."); }
+    try { await p.waitForURL((u) => !/login|signin|auth/i.test(u.pathname), { timeout: 45000 }); }
+    catch {
+      const t = await p.evaluate(() => ({ campos: [...document.querySelectorAll("input")].map((e) => `${e.type}:${e.name || e.id || ""}`).join(" "),
+        botoes: [...document.querySelectorAll("button")].map((b) => b.innerText.trim()).filter(Boolean).join(" / "),
+        avisos: [...document.querySelectorAll("[role=alert], [class*=error i], [class*=toast i], .text-red-500, .text-destructive")].map((e) => e.innerText.trim().slice(0, 100)).filter(Boolean).join(" | ") }));
+      log("  tela de login:", new URL(p.url()).pathname, "· campos:", t.campos, "· botões:", t.botoes, "· avisos:", t.avisos);
+      throw new Error("O Multi360 recusou o login do robô (confira o login guardado no GitHub).");
+    }
   }
   log("Entrei no Multi360.");
   return p;
