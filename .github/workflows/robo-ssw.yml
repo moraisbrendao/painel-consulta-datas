@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, conferencia, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda]
+        options: [real, conferencia, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -57,6 +57,9 @@ jobs:
           SSW_SENHA_TRANSSUA: ${{ secrets.SSW_SENHA_TRANSSUA }}
           SSW_SENHA_VM: ${{ secrets.SSW_SENHA_VM }}
           SSW_SENHA_ACEVILLE: ${{ secrets.SSW_SENHA_ACEVILLE }}
+          JADLOG_TOKEN: ${{ secrets.JADLOG_TOKEN || secrets.TOKEN }}
+          JADLOG_USUARIO: ${{ secrets.JADLOG_USUARIO || secrets.USUARIO_JADLOG }}
+          JADLOG_CODIGO: ${{ secrets.JADLOG_CODIGO_CLIENTE || secrets.CODIGO_CLIENTE_JADLOG }}
       - name: Continuar a conferência (se ainda falta)
         if: ${{ hashFiles('continuar') != '' }}
         run: |

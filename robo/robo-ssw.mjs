@@ -125,6 +125,26 @@ if (MODO === "diag-ajuda") {   // página pública de ajuda do SSW (sem dados de
   log("status:", p.status);
   log(p.txt.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/<[^>]+>/g, (t) => /form|input|textarea|action|name=/i.test(t) ? t : " ").replace(/\s+/g, " ").slice(0, 6000));
 }
+if (MODO === "diag-jadlog") {   // API da Jadlog: manual público + teste com 2 NFs (só status e nomes de campos)
+  const manual = await pagina("http://integracoes.jadlog.com.br").catch((e) => ({ status: e.message, txt: "" }));
+  log("manual:", manual.status, "· links:", tags(manual.txt, /href=["'][^"']+["']/gi).filter((h) => !/\.(css|png|ico|svg|js)/i.test(h)).slice(0, 30).join(" "));
+  log("manual trechos:", tags(manual.txt, /[^<>]{0,60}(tracking|consultar|previs)[^<>]{0,80}/gi).slice(0, 15).join(" | ").replace(/\d{5,}/g, "#"));
+  const tok = process.env.JADLOG_TOKEN || "";
+  log("token:", tok ? `sim (${tok.length} caracteres)` : "não", "· usuário:", process.env.JADLOG_USUARIO ? "sim" : "não", "· código cliente:", process.env.JADLOG_CODIGO ? "sim" : "não");
+  if (!tok) process.exit(0);
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*jadlog*&nf=not.is.null&limit=2");
+  const chaves = (o, p = "") => o && typeof o === "object" ? Object.entries(o).flatMap(([k, v]) => Array.isArray(v) ? [`${p}${k}[${v.length}]`, ...chaves(v[0], `${p}${k}[0].`)] : v && typeof v === "object" ? chaves(v, `${p}${k}.`) : [`${p}${k}=${/^(data|dt|prev|status|descr|situa|tipo|erro|mensagem|message|error)/i.test(k) ? String(v).replace(/\d{5,}/g, "#").slice(0, 40) : typeof v}`]) : [];
+  for (const l of L) {
+    const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
+    for (const body of [{ consulta: [{ df: { nf: num, serie: ser, tpDocumento: 2, cnpjRemetente: cnpjDaSerie(ser) } }] }]) {
+      const r = await fetch("https://www.jadlog.com.br/embarcador/api/tracking/consultar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` }, body: JSON.stringify(body) });
+      const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {}
+      log(`tracking/consultar: ${r.status} · ${j ? chaves(j).join(" | ").slice(0, 1800) : t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\d{5,}/g, "#").slice(0, 300)}`);
+      await new Promise((ok) => setTimeout(ok, 2000));
+    }
+  }
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
