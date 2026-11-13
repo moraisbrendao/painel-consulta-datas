@@ -257,9 +257,11 @@
   async function carregarSSW() { try { ssw = new Map((await buscarTudo("previsao_ssw", "pedido")).map((x) => [x.pedido, x])); } catch (_) { ssw = new Map(); } }
   // transportadoras que não usam SSW (regra da Brenda); nas outras, "Informação não disponível" = CT-e ainda não emitido
   const FORA_SSW = /bento|formato|transiga|tr[aâ]nsito\s*brasil/i;   // Jadlog: o robô consulta pela API dela
-  const sitSSW = (sit, transp) => (sit === "fora do ssw" || sit === "sem cte") ? (FORA_SSW.test(transp || "") ? "fora do ssw" : "sem cte") : sit;
+  // transportadora fora do SSW: ignora qualquer resultado antigo do SSW (era da transportadora de first mile)
+  const sitSSW = (sit, transp) => FORA_SSW.test(transp || "") ? (sit === "sem nf" || sit === "pendente" ? sit : "fora do ssw") : sit === "fora do ssw" ? "sem cte" : sit;
   function sswClasse(p) {
     const x = ssw.get(p.pedido);
+    if (FORA_SSW.test(p.transportadora || "")) return "Transportadora fora do SSW";
     if (!x) return "Ainda não consultado";
     if (x.situacao === "entregue") return "Entregue no SSW";
     const venc = p._venc || p.prev_original || p.prev_atual;
@@ -269,7 +271,7 @@
     return "No SSW sem previsão";
   }
   function sswLinha(p) {
-    const x = ssw.get(p.pedido); if (!x) return "";
+    const x = ssw.get(p.pedido); if (!x || FORA_SSW.test(p.transportadora || "")) return "";
     const quando = `consultado em ${new Date(x.consultado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`;
     if (x.situacao === "entregue") return `<div class="s ssw verde" title="${quando}">SSW: entregue${x.previsao ? " · prev. " + br(x.previsao) : ""}</div>`;
     if (!x.previsao) return x.situacao === "sem previsao" ? `<div class="s ssw" title="${quando}">SSW: sem previsão</div>` : "";
@@ -692,7 +694,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=62");
+        const w = new Worker("leitor-intelipost.js?v=63");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -1828,8 +1830,8 @@
   }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
   const CF_CARD = {
-    atualizar: (x) => x.situacao === "entregue" && !cfEntregueIP(x),
-    nao: (x) => x.situacao === "nao entregue",
+    atualizar: (x) => sitSSW(x.situacao, x.transportadora) === "entregue" && !cfEntregueIP(x),
+    nao: (x) => sitSSW(x.situacao, x.transportadora) === "nao entregue",
     semcte: (x) => /sem cte|sem permissao/.test(sitSSW(x.situacao, x.transportadora)),
     fora: (x) => /fora do ssw|sem nf/.test(sitSSW(x.situacao, x.transportadora)),
     pendente: (x) => x.situacao === "pendente",
@@ -1888,7 +1890,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=62");
+        const w = new Worker("leitor-conferencia.js?v=63");
         w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
         w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
         carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
