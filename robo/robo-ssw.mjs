@@ -119,6 +119,11 @@ if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes 
   await tenta("só CNPJ + senha (sem NF)", cnpjDaSerie(ser), "", senha);
   for (const c of Object.keys(CNPJ_SERIE).filter((c) => c !== cnpjDaSerie(ser))) await tenta(`NF com senha no CNPJ ...${c.slice(-4)}`, c, num, senha);
 }
+if (MODO === "diag-ajuda") {   // página pública de ajuda do SSW (sem dados de cliente)
+  const p = await pagina("https://ssw.inf.br/ajuda/rastreamento.html");
+  log("status:", p.status);
+  log(p.txt.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/<[^>]+>/g, (t) => /form|input|textarea|action|name=/i.test(t) ? t : " ").replace(/\s+/g, " ").slice(0, 6000));
+}
 if (MODO === "diag-det") {
   await entrarSupabase();
   const L = await chamar("base_aberta?select=nf,transportadora&order=pedido.desc&limit=3000");
