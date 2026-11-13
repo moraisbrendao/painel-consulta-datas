@@ -17,7 +17,7 @@ const GEN = /^(TRANS|TRANSPORTES?|TRANSPORTADORA|LOGISTICA|LOG|LTDA|EIRELI|EXPRE
 const palavras = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 3 && !GEN.test(w));
 const mesmaTransp = (emissor, tp) => { const a = palavras(emissor), b = new Set(palavras(tp)); return a.some((w) => b.has(w)); };
 // primeira rodada é sempre teste (Cancelar): só libero o Sim depois de conferir o resultado do teste
-const LIBERADO = false;
+const LIBERADO = !!Number(process.env.SSW_LIMITE || 0);   // por enquanto: Sim só nas rodadas com limite (Brenda liberou os 10 do teste em 13/11)
 const BR = (iso) => iso ? iso.split("-").reverse().join("/") : "";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
