@@ -106,18 +106,17 @@ if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes 
   const senha = chaveDe("Trans Sua Log");
   log("pedidos Trans Sua:", L.length, "· com senha:", senha ? `sim (${senha.length} caracteres)` : "não");
   const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
-  const tenta = async (rot, cnpj, nr, chave) => {
-    const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj, NR: nr, chave }).toString() });
+  const tenta = async (rot, cnpj, nr, chave, url = "https://ssw.inf.br/2/resultSSW") => {
+    const pg = await pagina(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj, NR: nr, chave }).toString() });
     const ls = sohTexto(pg.txt), txt = ls.join(" ");
     log(`${rot}: ${pg.status} · ${lerEntrega(pg.txt).situacao} · NF na página: ${(txt.match(/N Fiscal/gi) || []).length} · datas: ${(txt.match(/\d{2}\/\d{2}\/\d{2}/g) || []).length} · senha inválida: ${/senha (inv|incorr)/i.test(txt) ? "sim" : "não"} · avisos: ${limpo(ls.filter((l) => /senha|permiss|dispon|inv[aá]lid|localiz/i.test(l)).join(" | ")).slice(0, 200)}`);
     await dorme(3000);
   };
   const [num, ser] = String(L[0].nf).split("-").map((x) => (x || "").trim());
   log("série:", ser, "· CNPJ final:", String(cnpjDaSerie(ser)).slice(-4));
-  await tenta("NF sem senha", cnpjDaSerie(ser), num, "");
-  await tenta("NF com senha", cnpjDaSerie(ser), num, senha);
-  await tenta("só CNPJ + senha (sem NF)", cnpjDaSerie(ser), "", senha);
-  for (const c of Object.keys(CNPJ_SERIE).filter((c) => c !== cnpjDaSerie(ser))) await tenta(`NF com senha no CNPJ ...${c.slice(-4)}`, c, num, senha);
+  for (const l of L) { const [n, se] = String(l.nf).split("-").map((x) => (x || "").trim());
+    await tenta(`série ${se} · formulário da ajuda com senha`, cnpjDaSerie(se), n, senha, "https://ssw.inf.br/2/ssw_resultSSW");
+    await tenta(`série ${se} · formulário da ajuda sem senha`, cnpjDaSerie(se), n, "", "https://ssw.inf.br/2/ssw_resultSSW"); }
 }
 if (MODO === "diag-ajuda") {   // página pública de ajuda do SSW (sem dados de cliente)
   const p = await pagina("https://ssw.inf.br/ajuda/rastreamento.html");
