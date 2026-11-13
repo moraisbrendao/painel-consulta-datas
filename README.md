@@ -153,3 +153,9 @@ Na aba **Alterar pedidos › Troca de notas**, abra um ticket e use:
 Para funcionar, rode de novo o `supabase/schema.sql` (parte 18). O robô passa de 30 em 30 minutos quando a variável `INTELIPOST_ATIVO = sim` existe no GitHub.
 
 **Reposição parcial:** a Troca de notas também traz os tickets "Parcial" da mesma fila (coluna Tipo e filtro Tipo). O passo a passo é o mesmo, só que **sem a etapa 4 (volumes)**: na tela ela aparece como "não se aplica" e o robô pula os volumes. Rode o `supabase/schema.sql` de novo (coluna `tipo`) e suba o detalhamento_tickets outra vez.
+
+## 19. Robô da Intelipost começa na hora
+
+Rode a parte 19 do `supabase/schema.sql`. Depois disso, cada clique em "Fazer com o robô" / "Testar com o robô"
+(Troca de notas) e cada envio de datas em "Alterar pedidos" chama o GitHub na mesma hora, sem esperar o agendamento.
+Usa o mesmo token do cofre da parte 13 (`github_robo_token`); sem ele, o robô só roda no agendamento.

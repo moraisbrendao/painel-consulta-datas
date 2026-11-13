@@ -762,3 +762,32 @@ begin
 end $$;
 revoke all on function public.resultado_troca(text, text, text, jsonb, integer, date) from public, anon;
 grant execute on function public.resultado_troca(text, text, text, jsonb, integer, date) to authenticated;
+
+-- 19) Robô da Intelipost na hora: quando alguém clica em "Fazer com o robô" / "Testar com o robô"
+--     (troca de notas) ou manda datas para a fila "Alterar pedidos", o Supabase chama o GitHub
+--     para rodar o robô na mesma hora. Usa o mesmo token do cofre da parte 13 (github_robo_token).
+create or replace function public._chamar_robo_intelipost()
+returns trigger language plpgsql security definer set search_path = public
+as $$
+declare tk text;
+begin
+  begin
+    select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null;
+  end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-intelipost.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"real"}}'::jsonb);   -- "real" respeita o teste/real de cada pedido
+  end if;
+  return null;
+end $$;
+drop trigger if exists chamar_robo_troca on public.troca_notas;
+create trigger chamar_robo_troca after update of robo_status on public.troca_notas
+  for each row when (new.robo_status = 'pendente' and old.robo_status is distinct from 'pendente')
+  execute function public._chamar_robo_intelipost();
+drop trigger if exists chamar_robo_datas on public.fila_intelipost;
+create trigger chamar_robo_datas after insert on public.fila_intelipost
+  for each statement execute function public._chamar_robo_intelipost();
