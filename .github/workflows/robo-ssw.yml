@@ -9,7 +9,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [real, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det]
+        options: [real, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api]
         default: real
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -21,7 +21,7 @@ on:
         default: ""
 
 concurrency:
-  group: robo-ssw
+  group: robo-ssw-${{ github.event.inputs.modo || 'real' }}
   cancel-in-progress: false
 
 permissions:
@@ -44,3 +44,7 @@ jobs:
           SSW_PARALELO: ${{ github.event.inputs.paralelo || '' }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+          DOMINALOG_DOMINIO: ${{ secrets.DOMINALOG_DOMINIO }}
+          DOMINALOG_USUARIO: ${{ secrets.DOMINALOG_USUARIO }}
+          DOMINALOG_SENHA: ${{ secrets.DOMINALOG_SENHA }}
+          DOMINALOG_CNPJ: ${{ secrets.DOMINALOG_CNPJ }}

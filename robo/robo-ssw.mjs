@@ -113,6 +113,31 @@ if (MODO === "diag-det") {
     log("   rótulos:", ls.filter((x) => !/\d/.test(x) && x.length < 30).slice(-25).map(limpo).join(" / "));
   }
 }
+if (MODO === "diag-api") {   // API do SSW com login da transportadora (Dominalog): só mostra status e nomes de campos
+  const { DOMINALOG_DOMINIO: domain, DOMINALOG_USUARIO: username, DOMINALOG_SENHA: password, DOMINALOG_CNPJ: cnpjEdi } = process.env;
+  log("Segredos:", ["DOMINIO", "USUARIO", "SENHA", "CNPJ"].map((k) => `${k} ${process.env["DOMINALOG_" + k] ? "ok" : "falta"}`).join(" · "));
+  const chaves = (o, p = "") => o && typeof o === "object" ? Object.entries(o).flatMap(([k, v]) => Array.isArray(v) ? [`${p}${k}[${v.length}]`, ...chaves(v[0], `${p}${k}[0].`)] : v && typeof v === "object" ? chaves(v, `${p}${k}.`) : [`${p}${k}=${/data|prev|date|hora|status|ocorr|descr|situa|tipo|codigo|success|message|erro/i.test(k) ? String(v).replace(/\d{5,}/g, "#").slice(0, 40) : typeof v}`]) : [];
+  const post = async (url, corpo, h = {}) => { const r = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: JSON.stringify(corpo) }); const t = await r.text(); let j = null; try { j = JSON.parse(t); } catch {} return { st: r.status, j, t }; };
+  let token = null;
+  for (const corpo of [{ domain, username, password, cnpj_edi: cnpjEdi || "00349443000192" }, { domain, username, password }]) {
+    const r = await post("https://ssw.inf.br/api/generateToken", corpo);
+    log("generateToken:", r.st, r.j ? chaves(r.j).filter((k) => !/token=/.test(k)).join(" | ").slice(0, 400) : r.t.replace(/\d{5,}/g, "#").slice(0, 200));
+    token = r.j && (r.j.token || (r.j.data && r.j.data.token)); if (token) break;
+  }
+  await entrarSupabase();
+  const L = (await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.dominalog*&limit=3")) || [];
+  log("Notas Dominalog para teste:", L.length);
+  for (const l of L.slice(0, 2)) {
+    const [num, ser] = String(l.nf).split("-").map((x) => x.trim()); const c = cnpjDaSerie(ser);
+    const tent = [["https://ssw.inf.br/api/tracking", { cnpj: c, nro_nf: num, senha: password }, {}],
+      ...(token ? [["https://ssw.inf.br/api/tracking", { cnpj: c, nro_nf: num }, { Authorization: token }], ["https://ssw.inf.br/api/trackingpag", { cnpj: c, nro_nf: num }, { Authorization: token }]] : [])];
+    for (const [u, corpo, h] of tent) {
+      const r = await post(u, corpo, h);
+      log(`${u.replace("https://ssw.inf.br", "")}${h.Authorization ? " (token)" : " (senha)"}: ${r.st} · ${r.j ? chaves(r.j).slice(0, 40).join(" | ").slice(0, 1500) : r.t.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\d{5,}/g, "#").slice(0, 200)}`);
+      await new Promise((ok) => setTimeout(ok, 2500));
+    }
+  }
+}
 if (MODO === "diag-form") {
   const p = await pagina("https://ssw.inf.br/2/rastreamento?");
   const i = p.txt.search(/<form/i), f = p.txt.slice(i, p.txt.indexOf("</form>", i) + 7);
