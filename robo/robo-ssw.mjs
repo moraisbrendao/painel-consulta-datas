@@ -182,6 +182,7 @@ if (MODO === "real") {
           const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
           if (det) cont._det = (cont._det || 0) + 1;
           else if (process.env.SSW_LIMITE && !/fora do ssw|sem permissao/.test(r.situacao) && (cont._amostra = (cont._amostra || 0) + 1) <= 4) {
+            log("  página:", pg.status, pg.url.replace(/\?.*/, ""), pg.txt.length, "letras ·", limpo(sohTexto(pg.txt).filter((x) => !/^(Para |Rastreamento|Pelo |Preciso|Solicitar|Coleta|Serviço|Imprimir|Download|Reemis|Pré-|ssw|Sistema|Quem)/i.test(x)).slice(0, 12).join(" / ")).slice(0, 300), "· raw:", pg.txt.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\d{4,}/g, "#").slice(0, 200));
             const corpo = pg.txt.slice(Math.max(0, pg.txt.search(/Remetente/i)));
             log("  sem link:", tags(corpo, /<a [^>]*>|onclick=["'][^"']{0,160}["']|<form[^>]*>/gi).map((t) => t.replace(/\d{4,}/g, "#").replace(/(id|md)=[^&'"]{6,}/g, "$1=…")).slice(0, 8).join(" | "));
             log("  rótulos:", sohTexto(corpo).filter((x) => !/\d{3,}/.test(x) && x.length < 40).slice(0, 20).map(limpo).join(" / "));
