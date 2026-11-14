@@ -1486,7 +1486,7 @@ create table if not exists public.detalhe_nf (
   tem_ocorr    boolean,
   ocorr_status text,
   ocorr_msg    text,
-  ocorr_em     timestamptz,
+  ocorr_em     text,
   tem_repo     boolean,
   repo_nf      text,
   tem_at       boolean
@@ -1504,7 +1504,7 @@ begin
   if limpar then delete from public.detalhe_nf where true; end if;
   insert into public.detalhe_nf (nf, tem_ocorr, ocorr_status, ocorr_msg, ocorr_em, tem_repo, repo_nf, tem_at)
   select r.nf, r.tem_ocorr, r.ocorr_status, left(r.ocorr_msg, 1000), r.ocorr_em, r.tem_repo, r.repo_nf, r.tem_at
-  from jsonb_to_recordset(linhas) as r(nf text, tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em timestamptz, tem_repo boolean, repo_nf text, tem_at boolean)
+  from jsonb_to_recordset(linhas) as r(nf text, tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em text, tem_repo boolean, repo_nf text, tem_at boolean)
   where r.nf is not null and r.nf <> ''
   on conflict (nf) do update set tem_ocorr = excluded.tem_ocorr, ocorr_status = excluded.ocorr_status, ocorr_msg = excluded.ocorr_msg,
     ocorr_em = excluded.ocorr_em, tem_repo = excluded.tem_repo, repo_nf = excluded.repo_nf, tem_at = excluded.tem_at;
