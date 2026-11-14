@@ -226,3 +226,7 @@ quando o rastreio tem previsão de hoje em diante e depois da prometida.
 ## 31. Histórico diário (aba Transportadoras)
 - Tabela historico_base: uma foto por dia, do 1º arquivo enviado no botão "Enviar base" naquele dia.
 - A aba Transportadoras mostra a "Tabela do histórico" e segue os filtros de transportadora, canal e UF.
+
+## 32. Excel da Visão Gerencial (modelo de 55 colunas)
+- A base passa a guardar mais colunas (coluna "extra"): é preciso enviar a base de novo depois de rodar esta parte.
+- "Enviar tickets" agora também lê as abas Ocorrências, Reposições e Assistência Técnica do detalhamento (tabela detalhe_nf).

@@ -676,6 +676,14 @@
     status_prazo: "STATUS PRAZO INTELIPOST", sem_expedicao: "PEDIDO SEM EXPEDICAO",
   };
   const DATAS = new Set(["data_expedicao", "prev_original", "prev_atual", "prev_360", "data_criacao", "data_entrega"]);
+  // colunas que só vão para o Excel da Visão Gerencial (ficam juntas na coluna "extra" do banco, parte 32)
+  const EXTRA = {
+    id_any: ["ID ANYMARKET"], pedido_any: ["PEDIDO ANYMARKET"], promob: ["PEDIDO PROMOB"], sku: ["SKU"],
+    faturamento: ["DATA DE FATURAMENTO", "d"], emissao_cte: ["DATA EMISSAO CTE OOBJ", "d"], cep: ["CEP DESTINO INTELIPOST"], chave: ["CHAVE NOTA"],
+    valor_nf: ["VALOR TOTAL NF NA INTELIPOST", "n"], valor_cte: ["VALOR RECEBIDO CTE", "n"], num_cte: ["NUMERO CTE"],
+    redespacho: ["TRANSPORTADORA REDESPACHO PROMOB"], trocas: ["QTD DE ALTERACOES / DATA PREVISTA PARA ENTREGAR(360)", "n"],
+    prazo_transp: ["TEMPO EM DIAS UTEIS PARA A TRANSPORTADORA ENTREGAR (INTELIPOST)", "n"],
+  };
 
   function dataCelula(v, comHora) {
     if (v === null || v === undefined || v === "") return null;
@@ -695,6 +703,7 @@
     return comHora ? `${dt}T${p2(H)}:${p2(M)}:${p2(S)}` : dt;
   }
 
+  let baseExtraOk = true;   // false se o banco ainda não tem a coluna "extra" (parte 32)
   $("arquivo").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = "";
     if (!arq) return;
@@ -709,6 +718,7 @@
       if (iCab < 0) throw new Error('Não achei as colunas "Pedido Intelipost" e "Micro Status Intelipost". Confira se é a planilha exportada.');
       const cab = rows[iCab].map(norm);
       const idx = {}; Object.entries(COLUNAS).forEach(([k, nome]) => (idx[k] = cab.indexOf(nome)));
+      const idxEx = Object.entries(EXTRA).map(([k, [nome, tipo]]) => [k, cab.indexOf(nome), tipo]).filter(([, i]) => i >= 0);
       const vistos = new Set();
       linhas = [];
       for (const r of rows.slice(iCab + 1)) {
@@ -723,6 +733,12 @@
           else if (k === "qtd_tickets" || k === "dias_atraso") o[k] = v == null || v === "" || isNaN(Number(v)) ? null : Math.round(Number(v));
           else o[k] = v == null || v === "" ? null : String(v).trim();
         }
+        const ex = {};
+        for (const [k, i, tipo] of idxEx) { const v = r[i]; if (v == null || v === "") continue;
+          if (tipo === "d") { const d = dataCelula(v, false); if (d) ex[k] = d; }
+          else if (tipo === "n") { const n = Number(String(v).replace(",", ".")); if (!isNaN(n)) ex[k] = n; }
+          else ex[k] = String(v).trim(); }
+        if (baseExtraOk) o.extra = ex;
         linhas.push(o);
       }
       if (!linhas.length) throw new Error("A planilha não tem pedidos.");
@@ -734,7 +750,9 @@
     try {
       for (let i = 0; i < linhas.length; i += 2000) {
         carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
-        const { error } = await sb.rpc("importar_base", { linhas: linhas.slice(i, i + 2000), limpar: i === 0, arquivo: arq.name, total: linhas.length });
+        let { error } = await sb.rpc("importar_base", { linhas: linhas.slice(i, i + 2000), limpar: i === 0, arquivo: arq.name, total: linhas.length });
+        if (error && /extra/i.test(error.message || "") && baseExtraOk) {   // banco sem a parte 32: manda sem as colunas extras
+          baseExtraOk = false; linhas.forEach((l) => delete l.extra); i -= 2000; continue; }
         if (error) throw error;
       }
     } catch (err) {
@@ -1356,12 +1374,64 @@
   $("g-perf-nota").addEventListener("click", (e) => { if (e.target.id === "g-modo") { gTodos = !gTodos; desenharGerencial(); } });
   $("g-limpar").addEventListener("click", () => { Object.values(gSel).forEach((s) => s.clear()); ["g-de", "g-ate", "g-nf"].forEach((id) => ($(id).value = "")); montarFiltrosG(); filtrosGMudaram(); });
   $("g-paginacao").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; gPagina += Number(b.dataset.p); desenharGLista(false); });
-  function baixarGLista() {
+  // Excel da Visão Gerencial no modelo "multimoveis-atrasados-em-aberto" (55 colunas, pedido da Brenda 13/11)
+  let detNF = null;   // nf -> ocorrência / reposição / assistência técnica (aba do detalhamento, parte 32)
+  async function carregarDetNF() {
+    if (detNF) return detNF;
+    try { const L = await buscarTudo("detalhe_nf", "nf"); detNF = new Map(L.map((x) => [x.nf, x])); } catch (_) { detNF = new Map(); }
+    return detNF;
+  }
+  // colunas que não ficam na memória da Visão Gerencial: busca só dos pedidos que vão para o Excel
+  async function extrasDe(pedidos) {
+    const out = new Map(), lotes = [];
+    for (let i = 0; i < pedidos.length; i += 150) lotes.push(pedidos.slice(i, i + 150));
+    let cols = "pedido,extra,prev_360,link_rastreio";
+    for (let i = 0; i < lotes.length; i += 4) {
+      carregando(`Montando o Excel… ${fmt(Math.min((i + 4) * 150, pedidos.length))} de ${fmt(pedidos.length)}`);
+      const rs = await Promise.all(lotes.slice(i, i + 4).map(async (l) => {
+        let r = await sb.from("base_pedidos").select(cols).in("pedido", l);
+        if (r.error && /extra/i.test(r.error.message || "")) { cols = "pedido,prev_360,link_rastreio"; r = await sb.from("base_pedidos").select(cols).in("pedido", l); }
+        if (r.error) throw r.error; return r.data; }));
+      rs.flat().forEach((x) => out.set(x.pedido, x));
+    }
+    return out;
+  }
+  const G_XLS_COLS = ["Pedido Intelipost", "ID Any", "Pedido Anymarket", "Nota-Série", "Número da NF", "Série", "Nova NF reposição", "Data Estimada 360 (AL)", "Nova Data (sistema)",
+    "Observação do BI", "Fila", "Status da fila", "Status da Ocorrencia", "Ultima mensagem da ocorrencia", "Canal", "Origem", "Transportadora", "Status", "Micro Stauts",
+    "Range de Atraso", "Dias de Atraso", "De quem é o atraso", "Últ. Movimento", "Data Criação", "Data Emissão", "Data Expedição", "Emissão do CT-e", "Prev. Original",
+    "Prev. Atual", "Data Entrega", "UF", "Cidade", "CEP", "Chave da nota", "Link Rastreio", "Valor da NF", "Valor recebido CT-e", "Nº do CT-e", "Ticket", "Qtd de tickets",
+    "Pedido Promob", "SKU", "Status Prazo", "Situação", "Transportadora de redespacho", "Trocas da data prometida", "Prazo da transportadora (dias úteis)", "Dias sem movimento",
+    "Prazo médio da transportadora (dias)", "Previsão estimada", "Dias além da previsão estimada", "Observação (sistema)", "Tem reposição", "Tem ocorrência", "Tem assistência técnica"];
+  const G_SIT_NOME = { ent_prazo: "Entregue (no prazo)", ent_atraso: "Entregue (com atraso)", ab_prazo: "Em aberto (no prazo)", ab_risco: "Em aberto (em risco)", ab_atraso: "Em aberto (atrasado)", cancelado: "Cancelado" };
+  async function baixarGLista() {
     if (!gLista.length) return toast("Nada para exportar.", true);
-    const linhas = [["Pedido", "NF", "Série", "Canal", "Transportadora", "UF", "Origem", "Status", "Micro status", "Criado", "Despacho", "Prometido", "Entrega", "Dias de atraso", "Dias parado"]]
-      .concat(gLista.map((r) => [r.pedido, r.nf, r.serie, r.canal, r.transp, r.uf, r.origem, r.status, r.micro, br(r.criado), br(r.despacho), br(r._prom), br(r.entrega), r._atraso || "", r._fechado ? "" : r._parado]));
-    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Visão Gerencial");
-    XLSX.writeFile(wb, `visao_gerencial_${hojeISO()}.xlsx`);
+    const lista = gLista.slice(), hoje = hojeISO();
+    carregando("Montando o Excel…");
+    let ex, det;
+    try { [ex, det] = await Promise.all([extrasDe(lista.map((r) => r.pedido)), carregarDetNF()]); }
+    catch (err) { carregando(""); return toast("Não consegui montar o Excel: " + (err.message || err), true); }
+    // prazo médio de cada transportadora = média de dias entre expedição e entrega dos já entregues da base
+    const pm = new Map();
+    gDados.forEach((r) => { if (r._sit !== "ent_prazo" && r._sit !== "ent_atraso") return; if (!r.despacho || !r.entrega) return;
+      const d = diasEntre(r.despacho, r.entrega); if (!Number.isFinite(d) || d < 0 || d > 120) return; const x = pm.get(r.transp) || [0, 0]; x[0] += d; x[1]++; pm.set(r.transp, x); });
+    const media = (t) => { const x = pm.get(t); return x && x[1] ? Math.round(x[0] / x[1]) : null; };
+    const quem = (r) => !r._atraso ? "" : r._semExp ? "Ainda não foi expedido" : r._prom && r.despacho > r._prom ? "Já saiu atrasado daqui" : "Atraso da transportadora";
+    const sim = (v) => (v ? "sim" : "");
+    const somaSeg = (iso, n) => { try { return somaDias(iso, n); } catch (_) { return null; } };
+    let linhas;
+    try { linhas = [G_XLS_COLS].concat(lista.map((r) => {
+      const e = ex.get(r.pedido) || {}, x = e.extra || {}, nfs = r.serie ? `${r.nf}-${r.serie}` : r.nf, d = det.get(chaveNF(nfs)) || {}, tk = tickets.get(chaveNF(nfs)) || {}, t = trat.get(r.pedido) || {};
+      const pmT = media(r.transp), base = r.despacho || r.criado, prevEst = pmT !== null && /^\d{4}-\d{2}-\d{2}/.test(base || "") ? somaSeg(base.slice(0, 10), pmT) : null;
+      return [r.pedido, x.id_any || "", x.pedido_any || "", nfs, r.nf, r.serie, d.repo_nf || "", br(e.prev_360), br(t.nova_data), "",
+        tk.fila || "", "", d.ocorr_status || "", d.ocorr_msg || "", r.canal || "", r.origem || "", r.transp || "", r.status || "", r.micro || "",
+        r.range || "", r.diasAtr ?? (r._atraso || 0), quem(r), br(r.ult), br(r.criado), br(x.faturamento), br(r.despacho), br(x.emissao_cte), br(r.prevOrig),
+        br(r.prev), br(r.entrega), r.uf || "", r.cidade || "", x.cep || "", x.chave || "", e.link_rastreio || "", x.valor_nf ?? "", x.valor_cte ?? "", x.num_cte || "", tk.id_ticket || "", tk.qtd || "",
+        x.promob || "", x.sku || "", r.sprazo || "", G_SIT_NOME[r._sit] || "", x.redespacho || "", x.trocas ?? 0, x.prazo_transp ?? "", r._fechado ? "" : r._parado ?? "",
+        pmT ?? "", br(prevEst), prevEst && !r._fechado ? diasEntre(prevEst, hoje) : "", t.observacao || "", sim(d.tem_repo), sim(d.tem_ocorr), sim(d.tem_at)];
+    })); } catch (err) { carregando(""); return toast("Não consegui montar o Excel: " + (err.message || err), true); }
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
+    carregando("");
+    XLSX.writeFile(wb, `multimoveis-${(gSelecao ? gSelecao.titulo : G_NOME[gCard]).normalize("NFD").replace(/[^\w]+/g, "-").replace(/-+$/, "").toLowerCase()}_${hoje}.xlsx`);
   }
   $("g-exportar").addEventListener("click", baixarGLista);
 
@@ -2557,7 +2627,7 @@
     if (!ticketsOk) return toast("Rode de novo o supabase/schema.sql no Supabase para usar os tickets.", true);
     carregando("Lendo a planilha de tickets…");
     await new Promise((r) => setTimeout(r, 50));
-    let linhas, total = 0;
+    let linhas, total = 0, detLinhas = [];
     try {
       const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
       const nomeAba = wb.SheetNames.find((n) => norm(n) === "TICKETS") || wb.SheetNames[0];
@@ -2583,6 +2653,7 @@
       });
       linhas = [...porNF.values()];
       if (!linhas.length) throw new Error("A aba Tickets não tem notas.");
+      detLinhas = lerDetalheNF(wb);
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
     if (!confirm(`${arq.name}\n\n${fmt(total)} tickets abertos, em ${fmt(linhas.length)} notas.\nSubstitui a planilha de tickets anterior para todos.\n\nEnviar?`)) return;
@@ -2593,10 +2664,42 @@
         if (error) throw error;
       }
     } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
+    // abas Ocorrências, Reposições e Assistência Técnica (colunas do Excel da Visão Gerencial, parte 32)
+    let avisoDet = "";
+    if (detLinhas.length) {
+      for (let i = 0; i < detLinhas.length; i += 2000) {
+        carregando(`Enviando ocorrências e reposições… ${fmt(Math.min(i + 2000, detLinhas.length))} de ${fmt(detLinhas.length)}`);
+        const { error } = await sb.rpc("importar_detalhe_nf", { linhas: detLinhas.slice(i, i + 2000), limpar: i === 0 });
+        if (error) { avisoDet = /importar_detalhe_nf|function/i.test(error.message) ? " (ocorrências e reposições não foram: falta rodar a parte 32 do schema.sql)" : " (ocorrências e reposições: " + error.message + ")"; break; }
+      }
+      detNF = null;
+    }
     carregando("");
     await carregar();
-    toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto.`);
+    if (avisoDet) toast("Tickets atualizados" + avisoDet, true); else toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto.`);
   });
+
+  // abas Ocorrências, Reposições e Assistência Técnica do detalhamento_tickets360 → uma linha por NF
+  function lerDetalheNF(wb) {
+    const aba = (nome) => { const n = wb.SheetNames.find((x) => norm(x) === nome); if (!n) return null;
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }); if (!rows.length) return null;
+      const cab = rows[0].map(norm); return { rows: rows.slice(1), c: (nome2) => cab.indexOf(nome2) }; };
+    const txt = (v) => (v == null || v === "" ? null : v instanceof Date ? v.toISOString() : String(v).trim());
+    const m = new Map(), de = (nf) => { const k = chaveNF(nf); if (!k || !k.includes("-")) return null; if (!m.has(k)) m.set(k, { nf: k }); return m.get(k); };
+    const oc = aba("OCORRENCIAS");
+    if (oc) { const cN = oc.c("NOTA FISCAL"), cS = oc.c("STATUS OCORRENCIA"), cM = oc.c("ULTIMA MENSAGEM"), cD = oc.c("DATA ULTIMA MENSAGEM"), cC = oc.c("DATA CRIACAO OCORRENCIA");
+      if (cN >= 0) oc.rows.forEach((r) => { const x = r && de(r[cN]); if (!x) return; const d = txt(cD >= 0 ? r[cD] : null) || txt(cC >= 0 ? r[cC] : null) || "";
+        if (x.ocorr_em && String(x.ocorr_em) > d) return;   // fica a ocorrência com a mensagem mais recente
+        Object.assign(x, { tem_ocorr: true, ocorr_status: txt(cS >= 0 ? r[cS] : null), ocorr_msg: (txt(cM >= 0 ? r[cM] : null) || "").slice(0, 1000) || null, ocorr_em: d || null }); }); }
+    const rp = aba("REPOSICOES");
+    if (rp) { const cN = rp.c("NOTA TICKET"), cR = rp.c("NF EMITIDA PROMOB"), cD = rp.c("DATA EMISSAO PROMOB");
+      if (cN >= 0) rp.rows.forEach((r) => { const x = r && de(r[cN]); if (!x) return; x.tem_repo = true;
+        const nova = cR >= 0 ? txt(r[cR]) : null, d = txt(cD >= 0 ? r[cD] : null) || "";
+        if (nova && (!x.repo_nf || d >= (x._rd || ""))) { x.repo_nf = chaveNF(nova); x._rd = d; } }); }
+    const at = aba("ASSISTENCIA TECNICA");
+    if (at) { const cN = at.c("NOTA TICKET"); if (cN >= 0) at.rows.forEach((r) => { const x = r && de(r[cN]); if (x) x.tem_at = true; }); }
+    return [...m.values()].map(({ _rd, ...x }) => x);
+  }
 
   // ---------------- reposição (planilha TABELA DE ACOMPANHAMENTO, aba Export) ----------------
   // Pré entrega = criado pelo CCP (coluna Via) e na fila "Atribuir transportador"; pós entrega = Tipo "Reposição Pós Entrega".

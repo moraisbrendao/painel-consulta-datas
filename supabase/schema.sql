@@ -1444,3 +1444,71 @@ begin
 end $$;
 revoke all on function public.gravar_historico(date, jsonb, text) from public, anon;
 grant execute on function public.gravar_historico(date, jsonb, text) to authenticated;
+
+-- ============ PARTE 32: Excel da Visão Gerencial no modelo de 55 colunas ============
+-- (a) colunas a mais da base (ID Any, Pedido Anymarket, CEP, chave, valores, CT-e, SKU...) guardadas juntas em "extra"
+alter table public.base_pedidos add column if not exists extra jsonb;
+create or replace function public.importar_base(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if limpar then
+    delete from public.base_pedidos where true;
+    insert into public.base_info (id, arquivo, total, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, total = excluded.total,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.base_pedidos
+  select * from jsonb_populate_recordset(null::public.base_pedidos, linhas) r
+  where r.pedido is not null and r.pedido <> ''
+  on conflict (pedido) do update set
+    nf = excluded.nf, canal = excluded.canal, origem = excluded.origem, transportadora = excluded.transportadora,
+    micro_status = excluded.micro_status, status_intelipost = excluded.status_intelipost, descricao = excluded.descricao,
+    ultima_atualizacao = excluded.ultima_atualizacao, data_expedicao = excluded.data_expedicao,
+    prev_original = excluded.prev_original, prev_atual = excluded.prev_atual, prev_360 = excluded.prev_360,
+    comentario_360 = excluded.comentario_360, uf = excluded.uf, cidade = excluded.cidade, ocorrencia = excluded.ocorrencia,
+    qtd_tickets = excluded.qtd_tickets, motivo_ticket = excluded.motivo_ticket, link_rastreio = excluded.link_rastreio,
+    data_criacao = excluded.data_criacao, data_entrega = excluded.data_entrega, range_atrasos = excluded.range_atrasos,
+    dias_atraso = excluded.dias_atraso, status_prazo = excluded.status_prazo, sem_expedicao = excluded.sem_expedicao,
+    extra = excluded.extra;
+  return (select count(*) from public.base_pedidos);
+end $$;
+revoke all on function public.importar_base(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_base(jsonb, boolean, text, integer) to authenticated;
+
+-- (b) abas Ocorrências, Reposições e Assistência Técnica do detalhamento_tickets360 (substituídas a cada "Enviar tickets")
+create table if not exists public.detalhe_nf (
+  nf           text primary key,
+  tem_ocorr    boolean,
+  ocorr_status text,
+  ocorr_msg    text,
+  ocorr_em     timestamptz,
+  tem_repo     boolean,
+  repo_nf      text,
+  tem_at       boolean
+);
+alter table public.detalhe_nf enable row level security;
+drop policy if exists "logados leem" on public.detalhe_nf;
+create policy "logados leem" on public.detalhe_nf for select to authenticated using ((select not public.e_sac()));
+grant select on public.detalhe_nf to authenticated;
+
+create or replace function public.importar_detalhe_nf(linhas jsonb, limpar boolean)
+returns integer language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if limpar then delete from public.detalhe_nf where true; end if;
+  insert into public.detalhe_nf (nf, tem_ocorr, ocorr_status, ocorr_msg, ocorr_em, tem_repo, repo_nf, tem_at)
+  select r.nf, r.tem_ocorr, r.ocorr_status, left(r.ocorr_msg, 1000), r.ocorr_em, r.tem_repo, r.repo_nf, r.tem_at
+  from jsonb_to_recordset(linhas) as r(nf text, tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em timestamptz, tem_repo boolean, repo_nf text, tem_at boolean)
+  where r.nf is not null and r.nf <> ''
+  on conflict (nf) do update set tem_ocorr = excluded.tem_ocorr, ocorr_status = excluded.ocorr_status, ocorr_msg = excluded.ocorr_msg,
+    ocorr_em = excluded.ocorr_em, tem_repo = excluded.tem_repo, repo_nf = excluded.repo_nf, tem_at = excluded.tem_at;
+  return (select count(*) from public.detalhe_nf);
+end $$;
+revoke all on function public.importar_detalhe_nf(jsonb, boolean) from public, anon;
+grant execute on function public.importar_detalhe_nf(jsonb, boolean) to authenticated;
