@@ -1158,8 +1158,8 @@
     prepararG(); montarFiltrosG(); desenharGAtual();
   }
   // Visão Gerencial e Entregas e SLA usam os mesmos dados e os mesmos filtros
-  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp", "divtp"];
-  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else if (paginaAtual === "divtp") desenharDivTP(); else desenharGerencial(); }
+  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp"];
+  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else desenharGerencial(); }
   function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
 
   function desenharGerencial() {
@@ -1612,11 +1612,17 @@
     } catch (err) { dvPromob = new Map(); dvGer = gGeracao; $("dv-info").textContent = /extra/i.test(err.message || "") ? "Falta rodar a parte 32 do schema.sql e enviar a base de novo." : "Não consegui ler: " + err.message; return false; }
   }
   const DV_CARD = {
-    div: (x) => x.sit === "div" && !x.r._fechado, divtodos: (x) => x.sit === "div", sem: (x) => x.sit === "sem", ok: (x) => x.sit === "ok", todos: () => true,
+    div: (x) => x.sit === "div", sem: (x) => x.sit === "sem", ok: (x) => x.sit === "ok", todos: () => true,
   };
   async function desenharDivTP() {
-    if (!gDados) return;
-    const L = gFiltrados();
+    // fica em Alterar pedidos: usa a base inteira, só os pedidos em andamento (sem entregues e cancelados)
+    if (!gDados) {
+      $("dv-info").textContent = "Carregando os pedidos da base…";
+      if (!gCarregando) await carregarGerencial(); else { setTimeout(() => { if (!$("ap-sec-dv").hidden) desenharDivTP(); }, 1500); return; }
+      if (!gDados) { $("dv-info").textContent = "Não consegui carregar a base. Atualize a página."; return; }
+    }
+    prepararG();
+    const L = gDados.filter((r) => !r._fechado);
     if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
     const temPromob = [...dvPromob.values()].some((x) => x.tp);
     if (!temPromob) { $("dv-info").textContent = 'A base ainda não tem a coluna "Transportadora Promob" (BD): envie a base de novo no botão "Enviar base".'; }
@@ -1628,11 +1634,11 @@
       return { r, bd, rd, e, fonte, sit };
     });
     document.querySelectorAll("#dv-cards .kpi[data-dv]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(todos.filter(DV_CARD[b.dataset.dv]).length); b.classList.toggle("ativa", b.dataset.dv === dvCard); });
-    if (temPromob) $("dv-info").textContent = `${fmt(todos.filter(DV_CARD.div).length)} pedidos em aberto com a transportadora da Intelipost diferente da nota (Promob) · ${fmt(L.length)} pedidos nos filtros`;
+    if (temPromob) $("dv-info").textContent = `${fmt(todos.filter(DV_CARD.div).length)} pedidos em andamento com a transportadora da Intelipost diferente da nota (Promob) · ${fmt(L.length)} pedidos em andamento na base`;
     const q = norm(dvBusca);
     dvLista = todos.filter(DV_CARD[dvCard]).filter((x) => !q || [x.r.pedido, x.r.nf, x.r.transp, x.bd, x.rd].some((v) => norm(v).includes(q)));
     dvLista.sort((a, b) => (b.r._atraso - a.r._atraso) || String(a.r.transp || "").localeCompare(String(b.r.transp || "")));
-    $("dv-titulo").textContent = `${{ div: "Divergentes em aberto", divtodos: "Divergentes (todos)", sem: "Sem DE × PARA", ok: "Iguais", todos: "Todos" }[dvCard]} (${fmt(dvLista.length)})`;
+    $("dv-titulo").textContent = `${{ div: "Divergentes em andamento", sem: "Sem DE × PARA", ok: "Iguais", todos: "Todos" }[dvCard]} (${fmt(dvLista.length)})`;
     $("dv-linhas").innerHTML = dvLista.slice(0, 500).map((x) => {
       const ok = x.e.ok, certo = ok ? `<b>${esc(ok.metodo)}</b> <span class="s">ID ${ok.id}${x.e.padrao ? " · padrão" : ""}</span>` : `<span class="s">${esc(x.e.erro || "")}</span>`;
       const faz = x.sit === "div" && ok ? `Intelipost: trocar <b>${esc(x.r.transp || "—")}</b> por <b>${esc(ok.metodo)}</b> (ID ${ok.id}) · BI: <b>${esc(ok.transp)}</b>` : x.sit === "ok" ? `<span class="chip verde">certo</span>` : `<span class="chip cinza">conferir à mão</span>`;
@@ -2011,7 +2017,8 @@
   });
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap);
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv";
+    if (b.dataset.ap === "dv") desenharDivTP();
     if (b.dataset.ap === "troca") carregarTrocas();
     if (b.dataset.ap === "ag" || b.dataset.ap === "at") { agFila = b.dataset.ap === "at" ? "AT" : "AE"; agCard = "tratar"; agBusca = ""; $("ag-busca").value = "";
       $("ag-h2").textContent = agFila === "AT" ? "Aguardando entrega AT" : "Fila Aguardando entrega";
