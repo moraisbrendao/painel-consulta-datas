@@ -681,7 +681,7 @@
     id_any: ["ID ANYMARKET"], pedido_any: ["PEDIDO ANYMARKET"], promob: ["PEDIDO PROMOB"], sku: ["SKU"],
     faturamento: ["DATA DE FATURAMENTO", "d"], emissao_cte: ["DATA EMISSAO CTE OOBJ", "d"], cep: ["CEP DESTINO INTELIPOST"], chave: ["CHAVE NOTA"],
     valor_nf: ["VALOR TOTAL NF NA INTELIPOST", "n"], valor_cte: ["VALOR RECEBIDO CTE", "n"], num_cte: ["NUMERO CTE"],
-    redespacho: ["TRANSPORTADORA REDESPACHO PROMOB"], trocas: ["QTD DE ALTERACOES / DATA PREVISTA PARA ENTREGAR(360)", "n"],
+    redespacho: ["TRANSPORTADORA REDESPACHO PROMOB"], transp_promob: ["TRANSPORTADORA PROMOB"], trocas: ["QTD DE ALTERACOES / DATA PREVISTA PARA ENTREGAR(360)", "n"],
     prazo_transp: ["TEMPO EM DIAS UTEIS PARA A TRANSPORTADORA ENTREGAR (INTELIPOST)", "n"],
   };
 
@@ -1158,8 +1158,8 @@
     prepararG(); montarFiltrosG(); desenharGAtual();
   }
   // Visão Gerencial e Entregas e SLA usam os mesmos dados e os mesmos filtros
-  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp"];
-  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else desenharGerencial(); }
+  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp", "divtp"];
+  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else if (paginaAtual === "divtp") desenharDivTP(); else desenharGerencial(); }
   function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
 
   function desenharGerencial() {
@@ -1598,6 +1598,58 @@
       .concat(tStats.filter((x) => x.vol).sort((a, b) => b.vol - a.vol).map((x) => [x.t, x.vol, x.ab, x.atr, x.risco, x.ent, x.entAtr, x.med === null ? "" : +x.med.toFixed(1), x.sla === null ? "" : +(x.sla * 100).toFixed(1), x.can]));
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Transportadoras");
     XLSX.writeFile(wb, `transportadoras_${hojeISO()}.xlsx`);
+  });
+
+  // ---------------- transportadora divergente (coluna H × coluna BD da base) ----------------
+  // H = transportadora na Intelipost; BD = "Transportadora Promob" (a da nota). A certa sai do DE × PARA pela série da nota
+  // (planilha "modelos_eloggia_ajuste tp"); se tiver redespacho no Promob (BE), vale o redespacho.
+  let dvPromob = null, dvGer = -1, dvCard = "div", dvLista = [], dvBusca = "";
+  async function carregarDvPromob() {
+    if (dvPromob && dvGer === gGeracao) return true;
+    try {
+      const L = await buscarTudo("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho");
+      dvPromob = new Map(L.map((x) => [x.pedido, x])); dvGer = gGeracao; return true;
+    } catch (err) { dvPromob = new Map(); dvGer = gGeracao; $("dv-info").textContent = /extra/i.test(err.message || "") ? "Falta rodar a parte 32 do schema.sql e enviar a base de novo." : "Não consegui ler: " + err.message; return false; }
+  }
+  const DV_CARD = {
+    div: (x) => x.sit === "div" && !x.r._fechado, divtodos: (x) => x.sit === "div", sem: (x) => x.sit === "sem", ok: (x) => x.sit === "ok", todos: () => true,
+  };
+  async function desenharDivTP() {
+    if (!gDados) return;
+    const L = gFiltrados();
+    if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
+    const temPromob = [...dvPromob.values()].some((x) => x.tp);
+    if (!temPromob) { $("dv-info").textContent = 'A base ainda não tem a coluna "Transportadora Promob" (BD): envie a base de novo no botão "Enviar base".'; }
+    const todos = L.map((r) => {
+      const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "";
+      let e = rd ? TROCA.esperadoPromob(rd, r.serie) : null, fonte = "redespacho";
+      if (!e || e.erro) { e = TROCA.esperadoPromob(bd, r.serie); fonte = "promob"; }
+      const sit = !bd && !rd ? "sem" : e.erro ? "sem" : TROCA.mesmaTransp(r.transp, e.grupo) ? "ok" : "div";
+      return { r, bd, rd, e, fonte, sit };
+    });
+    document.querySelectorAll("#dv-cards .kpi[data-dv]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(todos.filter(DV_CARD[b.dataset.dv]).length); b.classList.toggle("ativa", b.dataset.dv === dvCard); });
+    if (temPromob) $("dv-info").textContent = `${fmt(todos.filter(DV_CARD.div).length)} pedidos em aberto com a transportadora da Intelipost diferente da nota (Promob) · ${fmt(L.length)} pedidos nos filtros`;
+    const q = norm(dvBusca);
+    dvLista = todos.filter(DV_CARD[dvCard]).filter((x) => !q || [x.r.pedido, x.r.nf, x.r.transp, x.bd, x.rd].some((v) => norm(v).includes(q)));
+    dvLista.sort((a, b) => (b.r._atraso - a.r._atraso) || String(a.r.transp || "").localeCompare(String(b.r.transp || "")));
+    $("dv-titulo").textContent = `${{ div: "Divergentes em aberto", divtodos: "Divergentes (todos)", sem: "Sem DE × PARA", ok: "Iguais", todos: "Todos" }[dvCard]} (${fmt(dvLista.length)})`;
+    $("dv-linhas").innerHTML = dvLista.slice(0, 500).map((x) => {
+      const ok = x.e.ok, certo = ok ? `<b>${esc(ok.metodo)}</b> <span class="s">ID ${ok.id}${x.e.padrao ? " · padrão" : ""}</span>` : `<span class="s">${esc(x.e.erro || "")}</span>`;
+      const faz = x.sit === "div" && ok ? `Intelipost: trocar <b>${esc(x.r.transp || "—")}</b> por <b>${esc(ok.metodo)}</b> (ID ${ok.id}) · BI: <b>${esc(ok.transp)}</b>` : x.sit === "ok" ? `<span class="chip verde">certo</span>` : `<span class="chip cinza">conferir à mão</span>`;
+      return `<tr><td class="mono">${esc(x.r.pedido)}</td><td>${esc(x.r.nf)}${x.r.serie ? "-" + esc(x.r.serie) : ""}</td><td><span class="ms">${esc(x.r.status || "")}</span>${x.r._atraso ? `<div><span class="chip vermelho">atrasado ${x.r._atraso} d</span></div>` : ""}</td>
+        <td>${esc(x.r.transp || "—")}</td><td>${esc(x.bd || "—")}${x.rd ? `<div class="s">redespacho: ${esc(x.rd)}</div>` : ""}</td><td>${certo}${ok ? `<div class="s">${esc(ok.transp)}</div>` : ""}</td><td>${faz}</td></tr>`;
+    }).join("") + (dvLista.length > 500 ? `<tr><td colspan="7" class="s">Mostrando 500 de ${fmt(dvLista.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
+    $("dv-vazio").hidden = dvLista.length > 0;
+  }
+  $("dv-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-dv]"); if (!b) return; dvCard = b.dataset.dv; desenharDivTP(); });
+  let esperaDv; $("dv-busca").addEventListener("input", (e) => { dvBusca = e.target.value; clearTimeout(esperaDv); esperaDv = setTimeout(desenharDivTP, 250); });
+  $("dv-exportar").addEventListener("click", () => {
+    if (!dvLista.length) return toast("Nada para exportar.", true);
+    const linhas = [["Pedido Intelipost", "Nota-Série", "Status", "Dias de atraso", "Transportadora na Intelipost (H)", "Transportadora Promob (BD)", "Redespacho Promob", "Método certo na Intelipost", "ID do método", "Transportadora certa (BI)", "Situação"]]
+      .concat(dvLista.map((x) => [x.r.pedido, x.r.serie ? `${x.r.nf}-${x.r.serie}` : x.r.nf, x.r.status || "", x.r._atraso || "", x.r.transp || "", x.bd, x.rd, x.e.ok ? x.e.ok.metodo : "", x.e.ok ? x.e.ok.id : "", x.e.ok ? x.e.ok.transp : "",
+        x.sit === "div" ? "Divergente" : x.sit === "ok" ? "Igual" : "Sem DE × PARA: " + (x.e.erro || "")]));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Divergentes");
+    XLSX.writeFile(wb, `transportadora_divergente_${hojeISO()}.xlsx`);
   });
 
   // ---------------- histórico diário (parte 31) ----------------
@@ -2521,7 +2573,7 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", transp: "Transportadoras", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }

@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=87">
+  <link rel="stylesheet" href="styles.css?v=88">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -36,6 +36,7 @@
       <button class="menu-item so-log" data-pagina="gerencial"><span class="menu-icone">▦</span>Visão Gerencial</button>
       <button class="menu-item so-log" data-pagina="entregas"><span class="menu-icone">✓</span>Entregas e SLA</button>
       <button class="menu-item so-log" data-pagina="transp"><span class="menu-icone">🚚</span>Transportadoras</button>
+      <button class="menu-item so-log" data-pagina="divtp"><span class="menu-icone">⇄</span>Transportadora divergente</button>
       <button class="menu-item so-log" data-pagina="uf"><span class="menu-icone">⌖</span>Atrasos por UF</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
@@ -323,6 +324,37 @@
           </div>
         </div>
         <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-pt"><thead id="g-pt-cab"></thead><tbody id="g-pt-linhas"></tbody></table></div>
+      </section>
+    </main>
+
+    <main class="conteudo" id="pagina-divtp" hidden>
+      <!-- o cartão de filtros da Visão Gerencial é colocado aqui quando esta página abre (mesmos filtros) -->
+      <div class="titulo-pagina">
+        <div>
+          <h1>Transportadora divergente</h1>
+          <p class="sub">Pedidos em que a transportadora da Intelipost (coluna H da base) não é a da nota no Promob (coluna BD; se tiver redespacho, vale o redespacho). O método certo sai do DE × PARA pela série da nota.</p>
+          <p id="dv-info" class="info-base">Carregando…</p>
+        </div>
+      </div>
+      <section class="kpis" id="dv-cards">
+        <button class="kpi vermelho ativa" data-dv="div"><span class="kpi-rot">Divergentes em aberto</span><b class="kpi-num">–</b><small>para acertar na Intelipost</small><i>↗</i></button>
+        <button class="kpi laranja" data-dv="divtodos"><span class="kpi-rot">Divergentes (todos)</span><b class="kpi-num">–</b><small>inclui entregues e cancelados</small><i>↗</i></button>
+        <button class="kpi" data-dv="sem"><span class="kpi-rot">Sem DE × PARA</span><b class="kpi-num">–</b><small>transportadora do Promob não reconhecida</small><i>↗</i></button>
+        <button class="kpi verde" data-dv="ok"><span class="kpi-rot">Iguais</span><b class="kpi-num">–</b><small>Intelipost bate com a nota</small><i>↗</i></button>
+        <button class="kpi" data-dv="todos"><span class="kpi-rot">Todos</span><b class="kpi-num">–</b><small>pedidos nos filtros</small><i>↗</i></button>
+      </section>
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div><h2 id="dv-titulo">Divergentes</h2><p class="sub">"BI" = nome da transportadora como deve ficar no relatório.</p></div>
+          <div class="acoes-robo"><input id="dv-busca" type="search" placeholder="Procurar pedido, NF ou transportadora"><button id="dv-exportar" class="btn contorno">Baixar Excel</button></div>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>Pedido</th><th>NF</th><th>Status</th><th>Na Intelipost (H)</th><th>No Promob (BD)</th><th>Certo na Intelipost</th><th>O que fazer</th></tr></thead>
+            <tbody id="dv-linhas"></tbody>
+          </table>
+          <p id="dv-vazio" class="vazio" hidden>Nenhum pedido.</p>
+        </div>
       </section>
     </main>
 
@@ -898,9 +930,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=87"></script>
-  <script src="mapa-brasil.js?v=87"></script>
-  <script src="troca-notas.js?v=87"></script>
-  <script src="app.js?v=87"></script>
+  <script src="config.js?v=88"></script>
+  <script src="mapa-brasil.js?v=88"></script>
+  <script src="troca-notas.js?v=88"></script>
+  <script src="app.js?v=88"></script>
 </body>
 </html>

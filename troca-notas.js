@@ -129,7 +129,44 @@
     return d.toISOString().slice(0, 10);
   }
 
-  const api = { DEPARA, metodoPara, transpDaTroca, somaDiasUteis, palavras };
+  // Apelidos do Promob (coluna BD "Transportadora Promob" da base) -> apelido do DE × PARA + método padrão
+  // (planilha "modelos_eloggia_ajuste tp", aba Apelidos, 13/11/2026). [chave procurada no nome do Promob, apelido, ID padrão]
+  const APELIDOS = [
+    ["Aceville", "Aceville"], ["Atual Cargas", "Atual Cargas", 33], ["Bento Brasil", "Bento Brasil"], ["Costa", "Costa Transportes"],
+    ["Dlog", "DLOG Transportes"], ["Dominalog", "Dominalog", 196], ["Flog", "Flog Transportes", 4946], ["Formato", "Formato Transportes"],
+    ["IDH", "IDH Transportes"], ["LDC", "LDC"], ["MF Almeida", "MF Transportes"], ["Frota Interna", "Frota Interna"], ["Petrymar", "Petrymar"],
+    ["Prolog", "PROLOG TRANSPORTES E LOGISTICA LTDA", 9704], ["Rajlog", "RAJLOG SERVICOS LOGISTICOS"], ["Rapido Alem Paraiba", "Rapido Alem Paraiba", 22359],
+    ["Reunidas", "Reunidas"], ["Sajob", "SAJOB OPERACOES E LOGISTICAS LTDA"], ["Tempo Justo", "VM TRANSPORTES", 601], ["Termaco", "Termaco"],
+    ["Tradicional Log", "Tradicional Log"], ["J S De Oliveira", "JS Oliveira", 15128], ["Transcai", "TRANSCAI TRANSPORTES", 21511],
+    ["Via Cargas", "Via Cargas", 22575], ["HB Transportes", "HB Transportes"], ["Translaguna", "Translaguna"], ["Translovato", "Translovato"],
+    ["BLZ", "BLZ"], ["CNPJ 44657205", "CNPJ 44.657.205", 20062], ["Trilog", "Trilog Express"], ["LLS", "LLS", 18001], ["Zafer", "Zafer Standard"],
+    ["Zelog", "Zelog Transportes", 19536], ["Anjun", "Anjun Express"], ["Passaro", "Passaro transportes"],
+  ];
+  const chaveAp = (t) => semAcento(t).replace(/[^A-Z0-9]+/g, " ").trim();
+  // nome no Promob + série -> método certo na Intelipost (pela série; se a série não decidir, o ID padrão)
+  function esperadoPromob(nomePromob, serie) {
+    const nome = String(nomePromob || "").trim();
+    if (!nome) return { erro: "sem transportadora no Promob" };
+    const n = " " + chaveAp(nome) + " ", dig = nome.replace(/\D/g, "");
+    const ap = APELIDOS.filter(([k]) => k.startsWith("CNPJ ") ? dig.includes(k.slice(5)) : n.includes(" " + chaveAp(k) + " ")).sort((a, b) => b[0].length - a[0].length)[0];
+    if (!ap) return { erro: "não está no DE × PARA" };
+    const rows = DEPARA.filter((r) => chaveAp(r.apelido) === chaveAp(ap[1]) || (ap[1].startsWith("CNPJ ") && r.apelido.startsWith("CNPJ ")));
+    if (!rows.length) return { erro: "não está no DE × PARA" };
+    const s = String(serie || "").replace(/^0+(?=\d)/, "").trim();
+    const pela = rows.filter((r) => r.series.includes(s));
+    if (pela.length === 1) return { ok: pela[0], grupo: rows };
+    const pad = ap[2] && rows.find((r) => r.id === ap[2]);
+    if (pad) return { ok: pad, grupo: rows, padrao: true };
+    if (rows.length === 1) return { ok: rows[0], grupo: rows };
+    return { erro: `mais de um método para a série ${s || "?"}`, grupo: rows };
+  }
+  // o nome da transportadora na Intelipost (coluna H) é de algum método desse grupo?
+  function mesmaTransp(nomeIntelipost, grupo) {
+    const pw = palavras(nomeIntelipost);
+    return grupo.some((r) => contem(pw, tiraLocal(palavras(r.transp))) || contem(pw, tiraLocal(palavras(r.metodo))));
+  }
+
+  const api = { DEPARA, metodoPara, transpDaTroca, somaDiasUteis, palavras, esperadoPromob, mesmaTransp };
   if (typeof window !== "undefined") window.TROCA = api;
   if (typeof module !== "undefined") module.exports = api;
 })();
