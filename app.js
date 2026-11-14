@@ -719,6 +719,7 @@
       const cab = rows[iCab].map(norm);
       const idx = {}; Object.entries(COLUNAS).forEach(([k, nome]) => (idx[k] = cab.indexOf(nome)));
       const idxEx = Object.entries(EXTRA).map(([k, [nome, tipo]]) => [k, cab.indexOf(nome), tipo]).filter(([, i]) => i >= 0);
+      if (!idxEx.some(([k]) => k === "transp_promob")) toast('Aviso: não achei a coluna "Transportadora Promob" nesta planilha. A página Transportadora divergente vai ficar vazia.', true);
       const vistos = new Set();
       linhas = [];
       for (const r of rows.slice(iCab + 1)) {
@@ -1607,7 +1608,7 @@
   async function carregarDvPromob() {
     if (dvPromob && dvGer === gGeracao) return true;
     try {
-      const L = await buscarTudo("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho");
+      const L = await buscarTudo("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho,cep:extra->>cep");
       dvPromob = new Map(L.map((x) => [x.pedido, x])); dvGer = gGeracao; return true;
     } catch (err) { dvPromob = new Map(); dvGer = gGeracao; $("dv-info").textContent = /extra/i.test(err.message || "") ? "Falta rodar a parte 32 do schema.sql e enviar a base de novo." : "Não consegui ler: " + err.message; return false; }
   }
@@ -1625,7 +1626,12 @@
     const L = gDados.filter((r) => !r._fechado);
     if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
     const temPromob = [...dvPromob.values()].some((x) => x.tp);
-    if (!temPromob) { $("dv-info").textContent = 'A base ainda não tem a coluna "Transportadora Promob" (BD): envie a base de novo no botão "Enviar base".'; }
+    if (!temPromob) {
+      const antiga = [...dvPromob.values()].some((x) => x.cep);
+      $("dv-info").textContent = antiga
+        ? 'A base atual foi enviada com a versão antiga do painel, que ainda não guardava a coluna "Transportadora Promob". Aperte Ctrl+F5 para atualizar a página e envie a base de novo.'
+        : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e envie a base de novo no botão "Enviar base".';
+    }
     const todos = L.map((r) => {
       const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "";
       let e = rd ? TROCA.esperadoPromob(rd, r.serie) : null, fonte = "redespacho";
