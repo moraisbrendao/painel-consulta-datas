@@ -747,7 +747,8 @@
       carregando(""); toast(err.message, true); return;
     }
     carregando("");
-    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
+    const nTp = linhas.filter((l) => l.extra && l.extra.transp_promob).length;
+    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\nTransportadora Promob preenchida em ${fmt(nTp)} pedidos.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
     try {
       for (let i = 0; i < linhas.length; i += 2000) {
         carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
@@ -1640,7 +1641,8 @@
       return { r, bd, rd, e, fonte, sit };
     });
     document.querySelectorAll("#dv-cards .kpi[data-dv]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(todos.filter(DV_CARD[b.dataset.dv]).length); b.classList.toggle("ativa", b.dataset.dv === dvCard); });
-    if (temPromob) $("dv-info").textContent = `${fmt(todos.filter(DV_CARD.div).length)} pedidos em andamento com a transportadora da Intelipost diferente da nota (Promob) · ${fmt(L.length)} pedidos em andamento na base`;
+    const nTp = [...dvPromob.values()].filter((x) => x.tp).length;
+    if (temPromob) $("dv-info").textContent = `Transportadora Promob na base: ${fmt(nTp)} de ${fmt(dvPromob.size)} pedidos · ${fmt(todos.filter(DV_CARD.div).length)} pedidos em andamento com a transportadora da Intelipost diferente da nota (Promob) · ${fmt(L.length)} pedidos em andamento na base`;
     const q = norm(dvBusca);
     dvLista = todos.filter(DV_CARD[dvCard]).filter((x) => !q || [x.r.pedido, x.r.nf, x.r.transp, x.bd, x.rd].some((v) => norm(v).includes(q)));
     dvLista.sort((a, b) => (b.r._atraso - a.r._atraso) || String(a.r.transp || "").localeCompare(String(b.r.transp || "")));
