@@ -773,6 +773,23 @@ async function conferirLote() {
   const t0 = Date.now(); await carregarSenhasDB();
   const lista = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  // Série 35 (dropshipping) da TSL: a TSL só faz a first mile; fora do RJ o rastreio que vale é o da transportadora de redespacho (Promob).
+  // Para RJ a TSL emite o CT-e da entrega e segue o rastreio da TSL. (Regra da Brenda, 16/11.)
+  // (inclui as já "entregues" pela TSL fora do RJ: podem ter sido a entrega da first mile, então reconfere pelo redespacho)
+  { const jaEnt = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&transportadora=ilike.*tsl*&nf=like.*-35&limit=5000`).catch(() => []);
+    const tem = new Set(lista.map((l) => l.pedido)); jaEnt.forEach((l) => { if (!tem.has(l.pedido)) lista.push({ ...l, _jaEnt: true }); }); }
+  { const tsl = lista.filter((l) => /\btsl\b/i.test(l.transportadora || "") && String(l.nf || "").split("-")[1]?.trim() === "35");
+    let rj = 0, redesp = 0, semRd = 0; const B = new Map();
+    for (let i = 0; i < tsl.length; i += 100) { const ids = tsl.slice(i, i + 100).map((l) => `"${String(l.pedido).replace(/"/g, "")}"`).join(",");
+      (await chamar(`base_pedidos?select=pedido,uf,rd:extra->>redespacho&pedido=in.(${encodeURIComponent(ids)})`).catch(() => [])).forEach((b) => B.set(b.pedido, b)); }
+    const fora = new Set();
+    for (const l of tsl) { const b = B.get(l.pedido) || {};
+      if (String(b.uf || "").trim().toUpperCase() === "RJ") { rj++; if (l._jaEnt) fora.add(l.pedido); continue; }
+      if (b.rd && String(b.rd).trim()) { l.transportadora = String(b.rd).trim(); redesp++; }   // só para escolher onde rastrear; não grava a transportadora
+      else { fora.add(l.pedido); semRd++; } }
+    lista.forEach((l) => { if (l._jaEnt && !/\btsl\b/i.test(l.transportadora || "")) delete l._jaEnt; else if (l._jaEnt) fora.add(l.pedido); });
+    if (fora.size) { const resto = lista.filter((l) => !fora.has(l.pedido)); lista.length = 0; lista.push(...resto); }
+    if (tsl.length) log(`TSL série 35: ${rj} RJ (rastreio TSL) · ${redesp} pelo redespacho · ${semRd} sem redespacho na base (não conferidos)`); }
   // Jadlog: API própria (100 por chamada), roda ao mesmo tempo que o SSW
   const jad = lista.filter((l) => EH_JADLOG.test(l.transportadora || ""));
   const pJad = (async () => { if (jad.length && process.env.JADLOG_TOKEN) { const m = await jadlog(jad).catch(() => new Map());
