@@ -779,6 +779,16 @@ async function conferirLote() {
     const linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido); return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : null }; });
     for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
     log(`Jadlog (API): ${linhas.length} conferidos · ${Math.round((Date.now() - t0) / 1000)} s`); } })().catch((e) => log("Jadlog parou:", String(e.message).slice(0, 80)));
+  // Transiga: não usa SSW; o rastreio chega por webhook na tabela rastreio_transiga (Arquivo Recebido = sem CT-e)
+  const pTransiga = (async () => { const tg = lista.filter((l) => /transiga/i.test(l.transportadora || "")); if (!tg.length) return;
+    const ch = (v) => String(v || "").trim().split("-").map((x) => x.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-");
+    const R = new Map(); for (let de = 0; ; de += 1000) { const L = await chamar(`rastreio_transiga?select=nf,descricao,data_evento,previsao,entregue,data_entrega&order=nf&limit=1000&offset=${de}`); L.forEach((x) => R.set(x.nf, x)); if (L.length < 1000) break; }
+    const linhas = tg.filter((l) => R.has(ch(l.nf))).map((l) => { const x = R.get(ch(l.nf)), d = (v) => (v ? String(v).slice(0, 10) : null);
+      const sit = x.entregue ? "entregue" : /arquivo recebido/i.test(x.descricao || "") ? "sem cte" : "nao entregue";
+      return { pedido: l.pedido, situacao: sit, ultimo_evento: (x.descricao || "").toUpperCase().slice(0, 60) || null, data_evento: d(x.data_evento), data_entrega: x.entregue ? d(x.data_entrega || x.data_evento) : null,
+        detalhe: { ...(l.detalhe || {}), fonte: "Transiga", previsao: x.previsao || null } }; });
+    for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Transiga:", e.message.slice(0, 120)));
+    log(`Transiga (webhook): ${linhas.length} de ${tg.length} com rastreio · ${R.size} NFs recebidas até agora`); })().catch((e) => log("Transiga parou:", String(e.message).slice(0, 80)));
   // SSW: tudo que não é Jadlog, Bento, Trânsito Brasil (sistemas próprios) nem fora do SSW
   const ssw = lista.filter((l) => !EH_JADLOG.test(l.transportadora || "") && !EH_BENTO.test(l.transportadora || "") && !(EH_TRANSITO.test(l.transportadora || "") && !(l.detalhe && l.detalhe.emissor)) && !FORA_SSW.test(l.transportadora || ""));
   // CNPJ: o da série, ou o outro CNPJ em que essa NF já foi achada antes (detalhe.cnpj_outro)
@@ -840,11 +850,11 @@ async function conferirLote() {
     }
     log(`Outros CNPJ: ${achou} NFs achadas em ${consultas - c0} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
   } catch (e) { log("Parei:", e.message, `· outros CNPJ: ${achou} achadas até aqui · gravo o que já conferi.`); }
-  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; log("Nada gravado do SSW nesta rodada."); return; }
+  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; await pTransiga; log("Nada gravado do SSW nesta rodada."); return; }
   const final = gravados ? montar(ssw.filter((l) => mexidos.has(l.pedido))) : montar(ssw);
   await gravar(final.concat(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
   res.forEach((r) => (cont[r.situacao] = (cont[r.situacao] || 0) + 1));
-  await pJad;
+  await pJad; await pTransiga;
   log("Conferência em lote:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), `· sem NF/série ${semNf.length} · ${Math.round((Date.now() - t0) / 1000)} s no total`);
 }
 if (MODO === "lote") {

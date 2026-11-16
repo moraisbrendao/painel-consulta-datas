@@ -1755,3 +1755,49 @@ select h.ticket,
   bool_or(h.envio_id = (select envio_id from ult)) as no_ultimo_envio
 from h group by h.ticket;
 grant select on public.repo_atual to authenticated;
+-- 37) Rastreio da Transiga por webhook: a Transiga manda os eventos para a função transiga-webhook,
+--     que guarda só NF, status/ocorrência, datas e previsão (nada de nomes, documentos, endereço ou fotos)
+create table if not exists public.rastreio_transiga (
+  nf text primary key,              -- chave_nf("número-série")
+  encomenda text,
+  codigo text,
+  descricao text,
+  data_evento timestamp,
+  previsao date,
+  entregue boolean not null default false,
+  data_entrega timestamp,
+  eventos integer not null default 0,
+  recebido_em timestamptz not null default now()
+);
+alter table public.rastreio_transiga enable row level security;
+revoke all on public.rastreio_transiga from anon;
+revoke insert, update, delete, truncate on public.rastreio_transiga from authenticated;
+grant select on public.rastreio_transiga to authenticated;
+drop policy if exists "logistica le" on public.rastreio_transiga;
+create policy "logistica le" on public.rastreio_transiga for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public.receber_transiga(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare r record; n integer := 0;
+begin
+  for r in select * from jsonb_to_recordset(linhas) as x(numero text, serie text, encomenda text, codigo text, descricao text, data_evento timestamp, previsao date, entregue boolean)
+           where coalesce(x.numero, '') <> '' order by x.data_evento nulls first loop
+    insert into public.rastreio_transiga as t (nf, encomenda, codigo, descricao, data_evento, previsao, entregue, data_entrega, eventos, recebido_em)
+    values (public.chave_nf(r.numero || '-' || coalesce(r.serie, '')), nullif(r.encomenda, ''), nullif(r.codigo, ''), left(nullif(r.descricao, ''), 80),
+      r.data_evento, r.previsao, coalesce(r.entregue, false), case when r.entregue then r.data_evento end, 1, now())
+    on conflict (nf) do update set
+      encomenda = coalesce(excluded.encomenda, t.encomenda),
+      codigo = case when t.data_evento is null or excluded.data_evento >= t.data_evento then coalesce(excluded.codigo, t.codigo) else t.codigo end,
+      descricao = case when t.data_evento is null or excluded.data_evento >= t.data_evento then coalesce(excluded.descricao, t.descricao) else t.descricao end,
+      data_evento = greatest(t.data_evento, excluded.data_evento),
+      previsao = coalesce(excluded.previsao, t.previsao),
+      entregue = t.entregue or excluded.entregue,
+      data_entrega = coalesce(t.data_entrega, excluded.data_entrega),
+      eventos = t.eventos + 1,
+      recebido_em = now();
+    n := n + 1;
+  end loop;
+  return n;
+end $$;
+revoke all on function public.receber_transiga(jsonb) from public, anon, authenticated;
+grant execute on function public.receber_transiga(jsonb) to service_role;
