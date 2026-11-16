@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=126">
+  <link rel="stylesheet" href="styles.css?v=127">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -887,6 +887,7 @@
         <label>Pedido ou NF<input id="rt-busca" type="search" placeholder="# pedido ou nota"></label>
         <label>Transportadora<select id="rt-transp"></select></label>
         <label>Canal<select id="rt-canal"></select></label>
+        <label>Responsável<select id="rt-resp"><option value="">Todos</option></select></label>
         <button id="rt-limpar" class="link limpar" type="button">Limpar filtros</button>
       </section>
       <div class="titulo-pagina com-acoes">
@@ -908,7 +909,7 @@
         <button class="kpi azul" data-rt="p5"><span class="kpi-rot">5 · Vence amanhã sem retorno</span><b class="kpi-num"></b><small>preventivo</small><i>↗</i></button>
         <button class="kpi roxo" data-rt="p6"><span class="kpi-rot">6 · Nova data vence hoje/amanhã</span><b class="kpi-num"></b><small>confirmar que vai entregar</small><i>↗</i></button>
         <button class="kpi" data-rt="ok"><span class="kpi-rot">Em dia</span><b class="kpi-num"></b><small>com nova data válida: só acompanhar</small><i>↗</i></button>
-        <button class="kpi" data-rt="cobrar"><span class="kpi-rot">Tudo para cobrar</span><b class="kpi-num"></b><small>cards 1 a 6</small><i>↗</i></button>
+        <button class="kpi" data-rt="cobrar"><span class="kpi-rot">Tudo para cobrar</span><b class="kpi-num"></b><small>cards 1 a 6 · pode marcar vários cards</small><i>↗</i></button>
       </section>
       <div id="rt-aviso" class="aviso-perfil" hidden></div>
 
@@ -920,8 +921,21 @@
       </section>
 
       <section class="cartao">
-        <div class="cartao-topo"><div><h2>O que dizem as observações</h2><p class="sub">Leitura automática das observações dos pedidos para cobrar (atrasados e vencendo). Clique para ver os pedidos.</p></div></div>
+        <div class="cartao-topo"><div><h2>Retornos padronizados</h2><p class="sub">O retorno (observação) de cada pedido dos cards marcados, padronizado pelas regras abaixo, com o responsável de cada um. Clique para ver os pedidos.</p></div></div>
         <div id="rt-cats" class="rt-cats"></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo"><div><h2>Como padronizar o retorno</h2><p class="sub">Diga as palavras e para onde elas vão. Qualquer retorno que contenha uma delas vira essa categoria (vale a 1ª regra da lista que bater). Escolha o responsável de cada categoria. Vale para todos.</p></div></div>
+        <div id="rt-regras-aviso" class="aviso-perfil" hidden>⚠ Para guardar as regras e os responsáveis, rode a <b>parte 43</b> do supabase/schema.sql no Supabase. Enquanto isso valem as regras de fábrica.</div>
+        <div class="rt-regra-form">
+          <label>Considerar como<input id="rt-regra-cat" list="rt-cat-lista" placeholder="Em rota de entrega"><datalist id="rt-cat-lista"></datalist></label>
+          <label class="cresce">quando o retorno tiver (separe por vírgula)<input id="rt-regra-pal" placeholder="EM ROTA DE ENTREGA, EM ENTREGA, SAIDA PARA ENTREGA"></label>
+          <button id="rt-regra-salvar" class="btn amarelo" type="button">＋ Guardar regra</button>
+        </div>
+        <p class="s rt-regras-tit">Regras que estão valendo</p>
+        <div id="rt-regras" class="rt-regras"></div>
+        <p><button id="rt-regras-fabrica" class="link" type="button">voltar para as regras de fábrica</button></p>
       </section>
 
       <section class="cartao">
@@ -1301,13 +1315,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=126"></script>
-  <script src="mapa-brasil.js?v=126"></script>
-  <script src="troca-notas.js?v=126"></script>
-  <script src="app.js?v=126"></script>
-  <script src="ordenar.js?v=126"></script>
-  <script src="menu.js?v=126"></script>
-  <script src="ajuda.js?v=126"></script>
-  <script src="documentos.js?v=126"></script>
+  <script src="config.js?v=127"></script>
+  <script src="mapa-brasil.js?v=127"></script>
+  <script src="troca-notas.js?v=127"></script>
+  <script src="app.js?v=127"></script>
+  <script src="ordenar.js?v=127"></script>
+  <script src="menu.js?v=127"></script>
+  <script src="ajuda.js?v=127"></script>
+  <script src="documentos.js?v=127"></script>
 </body>
 </html>

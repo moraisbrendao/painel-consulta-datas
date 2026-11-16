@@ -1793,19 +1793,58 @@ ${extra}
   // Cada pedido em aberto cai em UM balde, na ordem de prioridade. Retorno válido = nova data de hoje em diante.
   const RT_NOMES = { p1: "Atrasado sem retorno", p2: "Promessa quebrada", p3: "Atrasado só com observação", p4: "Vence hoje sem retorno", p5: "Vence amanhã sem retorno", p6: "Nova data vence hoje/amanhã", ok: "Em dia", cobrar: "Tudo para cobrar" };
   const RT_ACAO = { p1: "Cobrar retorno com nova data", p2: "Cobrar de novo e escalar (data não cumprida)", p3: "Pedir a previsão de entrega", p4: "Cobrar hoje para não atrasar", p5: "Confirmar a entrega de amanhã", p6: "Confirmar que entrega na nova data" };
-  // leitura da observação (palavras-chave) → categoria e sugestão
-  const RT_CATS = [
-    ["insucesso", "Insucesso na entrega", /ausente|endere[cç]o|n[aã]o localiz|recus|fechad|mudou|insucesso|devolu/i, "abrir ocorrência no portal"],
-    ["avaria", "Avaria / extravio", /avaria|extravi|sinistr|roub|danific|faltando volume|falta de volume|quebrad/i, "abrir reposição"],
-    ["agendado", "Agendado", /agend/i, "acompanhar a data agendada"],
-    ["rota", "Em rota / saiu para entrega", /rota|saiu para entrega|em entrega|motorista|carregad/i, "confirmar a entrega"],
-    ["cliente", "Aguardando cliente", /cliente|contato|retirar|retirada|liga[cç]/i, "acionar o SAC / cliente"],
-    ["semprev", "Sem previsão / sem resposta", /sem previs|sem retorno|n[aã]o respond|aguardando retorno|sem resposta|cobrad/i, "escalar com a transportadora"],
-    ["transito", "Em trânsito / transferência", /transfer|tr[aâ]nsito|hub|filial|unidade|cd\b/i, "pedir a previsão de chegada"],
-    ["reentrega", "Reentrega", /reentreg|nova tentativa|tentativa/i, "confirmar a nova tentativa"],
-  ];
-  const rtCat = (obs) => { if (!obs) return null; const c = RT_CATS.find((x) => x[2].test(obs)); return c || ["outros", "Outros", null, "ler e decidir"]; };
-  let rtCard = "cobrar", rtTransp = null, rtCatSel = null, rtPag = 1, rtLista = [], rtResumo = null, rtResumoEm = 0;
+  // Retorno padronizado (como no E-loggia do Danilo): palavras do retorno → categoria, com responsável por categoria.
+  // As regras ficam no banco (parte 43) e valem para todos; sem regra guardada, valem as de fábrica.
+  const RT_FABRICA = [
+    ["Entrega agendada", ["AGENDAD", "AGENDAMENTO"]],
+    ["Em processo de devolução", ["DEVOLU", "RETORNANDO PARA O REMETENTE", "BARRADA", "CANCELADA", "AGUARDANDO NFD"]],
+    ["Em processo de reposição", ["REPOSI", "FALTA DE VOL", "FALTA VOLUME", "EXTRAVIO", "AVARIA", "MERCADORIA SINISTRADA", "CTRC BAIXADO"]],
+    ["Em buscas", ["BUSCAS", "EM BUSCA"]],
+    ["Não chegou para a transportadora", ["NAO COLETAD", "NAO FOI COLETAD", "NAO TEMOS EM SISTEMA", "NAO DEU ENTRADA", "NAO EMBARCAD", "SEM ENTRADA", "NAO RECEBEMOS", "MERCADORIA NAO COLETA", "SEM EMISSAO", "NAO TENHO ESTA NF", "NAO CONSTA EM NOSSA BASE"]],
+    ["Ocorrência - pendência SAC", ["AUSENTE", "RECUSA", "NAO LOCALIZAD", "ENDERECO INCORRETO", "MUDOU-SE", "FECHADO", "AGUARDANDO INSTRU", "CONTATO", "AGUARDANDO RETORNO", "CONFIRMACAO DE DADOS"]],
+    ["Mercadoria retida", ["RETIDA", "RETENCAO", "FISCALIZACAO"]],
+    ["Roubo / área de risco", ["ROUBO", "FURTO", "AREA DE RISCO", "SINISTRO"]],
+    ["Pendência transportadora - cobrar", ["SEM PREVISAO", "AGUARDANDO POSICAO", "VERIFICANDO", "TRATANDO", "EM ANALISE", "EM TRATATIVA", "AGUARDANDO ATUALIZACAO", "SOBRA CONSTATADA", "ENTREGA PREJUDICADA", "VOLUME TROCADO", "AGUARDANDO O RECEBIMENTO", "AGUARDANDO LIBERACAO"]],
+    ["Em rota de entrega", ["EM ROTA", "EMROTA", "ROTA DE ENTREGA", "SAIDA PARA ENTREGA"]],
+    ["Entregue", ["ENTREGUE", "ENTREGA FINALIZADA", "FINALIZADO"]],
+  ].map(([categoria, palavras], i) => ({ categoria, palavras, responsavel_id: null, ordem: i + 1 }));
+  let rtRegras = RT_FABRICA.map((x) => ({ ...x, palavras: [...x.palavras] })), rtRegrasSalvas = false, rtRegrasOk = true;
+  const RT_SEMOBS = "Sem observação", RT_NAOPAD = "Não padronizado";
+  const rtCatCache = new Map();
+  function rtCat(obs) {   // categoria do retorno (texto da observação): a 1ª regra cuja palavra aparece no texto
+    if (!obs) return RT_SEMOBS;
+    if (rtCatCache.has(obs)) return rtCatCache.get(obs);
+    const t = norm(obs), r = rtRegras.find((g) => g.palavras.some((w) => w && t.includes(norm(w))));
+    const c = r ? r.categoria : RT_NAOPAD; rtCatCache.set(obs, c); return c;
+  }
+  const rtRegraDe = (cat) => rtRegras.find((g) => g.categoria === cat) || null;
+  const rtRespDe = (cat) => { const g = rtRegraDe(cat); return g && g.responsavel_id ? pessoas.find((x) => x.id === g.responsavel_id) || null : null; };
+  async function carregarRegrasRetorno() {
+    const { data, error } = (await sb.from("retorno_regras").select("*").order("ordem").then((r) => r, (e) => ({ error: e }))) || { error: true };
+    rtRegrasOk = !error;
+    if (!error && data && data.length) { rtRegras = data.map((x) => ({ ...x, palavras: x.palavras || [] })); rtRegrasSalvas = true; }
+    rtCatCache.clear();
+  }
+  async function salvarRegras(lista, apagar = []) {   // grava as regras passadas (na 1ª vez, a lista inteira, com as de fábrica)
+    if (!rtRegrasOk) { toast("Para guardar as regras, rode no Supabase a parte 43 do supabase/schema.sql.", true); return false; }
+    if (apagar.length) { const { error } = await sb.from("retorno_regras").delete().in("categoria", apagar); if (error) { toast("Não salvei: " + error.message, true); return false; } }
+    const linhas = lista.map((g) => ({ categoria: g.categoria, palavras: g.palavras, responsavel_id: g.responsavel_id || null, ordem: g.ordem }));
+    if (linhas.length) { const { error } = await sb.from("retorno_regras").upsert(linhas, { onConflict: "categoria" }); if (error) { toast("Não salvei: " + error.message, true); return false; } }
+    rtRegrasSalvas = true; rtCatCache.clear(); return true;
+  }
+  function desenharRegras() {
+    const ops = (sel) => `<option value="">${PENDENTE}</option>` + pessoas.map((x) => `<option value="${x.id}" ${x.id === sel ? "selected" : ""}>${esc(x.nome)}${x.area ? " · " + esc(x.area) : ""}</option>`).join("");
+    $("rt-regras").innerHTML = rtRegras.map((g) => `<div class="rt-regra" data-cat="${esc(g.categoria)}">
+        <div class="rt-regra-nome"><b>${esc(g.categoria)}</b><select class="rt-regra-resp" title="Responsável por este retorno">${ops(g.responsavel_id)}</select></div>
+        <div class="rt-regra-pal">${g.palavras.map((w, i) => `<span class="t-chip">${esc(w)}<button type="button" data-tirar-pal="${i}" title="Tirar">×</button></span>`).join("")}
+          <button type="button" class="link" data-tirar-cat title="Apagar esta categoria">apagar categoria</button></div></div>`).join("");
+    $("rt-cat-lista").innerHTML = rtRegras.map((g) => `<option value="${esc(g.categoria)}">`).join("");
+    $("rt-regras-aviso").hidden = rtRegrasOk;
+    const v = $("rt-resp").value;
+    $("rt-resp").innerHTML = `<option value="">Todos</option><option value="-">${PENDENTE}</option>` + pessoas.map((x) => `<option value="${x.id}" ${String(x.id) === v ? "selected" : ""}>${esc(x.nome)}</option>`).join("");
+    if (v === "-") $("rt-resp").value = "-";
+  }
+  let rtCards = new Set(), rtTransp = null, rtCatSel = null, rtPag = 1, rtLista = [], rtResumo = null, rtResumoEm = 0;
   function rtBalde(p) {
     if (p.entregue_ip) return null;
     const t = p._t || {}, hoje = hojeISO(), amanha = somaDias(hoje, 1), nova = t.nova_data ? String(t.nova_data).slice(0, 10) : null, obs = (t.observacao || "").trim();
@@ -1831,6 +1870,8 @@ ${extra}
     if (q && !norm(p.pedido).includes(q) && !norm(p.nf).includes(q)) return false;
     if (tr && (p.transportadora || "(sem transportadora)") !== tr) return false;
     if (cn && (p.canal || "(sem canal)") !== cn) return false;
+    const rs = $("rt-resp").value;
+    if (rs) { const r = rtRespDe(rtCat(p._t && p._t.observacao)); if (rs === "-" ? !!r : !r || String(r.id) !== rs) return false; }
     return true;
   }
   function desenharRetornos() {
@@ -1841,7 +1882,7 @@ ${extra}
     const L = base.filter(rtPassaFiltro).map((p) => { p._rt = rtBalde(p); return p; });
     const cont = { p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, ok: 0, cobrar: 0 };
     L.forEach((p) => { if (!p._rt) return; cont[p._rt]++; if (p._rt !== "ok") cont.cobrar++; });
-    document.querySelectorAll("#rt-cards .kpi[data-rt]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.rt]); b.classList.toggle("ativa", rtCard === b.dataset.rt); });
+    document.querySelectorAll("#rt-cards .kpi[data-rt]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.rt]); b.classList.toggle("ativa", b.dataset.rt === "cobrar" ? !rtCards.size : rtCards.has(b.dataset.rt)); });
     $("menu-rt").hidden = !cont.p1 && !cont.p2; $("menu-rt").textContent = fmt(cont.p1 + cont.p2);
     // por transportadora
     const porT = new Map();
@@ -1856,16 +1897,19 @@ ${extra}
         <td><button class="btn mini contorno" data-rtx="${esc(x.k)}" title="Excel no formato do Enviar retornos, só desta transportadora">⤓ Cobrança</button> <button class="btn mini contorno" data-rtm="${esc(x.k)}" title="Texto pronto para e-mail ou WhatsApp">⧉ Mensagem</button></td></tr>`).join("")
       || `<tr><td colspan="11" class="vazio">Nada para cobrar.</td></tr>`;
     // observações
-    const C = L.filter((p) => p._rt && p._rt !== "ok"), porC = new Map();
-    C.forEach((p) => { const c = rtCat(p._t && p._t.observacao); if (!c) return; const x = porC.get(c[0]) || porC.set(c[0], { c, n: 0 }).get(c[0]); x.n++; });
-    $("rt-cats").innerHTML = [...porC.values()].sort((a, b) => b.n - a.n).map((x) => `<button class="rt-cat ${rtCatSel === x.c[0] ? "sel" : ""}" data-rtc="${x.c[0]}"><b>${fmt(x.n)}</b> ${esc(x.c[1])}<small>→ ${esc(x.c[3])}</small></button>`).join("")
-      || '<p class="s">Nenhuma observação nos pedidos para cobrar.</p>';
+    const C = L.filter((p) => p._rt), porC = new Map();
+    const naCard = (p) => p._rt && (rtCards.size ? rtCards.has(p._rt) : p._rt !== "ok");
+    C.filter(naCard).forEach((p) => { const c = rtCat(p._t && p._t.observacao); const x = porC.get(c) || porC.set(c, { c, n: 0 }).get(c); x.n++; });
+    const ordC = new Map(rtRegras.map((g, i) => [g.categoria, i])); ordC.set(RT_NAOPAD, 998); ordC.set(RT_SEMOBS, 999);
+    $("rt-cats").innerHTML = [...porC.values()].sort((a, b) => (ordC.get(a.c) ?? 997) - (ordC.get(b.c) ?? 997)).map((x) => { const r = rtRespDe(x.c);
+      return `<button class="rt-cat ${rtCatSel === x.c ? "sel" : ""} ${x.c === RT_NAOPAD ? "naopad" : ""}" data-rtc="${esc(x.c)}"><b>${fmt(x.n)}</b> ${esc(x.c)}<small>${x.c === RT_SEMOBS || x.c === RT_NAOPAD ? (x.c === RT_NAOPAD ? "padronize abaixo" : "cobrar o retorno") : r ? "👤 " + esc(r.nome) : PENDENTE}</small></button>`; }).join("")
+      || '<p class="s">Nada para cobrar nos cards marcados.</p>';
     // lista
     const ordem = { p1: 1, p2: 2, p4: 3, p3: 4, p5: 5, p6: 6, ok: 9 };
-    rtLista = L.filter((p) => p._rt && (rtCard === "cobrar" ? p._rt !== "ok" : p._rt === rtCard) && (!rtTransp || (p.transportadora || "(sem transportadora)") === rtTransp)
-      && (!rtCatSel || (rtCat(p._t && p._t.observacao) || [])[0] === rtCatSel))
+    rtLista = L.filter((p) => naCard(p) && (!rtTransp || (p.transportadora || "(sem transportadora)") === rtTransp)
+      && (!rtCatSel || rtCat(p._t && p._t.observacao) === rtCatSel))
       .sort((a, b) => ordem[a._rt] - ordem[b._rt] || (a._dias ?? 0) - (b._dias ?? 0));
-    $("rt-titulo").textContent = `${RT_NOMES[rtCard]}${rtTransp ? " · " + rtTransp : ""}${rtCatSel ? " · " + RT_CATS.concat([["outros", "Outros"]]).find((c) => c[0] === rtCatSel)[1] : ""} (${fmt(rtLista.length)})`;
+    $("rt-titulo").textContent = `${rtCards.size ? [...rtCards].map((k) => RT_NOMES[k]).join(" + ") : RT_NOMES.cobrar}${rtTransp ? " · " + rtTransp : ""}${rtCatSel ? " · " + rtCatSel : ""} (${fmt(rtLista.length)})`;
     const totAlvo = L.filter((p) => !p.entregue_ip && (p._atrasoG || p._dias === 0 || p._dias === 1)).length, totCob = L.filter((p) => !p.entregue_ip && (p._atrasoG || p._dias === 0 || p._dias === 1) && p._t && p._t.nova_data && String(p._t.nova_data).slice(0, 10) >= hojeISO()).length;
     $("rt-info").innerHTML = `${fmt(cont.cobrar)} pedidos para cobrar hoje · cobertura geral <b>${pctTxt(totCob, totAlvo)}</b> (atrasados e vencendo com retorno válido) · ${fmt(L.filter((p) => p.entregue_ip).length)} já entregues na Intelipost ficam fora`;
     desenharRtLista();
@@ -1873,18 +1917,53 @@ ${extra}
   function desenharRtLista() {
     const tot = rtLista.length, pags = Math.max(1, Math.ceil(tot / POR_PAGINA)); rtPag = Math.min(Math.max(1, rtPag), pags);
     $("rt-linhas").innerHTML = rtLista.slice((rtPag - 1) * POR_PAGINA, rtPag * POR_PAGINA).map((p) => {
-      const c = rtCat(p._t && p._t.observacao), r = rtResumo && rtResumo.get(p.pedido);
+      const c = rtCat(p._t && p._t.observacao), r = rtResumo && rtResumo.get(p.pedido), rp = rtRespDe(c);
       const cob = `<span class="chip ${["p1", "p2"].includes(p._rt) ? "vermelho" : ["p3", "p4"].includes(p._rt) ? "laranja" : p._rt === "ok" ? "verde" : "ambar"}">${RT_NOMES[p._rt]}</span>
-        <div class="s">${RT_ACAO[p._rt] || "acompanhar"}</div>${c ? `<div class="s">📝 ${esc(c[1])} → ${esc(c[3])}</div>` : ""}${r ? `<div class="s">${fmt(r.retornos)} retorno${r.retornos === 1 ? "" : "s"}${r.quebradas ? ` · <b class="txt-vermelho">${fmt(r.quebradas)} promessa${r.quebradas === 1 ? "" : "s"} quebrada${r.quebradas === 1 ? "" : "s"}</b>` : ""}</div>` : ""}`;
+        <div class="s">${RT_ACAO[p._rt] || "acompanhar"}</div>${c !== RT_SEMOBS ? `<div class="s">📝 ${esc(c)}${c !== RT_NAOPAD ? ` · ${rp ? "👤 " + esc(rp.nome) : PENDENTE}` : ""}</div>` : ""}${r ? `<div class="s">${fmt(r.retornos)} retorno${r.retornos === 1 ? "" : "s"}${r.quebradas ? ` · <b class="txt-vermelho">${fmt(r.quebradas)} promessa${r.quebradas === 1 ? "" : "s"} quebrada${r.quebradas === 1 ? "" : "s"}</b>` : ""}</div>` : ""}`;
       return linhaPreventivo(p, "data-rt-campo", `<td>${cob}</td>`); }).join("");
     $("rt-vazio").hidden = tot > 0;
     $("rt-paginacao").innerHTML = tot > POR_PAGINA ? `<button class="btn" data-p="-1" ${rtPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rtPag} de ${pags}</span><button class="btn" data-p="1" ${rtPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
-  async function abrirRetornos() { desenharRetornos(); await carregarResumoRetornos(); desenharRetornos(); }
+  async function abrirRetornos() { desenharRetornos(); await Promise.all([carregarResumoRetornos(), carregarRegrasRetorno(), pessoas.length ? null : carregarResponsaveis()]); desenharRegras(); desenharRetornos(); }
+  // regras: guardar, tirar palavra, apagar categoria, responsável, voltar às de fábrica
+  $("rt-regra-salvar").addEventListener("click", async () => {
+    const cat = $("rt-regra-cat").value.trim(), pal = $("rt-regra-pal").value.split(/[,;\n]+/).map((x) => x.trim()).filter(Boolean);
+    if (!cat || !pal.length) return toast("Diga a categoria e pelo menos uma palavra.", true);
+    const lista = rtRegras.map((g) => ({ ...g, palavras: [...g.palavras] }));
+    let g = lista.find((x) => norm(x.categoria) === norm(cat));
+    if (!g) { g = { categoria: cat, palavras: [], responsavel_id: null, ordem: Math.max(0, ...lista.map((x) => x.ordem || 0)) + 1 }; lista.push(g); }
+    pal.forEach((w) => { if (!g.palavras.some((x) => norm(x) === norm(w))) g.palavras.push(w); });
+    if (!(await salvarRegras(rtRegrasSalvas ? [g] : lista))) return;
+    rtRegras = lista; rtCatCache.clear(); $("rt-regra-pal").value = ""; desenharRegras(); desenharRetornos(); toast("Regra guardada: vale para todos.");
+  });
+  $("rt-regras").addEventListener("click", async (e) => {
+    const box = e.target.closest(".rt-regra"); if (!box) return; const cat = box.dataset.cat;
+    const lista = rtRegras.map((g) => ({ ...g, palavras: [...g.palavras] })), g = lista.find((x) => x.categoria === cat);
+    const tp = e.target.closest("[data-tirar-pal]");
+    if (tp) { g.palavras.splice(Number(tp.dataset.tirarPal), 1); if (!(await salvarRegras(rtRegrasSalvas ? [g] : lista))) return; rtRegras = lista; }
+    else if (e.target.closest("[data-tirar-cat]")) { if (!confirm(`Apagar a categoria "${cat}"? Os retornos dela passam a "${RT_NAOPAD}".`)) return;
+      const resto = lista.filter((x) => x.categoria !== cat); if (!(await salvarRegras(resto, rtRegrasSalvas ? [cat] : []))) return; rtRegras = resto; }
+    else return;
+    rtCatCache.clear(); desenharRegras(); desenharRetornos();
+  });
+  $("rt-regras").addEventListener("change", async (e) => {
+    const sel = e.target.closest(".rt-regra-resp"); if (!sel) return; const cat = sel.closest(".rt-regra").dataset.cat;
+    const lista = rtRegras.map((g) => ({ ...g })), g = lista.find((x) => x.categoria === cat); g.responsavel_id = sel.value ? Number(sel.value) : null;
+    if (!(await salvarRegras(rtRegrasSalvas ? [g] : lista))) { desenharRegras(); return; }
+    rtRegras = lista; toast(`Responsável de "${cat}" salvo.`); desenharRetornos();
+  });
+  $("rt-regras-fabrica").addEventListener("click", async () => {
+    if (!confirm("Voltar para as regras de fábrica? As palavras e categorias que vocês criaram serão apagadas (os responsáveis das categorias de fábrica ficam).")) return;
+    const resp = new Map(rtRegras.map((g) => [g.categoria, g.responsavel_id]));
+    const lista = RT_FABRICA.map((g) => ({ ...g, palavras: [...g.palavras], responsavel_id: resp.get(g.categoria) || null }));
+    const apagar = rtRegrasSalvas ? rtRegras.map((g) => g.categoria).filter((c) => !lista.some((x) => x.categoria === c)) : [];
+    rtRegrasSalvas = true; if (!(await salvarRegras(lista, apagar))) return;
+    rtRegras = lista; rtCatCache.clear(); desenharRegras(); desenharRetornos(); toast("Regras de fábrica de volta.");
+  });
   // planilha de cobrança: mesmas colunas do "Enviar retornos" (Pedido Intelipost, NF, Transportadora, Nova Data, Observação) + o que a transportadora precisa saber
   function rtLinhasExcel(L) {
-    return [["Pedido Intelipost", "NF", "Transportadora", "Nova Data", "Observação", "Motivo da cobrança", "Prometido ao cliente", "Data informada antes", "Último retorno", "Canal", "UF", "Cidade", "Micro status"]]
-      .concat(L.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.transportadora, null, null, RT_NOMES[p._rt], br(p._venc), br(t.nova_data), t.observacao || "", p.canal, p.uf, p.cidade || "", p.micro_status]; }));
+    return [["Pedido Intelipost", "NF", "Transportadora", "Nova Data", "Observação", "Motivo da cobrança", "Prometido ao cliente", "Data informada antes", "Último retorno", "Canal", "UF", "Cidade", "Micro status", "Retorno padronizado", "Responsável"]]
+      .concat(L.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.transportadora, null, null, RT_NOMES[p._rt], br(p._venc), br(t.nova_data), t.observacao || "", p.canal, p.uf, p.cidade || "", p.micro_status, rtCat(t.observacao), (rtRespDe(rtCat(t.observacao)) || {}).nome || ""]; }));
   }
   const rtParaCobrar = (tr) => base.filter((p) => rtPassaFiltro(p) && (p._rt = rtBalde(p)) && p._rt !== "ok" && (!tr || (p.transportadora || "(sem transportadora)") === tr));
   function rtBaixar(tr) {
@@ -1904,7 +1983,8 @@ ${extra}
       t += `\n${RT_NOMES[k]} (${xs.length}):\n` + xs.slice(0, 60).map((p) => `• NF ${p.nf} · pedido ${p.pedido} · prometido ${br(p._venc)}${p._t && p._t.nova_data ? ` · data informada ${br(p._t.nova_data)}` : ""}`).join("\n") + (xs.length > 60 ? `\n… e mais ${xs.length - 60} (na planilha)` : "") + "\n"; }
     return t + "\nObrigado!";
   }
-  $("rt-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-rt]"); if (!b) return; rtCard = b.dataset.rt; rtPag = 1; desenharRetornos(); });
+  $("rt-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-rt]"); if (!b) return; const k = b.dataset.rt;   // marca vários; "Tudo para cobrar" limpa
+    if (k === "cobrar") rtCards.clear(); else if (rtCards.has(k)) rtCards.delete(k); else rtCards.add(k); rtPag = 1; desenharRetornos(); });
   $("pagina-retornos").addEventListener("click", async (e) => {
     const x = e.target.closest("[data-rtx]"); if (x) return rtBaixar(x.dataset.rtx);
     const m = e.target.closest("[data-rtm]");
@@ -1918,8 +1998,8 @@ ${extra}
   $("rt-linhas").addEventListener("change", async (e) => { const inp = e.target.closest("[data-rt-campo]"); if (!inp) return; const tr = inp.closest("tr[data-pedido]");
     await gravar(tr.dataset.pedido, inp.dataset.rtCampo, inp.value, tr.querySelector(".quem")); });
   let rtEspera; $("rt-busca").addEventListener("input", () => { clearTimeout(rtEspera); rtEspera = setTimeout(() => { rtPag = 1; desenharRetornos(); }, 250); });
-  ["rt-transp", "rt-canal"].forEach((id) => $(id).addEventListener("change", () => { rtPag = 1; desenharRetornos(); }));
-  $("rt-limpar").addEventListener("click", () => { $("rt-busca").value = ""; $("rt-transp").value = ""; $("rt-canal").value = ""; rtTransp = null; rtCatSel = null; rtCard = "cobrar"; rtPag = 1; desenharRetornos(); });
+  ["rt-transp", "rt-canal", "rt-resp"].forEach((id) => $(id).addEventListener("change", () => { rtPag = 1; desenharRetornos(); }));
+  $("rt-limpar").addEventListener("click", () => { $("rt-busca").value = ""; $("rt-transp").value = ""; $("rt-canal").value = ""; $("rt-resp").value = ""; rtTransp = null; rtCatSel = null; rtCards.clear(); rtPag = 1; desenharRetornos(); });
   $("rt-excel").addEventListener("click", () => rtBaixar(null));
   $("rt-copiar").addEventListener("click", async () => {
     const L = base.filter((p) => (p._rt = rtBalde(p))), c = (k) => L.filter((p) => p._rt === k).length, porT = new Map();

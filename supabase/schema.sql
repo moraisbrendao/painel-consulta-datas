@@ -2024,3 +2024,22 @@ begin
 end $$;
 revoke all on function public.importar_base_c(text[], jsonb, text[], text[], boolean, text, integer) from public, anon;
 grant execute on function public.importar_base_c(text[], jsonb, text[], text[], boolean, text, integer) to authenticated;
+
+-- ============ PARTE 43: Cobrança do dia — retornos padronizados (palavras → categoria) com responsável ============
+create table if not exists public.retorno_regras (
+  categoria      text primary key,
+  palavras       text[] not null default '{}',
+  responsavel_id bigint references public.pessoas_responsaveis(id) on delete set null,
+  ordem          integer not null default 0,
+  atualizado_por text,
+  atualizado_em  timestamptz not null default now()
+);
+alter table public.retorno_regras enable row level security;
+revoke all on public.retorno_regras from anon;
+grant select, insert, update, delete on public.retorno_regras to authenticated;
+drop policy if exists "logistica cuida" on public.retorno_regras;
+create policy "logistica cuida" on public.retorno_regras for all to authenticated
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
+drop trigger if exists carimbo on public.retorno_regras;
+create trigger carimbo before insert or update on public.retorno_regras
+  for each row execute function public._carimbo_responsavel();

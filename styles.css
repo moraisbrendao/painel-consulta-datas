@@ -699,3 +699,17 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .rt-hist td { font-size: 12px; vertical-align: top; }
 @media (max-width: 900px) { .rt-kpis { grid-template-columns: 1fr 1fr; } }
 .rt-tab td.ok { color: var(--verde); font-weight: 700; } .rt-tab td.ruim { color: var(--vermelho); font-weight: 700; }
+.rt-cat.naopad { border-style: dashed; }
+.rt-regra-form { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; margin-bottom: 14px; }
+.rt-regra-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--texto-2); }
+.rt-regra-form label.cresce { flex: 1; min-width: 240px; }
+.rt-regra-form input { font: inherit; padding: 8px 10px; border: 1px solid var(--borda); border-radius: 8px; }
+.rt-regras-tit { margin: 0 0 6px; }
+.rt-regras { border: 1px solid var(--borda); border-radius: 10px; }
+.rt-regra { display: grid; grid-template-columns: 260px 1fr; gap: 12px; padding: 10px 12px; border-top: 1px solid var(--borda); align-items: start; }
+.rt-regra:first-child { border-top: 0; }
+.rt-regra-nome { display: flex; flex-direction: column; gap: 6px; }
+.rt-regra-nome select { font: inherit; font-size: 12px; padding: 4px 6px; border: 1px solid var(--borda); border-radius: 6px; max-width: 240px; }
+.rt-regra-pal { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rt-regra-pal .t-chip { font-size: 12px; }
+@media (max-width: 700px) { .rt-regra { grid-template-columns: 1fr; } }
