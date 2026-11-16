@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=113">
+  <link rel="stylesheet" href="styles.css?v=114">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -32,7 +32,7 @@
   <!-- ============ PAINEL ============ -->
   <div id="tela-painel" hidden>
     <nav class="menu-lateral" aria-label="Menu">
-      <div class="marca"><b>E-loggia 2.0</b><span>Multimóveis</span></div>
+      <div class="marca"><b>E-loggia 2.0</b><span>Multimóveis</span><button id="btn-recolher" class="btn-recolher" type="button" title="Recolher menu" aria-label="Recolher menu">«</button></div>
       <button class="menu-item so-log" data-pagina="gerencial"><span class="menu-icone">▦</span>Visão Gerencial</button>
       <button class="menu-item so-log" data-pagina="entregas"><span class="menu-icone">✓</span>Entregas e SLA</button>
       <button class="menu-item so-log" data-pagina="transp"><span class="menu-icone">🚚</span>Transportadoras</button>
@@ -1169,10 +1169,11 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=113"></script>
-  <script src="mapa-brasil.js?v=113"></script>
-  <script src="troca-notas.js?v=113"></script>
-  <script src="app.js?v=113"></script>
-  <script src="ordenar.js?v=113"></script>
+  <script src="config.js?v=114"></script>
+  <script src="mapa-brasil.js?v=114"></script>
+  <script src="troca-notas.js?v=114"></script>
+  <script src="app.js?v=114"></script>
+  <script src="ordenar.js?v=114"></script>
+  <script src="menu.js?v=114"></script>
 </body>
 </html>

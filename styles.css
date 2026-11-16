@@ -622,3 +622,16 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .c-obs { max-width: 260px; font-size: 12px; color: #4b5563; }
 .c-regras { margin-top: 10px; font-size: 13px; color: #4b5563; }
 #c-metodo h3 { font-size: 14px; margin: 12px 0 6px; }
+
+/* menu lateral recolhível */
+.marca { position: relative; }
+.btn-recolher { position: absolute; top: 14px; right: 10px; width: 28px; height: 28px; border: 0; border-radius: 6px; background: rgba(255,255,255,.08); color: #fff; font-size: 16px; line-height: 1; cursor: pointer; }
+.btn-recolher:hover { background: rgba(255,255,255,.18); }
+#tela-painel.menu-recolhido { grid-template-columns: 60px minmax(0, 1fr); }
+#tela-painel.menu-recolhido .marca { padding: 14px 0 12px; align-items: center; }
+#tela-painel.menu-recolhido .marca b, #tela-painel.menu-recolhido .marca span { display: none; }
+#tela-painel.menu-recolhido .btn-recolher { position: static; }
+#tela-painel.menu-recolhido .menu-item { font-size: 0; justify-content: center; padding: 11px 0; position: relative; }
+#tela-painel.menu-recolhido .menu-item .menu-icone { font-size: 17px; margin: 0; }
+#tela-painel.menu-recolhido .menu-item .menu-cont { position: absolute; top: 4px; right: 6px; font-size: 9px; padding: 0 4px; }
+@media (max-width: 900px) { .btn-recolher { display: none; } }
