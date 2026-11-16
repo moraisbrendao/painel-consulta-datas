@@ -1908,15 +1908,18 @@ ${extra}
     $("rt-cats").innerHTML = [...porC.values()].sort((a, b) => (ordC.get(a.c) ?? 997) - (ordC.get(b.c) ?? 997)).map((x) => { const r = rtRespDe(x.c);
       return `<button class="rt-cat ${rtCatSel === x.c ? "sel" : ""} ${x.c === RT_NAOPAD ? "naopad" : ""}" data-rtc="${esc(x.c)}"><b>${fmt(x.n)}</b> ${esc(x.c)}<small>${x.c === RT_SEMOBS || x.c === RT_NAOPAD ? (x.c === RT_NAOPAD ? "padronize abaixo" : "cobrar o retorno") : r ? "👤 " + esc(r.nome) : PENDENTE}</small></button>`; }).join("")
       || '<p class="s">Nada para cobrar nos cards marcados.</p>';
-    // resumo por retorno padronizado × responsável
-    { const G = new Map(), atrasoDe = (p) => (p._atrasoG ? Math.max(0, -(p._dias ?? 0)) : 0);
-      L.filter(naCard).forEach((p) => { const c = rtCat(p._t && p._t.observacao), x = G.get(c) || G.set(c, { c, n: 0, soma: 0, nAtr: 0, sem: 0, tr: new Map() }).get(c);
-        x.n++; if (p._atrasoG) { x.soma += atrasoDe(p); x.nAtr++; } if (!rtNovaValida(p)) x.sem++;
-        const k = rtT(p); x.tr.set(k, (x.tr.get(k) || 0) + 1); });
-      $("rt-resumo-linhas").innerHTML = [...G.values()].sort((a, b) => b.n - a.n).map((x) => { const r = rtRespDe(x.c), top = [...x.tr.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
-        return `<tr class="clicavel ${rtCatSel === x.c ? "sel" : ""}" data-rtc="${esc(x.c)}"><td>${esc(x.c)}</td><td>${x.c === RT_SEMOBS || x.c === RT_NAOPAD ? "—" : r ? esc(r.nome) : `<span class="pendente">${PENDENTE}</span>`}</td>
-          <td class="num"><b>${fmt(x.n)}</b></td><td class="num">${x.nAtr ? (x.soma / x.nAtr).toFixed(1).replace(".", ",") : "—"}</td><td class="num ${x.sem ? "ruim-t" : ""}">${fmt(x.sem)}</td>
-          <td class="s">${top.map(([k, n]) => `${esc(k)} (${fmt(n)})`).join(" · ")}</td></tr>`; }).join("") || `<tr><td colspan="6" class="vazio">Nada nos cards marcados.</td></tr>`; }
+    // resumo por retorno padronizado (cada retorno é uma linha, como um status; todas as transportadoras juntas)
+    { const G = new Map(), linha = (c) => G.get(c) || G.set(c, { c, n: 0, atr: 0, vence: 0, soma: 0, sem: 0 }).get(c);
+      rtRegras.forEach((g) => linha(g.categoria)); linha(RT_NAOPAD); linha(RT_SEMOBS);
+      L.filter(naCard).forEach((p) => { const x = linha(rtCat(p._t && p._t.observacao)); x.n++;
+        if (p._atrasoG) { x.atr++; x.soma += Math.max(0, -(p._dias ?? 0)); } else if (p._dias === 0 || p._dias === 1) x.vence++;
+        if (!rtNovaValida(p)) x.sem++; });
+      const tot = [...G.values()].reduce((a, x) => ({ n: a.n + x.n, atr: a.atr + x.atr, vence: a.vence + x.vence, soma: a.soma + x.soma, sem: a.sem + x.sem }), { n: 0, atr: 0, vence: 0, soma: 0, sem: 0 });
+      const med = (x) => (x.atr ? (x.soma / x.atr).toFixed(1).replace(".", ",") : "—");
+      $("rt-resumo-linhas").innerHTML = [...G.values()].map((x) => { const r = rtRespDe(x.c);
+        return `<tr class="clicavel ${rtCatSel === x.c ? "sel" : ""} ${x.n ? "" : "zero"}" data-rtc="${esc(x.c)}"><td>${esc(x.c)}</td><td>${x.c === RT_SEMOBS || x.c === RT_NAOPAD ? "—" : r ? esc(r.nome) : `<span class="pendente">${PENDENTE}</span>`}</td>
+          <td class="num"><b>${fmt(x.n)}</b></td><td class="num">${fmt(x.atr)}</td><td class="num">${fmt(x.vence)}</td><td class="num">${med(x)}</td><td class="num ${x.sem ? "ruim-t" : ""}">${fmt(x.sem)}</td></tr>`; }).join("")
+        + `<tr class="total"><td><b>Total</b></td><td></td><td class="num"><b>${fmt(tot.n)}</b></td><td class="num"><b>${fmt(tot.atr)}</b></td><td class="num"><b>${fmt(tot.vence)}</b></td><td class="num">${med(tot)}</td><td class="num"><b>${fmt(tot.sem)}</b></td></tr>`; }
     // transportadoras sem nova data e em reposição (independe dos cards)
     { rtSemData = new Map();
       L.filter((p) => p._rt && p._rt !== "ok").forEach((p) => { const k = rtT(p), x = rtSemData.get(k) || rtSemData.set(k, { k, atr: 0, vence: 0, rep: 0, repSem: 0, peds: [] }).get(k);

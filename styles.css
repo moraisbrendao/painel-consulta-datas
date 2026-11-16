@@ -713,3 +713,4 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .rt-regra-pal { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .rt-regra-pal .t-chip { font-size: 12px; }
 @media (max-width: 700px) { .rt-regra { grid-template-columns: 1fr; } }
+.rt-tab tr.zero td { color: var(--texto-2); } .rt-tab tr.total td { border-top: 2px solid var(--borda); }
