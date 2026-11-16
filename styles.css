@@ -595,3 +595,13 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .kpi.kpi-info.vermelho .kpi-num { color: #c62828; }
 #rpg-cards, #rpf-cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
 .rp-matriz th, .rp-matriz td { font-size: 12px; padding: 6px 8px; }
+
+/* Visão Gerencial: atraso por transportadora × UF × cidade × canal (filtro cruzado) */
+.g-cruz { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; margin-top: 14px; }
+.g-cruz h3 { margin: 0 0 6px; font-size: 15px; }
+.tabela-cruz tr.sel td { background: #fff4c2; font-weight: 600; }
+.tabela-cruz tr.clicavel { cursor: pointer; }
+.tabela-cruz td:first-child { max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.g-cruz-sel { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
+.chip-sel { background: #fff4c2; border: 1px solid #f5b400; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
+.chip-sel .link { margin-left: 4px; }

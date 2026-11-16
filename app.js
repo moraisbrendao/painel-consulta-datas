@@ -1131,7 +1131,7 @@
 
   // lê só as colunas que a Visão Gerencial usa, em páginas paralelas (não depende de função nova no banco)
   const G_COLS = "pedido,nf,canal,uf,cidade,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao";
-  const G_COLS_NOVAS = ",data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao";
+  const G_COLS_NOVAS = ",data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao,trocas:extra->>trocas";
   let gGeracao = 0, gBaseEm = null;   // gBaseEm = data de envio da base que está na tela
   async function carregarGerencial(forcar) {
     if ((gCarregando && !forcar) || (gDados && gDados.length && !forcar)) return;
@@ -1150,7 +1150,8 @@
         return { pedido: b.pedido, nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: b.canal, uf: b.uf, cidade: b.cidade || null, transp: b.transportadora,
           status: b.status_intelipost, micro: b.micro_status, origem: b.origem, criado: b.data_criacao || null, despacho: b.data_expedicao, entrega: b.data_entrega || null,
           prevOrig: b.prev_original, prev: b.prev_atual, ult: b.ultima_atualizacao ? String(b.ultima_atualizacao).slice(0, 10) : null,
-          range: b.range_atrasos || null, diasAtr: b.dias_atraso ?? null, sprazo: b.status_prazo || null, semExp: b.sem_expedicao || null };
+          range: b.range_atrasos || null, diasAtr: b.dias_atraso ?? null, sprazo: b.status_prazo || null, semExp: b.sem_expedicao || null,
+          trocas: Math.max(0, parseInt(b.trocas, 10) || 0) };
       });
     } catch (err) {
       if (minha !== gGeracao) return;
@@ -1290,19 +1291,67 @@
     $("g-situacao").innerHTML = SIT.map(([k, nome, cor]) => `<button class="barra" data-sit="${k}" title="${nome}: ${fmt(porSit.get(k))}"><span class="barra-nome">${nome}</span>
       <span class="barra-trilho"><span style="width:${Math.max(1, (porSit.get(k) / maxS) * 100)}%;background:${cor}"></span></span><b style="color:${cor}">${fmt(porSit.get(k))}</b></button>`).join("");
     desenharCanais(L);
-    // atraso por transportadora (performance)
-    const porT = new Map();
-    L.forEach((r) => { if (r._fechado) return; const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { ab: 0, atr: 0 }; x.ab++; if (r._atraso) x.atr++; porT.set(t, x); });
-    $("g-perf-linhas").innerHTML = [...porT.entries()].sort((a, b) => b[1].atr - a[1].atr || b[1].ab - a[1].ab).map(([t, x]) => {
-      const pf = 1 - x.atr / x.ab, ok = pf >= meta;
-      return `<tr class="clicavel" data-pt="${esc(t)}"><td>${esc(t)}</td><td class="num ${ok ? "ok" : "ruim"}">${ok ? "●" : "↘"} ${(pf * 100).toFixed(2).replace(".", ",")}%</td><td class="num neutro">${fmt(x.ab)}</td><td class="num">${fmt(x.atr)}</td></tr>`;
-    }).join("");
-    desenharPorTransp(L);
     gFiltradosCache = L;
+    desenharCruz();
+    desenharPorTransp(L);
     if (!gSelecao) { gPagina = Math.min(gPagina, 9999); }
     desenharGLista(false);
   }
   let gAtr = {}, gFiltradosCache = [];
+
+  // Atraso por transportadora × UF × cidade × canal (filtro cruzado, como no BI): pedidos em aberto
+  const CZ = { transp: (r) => r.transp || "(sem transportadora)", uf: (r) => r.uf || "(sem UF)", cid: (r) => r.cidade || "(sem cidade)", can: (r) => r.canal || "(sem canal)" };
+  const CZ_NOME = { transp: "Transportadora", uf: "UF", cid: "Cidade", can: "Canal" };
+  const gCruz = { transp: null, uf: null, cid: null, can: null };
+  const czPassa = (r, menos) => Object.keys(CZ).every((d) => d === menos || gCruz[d] === null || CZ[d](r) === gCruz[d]);
+  function czAgrupa(L, d) {
+    const m = new Map();
+    L.forEach((r) => { const k = CZ[d](r), x = m.get(k) || { k, q: 0, a: 0, pa: 0, ta: 0 }; x.q++; if (r._atraso) x.a++; if (r.trocas) { x.pa++; x.ta += r.trocas; } m.set(k, x); });
+    return [...m.values()].sort((a, b) => b.a - a.a || b.q - a.q || String(a.k).localeCompare(String(b.k), "pt-BR"));
+  }
+  const czIfa = (x) => (x.a ? (x.q / x.a).toFixed(2).replace(".", ",") : "—");
+  function czPerf(x, meta) { const pf = x.q ? 1 - x.a / x.q : 1, ok = pf >= meta; return `<td class="num ${ok ? "ok" : "ruim"}">${ok ? "●" : "↘"} ${(pf * 100).toFixed(2).replace(".", ",")}%</td>`; }
+  function czTotal(xs) { return xs.reduce((t, x) => ({ q: t.q + x.q, a: t.a + x.a, pa: t.pa + x.pa, ta: t.ta + x.ta }), { q: 0, a: 0, pa: 0, ta: 0 }); }
+  function desenharCruz() {
+    const meta = Math.min(100, Math.max(50, parseFloat($("g-meta").value) || 97)) / 100;
+    const AB = gFiltradosCache.filter((r) => !r._fechado);
+    const linha = (d, x) => `<tr class="clicavel ${gCruz[d] === x.k ? "sel" : ""}" data-czd="${d}" data-czk="${esc(x.k)}"><td>${esc(x.k)}</td>`;
+    const nums = (x) => `<td class="num neutro">${fmt(x.q)}</td><td class="num">${fmt(x.a)}</td><td class="num">${czIfa(x)}</td><td class="num">${x.pa ? fmt(x.pa) : ""}</td><td class="num">${fmt(x.ta)}</td>`;
+    // transportadora: Performance primeiro (como era)
+    const T = czAgrupa(AB.filter((r) => czPassa(r, "transp")), "transp"), tt = czTotal(T);
+    $("g-perf-linhas").innerHTML = T.map((x) => linha("transp", x) + czPerf(x, meta) + nums(x) + "</tr>").join("")
+      + (T.length ? `<tr class="tot-linha"><td>Total</td>${czPerf(tt, meta)}${nums(tt)}</tr>` : "");
+    [["uf", "g-cz-uf"], ["cid", "g-cz-cid"], ["can", "g-cz-can"]].forEach(([d, id]) => {
+      const X = czAgrupa(AB.filter((r) => czPassa(r, d)), d), t = czTotal(X);
+      $(id).innerHTML = X.map((x) => linha(d, x) + nums(x) + czPerf(x, meta) + "</tr>").join("")
+        + (X.length ? `<tr class="tot-linha"><td>Total</td>${nums(t)}${czPerf(t, meta)}</tr>` : `<tr><td colspan="7" class="vazio">Nenhum pedido em aberto.</td></tr>`);
+    });
+    const sel = Object.keys(CZ).filter((d) => gCruz[d] !== null);
+    $("g-cruz-sel").hidden = $("g-cruz-limpar").hidden = !sel.length;
+    $("g-cruz-sel").innerHTML = sel.map((d) => `<span class="chip-sel">${CZ_NOME[d]}: <b>${esc(gCruz[d])}</b> <button class="link" data-czx="${d}" title="Tirar">✕</button></span>`).join("");
+  }
+  function czMudou() {
+    desenharCruz();
+    const sel = Object.keys(CZ).filter((d) => gCruz[d] !== null);
+    if (!sel.length) { gSelecao = null; gPagina = 1; desenharGLista(false); return; }
+    selecionar(`Pedidos em aberto · ${sel.map((d) => gCruz[d]).join(" · ")}`, (L) => L.filter((r) => !r._fechado && czPassa(r, null)));
+  }
+  $("g-cruz-cartao").addEventListener("click", (e) => {
+    const x = e.target.closest("[data-czx]"); if (x) { gCruz[x.dataset.czx] = null; return czMudou(); }
+    const tr = e.target.closest("tr[data-czd]"); if (!tr) return;
+    const d = tr.dataset.czd, k = tr.dataset.czk; gCruz[d] = gCruz[d] === k ? null : k;
+    if (d === "uf" && gCruz.cid !== null && gCruz.uf !== null && !gFiltradosCache.some((r) => !r._fechado && CZ.uf(r) === gCruz.uf && CZ.cid(r) === gCruz.cid)) gCruz.cid = null;   // cidade de outra UF
+    czMudou();
+  });
+  $("g-cruz-limpar").addEventListener("click", () => { Object.keys(gCruz).forEach((d) => (gCruz[d] = null)); czMudou(); });
+  $("g-cruz-extrair").addEventListener("click", () => {
+    const wb = XLSX.utils.book_new();
+    [["Transportadora", "#g-perf-linhas"], ["UF", "#g-cz-uf"], ["Cidade", "#g-cz-cid"], ["Canal", "#g-cz-can"]].forEach(([nome, sel]) => {
+      const tb = document.querySelector(sel), cab = [...tb.closest("table").querySelectorAll("thead th")].map((c) => c.textContent.trim());
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab].concat([...tb.querySelectorAll("tr")].map((tr) => [...tr.children].map((c) => c.textContent.replace(/[●↘]/g, "").trim())))), nome);
+    });
+    XLSX.writeFile(wb, `atraso_por_transportadora_uf_cidade_canal_${hojeISO()}.xlsx`);
+  });
 
   function desenharProdutividade(L, hoje) {
     const J = gJanela, dias = []; for (let i = -J; i <= J; i++) dias.push(somaDias(hoje, i));
@@ -1442,8 +1491,6 @@
     selecionar(SIT.find((x) => x[0] === k)[1], (L) => L.filter((r) => r._sit === k)); });
   $("g-canais").addEventListener("click", (e) => { const b = e.target.closest("[data-canal]"); if (!b) return; const c = b.dataset.canal, k = b.dataset.ck;
     selecionar(`${c} · ${{ v: "todos", a: "em aberto", t: "atrasados" }[k]}`, (L) => L.filter((r) => (r.canal || "(sem canal)") === c && (k === "v" || (k === "a" ? !r._fechado : r._atraso > 0)))); });
-  $("g-perf-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-pt]"); if (!tr) return; const t = tr.dataset.pt;
-    selecionar(`Atrasados · ${t}`, (L) => L.filter((r) => r._atraso && (r.transp || "(sem transportadora)") === t)); });
   $("g-pt-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-ptt]"); if (!tr) return; verPedidosTransp(tr.dataset.ptt); });
   // a lista de pedidos fica na Visão Gerencial: abre ela já filtrada pela transportadora
   function verPedidosTransp(t) {

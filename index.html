@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=110">
+  <link rel="stylesheet" href="styles.css?v=111">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -151,10 +151,22 @@
         </section>
       </div>
 
-      <section class="cartao">
-        <h2>Atraso por transportadora</h2>
-        <p class="sub">Sobre os pedidos em aberto, contra a meta. Clique numa linha para ver os atrasados dela.</p>
-        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-perf"><thead><tr><th>Transportadora</th><th class="num">Performance</th><th class="num">Qtd em aberto</th><th class="num">Atrasado</th></tr></thead><tbody id="g-perf-linhas"></tbody></table></div>
+      <section class="cartao" id="g-cruz-cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>Atraso por transportadora, UF, cidade e canal</h2>
+            <p class="sub">Pedidos em aberto. Clique numa linha de qualquer tabela para filtrar as outras (ex.: transportadora → UFs que ela atende → cidades → canais); clique de novo para tirar. A lista de pedidos lá embaixo mostra a combinação escolhida.<br>
+              <b>IFA</b> = pedidos ÷ atrasados (quanto maior, melhor) · <b>Performance</b> = 1 − atrasados ÷ pedidos, contra a meta.</p>
+          </div>
+          <div class="acoes-robo"><button id="g-cruz-limpar" class="btn contorno" hidden>Limpar seleção</button><button id="g-cruz-extrair" class="btn contorno">Extrair tabelas</button></div>
+        </div>
+        <div id="g-cruz-sel" class="g-cruz-sel" hidden></div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-perf tabela-cruz"><thead><tr><th>Transportadora</th><th class="num">Performance</th><th class="num">Qtd em aberto</th><th class="num">Atrasado</th><th class="num">IFA</th><th class="num">Pedidos c/ alteração de data</th><th class="num">Total de alterações</th></tr></thead><tbody id="g-perf-linhas"></tbody></table></div>
+        <div class="g-cruz">
+          <div><h3>Atraso por UF</h3><div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>UF</th><th class="num">Qtd</th><th class="num">Atrasado</th><th class="num">IFA</th><th class="num">C/ alteração</th><th class="num">Total alter.</th><th class="num">Performance</th></tr></thead><tbody id="g-cz-uf"></tbody></table></div></div>
+          <div><h3>Atraso por cidade</h3><div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Cidade</th><th class="num">Qtd</th><th class="num">Atrasado</th><th class="num">IFA</th><th class="num">C/ alteração</th><th class="num">Total alter.</th><th class="num">Performance</th></tr></thead><tbody id="g-cz-cid"></tbody></table></div></div>
+          <div><h3>Atraso por canal</h3><div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Canal</th><th class="num">Qtd</th><th class="num">Atrasado</th><th class="num">IFA</th><th class="num">C/ alteração</th><th class="num">Total alter.</th><th class="num">Performance</th></tr></thead><tbody id="g-cz-can"></tbody></table></div></div>
+        </div>
       </section>
 
 
@@ -1073,9 +1085,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=110"></script>
-  <script src="mapa-brasil.js?v=110"></script>
-  <script src="troca-notas.js?v=110"></script>
-  <script src="app.js?v=110"></script>
+  <script src="config.js?v=111"></script>
+  <script src="mapa-brasil.js?v=111"></script>
+  <script src="troca-notas.js?v=111"></script>
+  <script src="app.js?v=111"></script>
 </body>
 </html>
