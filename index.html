@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=115">
+  <link rel="stylesheet" href="styles.css?v=116">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -899,6 +899,14 @@
         </div>
       </div>
 
+      <section class="cartao dc-digitar">
+        <label for="dc-nf"><b>Digite a nota</b> <span class="sub">NF-série, ex.: 12365-35 · pode colar várias separadas por espaço, vírgula ou linha</span></label>
+        <div class="dc-digitar-linha">
+          <input id="dc-nf" type="text" placeholder="12365-35" autocomplete="off">
+          <button id="dc-nf-add" class="btn amarelo" type="button">Buscar chave</button>
+        </div>
+      </section>
+
       <section class="kpis" id="dc-cards">
         <button class="kpi ativa" data-dc="todos"><span class="kpi-rot">Notas da planilha</span><b class="kpi-num">0</b><small>todas as linhas enviadas</small><i>↗</i></button>
         <button class="kpi azul" data-dc="chave"><span class="kpi-rot">Chave encontrada</span><b class="kpi-num">0</b><small>achada na base</small><i>↗</i></button>
@@ -924,7 +932,7 @@
             <thead><tr><th>NF</th><th>Transportadora</th><th>Pedido</th><th>Chave</th><th>XML</th><th></th></tr></thead>
             <tbody id="dc-linhas"></tbody>
           </table>
-          <p id="dc-vazio" class="vazio">Envie a planilha para começar.</p>
+          <p id="dc-vazio" class="vazio">Digite uma nota acima ou envie a planilha.</p>
         </div>
       </section>
     </main>
@@ -1229,6 +1237,6 @@
   <script src="app.js?v=115"></script>
   <script src="ordenar.js?v=115"></script>
   <script src="menu.js?v=115"></script>
-  <script src="documentos.js?v=115"></script>
+  <script src="documentos.js?v=116"></script>
 </body>
 </html>

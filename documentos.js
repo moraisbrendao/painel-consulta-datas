@@ -46,7 +46,7 @@
       <td>${x.x ? `<button class="btn contorno pequeno" data-zip="${esc(t)}">Baixar .zip (${x.x})</button>` : ""}</td></tr>`).join("") || `<tr><td colspan="6" class="vazio">—</td></tr>`;
     const L = linhas.filter(passa);
     $("dc-titulo").textContent = `Notas (${L.length})`;
-    $("dc-vazio").hidden = !!L.length; $("dc-vazio").textContent = linhas.length ? "Nenhuma nota aqui." : "Envie a planilha para começar.";
+    $("dc-vazio").hidden = !!L.length; $("dc-vazio").textContent = linhas.length ? "Nenhuma nota aqui." : "Digite uma nota acima ou envie a planilha.";
     $("dc-linhas").innerHTML = L.slice(0, 500).map((l) => `<tr>
       <td><b>${esc(nfTxt(l))}</b>${l.fora ? `<div class="s">veio só no XML (não estava na planilha)</div>` : ""}</td>
       <td>${esc(l.transp)}</td><td>${esc(l.pedido || "—")}</td>
@@ -94,9 +94,9 @@
     desenhar();
   });
 
-  async function buscarChaves() {
+  async function buscarChaves(alvo = linhas) {
     const sb = window.__sb; if (!sb) throw new Error("Entre no painel de novo (sessão expirada).");
-    const nums = [...new Set(linhas.map((l) => l.num))], achados = [];
+    const nums = [...new Set(alvo.map((l) => l.num))], achados = [];
     for (let i = 0; i < nums.length; i += 40) {
       const parte = nums.slice(i, i + 40), filtro = parte.flatMap((n) => [`nf.eq.${n}`, `nf.like.${n}-*`]).join(",");
       const { data, error } = await sb.from("base_pedidos").select("pedido,nf,transportadora,chave:extra->>chave").or(filtro);
@@ -105,15 +105,37 @@
       info(`Procurando a chave na base… ${Math.min(i + 40, nums.length)} de ${nums.length}`);
     }
     const porNum = new Map(); achados.forEach((b) => { const [n, s] = String(b.nf || "").split("-").map(sem0); (porNum.get(n) || porNum.set(n, []).get(n)).push({ ...b, s: s || "" }); });
-    for (const l of linhas) {
+    for (const l of alvo) {
       let c = porNum.get(l.num) || []; l.achouBase = !!c.length;
       if (l.serie) c = c.filter((b) => !b.s || b.s === l.serie);
       const com = c.find((b) => /^\d{44}$/.test(String(b.chave || "").replace(/\D/g, ""))) || c[0];
       if (!com) continue;
-      l.pedido = com.pedido || ""; if (!l.serie) l.serie = com.s || "";
+      l.pedido = com.pedido || ""; if (!l.serie) l.serie = com.s || ""; if (!l.transp) l.transp = com.transportadora || "(sem transportadora)";
       const ch = String(com.chave || "").replace(/\D/g, ""); if (ch.length === 44) l.chave = ch;
     }
   }
+
+  // ---------- digitar NF-série ----------
+  async function adicionarDigitadas() {
+    const txt = $("dc-nf").value.trim(); if (!txt) return;
+    const novos = []; let id = linhas.reduce((m, l) => Math.max(m, l.id), 0), repetidas = 0;
+    for (const pedaco of txt.split(/[\s,;]+/)) {
+      const [n, se] = pedaco.split("-"), num = sem0(String(n || "").replace(/\D/g, "")), serie = sem0(String(se || "").replace(/\D/g, ""));
+      if (!num) continue;
+      if (linhas.some((l) => l.num === num && (!serie || l.serie === serie)) || novos.some((l) => l.num === num && l.serie === serie)) { repetidas++; continue; }
+      novos.push({ id: ++id, num, serie, transp: "", pedido: "", chave: "", xml: null, digitada: true });
+    }
+    if (!novos.length) { info(repetidas ? "Essa nota já está na tabela." : "Digite a nota como NF-série, ex.: 12365-35.", !repetidas); return; }
+    info(`Procurando a chave de ${novos.length} nota(s) na base…`);
+    try { await buscarChaves(novos); } catch (err) { info("⚠ " + esc(err.message || err), true); return; }
+    novos.forEach((l) => { if (!l.transp) l.transp = "(não está na base)"; });
+    linhas = novos.concat(linhas); card = "todos"; $("dc-nf").value = "";
+    const ach = novos.filter((l) => l.chave).length;
+    info(`${novos.length} nota(s) digitada(s) · chave encontrada em ${ach}${ach < novos.length ? ` · ${novos.length - ach} sem chave na base` : ""}${repetidas ? ` · ${repetidas} já estava(m) na tabela` : ""}.`, !ach);
+    desenhar();
+  }
+  $("dc-nf-add").addEventListener("click", adicionarDigitadas);
+  $("dc-nf").addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); adicionarDigitadas(); } });
 
   // ---------- XML ----------
   const tag = (el, nome) => (el ? el.getElementsByTagNameNS("*", nome)[0] || null : null);
