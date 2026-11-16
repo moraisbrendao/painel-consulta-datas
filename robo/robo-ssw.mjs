@@ -749,25 +749,39 @@ async function conferirTudo(minutos) {
 // NF que não aparece com o CNPJ da série é procurada com os outros CNPJ; se não aparecer em nenhum = sem CT-e.
 function sem0(n) { return String(n || "").replace(/^0+(?=\d)/, ""); }
 function lerLote(html) {   // uma linha por NF: número, data/hora do último evento, situação, descrição (pode ter a previsão)
-  const out = new Map(), iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
+  const linhas = new Map(), iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
   for (const bloco of html.split(/<tr style="background-color:#(?:FFFFFF|F0F0F0);(?:cursor:pointer;)?"/i).slice(1)) {
     const tds = bloco.split(/<td\b/i).slice(1); if (tds.length < 3) continue;
     const nf = sem0(((sohTexto("<td " + tds[0])[0] || "").match(/\d+/g) || []).pop()); if (!nf) continue;   // 1ª linha = "série NF" (achada) ou só "NF"; a 2ª é o CT-e
     const quando = (sohTexto("<td " + tds[1]).join(" ").match(/(\d{2}\/\d{2}\/\d{2,4})(?:\s+(\d{2}:\d{2}))?/) || []);
+    const sigla = (sohTexto((tds[2].match(/<p class=titulo>[\s\S]*?<font[^>]*>([\s\S]*?)<\/font>/i) || [])[1] || "").join(" ").match(/\(([^)]*)\)/) || [])[1] || "";
     const titulo = sohTexto(((tds[2].match(/<p class=titulo>([\s\S]*?)<\/p>/i) || [])[1] || "").replace(/<font[\s\S]*?<\/font>/gi, "")).join(" ").trim();
     const desc = sohTexto((tds[2].match(/<p class=tdb>([\s\S]*?)<\/p>/i) || [])[1] || "").join(" ");
-    const tudo = titulo + " " + desc;
+    const tudo = titulo + " " + desc, raj = /^RAJ\b/i.test(sigla.trim()) || /\bRAJ MOV\b/i.test(sohTexto("<td " + tds[1]).join(" "));
     let r;
     if (/n[ãa]o tem permiss[ãa]o/i.test(tudo)) r = { situacao: "sem permissao" };
     else if (/informa[cç][aã]o n[ãa]o dispon/i.test(tudo) || !quando[1]) r = { situacao: "sem cte" };
     else if (/MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(titulo)) r = { situacao: "entregue", data_entrega: iso(quando[1]), data_evento: iso(quando[1]), ultimo_evento: "MERCADORIA ENTREGUE" };
     else { const pv = (desc.match(/Previs[aã]o de entrega:\s*(\d{2}\/\d{2}\/\d{2,4})/i) || [])[1];
       r = { situacao: "nao entregue", data_evento: iso(quando[1]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{3,60}$/.test(titulo) ? titulo : null, previsao: pv ? iso(pv) : null }; }
-    const ant = out.get(nf);   // a mesma NF em mais de uma linha: vale entregue; senão o evento mais recente
-    const rank = (x) => (x.situacao === "entregue" ? 3 : x.situacao === "nao entregue" ? 2 : x.situacao === "sem permissao" ? 1 : 0);
-    if (!ant || rank(r) > rank(ant) || (rank(r) === rank(ant) && String(r.data_evento || "") > String(ant.data_evento || ""))) out.set(nf, r);
+    r.sigla = sigla.trim().slice(0, 20) || null; r.raj = raj;
+    (linhas.get(nf) || linhas.set(nf, []).get(nf)).push(r);
   }
+  // a mesma NF em mais de uma linha: vale entregue; senão o evento mais recente. _semRaj = o mesmo sem as linhas da Rajlog (milk run)
+  const rank = (x) => (x.situacao === "entregue" ? 3 : x.situacao === "nao entregue" ? 2 : x.situacao === "sem permissao" ? 1 : 0);
+  const melhor = (L) => L.reduce((a, r) => (!a || rank(r) > rank(a) || (rank(r) === rank(a) && String(r.data_evento || "") > String(a.data_evento || "")) ? r : a), null);
+  const out = new Map();
+  linhas.forEach((L, nf) => out.set(nf, { ...melhor(L), _semRaj: melhor(L.filter((r) => !r.raj)), _temRaj: L.some((r) => r.raj) }));
   return out;
+}
+// Dominalog, Tempo Justo, Trans Sua e Transvanio nas séries 25, 34 e 35: o CT-e da Rajlog é o milk run (coleta), não a entrega ao cliente.
+// Vale só o rastreio da Dominalog; se só tiver a Rajlog, ainda não foi entregue. (Regra da Brenda, 16/11.)
+const REGRA_RAJ = (transp, nf) => /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(transp || "") && ["25", "34", "35"].includes(String(nf || "").split("-")[1]?.trim());
+function pegaLote(m, x) {
+  const v = m.get(x.n); if (!v) return null;
+  if (!REGRA_RAJ(x.transportadora, x.nf) || !v._temRaj) return v;
+  if (v._semRaj && v._semRaj.situacao !== "sem cte") return v._semRaj;
+  const raj = v; return { situacao: "nao entregue", ultimo_evento: "MILK RUN (RAJLOG) - SEM DOMINALOG AINDA", data_evento: raj.data_evento || null, previsao: null, sigla: raj.sigla };
 }
 async function conferirLote() {
   const t0 = Date.now(); await carregarSenhasDB();
@@ -778,6 +792,10 @@ async function conferirLote() {
   // (inclui as já "entregues" pela TSL fora do RJ: podem ter sido a entrega da first mile, então reconfere pelo redespacho)
   { const jaEnt = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&transportadora=ilike.*tsl*&nf=like.*-35&limit=5000`).catch(() => []);
     const tem = new Set(lista.map((l) => l.pedido)); jaEnt.forEach((l) => { if (!tem.has(l.pedido)) lista.push({ ...l, _jaEnt: true }); }); }
+  { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&or=(transportadora.ilike.*dominalog*,transportadora.ilike.*tempo*justo*,transportadora.ilike.*trans*sua*,transportadora.ilike.*transvanio*)&limit=5000`).catch(() => []);
+    const tem = new Set(lista.map((l) => l.pedido)); let n = 0;
+    L.forEach((l) => { if (REGRA_RAJ(l.transportadora, l.nf) && !tem.has(l.pedido) && (!l.detalhe || !l.detalhe.sigla || /^RAJ/i.test(l.detalhe.sigla))) { lista.push(l); n++; } });
+    if (n) log(`Rajlog (milk run): reconfiro ${n} já marcados como entregues`); }
   { const tsl = lista.filter((l) => /\btsl\b/i.test(l.transportadora || "") && String(l.nf || "").split("-")[1]?.trim() === "35");
     let rj = 0, redesp = 0, semRd = 0; const B = new Map();
     for (let i = 0; i < tsl.length; i += 100) { const ids = tsl.slice(i, i + 100).map((l) => `"${String(l.pedido).replace(/"/g, "")}"`).join(",");
@@ -833,7 +851,7 @@ async function conferirLote() {
   const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
     const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
     const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
-      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}) };
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r.sigla ? { sigla: r.sigla } : {}) };
     if (r.situacao !== "sem cte") delete det.tentados;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
@@ -841,7 +859,7 @@ async function conferirLote() {
   try {
     for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
       for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
-        parte.forEach((x) => res.set(x.pedido, { ...(m.get(x.n) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
+        parte.forEach((x) => res.set(x.pedido, { ...(pegaLote(m, x) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
     log(`SSW: ${ssw.length - semNf.length} NFs em ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
     const achadosSSW = [...res.values()].filter((r) => r.situacao !== "sem cte").length;
     if (res.size > 200 && achadosSSW === 0) throw new Error("nenhuma NF reconhecida no retorno do SSW (leitura da página falhou); não gravo nada");
@@ -861,7 +879,7 @@ async function conferirLote() {
       if (!algum) break;
       for (const [k, xs] of g) { const [c, chave] = k.split("|");
         for (let i = 0; i < xs.length && consultas - c0 < REPESCA; i += 100) { const parte = xs.slice(i, i + 100), m = await lote(c, chave, [...new Set(parte.map((x) => x.n))]);
-          parte.forEach((x) => { const r = m.get(x.n); mexidos.add(x.pedido);
+          parte.forEach((x) => { const r = pegaLote(m, x); mexidos.add(x.pedido);
             if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); conta(x.transportadora, c); achou++; }
             else tentados.get(x.pedido).push(c.slice(-6)); }); } }
     }
