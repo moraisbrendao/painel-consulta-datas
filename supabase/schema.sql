@@ -1968,3 +1968,59 @@ begin
 end $$;
 revoke all on function public.importar_base(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_base(jsonb, boolean, text, integer) to authenticated;
+
+-- ============ PARTE 42: Carregar planilha mais rápido (só manda o que mudou, em formato de colunas) ============
+alter table public.base_pedidos add column if not exists h text;   -- "impressão digital" da linha, calculada no navegador
+-- lista pedido + impressão digital (para o navegador saber o que mudou)
+create or replace function public.base_hashes()
+returns jsonb language sql stable security invoker set search_path = public
+set statement_timeout = '60s'
+as $$ select coalesce(jsonb_agg(jsonb_build_array(pedido, h)), '[]'::jsonb) from public.base_pedidos $$;
+revoke all on function public.base_hashes() from public, anon;
+grant execute on function public.base_hashes() to authenticated;
+-- grava um lote: cols = nomes das colunas (as que começam com "x:" vão para "extra"), linhas = [[valores], ...],
+-- hs = impressão digital de cada linha, remover = pedidos que não estão mais na planilha, fim = último lote (atualiza base_info)
+create or replace function public.importar_base_c(cols text[], linhas jsonb, hs text[], remover text[], fim boolean, arquivo text, total integer)
+returns integer language plpgsql security definer set search_path = public
+set statement_timeout = '120s'
+as $$
+declare n integer := 0;
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if remover is not null and cardinality(remover) > 0 then
+    delete from public.base_pedidos where pedido = any(remover);
+  end if;
+  if linhas is not null and jsonb_array_length(linhas) > 0 then
+    insert into public.base_pedidos
+    select (jsonb_populate_record(null::public.base_pedidos,
+              coalesce(a.base, '{}'::jsonb) || jsonb_build_object('extra', coalesce(a.ex, '{}'::jsonb), 'h', hs[l.i]))).*
+    from jsonb_array_elements(linhas) with ordinality as l(r, i)
+    cross join lateral (
+      select jsonb_object_agg(c.nome, l.r -> (c.j::int - 1)) filter (where c.nome not like 'x:%') as base,
+             jsonb_object_agg(substr(c.nome, 3), l.r -> (c.j::int - 1)) filter (where c.nome like 'x:%' and jsonb_typeof(l.r -> (c.j::int - 1)) not in ('null')) as ex
+      from unnest(cols) with ordinality as c(nome, j)
+    ) a
+    where coalesce(l.r ->> 0, '') <> ''
+    on conflict (pedido) do update set
+      nf = excluded.nf, canal = excluded.canal, origem = excluded.origem, transportadora = excluded.transportadora,
+      micro_status = excluded.micro_status, status_intelipost = excluded.status_intelipost, descricao = excluded.descricao,
+      ultima_atualizacao = excluded.ultima_atualizacao, data_expedicao = excluded.data_expedicao,
+      prev_original = excluded.prev_original, prev_atual = excluded.prev_atual, prev_360 = excluded.prev_360,
+      comentario_360 = excluded.comentario_360, uf = excluded.uf, cidade = excluded.cidade, ocorrencia = excluded.ocorrencia,
+      qtd_tickets = excluded.qtd_tickets, motivo_ticket = excluded.motivo_ticket, link_rastreio = excluded.link_rastreio,
+      data_criacao = excluded.data_criacao, data_entrega = excluded.data_entrega, range_atrasos = excluded.range_atrasos,
+      dias_atraso = excluded.dias_atraso, status_prazo = excluded.status_prazo, sem_expedicao = excluded.sem_expedicao,
+      extra = excluded.extra, h = excluded.h;
+    get diagnostics n = row_count;
+  end if;
+  if fim then
+    insert into public.base_info (id, arquivo, total, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, total = excluded.total,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  return n;
+end $$;
+revoke all on function public.importar_base_c(text[], jsonb, text[], text[], boolean, text, integer) from public, anon;
+grant execute on function public.importar_base_c(text[], jsonb, text[], text[], boolean, text, integer) to authenticated;

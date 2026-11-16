@@ -806,51 +806,58 @@ ${extra}
   }
 
   let baseExtraOk = true;   // false se o banco ainda não tem a coluna "extra" (parte 32)
+  // Lê a base num Worker (a tela não trava) e manda só os pedidos que mudaram desde a última base (parte 42).
+  function lerBaseWorker(buf) {
+    return new Promise((ok, falha) => {
+      const w = new Worker("leitor-base.js?v=126");
+      w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
+      w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler a planilha.")); };
+      w.postMessage({ buf, COLUNAS, EXTRA, DATAS: [...DATAS], rodape: LINHA_RODAPE.source }, [buf]);
+    });
+  }
+  async function enviarBaseNova(res, arq) {   // devolve false se o banco ainda não tem a parte 42
+    carregando("Comparando com a base atual…");
+    let hsDb = await sb.rpc("base_hashes");
+    if (hsDb.error && /timeout|canceling/i.test(hsDb.error.message || "")) hsDb = await sb.rpc("base_hashes");
+    if (hsDb.error) { if (/base_hashes|function|schema cache/i.test(hsDb.error.message || "")) return false; throw hsDb.error; }
+    const atual = new Map(hsDb.data || []), noArquivo = new Set();
+    const mudou = [];
+    res.rows.forEach((r, i) => { noArquivo.add(r[0]); if (atual.get(r[0]) !== res.hs[i]) mudou.push(i); });
+    const remover = [...atual.keys()].filter((p) => !noArquivo.has(p));
+    const total = res.rows.length;
+    const chamar = async (args) => { let r;
+      for (let t = 0; t < 4; t++) { r = await sb.rpc("importar_base_c", { cols: res.cols, linhas: [], hs: [], remover: null, fim: false, arquivo: arq.name, total, ...args });
+        if (!r.error) return r; await new Promise((ok) => setTimeout(ok, 1500 * (t + 1))); }
+      throw r.error; };
+    for (let i = 0; i < remover.length; i += 5000) { carregando(`Tirando ${fmt(remover.length)} pedidos que saíram da planilha…`); await chamar({ remover: remover.slice(i, i + 5000) }); }
+    const TAM = 2000, JUNTOS = 4, inicios = []; for (let i = 0; i < mudou.length; i += TAM) inicios.push(i);
+    let feitos = 0; carregando(`Enviando ${fmt(mudou.length)} pedidos novos ou alterados (de ${fmt(total)})…`);
+    for (let k = 0; k < inicios.length; k += JUNTOS) {
+      await Promise.all(inicios.slice(k, k + JUNTOS).map(async (i) => { const ix = mudou.slice(i, i + TAM);
+        await chamar({ linhas: ix.map((n) => res.rows[n]), hs: ix.map((n) => res.hs[n]) }); feitos += ix.length;
+        carregando(`Enviando… ${fmt(feitos)} de ${fmt(mudou.length)} pedidos novos ou alterados`); }));
+    }
+    await chamar({ fim: true });
+    return { mudou: mudou.length, removidos: remover.length };
+  }
   $("arquivo").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = "";
     if (!arq) return;
     carregando("Lendo a planilha…");
-    await new Promise((r) => setTimeout(r, 50));
-    let linhas;
-    try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", cellDates: false, dense: true, ...LEITURA_RAPIDA });
-      const nomeAba = wb.SheetNames.find((n) => norm(n) === "EXPORT") || wb.SheetNames[0];
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
-      const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "PEDIDO INTELIPOST") && r.some((c) => norm(c) === "MICRO STATUS INTELIPOST"));
-      if (iCab < 0) throw new Error('Não achei as colunas "Pedido Intelipost" e "Micro Status Intelipost". Confira se é a planilha exportada.');
-      const cab = rows[iCab].map(norm);
-      const idx = {}; Object.entries(COLUNAS).forEach(([k, nome]) => (idx[k] = cab.indexOf(nome)));
-      const idxEx = Object.entries(EXTRA).map(([k, [nome, tipo]]) => [k, cab.indexOf(nome), tipo]).filter(([, i]) => i >= 0);
-      if (!idxEx.some(([k]) => k === "transp_promob")) toast('Aviso: não achei a coluna "Transportadora Promob" nesta planilha. A página Transportadora divergente vai ficar vazia.', true);
-      const vistos = new Set();
-      linhas = [];
-      for (const r of rows.slice(iCab + 1)) {
-        const ped = r[idx.pedido] == null ? "" : String(r[idx.pedido]).trim();
-        if (!ped || vistos.has(ped) || LINHA_RODAPE.test(ped)) continue;   // rodapé do BI ("Filtros aplicados: …") não é pedido
-        vistos.add(ped);
-        const o = {};
-        for (const k of Object.keys(COLUNAS)) {
-          const v = idx[k] >= 0 ? r[idx[k]] : null;
-          if (k === "ultima_atualizacao") o[k] = dataCelula(v, true);
-          else if (DATAS.has(k)) o[k] = dataCelula(v, false);
-          else if (k === "qtd_tickets" || k === "dias_atraso") o[k] = v == null || v === "" || isNaN(Number(v)) ? null : Math.round(Number(v));
-          else o[k] = v == null || v === "" ? null : String(v).trim();
-        }
-        const ex = {};
-        for (const [k, i, tipo] of idxEx) { const v = r[i]; if (v == null || v === "") continue;
-          if (tipo === "d") { const d = dataCelula(v, false); if (d) ex[k] = d; }
-          else if (tipo === "n") { const n = Number(String(v).replace(",", ".")); if (!isNaN(n)) ex[k] = n; }
-          else ex[k] = String(v).trim(); }
-        if (baseExtraOk) o.extra = ex;
-        linhas.push(o);
-      }
-      if (!linhas.length) throw new Error("A planilha não tem pedidos.");
-    } catch (err) {
-      carregando(""); toast(err.message, true); return;
-    }
+    let res;
+    try { res = await lerBaseWorker(await arq.arrayBuffer()); }
+    catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    const nTp = linhas.filter((l) => l.extra && l.extra.transp_promob).length;
-    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\nTransportadora Promob preenchida em ${fmt(nTp)} pedidos.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
+    if (res.semPromob) toast('Aviso: não achei a coluna "Transportadora Promob" nesta planilha. A página Transportadora divergente vai ficar vazia.', true);
+    if (!confirm(`${arq.name}\n\n${fmt(res.rows.length)} pedidos encontrados.\nTransportadora Promob preenchida em ${fmt(res.nTp)} pedidos.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
+    let r = false;
+    try { r = await enviarBaseNova(res, arq); }
+    catch (err) { carregando(""); toast("Erro ao enviar: " + err.message + " · Pode enviar de novo: só vai o que faltou.", true); return; }
+    if (r === false) {   // banco sem a parte 42: envia do jeito antigo (tudo)
+      const nEx = res.cols.filter((c) => c.startsWith("x:")).length, nB = res.cols.length - nEx;
+      const linhas = res.rows.map((row) => { const o = {}, ex = {};
+        res.cols.forEach((c, j) => { const v = row[j] === undefined ? null : row[j]; if (j < nB) o[c] = v; else if (v !== null) ex[c.slice(2)] = v; });
+        if (baseExtraOk) o.extra = ex; return o; });
     try {
       const argsBase = (lote, primeiro) => ({ linhas: compactar(lote), limpar: primeiro, arquivo: arq.name, total: linhas.length });
       // 1º passo só limpa a base (sem linhas), com novas tentativas se o banco demorar; depois manda em lotes menores
@@ -868,8 +875,9 @@ ${extra}
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
+    }
     carregando("");
-    toast(`Base atualizada: ${fmt(linhas.length)} pedidos.`);
+    toast(r ? `Base atualizada: ${fmt(res.rows.length)} pedidos (${fmt(r.mudou)} novos ou alterados${r.removidos ? `, ${fmt(r.removidos)} saíram da planilha` : ""}).` : `Base atualizada: ${fmt(res.rows.length)} pedidos.`);
     carregar();
     carregarGerencial(true);   // Visão Gerencial, Entregas e SLA e Atrasos por UF releem a base nova na hora
   });
