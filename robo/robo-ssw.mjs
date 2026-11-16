@@ -845,8 +845,10 @@ function REGRA_RAJ(transp, nf) { return /dominalog|tempo\s*justo|trans\s*sua|tra
 function pegaLote(m, x) {
   let v = m.get(x.n); if (!v) return null;
   const se = sem0(String(x.nf || "").split("-")[1]?.trim() || "");
-  if (se && v._L.some((r) => r.serie && r.serie !== se)) {   // linhas de outra série = outra nota com o mesmo número: descarta
-    const L = v._L.filter((r) => !r.serie || r.serie === se); if (!L.length) return null;
+  // Regra da Brenda (16/11): no SSW aparece "SÉRIE NOTA"; só vale (entregue ou qualquer status) se nota E série forem iguais às do E-loggia.
+  const vale = (r) => r.situacao === "sem cte" || r.situacao === "sem permissao" || (se ? r.serie === se : !r.serie || true);
+  if (v._L.some((r) => !vale(r))) {   // linha sem a série ou de outra série = não dá para garantir que é a mesma nota: descarta
+    const L = v._L.filter(vale); if (!L.length) return null;
     const mm = lerLote.melhor; v = { ...mm(L), _semRaj: mm(L.filter((r) => !r.raj)), _temRaj: L.some((r) => r.raj), _L: L }; }
   if (!REGRA_RAJ(x.transportadora, x.nf) || !v._temRaj) return v;
   if (v._semRaj && v._semRaj.situacao !== "sem cte") return v._semRaj;
@@ -857,8 +859,8 @@ async function conferirLote() {
   const lista = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
   // "entregue" achado com outro CNPJ: confere de novo (antes não olhava a série e podia ser outra nota com o mesmo número)
-  { const E = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&detalhe->>cnpj_outro=not.is.null&detalhe->>serie_ok=is.null&limit=2000`).catch(() => []);
-    E.forEach((l) => { l.detalhe = { ...(l.detalhe || {}), tentados: [] }; }); lista.push(...E); if (E.length) log(`Reconfiro ${E.length} entregues achados com outro CNPJ (checagem da série)`); }
+  { const E = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&detalhe->>serie_ok=is.null&order=pedido&limit=2000`).catch(() => []);
+    E.forEach((l) => { l.detalhe = { ...(l.detalhe || {}), tentados: [] }; }); lista.push(...E); if (E.length) log(`Reconfiro ${E.length} entregues ainda sem a checagem da série`); }
   // Série 35 (dropshipping) da TSL: a TSL só faz a first mile; fora do RJ o rastreio que vale é o da transportadora de redespacho (Promob).
   // Para RJ a TSL emite o CT-e da entrega e segue o rastreio da TSL. (Regra da Brenda, 16/11.)
   // (inclui as já "entregues" pela TSL fora do RJ: podem ter sido a entrega da first mile, então reconfere pelo redespacho)
@@ -923,7 +925,7 @@ async function conferirLote() {
   const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
     const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
     const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
-      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6), serie_ok: true } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(r.situacao === "entregue" || r.situacao === "nao entregue" ? { serie_ok: true } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
     if (r.situacao !== "sem cte") delete det.tentados; if (!r._semSenha) delete det.sem_senha;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
