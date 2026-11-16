@@ -165,6 +165,7 @@
       carregar();
       if (volta === "alterar") { carregarAlterar(); const b = voltaAp && document.querySelector(`#ap-abas [data-ap="${voltaAp}"]`); if (b) b.click(); }
       if (volta === "conferencia") carregarConferencia();
+      if (volta === "retornos") setTimeout(function esperaBase() { if (base.length) abrirRetornos(); else setTimeout(esperaBase, 800); }, 800);
       ligarTempoReal();
       setTimeout(() => carregarSenhas().catch(() => {}), 3000);   // senhas do SSW para os botões de rastreio de todas as páginas
     }
@@ -218,7 +219,7 @@
     }
     const inicios = []; for (let i = desde; i < linhas.length; i += tam) inicios.push(i);
     let feitos = desde;
-    const JUNTOS = 4;
+    const JUNTOS = 3;
     for (let k = 0; k < inicios.length; k += JUNTOS) {
       const grupo = inicios.slice(k, k + JUNTOS);
       const res = await Promise.all(grupo.map((i) => sb.rpc(rpc, args(linhas.slice(i, i + tam), i === 0))));
@@ -286,7 +287,8 @@
       const [i, fi] = await Promise.all([sb.from("base_info").select("*").limit(1), sb.from("fechados_info").select("*").limit(1)]);
       const vBase = i.data && i.data[0] ? i.data[0].enviado_em : "", vFech = fi.data && fi.data[0] ? fi.data[0].enviado_em : "";
       const [b, t, tot] = await Promise.all([
-        buscarComCache("base_aberta", "pedido", "*", vBase && `${vBase}|${vFech}`),
+        // em aberto pela BASE (igual à Visão Gerencial); entregue_ip marca o que a Intelipost já deu como entregue/cancelado (parte 40)
+        buscarComCache("base_aberta_bi", "pedido", "*", vBase && `bi|${vBase}|${vFech}`).catch(() => buscarComCache("base_aberta", "pedido", "*", vBase && `${vBase}|${vFech}`)),
         buscarTudo("tratativas", "pedido"),
         sb.from("base_pedidos").select("pedido", { count: "exact", head: true }),
       ]);
@@ -364,6 +366,9 @@
     const hoje = hojeISO();
     const venc = p.prev_original || p.prev_atual || null;   // data prometida ao cliente
     p._venc = venc;
+    // atrasado igual à Visão Gerencial: range "Vencido" da base (se houver), senão a data prometida já passou
+    const rg = norm(p.range_atrasos);
+    p._atrasoG = rg ? rg.startsWith("VENCIDO") : !!(venc && venc < hoje);
     p._dias = venc ? diasEntre(hoje, venc) : null;                 // >0 faltam dias, <0 vencido
     // vencimento para tratar: a nova data informada pela Logística (se houver), senão a data prometida
     const ef = (t && t.nova_data) || venc;
@@ -375,7 +380,7 @@
     return p;
   }
   const naVisao = {
-    vencidos: (p) => p._diasEf !== null && p._diasEf < 0,
+    vencidos: (p) => p._atrasoG,
     hoje: (p) => p._diasEf === 0,
     amanha: (p) => p._diasEf === 1,
     vencem: (p) => p._diasEf !== null && p._diasEf >= 0 && p._diasEf <= 5,
@@ -383,7 +388,7 @@
     ssw: (p) => !!(p._t && p._t.nova_data && p._t.nova_data_fonte === "ssw"),
     todos: () => true,
   };  const filtroVisao = (v) => { const ks = v.split("+"); return (p) => ks.some((k) => naVisao[k](p)); };
-  const NOMES_VISAO = { vencem: "Vencem em até 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", ssw: "Nova data do SSW", todos: "Pedidos em aberto" };
+  const NOMES_VISAO = { vencem: "Vencem em até 5 dias", parados: "Parados no rastreio", vencidos: "Atrasados", hoje: "Vencem hoje", amanha: "Vencem amanhã", ssw: "Nova data do SSW", todos: "Pedidos em aberto" };
   const nomeVisao = () => visao.split("+").map((k) => NOMES_VISAO[k]).join(" + ");
 
 
@@ -529,7 +534,7 @@
     });
     const ord = [...grupos.entries()].sort((a, b) => b[1].n - a[1].n);
     const somaP = daVisao.reduce((s, p) => s + (p._parado || 0), 0);
-    const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "já vencidos", hoje: "que vencem hoje", amanha: "que vencem amanhã", todos: "em aberto" };
+    const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "atrasados", hoje: "que vencem hoje", amanha: "que vencem amanhã", todos: "em aberto" };
     $("ms-resumo").textContent = `${fmt(daVisao.length)} pedidos ${visao.split("+").map((k) => nomes[k]).join(" ou ")} · em média ${(daVisao.length ? somaP / daVisao.length : 0).toFixed(1).replace(".", ",")} dias sem movimento no rastreio · clique para ver e exportar.`;
     if (msSel && !grupos.has(msSel)) msSel = "";
     $("ms-linhas").innerHTML = ord.length ? ord.map(([k, g]) => {
@@ -574,7 +579,7 @@
     });
     // ordem: mais urgente primeiro (vencido/vence antes), depois mais parado
     filtrados.sort((a, b) => (a._diasEf ?? 9999) - (b._diasEf ?? 9999) || (b._parado || 0) - (a._parado || 0));
-    const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Já vencidos", hoje: "Vencem hoje", amanha: "Vencem amanhã", todos: "Todos os pedidos" };
+    const nomes = { vencem: "Vencem em 5 dias", parados: "Parados no rastreio", vencidos: "Atrasados", hoje: "Vencem hoje", amanha: "Vencem amanhã", todos: "Todos os pedidos" };
     const rNome = rangeSel === "__avencer" ? " · vencidos e a vencer" : rangeSel ? " · " + RANGES.find((r) => r.id === rangeSel).nome : "";
     $("lista-titulo").textContent = `${buscando ? "Busca em todos os pedidos" : nomeVisao()}${ms ? " · " + ms : ""}${rNome} (${fmt(filtrados.length)})`;
     if (!manterPagina) pagina = 1;
@@ -595,7 +600,7 @@
       const quem = t.atualizado_por ? `${esc(t.atualizado_por.split("@")[0])} · ${new Date(t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "";
       return `<tr data-pedido="${esc(p.pedido)}" class="clicavel ${t.observacao ? "editado" : ""}" title="Clique para ver o detalhe do pedido">
         <td><div class="p">${esc(p.pedido)}</div><div class="s">NF ${esc(p.nf || "—")} · ${esc(p.canal || "")}</div>
-          ${marcaTicket(p)}</td>
+          ${p.entregue_ip ? '<div><span class="chip verde" title="O arquivo da Intelipost já mostra este pedido como entregue/cancelado; a base ainda não.">✓ entregue na Intelipost</span></div>' : ""}${marcaTicket(p)}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div><div class="s resp-p">👤 ${nomeResp(p.micro_status)}</div>${marcaOc(p)}</td>
         <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}${sswLinha(p)}</td>
@@ -711,6 +716,15 @@ ${extra}
         <p class="s">A observação fica salva até o pedido aparecer como entregue ou cancelado no arquivo da Intelipost.</p>
       </div>`;
     $("modal").hidden = false;
+    // histórico de retornos (parte 40)
+    sb.from("retornos_hist").select("nova_data,nova_data_antes,observacao,fonte,feito_por,feito_em").eq("pedido", p.pedido).order("feito_em", { ascending: false }).limit(30).then(({ data, error }) => {
+      if (error || !data || !data.length || $("modal").hidden || $("modal-titulo").textContent !== "Pedido " + p.pedido) return;
+      const d = document.createElement("div"); d.className = "rt-hist";
+      d.innerHTML = `<h3 class="cf-h3">Histórico de retornos (${data.length})</h3><div class="tabela-wrap"><table class="tabela-range"><thead><tr><th>Quando</th><th>Quem</th><th>Nova data</th><th>Observação</th></tr></thead><tbody>${data.map((h) => {
+        const quebrou = h.nova_data_antes && h.nova_data !== h.nova_data_antes && h.nova_data_antes < String(h.feito_em).slice(0, 10);
+        return `<tr><td>${new Date(h.feito_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</td><td>${h.fonte === "ssw" ? "🤖 SSW" : esc((h.feito_por || "").split("@")[0])}</td><td>${br(h.nova_data) || "—"}${quebrou ? ` <span class="chip vermelho" title="A data anterior (${br(h.nova_data_antes)}) já tinha passado">promessa quebrada</span>` : h.nova_data_antes && h.nova_data !== h.nova_data_antes ? ` <span class="s">antes ${br(h.nova_data_antes)}</span>` : ""}</td><td>${esc(h.observacao || "")}</td></tr>`; }).join("")}</tbody></table></div>`;
+      $("modal-corpo").appendChild(d);
+    });
     document.body.classList.add("sem-rolagem");
   }
   function fecharDetalhe() { $("modal").hidden = true; document.body.classList.remove("sem-rolagem"); if (redesenhar._pendente) { redesenhar._pendente = false; redesenhar(true); } }
@@ -839,12 +853,18 @@ ${extra}
     if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\nTransportadora Promob preenchida em ${fmt(nTp)} pedidos.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
     try {
       const argsBase = (lote, primeiro) => ({ linhas: compactar(lote), limpar: primeiro, arquivo: arq.name, total: linhas.length });
-      carregando(`Enviando… ${fmt(Math.min(2000, linhas.length))} de ${fmt(linhas.length)}`);
-      let { error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 2000), true));
-      if (error && /extra/i.test(error.message || "") && baseExtraOk) {   // banco sem a parte 32: manda sem as colunas extras
-        baseExtraOk = false; linhas.forEach((l) => delete l.extra); ({ error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 2000), true))); }
+      // 1º passo só limpa a base (sem linhas), com novas tentativas se o banco demorar; depois manda em lotes menores
+      carregando("Limpando a base antiga…");
+      let { error } = await sb.rpc("importar_base", argsBase([], true));
+      for (let t = 0; error && /timeout|time out|canceling/i.test(error.message || "") && t < 3; t++) {
+        await new Promise((ok) => setTimeout(ok, 3000 * (t + 1))); ({ error } = await sb.rpc("importar_base", argsBase([], true))); }
       if (error) throw error;
-      await enviarLotes("importar_base", linhas, 2000, argsBase, 2000);
+      carregando(`Enviando… 0 de ${fmt(linhas.length)}`);
+      ({ error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 1000), false)));
+      if (error && /extra/i.test(error.message || "") && baseExtraOk) {   // banco sem a parte 32: manda sem as colunas extras
+        baseExtraOk = false; linhas.forEach((l) => delete l.extra); ({ error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 1000), false))); }
+      if (error && !/timeout|time out|canceling/i.test(error.message || "")) throw error;
+      await enviarLotes("importar_base", linhas, 1000, (lote) => argsBase(lote, false), error ? 0 : 1000);
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
@@ -1758,6 +1778,148 @@ ${extra}
       + `Transportadoras que mais seguram o canal:\n${txt("c-transp")}\nEstados com mais atraso:\n${txt("c-uf")}`;
     if (!$("c-metodo").hidden) t += `\n${$("c-m-indice-rot").textContent}: ${$("c-m-indice").querySelector(".kpi-num").textContent} (meta abaixo de 1%) · risco alto: ${document.querySelector('#c-m-cards [data-r="Alto"] .kpi-num').textContent} · médio: ${document.querySelector('#c-m-cards [data-r="Médio"] .kpi-num').textContent}`;
     try { await navigator.clipboard.writeText(t); toast("Análise copiada: é só colar no e-mail ou no WhatsApp."); } catch (_) { prompt("Copie o texto:", t); }
+  });
+
+
+  // ---------------- Cobrança do dia (controle de retornos das transportadoras) ----------------
+  // Cada pedido em aberto cai em UM balde, na ordem de prioridade. Retorno válido = nova data de hoje em diante.
+  const RT_NOMES = { p1: "Atrasado sem retorno", p2: "Promessa quebrada", p3: "Atrasado só com observação", p4: "Vence hoje sem retorno", p5: "Vence amanhã sem retorno", p6: "Nova data vence hoje/amanhã", ok: "Em dia", cobrar: "Tudo para cobrar" };
+  const RT_ACAO = { p1: "Cobrar retorno com nova data", p2: "Cobrar de novo e escalar (data não cumprida)", p3: "Pedir a previsão de entrega", p4: "Cobrar hoje para não atrasar", p5: "Confirmar a entrega de amanhã", p6: "Confirmar que entrega na nova data" };
+  // leitura da observação (palavras-chave) → categoria e sugestão
+  const RT_CATS = [
+    ["insucesso", "Insucesso na entrega", /ausente|endere[cç]o|n[aã]o localiz|recus|fechad|mudou|insucesso|devolu/i, "abrir ocorrência no portal"],
+    ["avaria", "Avaria / extravio", /avaria|extravi|sinistr|roub|danific|faltando volume|falta de volume|quebrad/i, "abrir reposição"],
+    ["agendado", "Agendado", /agend/i, "acompanhar a data agendada"],
+    ["rota", "Em rota / saiu para entrega", /rota|saiu para entrega|em entrega|motorista|carregad/i, "confirmar a entrega"],
+    ["cliente", "Aguardando cliente", /cliente|contato|retirar|retirada|liga[cç]/i, "acionar o SAC / cliente"],
+    ["semprev", "Sem previsão / sem resposta", /sem previs|sem retorno|n[aã]o respond|aguardando retorno|sem resposta|cobrad/i, "escalar com a transportadora"],
+    ["transito", "Em trânsito / transferência", /transfer|tr[aâ]nsito|hub|filial|unidade|cd\b/i, "pedir a previsão de chegada"],
+    ["reentrega", "Reentrega", /reentreg|nova tentativa|tentativa/i, "confirmar a nova tentativa"],
+  ];
+  const rtCat = (obs) => { if (!obs) return null; const c = RT_CATS.find((x) => x[2].test(obs)); return c || ["outros", "Outros", null, "ler e decidir"]; };
+  let rtCard = "cobrar", rtTransp = null, rtCatSel = null, rtPag = 1, rtLista = [], rtResumo = null, rtResumoEm = 0;
+  function rtBalde(p) {
+    if (p.entregue_ip) return null;
+    const t = p._t || {}, hoje = hojeISO(), amanha = somaDias(hoje, 1), nova = t.nova_data ? String(t.nova_data).slice(0, 10) : null, obs = (t.observacao || "").trim();
+    if (p._atrasoG && !nova && !obs) return "p1";
+    if (nova && nova < hoje) return "p2";
+    if (p._atrasoG && !nova && obs) return "p3";
+    if (!p._atrasoG && !nova && p._dias === 0) return "p4";
+    if (!p._atrasoG && !nova && p._dias === 1) return "p5";
+    if (nova && (nova === hoje || nova === amanha)) return "p6";
+    if (nova) return "ok";
+    return null;   // no prazo, sem retorno: ainda não precisa cobrar
+  }
+  async function carregarResumoRetornos() {
+    if (rtResumo && Date.now() - rtResumoEm < 5 * 60000) return;
+    const { data, error } = (await sb.rpc("resumo_retornos").then((r) => r, (e) => ({ error: e }))) || { error: true };
+    rtResumoEm = Date.now();
+    rtResumo = error ? null : new Map((data || []).map((x) => [x.pedido, x]));
+    $("rt-aviso").hidden = !error;
+    if (error) $("rt-aviso").innerHTML = '⚠ O histórico de retornos ainda não está ligado: rode a <b>parte 40</b> do supabase/schema.sql no Supabase (SQL Editor › New query › Run). O resto da página já funciona.';
+  }
+  function rtPassaFiltro(p) {
+    const q = norm($("rt-busca").value), tr = $("rt-transp").value, cn = $("rt-canal").value;
+    if (q && !norm(p.pedido).includes(q) && !norm(p.nf).includes(q)) return false;
+    if (tr && (p.transportadora || "(sem transportadora)") !== tr) return false;
+    if (cn && (p.canal || "(sem canal)") !== cn) return false;
+    return true;
+  }
+  function desenharRetornos() {
+    if (!base.length) { $("rt-info").textContent = "Carregando os pedidos…"; return; }
+    const opts = (id, f) => { const el = $(id), v = el.value, xs = [...new Set(base.map(f))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+      el.innerHTML = `<option value="">Todas</option>` + xs.map((x) => `<option ${x === v ? "selected" : ""}>${esc(x)}</option>`).join(""); };
+    opts("rt-transp", (p) => p.transportadora || "(sem transportadora)"); opts("rt-canal", (p) => p.canal || "(sem canal)");
+    const L = base.filter(rtPassaFiltro).map((p) => { p._rt = rtBalde(p); return p; });
+    const cont = { p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, ok: 0, cobrar: 0 };
+    L.forEach((p) => { if (!p._rt) return; cont[p._rt]++; if (p._rt !== "ok") cont.cobrar++; });
+    document.querySelectorAll("#rt-cards .kpi[data-rt]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.rt]); b.classList.toggle("ativa", rtCard === b.dataset.rt); });
+    $("menu-rt").hidden = !cont.p1 && !cont.p2; $("menu-rt").textContent = fmt(cont.p1 + cont.p2);
+    // por transportadora
+    const porT = new Map();
+    L.forEach((p) => { const k = p.transportadora || "(sem transportadora)", x = porT.get(k) || porT.set(k, { k, p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, ok: 0, alvo: 0, cob: 0, queb: 0 }).get(k);
+      if (p._rt) x[p._rt]++;
+      if (p._atrasoG || p._dias === 0 || p._dias === 1) { x.alvo++; const nv = p._t && p._t.nova_data; if (nv && String(nv).slice(0, 10) >= hojeISO()) x.cob++; }
+      const r = rtResumo && rtResumo.get(p.pedido); if (r) x.queb += r.quebradas || 0; });
+    const pctTxt = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "—");
+    $("rt-transp-linhas").innerHTML = [...porT.values()].map((x) => ({ ...x, cobrar: x.p1 + x.p2 + x.p3 + x.p4 + x.p5 + x.p6 })).filter((x) => x.cobrar || x.ok).sort((a, b) => (b.p1 + b.p2) - (a.p1 + a.p2) || b.cobrar - a.cobrar)
+      .map((x) => `<tr class="clicavel ${rtTransp === x.k ? "sel" : ""}" data-rtt="${esc(x.k)}"><td>${esc(x.k)}</td><td class="num ${x.p1 ? "ruim-t" : ""}">${fmt(x.p1)}</td><td class="num ${x.p2 ? "ruim-t" : ""}">${fmt(x.p2)}</td><td class="num">${fmt(x.p3)}</td><td class="num">${fmt(x.p4)}</td><td class="num">${fmt(x.p5)}</td><td class="num">${fmt(x.p6)}</td><td class="num"><b>${fmt(x.cobrar)}</b></td>
+        <td class="num ${x.alvo && x.cob / x.alvo < 0.7 ? "ruim" : "ok"}">${pctTxt(x.cob, x.alvo)}</td><td class="num">${rtResumo ? fmt(x.queb) : "—"}</td>
+        <td><button class="btn mini contorno" data-rtx="${esc(x.k)}" title="Excel no formato do Enviar retornos, só desta transportadora">⤓ Cobrança</button> <button class="btn mini contorno" data-rtm="${esc(x.k)}" title="Texto pronto para e-mail ou WhatsApp">⧉ Mensagem</button></td></tr>`).join("")
+      || `<tr><td colspan="11" class="vazio">Nada para cobrar.</td></tr>`;
+    // observações
+    const C = L.filter((p) => p._rt && p._rt !== "ok"), porC = new Map();
+    C.forEach((p) => { const c = rtCat(p._t && p._t.observacao); if (!c) return; const x = porC.get(c[0]) || porC.set(c[0], { c, n: 0 }).get(c[0]); x.n++; });
+    $("rt-cats").innerHTML = [...porC.values()].sort((a, b) => b.n - a.n).map((x) => `<button class="rt-cat ${rtCatSel === x.c[0] ? "sel" : ""}" data-rtc="${x.c[0]}"><b>${fmt(x.n)}</b> ${esc(x.c[1])}<small>→ ${esc(x.c[3])}</small></button>`).join("")
+      || '<p class="s">Nenhuma observação nos pedidos para cobrar.</p>';
+    // lista
+    const ordem = { p1: 1, p2: 2, p4: 3, p3: 4, p5: 5, p6: 6, ok: 9 };
+    rtLista = L.filter((p) => p._rt && (rtCard === "cobrar" ? p._rt !== "ok" : p._rt === rtCard) && (!rtTransp || (p.transportadora || "(sem transportadora)") === rtTransp)
+      && (!rtCatSel || (rtCat(p._t && p._t.observacao) || [])[0] === rtCatSel))
+      .sort((a, b) => ordem[a._rt] - ordem[b._rt] || (a._dias ?? 0) - (b._dias ?? 0));
+    $("rt-titulo").textContent = `${RT_NOMES[rtCard]}${rtTransp ? " · " + rtTransp : ""}${rtCatSel ? " · " + RT_CATS.concat([["outros", "Outros"]]).find((c) => c[0] === rtCatSel)[1] : ""} (${fmt(rtLista.length)})`;
+    const totAlvo = L.filter((p) => !p.entregue_ip && (p._atrasoG || p._dias === 0 || p._dias === 1)).length, totCob = L.filter((p) => !p.entregue_ip && (p._atrasoG || p._dias === 0 || p._dias === 1) && p._t && p._t.nova_data && String(p._t.nova_data).slice(0, 10) >= hojeISO()).length;
+    $("rt-info").innerHTML = `${fmt(cont.cobrar)} pedidos para cobrar hoje · cobertura geral <b>${pctTxt(totCob, totAlvo)}</b> (atrasados e vencendo com retorno válido) · ${fmt(L.filter((p) => p.entregue_ip).length)} já entregues na Intelipost ficam fora`;
+    desenharRtLista();
+  }
+  function desenharRtLista() {
+    const tot = rtLista.length, pags = Math.max(1, Math.ceil(tot / POR_PAGINA)); rtPag = Math.min(Math.max(1, rtPag), pags);
+    $("rt-linhas").innerHTML = rtLista.slice((rtPag - 1) * POR_PAGINA, rtPag * POR_PAGINA).map((p) => {
+      const c = rtCat(p._t && p._t.observacao), r = rtResumo && rtResumo.get(p.pedido);
+      const cob = `<span class="chip ${["p1", "p2"].includes(p._rt) ? "vermelho" : ["p3", "p4"].includes(p._rt) ? "laranja" : p._rt === "ok" ? "verde" : "ambar"}">${RT_NOMES[p._rt]}</span>
+        <div class="s">${RT_ACAO[p._rt] || "acompanhar"}</div>${c ? `<div class="s">📝 ${esc(c[1])} → ${esc(c[3])}</div>` : ""}${r ? `<div class="s">${fmt(r.retornos)} retorno${r.retornos === 1 ? "" : "s"}${r.quebradas ? ` · <b class="txt-vermelho">${fmt(r.quebradas)} promessa${r.quebradas === 1 ? "" : "s"} quebrada${r.quebradas === 1 ? "" : "s"}</b>` : ""}</div>` : ""}`;
+      return linhaPreventivo(p, "data-rt-campo", `<td>${cob}</td>`); }).join("");
+    $("rt-vazio").hidden = tot > 0;
+    $("rt-paginacao").innerHTML = tot > POR_PAGINA ? `<button class="btn" data-p="-1" ${rtPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rtPag} de ${pags}</span><button class="btn" data-p="1" ${rtPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
+  }
+  async function abrirRetornos() { desenharRetornos(); await carregarResumoRetornos(); desenharRetornos(); }
+  // planilha de cobrança: mesmas colunas do "Enviar retornos" (Pedido Intelipost, NF, Transportadora, Nova Data, Observação) + o que a transportadora precisa saber
+  function rtLinhasExcel(L) {
+    return [["Pedido Intelipost", "NF", "Transportadora", "Nova Data", "Observação", "Motivo da cobrança", "Prometido ao cliente", "Data informada antes", "Último retorno", "Canal", "UF", "Cidade", "Micro status"]]
+      .concat(L.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.transportadora, null, null, RT_NOMES[p._rt], br(p._venc), br(t.nova_data), t.observacao || "", p.canal, p.uf, p.cidade || "", p.micro_status]; }));
+  }
+  const rtParaCobrar = (tr) => base.filter((p) => rtPassaFiltro(p) && (p._rt = rtBalde(p)) && p._rt !== "ok" && (!tr || (p.transportadora || "(sem transportadora)") === tr));
+  function rtBaixar(tr) {
+    const L = rtParaCobrar(tr); if (!L.length) return toast("Nada para cobrar.", true);
+    const wb = XLSX.utils.book_new(), porT = new Map(); L.forEach((p) => { const k = p.transportadora || "(sem transportadora)"; (porT.get(k) || porT.set(k, []).get(k)).push(p); });
+    for (const [k, xs] of [...porT.entries()].sort((a, b) => b[1].length - a[1].length)) {
+      const ws = XLSX.utils.aoa_to_sheet(rtLinhasExcel(xs)); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 40 }, { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, ws, k.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Transportadora"); }
+    XLSX.writeFile(wb, `cobranca_${tr ? tr.replace(/\W+/g, "_") + "_" : ""}${hojeISO()}.xlsx`);
+    toast(`${fmt(L.length)} pedido(s) na planilha. Mande para a transportadora; quando voltar preenchida (Nova Data e Observação), suba no Enviar retornos do Preventivo.`);
+  }
+  function rtMensagem(tr) {
+    const L = rtParaCobrar(tr); if (!L.length) return "";
+    const grupo = (k) => L.filter((p) => p._rt === k);
+    let t = `Olá, equipe ${tr}! Precisamos do retorno dos pedidos abaixo, com a nova data de entrega de cada um, ainda hoje:\n`;
+    for (const k of ["p1", "p2", "p3", "p4", "p5", "p6"]) { const xs = grupo(k); if (!xs.length) continue;
+      t += `\n${RT_NOMES[k]} (${xs.length}):\n` + xs.slice(0, 60).map((p) => `• NF ${p.nf} · pedido ${p.pedido} · prometido ${br(p._venc)}${p._t && p._t.nova_data ? ` · data informada ${br(p._t.nova_data)}` : ""}`).join("\n") + (xs.length > 60 ? `\n… e mais ${xs.length - 60} (na planilha)` : "") + "\n"; }
+    return t + "\nObrigado!";
+  }
+  $("rt-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-rt]"); if (!b) return; rtCard = b.dataset.rt; rtPag = 1; desenharRetornos(); });
+  $("pagina-retornos").addEventListener("click", async (e) => {
+    const x = e.target.closest("[data-rtx]"); if (x) return rtBaixar(x.dataset.rtx);
+    const m = e.target.closest("[data-rtm]");
+    if (m) { const t = rtMensagem(m.dataset.rtm); if (!t) return toast("Nada para cobrar.", true); try { await navigator.clipboard.writeText(t); toast("Mensagem copiada: cole no e-mail ou WhatsApp da transportadora."); } catch (_) { prompt("Copie a mensagem:", t); } return; }
+    const tt = e.target.closest("tr[data-rtt]"); if (tt) { rtTransp = rtTransp === tt.dataset.rtt ? null : tt.dataset.rtt; rtPag = 1; return desenharRetornos(); }
+    const c = e.target.closest("[data-rtc]"); if (c) { rtCatSel = rtCatSel === c.dataset.rtc ? null : c.dataset.rtc; rtPag = 1; return desenharRetornos(); }
+    const pb = e.target.closest("#rt-paginacao button[data-p]"); if (pb) { rtPag += Number(pb.dataset.p); return desenharRtLista(); }
+    if (e.target.closest("input, select, textarea, a, button")) return;
+    const tr = e.target.closest("#rt-linhas tr[data-pedido]"); if (tr) abrirDetalhe(tr.dataset.pedido);
+  });
+  $("rt-linhas").addEventListener("change", async (e) => { const inp = e.target.closest("[data-rt-campo]"); if (!inp) return; const tr = inp.closest("tr[data-pedido]");
+    await gravar(tr.dataset.pedido, inp.dataset.rtCampo, inp.value, tr.querySelector(".quem")); });
+  let rtEspera; $("rt-busca").addEventListener("input", () => { clearTimeout(rtEspera); rtEspera = setTimeout(() => { rtPag = 1; desenharRetornos(); }, 250); });
+  ["rt-transp", "rt-canal"].forEach((id) => $(id).addEventListener("change", () => { rtPag = 1; desenharRetornos(); }));
+  $("rt-limpar").addEventListener("click", () => { $("rt-busca").value = ""; $("rt-transp").value = ""; $("rt-canal").value = ""; rtTransp = null; rtCatSel = null; rtCard = "cobrar"; rtPag = 1; desenharRetornos(); });
+  $("rt-excel").addEventListener("click", () => rtBaixar(null));
+  $("rt-copiar").addEventListener("click", async () => {
+    const L = base.filter((p) => (p._rt = rtBalde(p))), c = (k) => L.filter((p) => p._rt === k).length, porT = new Map();
+    L.filter((p) => p._rt === "p1" || p._rt === "p2").forEach((p) => { const k = p.transportadora || "(sem transportadora)"; porT.set(k, (porT.get(k) || 0) + 1); });
+    const t = `Cobrança do dia · ${new Date().toLocaleDateString("pt-BR")}\n`
+      + `1) Atrasados sem retorno: ${fmt(c("p1"))}\n2) Promessas quebradas: ${fmt(c("p2"))}\n3) Atrasados só com observação: ${fmt(c("p3"))}\n4) Vencem hoje sem retorno: ${fmt(c("p4"))}\n5) Vencem amanhã sem retorno: ${fmt(c("p5"))}\n6) Nova data vence hoje/amanhã: ${fmt(c("p6"))}\n`
+      + `Transportadoras com mais pendências (1 + 2):\n` + [...porT.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => `  • ${k}: ${fmt(n)}`).join("\n");
+    try { await navigator.clipboard.writeText(t); toast("Resumo copiado."); } catch (_) { prompt("Copie o resumo:", t); }
   });
 
   // a lista de pedidos fica na Visão Gerencial: abre ela já filtrada pela transportadora
@@ -3159,7 +3321,7 @@ ${extra}
   function irPara(pag) {
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Consulta Documento", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Consulta Documento", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
@@ -3172,6 +3334,7 @@ ${extra}
     if (G_PAGINAS.includes(b.dataset.pagina)) montarGerencial();
     if (b.dataset.pagina === "alterar") carregarAlterar();
     if (b.dataset.pagina === "conferencia") carregarConferencia();
+    if (b.dataset.pagina === "retornos") abrirRetornos();
     if (b.dataset.pagina === "ocorrencias") desenharOcorrencias();
     if (b.dataset.pagina === "logins") { carregarLogins(); carregarLoginsSac(); }
   });

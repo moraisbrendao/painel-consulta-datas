@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=123">
+  <link rel="stylesheet" href="styles.css?v=125">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -39,6 +39,7 @@
       <button class="menu-item so-log" data-pagina="uf"><span class="menu-icone">⌖</span>Atrasos por UF</button>
       <button class="menu-item so-log" data-pagina="canais"><span class="menu-icone">◎</span>Análise de canais</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
+      <button class="menu-item so-log" data-pagina="retornos"><span class="menu-icone">📣</span>Cobrança do dia <span id="menu-rt" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
@@ -521,7 +522,7 @@
       <!-- visões em cards -->
       <section class="kpis" id="visoes" role="tablist">
         <button class="visao kpi" data-visao="todos"><span class="kpi-rot">Pedidos em aberto</span><b class="kpi-num"></b><small>todos os pedidos da base</small><i>↗</i></button>
-        <button class="visao kpi vermelho" data-visao="vencidos"><span class="kpi-rot">Já vencidos</span><b class="kpi-num"></b><small>passou da data (ou da nova data)</small><i>↗</i></button>
+        <button class="visao kpi vermelho" data-visao="vencidos"><span class="kpi-rot">Atrasados</span><b class="kpi-num"></b><small>data prometida já passou (igual à Visão Gerencial)</small><i>↗</i></button>
         <button class="visao kpi laranja" data-visao="hoje"><span class="kpi-rot">Vencem hoje</span><b class="kpi-num"></b><small>agir hoje com a transportadora</small><i>↗</i></button>
         <button class="visao kpi laranja" data-visao="amanha"><span class="kpi-rot">Vencem amanhã</span><b class="kpi-num"></b><small>ação preventiva</small><i>↗</i></button>
         <button class="visao kpi azul ativa" data-visao="vencem"><span class="kpi-rot">Vencem em até 5 dias</span><b class="kpi-num"></b><small>preventivo: dá para evitar o atraso</small><i>↗</i></button>
@@ -876,6 +877,65 @@
           <p id="cf-vazio" class="vazio" hidden>Nenhum pedido aqui.</p>
         </div>
         <div id="cf-paginacao" class="paginacao"></div>
+      </section>
+    </main>
+
+    <!-- ============ COBRANÇA DO DIA (controle de retornos) ============ -->
+    <main class="conteudo" id="pagina-retornos" hidden>
+      <section class="filtros-cartao filtros-cf" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label>Pedido ou NF<input id="rt-busca" type="search" placeholder="# pedido ou nota"></label>
+        <label>Transportadora<select id="rt-transp"></select></label>
+        <label>Canal<select id="rt-canal"></select></label>
+        <button id="rt-limpar" class="link limpar" type="button">Limpar filtros</button>
+      </section>
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Cobrança do dia</h1>
+          <p class="sub">Controle dos retornos das transportadoras. Todo pedido atrasado ou vencendo precisa de um <b>retorno válido</b> (nova data que ainda não passou). A lista já vem na ordem de cobrança; o que a transportadora responder volta pelo <b>Enviar retornos</b> do Preventivo ou é digitado aqui mesmo.</p>
+          <p id="rt-info" class="info-base">Carregando…</p>
+        </div>
+        <div class="acoes-robo">
+          <button id="rt-copiar" class="btn contorno" type="button">⧉ Copiar resumo do dia</button>
+          <button id="rt-excel" class="btn amarelo" type="button">⤓ Cobrança (Excel por transportadora)</button>
+        </div>
+      </div>
+      <section class="kpis rt-kpis" id="rt-cards">
+        <button class="kpi vermelho" data-rt="p1"><span class="kpi-rot">1 · Atrasado sem retorno</span><b class="kpi-num"></b><small>nenhuma data nem observação: cobrar já</small><i>↗</i></button>
+        <button class="kpi vermelho" data-rt="p2"><span class="kpi-rot">2 · Promessa quebrada</span><b class="kpi-num"></b><small>a nova data passou e não entregou: cobrar e escalar</small><i>↗</i></button>
+        <button class="kpi laranja" data-rt="p3"><span class="kpi-rot">3 · Atrasado só com observação</span><b class="kpi-num"></b><small>sem data: pedir a previsão</small><i>↗</i></button>
+        <button class="kpi laranja" data-rt="p4"><span class="kpi-rot">4 · Vence hoje sem retorno</span><b class="kpi-num"></b><small>agir antes de atrasar</small><i>↗</i></button>
+        <button class="kpi azul" data-rt="p5"><span class="kpi-rot">5 · Vence amanhã sem retorno</span><b class="kpi-num"></b><small>preventivo</small><i>↗</i></button>
+        <button class="kpi roxo" data-rt="p6"><span class="kpi-rot">6 · Nova data vence hoje/amanhã</span><b class="kpi-num"></b><small>confirmar que vai entregar</small><i>↗</i></button>
+        <button class="kpi" data-rt="ok"><span class="kpi-rot">Em dia</span><b class="kpi-num"></b><small>com nova data válida: só acompanhar</small><i>↗</i></button>
+        <button class="kpi" data-rt="cobrar"><span class="kpi-rot">Tudo para cobrar</span><b class="kpi-num"></b><small>cards 1 a 6</small><i>↗</i></button>
+      </section>
+      <div id="rt-aviso" class="aviso-perfil" hidden></div>
+
+      <section class="cartao">
+        <div class="cartao-topo"><div><h2>Por transportadora</h2><p class="sub">Clique na transportadora para ver só os pedidos dela. <b>Cobertura</b> = atrasados e vencendo que já têm retorno válido. <b>Promessas quebradas</b> = datas que a transportadora deu e não cumpriu (60 dias).</p></div></div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz rt-tab">
+          <thead><tr><th>Transportadora</th><th class="num">1 · Sem retorno</th><th class="num">2 · Promessa quebrada</th><th class="num">3 · Só obs.</th><th class="num">4 · Vence hoje</th><th class="num">5 · Vence amanhã</th><th class="num">6 · Confirmar</th><th class="num">Para cobrar</th><th class="num">Cobertura</th><th class="num">Promessas quebradas (60d)</th><th></th></tr></thead>
+          <tbody id="rt-transp-linhas"></tbody></table></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo"><div><h2>O que dizem as observações</h2><p class="sub">Leitura automática das observações dos pedidos para cobrar (atrasados e vencendo). Clique para ver os pedidos.</p></div></div>
+        <div id="rt-cats" class="rt-cats"></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div><h2 id="rt-titulo">Pedidos para cobrar</h2><p class="sub">Na ordem de cobrança. A nova data e a observação são salvas aqui mesmo (valem no Preventivo). Clique na linha para ver o detalhe e o histórico de retornos.</p></div>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos rt-lista">
+            <thead><tr><th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Prometido ao cliente</th><th>Nova data</th><th>Observação</th><th>Cobrança</th><th></th></tr></thead>
+            <tbody id="rt-linhas"></tbody>
+          </table>
+          <p id="rt-vazio" class="vazio" hidden>Nada para cobrar aqui. 🎉</p>
+        </div>
+        <div id="rt-paginacao" class="paginacao"></div>
       </section>
     </main>
 
@@ -1241,13 +1301,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=123"></script>
-  <script src="mapa-brasil.js?v=123"></script>
-  <script src="troca-notas.js?v=123"></script>
-  <script src="app.js?v=123"></script>
-  <script src="ordenar.js?v=123"></script>
-  <script src="menu.js?v=123"></script>
-  <script src="ajuda.js?v=123"></script>
-  <script src="documentos.js?v=123"></script>
+  <script src="config.js?v=125"></script>
+  <script src="mapa-brasil.js?v=125"></script>
+  <script src="troca-notas.js?v=125"></script>
+  <script src="app.js?v=125"></script>
+  <script src="ordenar.js?v=125"></script>
+  <script src="menu.js?v=125"></script>
+  <script src="ajuda.js?v=125"></script>
+  <script src="documentos.js?v=125"></script>
 </body>
 </html>

@@ -1880,3 +1880,91 @@ begin
 end $$;
 revoke all on function public.salvar_vendas_canal(text, integer) from public, anon;
 grant execute on function public.salvar_vendas_canal(text, integer) to authenticated;
+
+-- =================================================================
+-- 40) Preventivo com os mesmos números da Visão Gerencial + histórico de retornos das transportadoras
+-- base_aberta_bi: pedidos em aberto pela BASE (igual à Visão Gerencial); entregue_ip marca os que o arquivo da Intelipost já deu como entregue/cancelado.
+-- retornos_hist: cada mudança de nova data / observação (tela, Enviar retornos ou robô do SSW) fica guardada, para medir promessa quebrada e retornos por pedido.
+-- =================================================================
+create or replace view public.base_aberta_bi with (security_invoker = true) as
+  select b.*, exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido) as entregue_ip
+  from public.base_pedidos b
+  where coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%';
+revoke all on public.base_aberta_bi from anon;
+grant select on public.base_aberta_bi to authenticated;
+
+create table if not exists public.retornos_hist (
+  id              bigserial primary key,
+  pedido          text not null,
+  nova_data       date,
+  nova_data_antes date,
+  observacao      text,
+  fonte           text,
+  feito_por       text,
+  feito_em        timestamptz not null default now()
+);
+create index if not exists retornos_hist_pedido on public.retornos_hist (pedido, feito_em desc);
+alter table public.retornos_hist enable row level security;
+revoke all on public.retornos_hist from anon;
+revoke insert, update, delete, truncate on public.retornos_hist from authenticated;
+grant select on public.retornos_hist to authenticated;
+drop policy if exists "logistica le" on public.retornos_hist;
+create policy "logistica le" on public.retornos_hist for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public._log_retorno() returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if tg_op = 'INSERT' or new.nova_data is distinct from old.nova_data or new.observacao is distinct from old.observacao then
+    insert into public.retornos_hist (pedido, nova_data, nova_data_antes, observacao, fonte, feito_por)
+    values (new.pedido, new.nova_data, case when tg_op = 'UPDATE' then old.nova_data end, left(new.observacao, 1000), new.nova_data_fonte, new.atualizado_por);
+  end if;
+  return new;
+end $$;
+drop trigger if exists log_retorno on public.tratativas;
+create trigger log_retorno after insert or update on public.tratativas for each row execute function public._log_retorno();
+
+-- resumo por pedido (últimos 60 dias): quantos retornos, quantas promessas quebradas (nova data trocada depois de já ter passado), primeiro e último retorno
+create or replace function public.resumo_retornos() returns table (pedido text, retornos integer, quebradas integer, primeiro timestamptz, ultimo timestamptz)
+language sql stable security invoker set search_path = public as $$
+  select h.pedido, count(*)::int, count(*) filter (where h.nova_data_antes is not null and h.nova_data_antes < (h.feito_em at time zone 'America/Sao_Paulo')::date and h.nova_data is distinct from h.nova_data_antes)::int,
+         min(h.feito_em), max(h.feito_em)
+  from public.retornos_hist h where h.feito_em > now() - interval '60 days' group by h.pedido;
+$$;
+revoke all on function public.resumo_retornos() from public, anon;
+grant execute on function public.resumo_retornos() to authenticated;
+
+
+-- ============ PARTE 41: Carregar planilha sem estourar o tempo do banco ============
+create or replace function public.importar_base(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+set statement_timeout = '120s'
+as $$
+declare n integer;
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if limpar then
+    truncate public.base_pedidos;   -- bem mais rápido que delete (era o que estourava o tempo)
+    insert into public.base_info (id, arquivo, total, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, total = excluded.total,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.base_pedidos
+  select * from jsonb_populate_recordset(null::public.base_pedidos, linhas) r
+  where r.pedido is not null and r.pedido <> ''
+  on conflict (pedido) do update set
+    nf = excluded.nf, canal = excluded.canal, origem = excluded.origem, transportadora = excluded.transportadora,
+    micro_status = excluded.micro_status, status_intelipost = excluded.status_intelipost, descricao = excluded.descricao,
+    ultima_atualizacao = excluded.ultima_atualizacao, data_expedicao = excluded.data_expedicao,
+    prev_original = excluded.prev_original, prev_atual = excluded.prev_atual, prev_360 = excluded.prev_360,
+    comentario_360 = excluded.comentario_360, uf = excluded.uf, cidade = excluded.cidade, ocorrencia = excluded.ocorrencia,
+    qtd_tickets = excluded.qtd_tickets, motivo_ticket = excluded.motivo_ticket, link_rastreio = excluded.link_rastreio,
+    data_criacao = excluded.data_criacao, data_entrega = excluded.data_entrega, range_atrasos = excluded.range_atrasos,
+    dias_atraso = excluded.dias_atraso, status_prazo = excluded.status_prazo, sem_expedicao = excluded.sem_expedicao,
+    extra = excluded.extra;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.importar_base(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_base(jsonb, boolean, text, integer) to authenticated;
