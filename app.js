@@ -2299,7 +2299,8 @@ ${extra}
 
   // ---------------- atrasos por UF ----------------
   // Mesma base e mesmos filtros da Visão Gerencial. % de atraso = atrasados ÷ pedidos em aberto do estado.
-  let uForma = "mapa", uModo = "mapa", uUF = null, uDados = new Map(), uAtrasadosUF = [];
+  let uForma = "mapa", uModo = "mapa", uUF = null, uT = null, uC = null, uDados = new Map(), uAtrasadosUF = [];
+  const uTDe = (r) => r.transp || "(sem transportadora)", uCDe = (r) => r.cidade || "(sem cidade)";
   const UF_NOME = { AC: "Acre", AL: "Alagoas", AP: "Amapá", AM: "Amazonas", BA: "Bahia", CE: "Ceará", DF: "Distrito Federal", ES: "Espírito Santo", GO: "Goiás", MA: "Maranhão",
     MT: "Mato Grosso", MS: "Mato Grosso do Sul", MG: "Minas Gerais", PA: "Pará", PB: "Paraíba", PR: "Paraná", PE: "Pernambuco", PI: "Piauí", RJ: "Rio de Janeiro", RN: "Rio Grande do Norte",
     RS: "Rio Grande do Sul", RO: "Rondônia", RR: "Roraima", SC: "Santa Catarina", SP: "São Paulo", SE: "Sergipe", TO: "Tocantins" };
@@ -2318,7 +2319,10 @@ ${extra}
   }
   function desenharUF() {
     if (!gDados) return;
-    const L = gFiltrados(); uDados = agruparUF(L); uFiltrados = L;
+    // filtro cruzado: a transportadora (e a cidade) escolhidas no detalhe valem também para o mapa e o ranking
+    const L = gFiltrados(); uFiltrados = L; uDados = agruparUF(L.filter((r) => (uT === null || uTDe(r) === uT) && (uC === null || uCDe(r) === uC)));
+    const sel = [uT !== null ? `<span class="chip-sel">🚚 ${esc(uT)} <button class="link" data-ux="t" title="Tirar">✕</button></span>` : "", uC !== null ? `<span class="chip-sel">🏙 ${esc(uC)} <button class="link" data-ux="c" title="Tirar">✕</button></span>` : ""].join(" ");
+    $("u-sel").hidden = !sel.trim(); $("u-sel").innerHTML = sel + (sel.trim() ? ' <button class="link" data-ux="tudo">Limpar seleção</button> <span class="s">o mapa mostra só essa seleção</span>' : "");
     const ab = [...uDados.values()].reduce((a, x) => a + x.ab, 0), atr = [...uDados.values()].reduce((a, x) => a + x.atr, 0);
     $("u-info").textContent = !info ? 'Envie a base ("Carregar planilha") para montar esta página.'
       : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(atr)} atrasados de ${fmt(ab)} pedidos em aberto em ${uDados.size} estados · o número em cada estado é a quantidade de atrasados`;
@@ -2368,21 +2372,31 @@ ${extra}
     if (!uUF) { caixa.hidden = true; return; }
     const L = uFiltrados.filter((r) => ufDe(r) === uUF && !r._fechado), x = uDados.get(uUF);
     caixa.hidden = false;
-    $("u-det-titulo").textContent = `${UF_NOME[uUF] || uUF} (${uUF})`;
-    $("u-det-sub").textContent = x ? `${fmt(x.atr)} atrasados de ${fmt(x.ab)} pedidos em aberto · ${pctBR(x.pct)} de atraso` : "Nenhum pedido em aberto neste estado com esses filtros.";
+    const sufixo = [uT, uC].filter((v) => v !== null).join(" · ");
+    $("u-det-titulo").textContent = `${UF_NOME[uUF] || uUF} (${uUF})${sufixo ? " · " + sufixo : ""}`;
+    $("u-det-sub").textContent = (x ? `${fmt(x.atr)} atrasados de ${fmt(x.ab)} pedidos em aberto · ${pctBR(x.pct)} de atraso` : "Nenhum pedido em aberto nessa seleção.") + " · clique numa transportadora ou cidade para cruzar; clique de novo para tirar";
     const porT = new Map(), porC = new Map();
+    // filtro cruzado: transportadoras seguem a cidade escolhida; cidades seguem a transportadora escolhida
     L.forEach((r) => {
-      const t = r.transp || "(sem transportadora)", a = porT.get(t) || { n: t, ab: 0, atr: 0, series: new Set() }; a.ab++; if (r._atraso) a.atr++; if (r.serie) a.series.add(r.serie); porT.set(t, a);
-      const c = r.cidade || "(sem cidade)", b = porC.get(c) || { n: c, ab: 0, atr: 0 }; b.ab++; if (r._atraso) b.atr++; porC.set(c, b);
+      const t = uTDe(r), c = uCDe(r);
+      if (uC === null || c === uC) { const a = porT.get(t) || { n: t, ab: 0, atr: 0, series: new Set() }; a.ab++; if (r._atraso) a.atr++; if (r.serie) a.series.add(r.serie); porT.set(t, a); }
+      if (uT === null || t === uT) { const b = porC.get(c) || { n: c, ab: 0, atr: 0 }; b.ab++; if (r._atraso) b.atr++; porC.set(c, b); }
     });
     const ord = (a, b) => b.atr - a.atr || b.ab - a.ab;
-    $("u-det-transp").innerHTML = [...porT.values()].sort(ord).map((a) => `<tr><td>${esc(a.n)}</td><td>${[...a.series].sort((p, q) => p.localeCompare(q, "pt-BR", { numeric: true })).map(esc).join(", ") || "—"}</td>
+    $("u-det-transp").innerHTML = [...porT.values()].sort(ord).map((a) => `<tr class="clic${uT === a.n ? " sel" : ""}" data-ut="${esc(a.n)}"><td>${esc(a.n)}</td><td>${[...a.series].sort((p, q) => p.localeCompare(q, "pt-BR", { numeric: true })).map(esc).join(", ") || "—"}</td>
       <td class="num">${fmt(a.ab)}</td><td class="num txt-vermelho">${fmt(a.atr)}</td><td class="num">${pctBR(a.atr / a.ab)}</td></tr>`).join("") || `<tr><td colspan="5" class="s">Nenhum pedido.</td></tr>`;
-    $("u-det-cidades").innerHTML = [...porC.values()].sort(ord).map((b) => `<tr><td>${esc(b.n)}</td><td class="num">${fmt(b.ab)}</td><td class="num txt-vermelho">${fmt(b.atr)}</td><td class="num">${pctBR(b.atr / b.ab)}</td></tr>`).join("") || `<tr><td colspan="4" class="s">Nenhum pedido.</td></tr>`;
-    uAtrasadosUF = L.filter((r) => r._atraso);
+    $("u-det-cidades").innerHTML = [...porC.values()].sort(ord).map((b) => `<tr class="clic${uC === b.n ? " sel" : ""}" data-uc="${esc(b.n)}"><td>${esc(b.n)}</td><td class="num">${fmt(b.ab)}</td><td class="num txt-vermelho">${fmt(b.atr)}</td><td class="num">${pctBR(b.atr / b.ab)}</td></tr>`).join("") || `<tr><td colspan="4" class="s">Nenhum pedido.</td></tr>`;
+    uAtrasadosUF = L.filter((r) => r._atraso && (uT === null || uTDe(r) === uT) && (uC === null || uCDe(r) === uC));
     if (rolar) caixa.scrollIntoView({ behavior: "smooth", block: "start" });
   }
-  function escolherUF(u) { uUF = uUF === u ? null : u; if (uModo === "mapa") (uForma === "mapa" ? desenharMapaBR : desenharQuadrados)(); else desenharRankingUF(); desenharDetalheUF(!!uUF); }
+  function escolherUF(u) { uUF = uUF === u ? null : u; uC = null; if (uModo === "mapa") (uForma === "mapa" ? desenharMapaBR : desenharQuadrados)(); else desenharRankingUF(); desenharDetalheUF(!!uUF); }
+  $("u-detalhe").addEventListener("click", (e) => {
+    const t = e.target.closest("tr[data-ut]"), c = e.target.closest("tr[data-uc]"); if (!t && !c) return;
+    if (t) uT = uT === t.dataset.ut ? null : t.dataset.ut; else uC = uC === c.dataset.uc ? null : c.dataset.uc;
+    desenharUF();
+  });
+  $("u-sel").addEventListener("click", (e) => { const b = e.target.closest("[data-ux]"); if (!b) return; const k = b.dataset.ux;
+    if (k === "t" || k === "tudo") uT = null; if (k === "c" || k === "tudo") uC = null; desenharUF(); });
   $("u-mapa").addEventListener("click", (e) => { const el = e.target.closest("[data-uf]"); if (el) escolherUF(el.dataset.uf); });
   $("u-ranking").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-uf]"); if (tr) escolherUF(tr.dataset.uf); });
   $("u-forma").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (!b) return; uForma = b.dataset.f;
