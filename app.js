@@ -198,14 +198,22 @@
   // envia os lotes: o 1º sozinho (ele limpa/prepara), os outros 3 de cada vez
   async function enviarLotes(rpc, linhas, tam, args, desde = 0) {
     if (desde === 0 && linhas.length) {   // o 1º lote limpa a tabela: precisa terminar antes dos outros
-      const r = await sb.rpc(rpc, args(linhas.slice(0, tam), true)); if (r.error) throw r.error;
+      let r = await sb.rpc(rpc, args(linhas.slice(0, tam), true));
+      if (r.error && /timeout|time out|canceling/i.test(r.error.message || "")) { await new Promise((ok) => setTimeout(ok, 2000)); r = await sb.rpc(rpc, args(linhas.slice(0, tam), true)); }
+      if (r.error) throw r.error;
       carregando(`Enviando… ${fmt(Math.min(tam, linhas.length))} de ${fmt(linhas.length)}`); desde = tam;
     }
     const inicios = []; for (let i = desde; i < linhas.length; i += tam) inicios.push(i);
     let feitos = desde;
     for (let k = 0; k < inicios.length; k += 3) {
-      const res = await Promise.all(inicios.slice(k, k + 3).map((i) => sb.rpc(rpc, args(linhas.slice(i, i + tam), i === 0))));
-      const err = res.find((r) => r.error); if (err) throw err.error;
+      const grupo = inicios.slice(k, k + 3);
+      const res = await Promise.all(grupo.map((i) => sb.rpc(rpc, args(linhas.slice(i, i + tam), i === 0))));
+      // se o banco recusar algum lote (ex.: tempo esgotado com 3 ao mesmo tempo), manda esse lote de novo sozinho
+      for (let g = 0; g < grupo.length; g++) {
+        let r = res[g];
+        for (let t = 0; r.error && t < 3; t++) { await new Promise((ok) => setTimeout(ok, 1500 * (t + 1))); r = await sb.rpc(rpc, args(linhas.slice(grupo[g], grupo[g] + tam), false)); }
+        if (r.error) throw r.error;
+      }
       feitos = Math.min(inicios[Math.min(k + 2, inicios.length - 1)] + tam, linhas.length);
       carregando(`Enviando… ${fmt(feitos)} de ${fmt(linhas.length)}`);
     }
