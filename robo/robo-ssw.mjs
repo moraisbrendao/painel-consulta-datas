@@ -752,7 +752,7 @@ function lerLote(html) {   // uma linha por NF: número, data/hora do último ev
   const out = new Map(), iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
   for (const bloco of html.split(/<tr style="background-color:#(?:FFFFFF|F0F0F0);(?:cursor:pointer;)?"/i).slice(1)) {
     const tds = bloco.split(/<td\b/i).slice(1); if (tds.length < 3) continue;
-    const nf = sem0((sohTexto("<td " + tds[0]).join(" ").match(/\d+/) || [])[0]); if (!nf) continue;
+    const nf = sem0(((sohTexto("<td " + tds[0])[0] || "").match(/\d+/g) || []).pop()); if (!nf) continue;   // 1ª linha = "série NF" (achada) ou só "NF"; a 2ª é o CT-e
     const quando = (sohTexto("<td " + tds[1]).join(" ").match(/(\d{2}\/\d{2}\/\d{2,4})(?:\s+(\d{2}:\d{2}))?/) || []);
     const titulo = sohTexto(((tds[2].match(/<p class=titulo>([\s\S]*?)<\/p>/i) || [])[1] || "").replace(/<font[\s\S]*?<\/font>/gi, "")).join(" ").trim();
     const desc = sohTexto((tds[2].match(/<p class=tdb>([\s\S]*?)<\/p>/i) || [])[1] || "").join(" ");
