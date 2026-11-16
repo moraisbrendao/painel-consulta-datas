@@ -230,3 +230,6 @@ quando o rastreio tem previsão de hoje em diante e depois da prometida.
 ## 32. Excel da Visão Gerencial (modelo de 55 colunas)
 - A base passa a guardar mais colunas (coluna "extra"): é preciso enviar a base de novo depois de rodar esta parte.
 - "Enviar tickets" agora também lê as abas Ocorrências, Reposições e Assistência Técnica do detalhamento (tabela detalhe_nf).
+
+## 33) Pedidos em aberto do arquivo da Intelipost
+O botão "Enviar Intelipost" também guarda os pedidos em aberto (tabela intelipost_abertos). O painel mostra a base + os em aberto que não estão na base.
