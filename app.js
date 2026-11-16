@@ -1758,7 +1758,7 @@
     dvResumo = [...g.values()].sort((a, b) => a.h.localeCompare(b.h) || b.qtd - a.qtd);
     const faz = (idp, h) => !idp ? '<span class="chip cinza">transportadora do Promob não cadastrada</span>'
       : `Intelipost: trocar <b>${esc(h || "—")}</b> por <b>${esc(idp.h)}</b> (ID ${idp.id}) · BI: <b>${esc(idp.h)}</b>`;
-    $("dv-resumo").innerHTML = dvResumo.length ? dvResumo.map((y) => `<tr class="clicavel${dvGrupo === y.k ? " aberta" : ""}" data-dvg="${esc(y.k)}"><td>${esc(y.h)}</td><td>${esc(y.ap ? y.ap.apelido : "")}</td><td>${esc(y.promob || "— sem transportadora no Promob")}</td><td class="num"><b>${fmt(y.qtd)}</b></td><td>${y.idp ? y.idp.id : '<span class="s">Não cadastrada</span>'}</td><td>${faz(y.idp, y.h)}</td></tr>`).join("")
+    if ($("dv-resumo")) $("dv-resumo").innerHTML = dvResumo.length ? dvResumo.map((y) => `<tr class="clicavel${dvGrupo === y.k ? " aberta" : ""}" data-dvg="${esc(y.k)}"><td>${esc(y.h)}</td><td>${esc(y.ap ? y.ap.apelido : "")}</td><td>${esc(y.promob || "— sem transportadora no Promob")}</td><td class="num"><b>${fmt(y.qtd)}</b></td><td>${y.idp ? y.idp.id : '<span class="s">Não cadastrada</span>'}</td><td>${faz(y.idp, y.h)}</td></tr>`).join("")
       : '<tr><td colspan="6" class="s">Sem divergências.</td></tr>';
     const q = norm(dvBusca);
     dvLista = todos.filter(DV_CARD[dvCard]).filter((x) => !dvGrupo || dvChave(x) === dvGrupo)
@@ -1774,7 +1774,7 @@
     $("dv-vazio").hidden = dvLista.length > 0;
   }
   $("dv-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-dv]"); if (!b) return; dvCard = b.dataset.dv; dvGrupo = null; desenharDivTP(); });
-  $("dv-resumo").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-dvg]"); if (!tr) return; dvGrupo = dvGrupo === tr.dataset.dvg ? null : tr.dataset.dvg; dvCard = "div"; desenharDivTP(); });
+  if ($("dv-resumo")) $("dv-resumo").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-dvg]"); if (!tr) return; dvGrupo = dvGrupo === tr.dataset.dvg ? null : tr.dataset.dvg; dvCard = "div"; desenharDivTP(); });
   $("dv-sub-lista").addEventListener("click", (e) => { if (e.target.id === "dv-limpa-grupo") { dvGrupo = null; desenharDivTP(); } });
   let esperaDv; $("dv-busca").addEventListener("input", (e) => { dvBusca = e.target.value; clearTimeout(esperaDv); esperaDv = setTimeout(desenharDivTP, 250); });
   $("dv-exportar").addEventListener("click", () => {
