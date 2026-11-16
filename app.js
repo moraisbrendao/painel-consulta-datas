@@ -589,11 +589,8 @@
     return `<span class="chip ${d <= 5 ? "ambar" : "verde"}">${d === 1 ? "vence amanhã" : `vence em ${d} d`}${extra}</span>`;
   }
 
-  function desenharLista() {
-    const total = filtrados.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
-    pagina = Math.min(pagina, paginas);
-    const fatia = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
-    $("linhas").innerHTML = fatia.map((p) => {
+  // linha da lista do Preventivo (também usada na Análise de canais, com uma coluna a mais)
+  function linhaPreventivo(p, attr = "data-campo", extra = "") {
       const t = p._t || {};
       const quem = t.atualizado_por ? `${esc(t.atualizado_por.split("@")[0])} · ${new Date(t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "";
       return `<tr data-pedido="${esc(p.pedido)}" class="clicavel ${t.observacao ? "editado" : ""}" title="Clique para ver o detalhe do pedido">
@@ -602,13 +599,19 @@
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div><div class="s resp-p">👤 ${nomeResp(p.micro_status)}</div>${marcaOc(p)}</td>
         <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}${sswLinha(p)}</td>
-        <td><input type="date" data-campo="nova_data" value="${esc(t.nova_data || "")}">${t.nova_data_fonte === "ssw" ? `<div class="s" title="Gravada sozinha pela previsão do SSW (depois da prometida). Se mudar à mão, o robô não mexe mais.">🤖 data do SSW</div>` : ""}</td>
-        <td class="col-obs"><input data-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
+        <td><input type="date" ${attr}="nova_data" value="${esc(t.nova_data || "")}">${t.nova_data_fonte === "ssw" ? `<div class="s" title="Gravada sozinha pela previsão do SSW (depois da prometida). Se mudar à mão, o robô não mexe mais.">🤖 data do SSW</div>` : ""}</td>
+        <td class="col-obs"><input ${attr}="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
           <div class="s quem">${quem}</div>
           ${p.comentario_360 ? `<div class="c360" title="Comentário 360">360: ${esc(p.comentario_360)}</div>` : ""}</td>
+${extra}
         <td>${/^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Rastreio ↗</a>` : ""}</td>
       </tr>`;
-    }).join("");
+  }
+  function desenharLista() {
+    const total = filtrados.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
+    pagina = Math.min(pagina, paginas);
+    const fatia = filtrados.slice((pagina - 1) * POR_PAGINA, pagina * POR_PAGINA);
+    $("linhas").innerHTML = fatia.map((p) => linhaPreventivo(p)).join("");
     $("vazio").hidden = total > 0;
     $("paginacao").innerHTML = total > POR_PAGINA
       ? `<button class="btn" data-p="-1" ${pagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${pagina} de ${paginas}</span>
@@ -1661,17 +1664,25 @@
         d.tem_repo ? '<span class="chip roxo">reposição</span>' : "", d.tem_ocorr ? '<span class="chip laranja">ocorrência</span>' : "",
         !r._atraso && r._d === 0 ? '<span class="chip laranja">vence hoje</span>' : !r._atraso && r._d === 1 ? '<span class="chip ambar">vence amanhã</span>' : "",
         t.nova_data && t.nova_data < hojeISO() ? '<span class="chip vermelho">nova data vencida</span>' : ""].filter(Boolean).join(" ");
-      return `<tr data-pedido="${esc(r.pedido)}"><td><div class="p">${esc(r.pedido)}</div><div class="s">NF ${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""}${cSel.canal ? "" : " · " + esc(r.canal)} · <span class="ms">${esc(r.micro)}</span></div></td>
-        <td>${esc(r.transp)}</td><td>${esc(r.uf)}</td><td>${br(r._prom) || "—"}</td><td class="num ${r._atraso ? "ruim-t" : ""}">${r._atraso ? fmt(r._atraso) : "—"}</td><td>${at}</td>
+      const p = cBaseMapa().get(r.pedido);
+      if (p) return linhaPreventivo(p, "data-c-campo", `<td>${at || '<span class="s">—</span>'}</td>`);
+      return `<tr data-pedido="${esc(r.pedido)}"><td><div class="p">${esc(r.pedido)}</div><div class="s">NF ${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""} · ${esc(r.canal)}</div></td>
+        <td>${esc(r.transp)}<div class="s">${esc([r.cidade, r.uf].filter(Boolean).join(" / "))}</div></td><td><span class="ms">${esc(r.micro)}</span></td>
+        <td>${br(r._prom) || "—"}${r._atraso ? `<div><span class="chip vermelho">vencido há ${fmt(r._atraso)} d</span></div>` : ""}</td>
         <td><input type="date" data-c-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
-        <td class="c-obs"><input data-c-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s c-quem"></div></td></tr>`; }).join("");
+        <td class="col-obs"><input data-c-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s quem"></div></td>
+        <td>${at}</td><td></td></tr>`; }).join("");
     $("c-vazio").hidden = total > 0;
     $("c-paginacao").innerHTML = total > POR_PAGINA ? `<button class="btn" data-p="-1" ${cPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cPagina} de ${pags}</span><button class="btn" data-p="1" ${cPagina === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
   const cMudou = () => { cPagina = 1; desenharCanaisPag(); };
+  // pedidos do Preventivo por número (para a lista dos canais mostrar as mesmas informações)
+  let cMapaBase = null, cMapaDe = null;
+  const cBaseMapa = () => { if (cMapaDe !== base) { cMapaBase = new Map(base.map((p) => [p.pedido, p])); cMapaDe = base; } return cMapaBase; };
+  $("c-linhas").addEventListener("click", (e) => { if (e.target.closest("input, select, textarea, a, button")) return; const tr = e.target.closest("tr[data-pedido]"); if (tr && cBaseMapa().has(tr.dataset.pedido)) abrirDetalhe(tr.dataset.pedido); });
   $("c-linhas").addEventListener("change", async (e) => {
     const inp = e.target.closest("[data-c-campo]"); if (!inp) return; const tr = inp.closest("tr[data-pedido]");
-    await gravar(tr.dataset.pedido, inp.dataset.cCampo, inp.value, tr.querySelector(".c-quem"));
+    await gravar(tr.dataset.pedido, inp.dataset.cCampo, inp.value, tr.querySelector(".quem"));
     // a contagem dos cards acompanha; a linha fica na tela até mudar de página ou de card (para não sumir enquanto escreve)
     if (inp.dataset.cCampo === "nova_data") { const B = cBase(), base = B.filter((r) => cPassa(r, "card", cRiscoAtual));
       document.querySelectorAll("#c-cards .kpi[data-c]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(base.filter(C_CARD[b.dataset.c]).length); }); }

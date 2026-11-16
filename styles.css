@@ -654,7 +654,7 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 /* Análise de canais: ação primeiro */
 @media (min-width: 1001px) { .c-kpis-acao { grid-template-columns: repeat(5, minmax(0, 1fr)); } .c-kpis-acao:has(.kpi[hidden]) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
 .c-tabela-acao input[type="date"] { font: inherit; font-size: 12.5px; padding: 4px 6px; border: 1px solid var(--borda); border-radius: 6px; }
-.c-tabela-acao .c-obs input { font: inherit; font-size: 12.5px; width: 100%; min-width: 180px; padding: 5px 8px; border: 1px solid var(--borda); border-radius: 6px; }
+.c-tabela-acao .col-obs input { font: inherit; font-size: 12.5px; width: 100%; min-width: 180px; padding: 5px 8px; border: 1px solid var(--borda); border-radius: 6px; }
 .c-tabela-acao td .chip { margin: 1px 2px 1px 0; }
 .c-mais { padding: 0; }
 .c-mais > summary { cursor: pointer; padding: 16px 20px; list-style: none; }
