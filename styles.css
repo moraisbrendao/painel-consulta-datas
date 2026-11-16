@@ -605,3 +605,9 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .g-cruz-sel { display: flex; flex-wrap: wrap; gap: 8px; margin: 4px 0 10px; }
 .chip-sel { background: #fff4c2; border: 1px solid #f5b400; border-radius: 999px; padding: 3px 10px; font-size: 13px; }
 .chip-sel .link { margin-left: 4px; }
+
+/* ordenar tabelas pelo título da coluna (ordenar.js) */
+table thead th { cursor: pointer; user-select: none; }
+table thead th.ord-desc::after { content: " ▼"; font-size: 10px; }
+table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
+.tabela-cruz thead th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
