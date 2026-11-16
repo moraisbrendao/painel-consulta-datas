@@ -367,6 +367,22 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
     const corpo = r.txt.replace(/\s+/g, " "), i0 = corpo.indexOf("<table"); mask(corpo.slice(i0, i0 + 7000)).match(/.{1,300}/g).forEach((l) => log("  " + l));
   }
 }
+if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai para o código nem para o log)
+  const { createHash } = await import("node:crypto"); await entrarSupabase(); await carregarSenhasDB();
+  const alvo = process.env.ALVO_HASH || "06c17d56f26512c0"; let l = null;
+  for (let de = 0; !l; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao,ultimo_evento,data_evento,data_entrega,consultado_em,detalhe&order=pedido&limit=1000&offset=${de}`);
+    l = L.find((x) => createHash("sha256").update(x.pedido).digest("hex").slice(0, 16) === alvo) || null; if (L.length < 1000) break; }
+  if (!l) log("não achei"); else {
+    const [num, ser] = String(l.nf).split("-"), cs = cnpjDaSerie(ser);
+    log("transp:", l.transportadora, "· série", ser, "· situação", l.situacao, "· evento", l.ultimo_evento, "· data_evento", l.data_evento, "· entrega", l.data_entrega, "· consultado", l.consultado_em, "· detalhe", JSON.stringify(l.detalhe || {}).replace(/\d{5,}/g, "#"));
+    log("REGRA_RAJ:", REGRA_RAJ(l.transportadora, l.nf), "· chave:", chaveDe(l.transportadora) ? "sim" : "não");
+    for (const c of [cs, ...Object.keys(CNPJ_SERIE).filter((x) => x !== cs)]) for (const ch of [chaveDe(l.transportadora), ""]) {
+      const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: sem0(num), cnpj: c, chave: ch, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+      const m = lerLote(r.txt), v = m.get(sem0(num)); await new Promise((ok) => setTimeout(ok, 1200));
+      if (v && v.situacao !== "sem cte") { log(`CNPJ ...${c.slice(-6)} ${ch ? "com senha" : "sem senha"}: melhor=${v.situacao}/${v.sigla} · semRaj=${v._semRaj ? v._semRaj.situacao + "/" + v._semRaj.sigla : "—"} · temRaj=${v._temRaj} · pegaLote=${JSON.stringify(pegaLote(m, { n: sem0(num), transportadora: l.transportadora, nf: l.nf }) || {}).replace(/\d{5,}/g, "#")}`); }
+      if (!ch) break; }
+  }
+}
 if (MODO === "diag-lote4") {   // testa a leitura do lote: só contagens e estrutura mascarada da 1ª linha
   await entrarSupabase(); await carregarSenhasDB();
   const L = await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*${encodeURIComponent(process.env.TRANSP || "flog")}*&nf=not.is.null&limit=${Number(process.env.SSW_LIMITE || 20)}`);
@@ -776,7 +792,7 @@ function lerLote(html) {   // uma linha por NF: número, data/hora do último ev
 }
 // Dominalog, Tempo Justo, Trans Sua e Transvanio nas séries 25, 34 e 35: o CT-e da Rajlog é o milk run (coleta), não a entrega ao cliente.
 // Vale só o rastreio da Dominalog; se só tiver a Rajlog, ainda não foi entregue. (Regra da Brenda, 16/11.)
-const REGRA_RAJ = (transp, nf) => /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(transp || "") && ["25", "34", "35"].includes(String(nf || "").split("-")[1]?.trim());
+function REGRA_RAJ(transp, nf) { return /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(transp || "") && ["25", "34", "35"].includes(String(nf || "").split("-")[1]?.trim()); }
 function pegaLote(m, x) {
   const v = m.get(x.n); if (!v) return null;
   if (!REGRA_RAJ(x.transportadora, x.nf) || !v._temRaj) return v;
