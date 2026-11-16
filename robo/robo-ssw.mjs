@@ -367,6 +367,21 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
     const corpo = r.txt.replace(/\s+/g, " "), i0 = corpo.indexOf("<table"); mask(corpo.slice(i0, i0 + 7000)).match(/.{1,300}/g).forEach((l) => log("  " + l));
   }
 }
+if (MODO === "diag-lote4") {   // testa a leitura do lote: só contagens e estrutura mascarada da 1ª linha
+  await entrarSupabase(); await carregarSenhasDB();
+  const L = await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*flog*&situacao=eq.entregue&nf=not.is.null&limit=20`);
+  const it = L.map((x) => ({ n: sem0(String(x.nf).split("-")[0].trim()), se: String(x.nf).split("-")[1], t: x.transportadora })).filter((x) => cnpjDaSerie(x.se));
+  const cnpj = cnpjDaSerie((it[0] || {}).se);
+  if (!cnpj) log("sem NFs"); else {
+    const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: it.map((x) => x.n).join("\r\n"), cnpj, chave: chaveDe(it[0].t), urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+    const m = lerLote(r.txt), c = {}; m.forEach((v) => (c[v.situacao] = (c[v.situacao] || 0) + 1));
+    log("HTTP", r.status, "bytes", r.txt.length, "enviadas", it.length, "lidas", m.size, "casam", it.filter((x) => m.has(x.n)).length, JSON.stringify(c));
+    log("tr total", (r.txt.match(/<tr\b/gi) || []).length, "tr com background", (r.txt.match(/<tr[^>]*background-color/gi) || []).length, "opx", (r.txt.match(/opx\(/g) || []).length);
+    const corpo = r.txt.replace(/\s+/g, " "), i0 = corpo.search(/<tr[^>]*opx/i);
+    const mask = (t) => t.replace(/\d+/g, "#").replace(/>[^<]+</g, (z) => ">" + z.slice(1, -1).replace(/[A-Za-zÀ-ú]{2,}/g, (w) => (OK_PAL.test(w) || /^(situa|entreg|unidade|data|hora|nota|fiscal|previs|mercadoria|informa|dispon)/i.test(w) ? w : "x")) + "<");
+    if (i0 >= 0) mask(corpo.slice(Math.max(0, i0 - 200), i0 + 1500)).match(/.{1,300}/g).forEach((z) => log("  " + z.replace(/id=[^&'"]+|md=[^&'"]+/g, "id=*")));
+  }
+}
 if (MODO === "diag-lote3") {   // separador das NFs no lote (CRLF, vírgula, espaço...): só contagens e estrutura mascarada
   await entrarSupabase(); await carregarSenhasDB();
   const L = (await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*flog*&situacao=in.(entregue,nao%20entregue)&nf=like.*-25&limit=12`));
@@ -788,6 +803,8 @@ async function conferirLote() {
       for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
         parte.forEach((x) => res.set(x.pedido, { ...(m.get(x.n) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
     log(`SSW: ${ssw.length - semNf.length} NFs em ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+    const achadosSSW = [...res.values()].filter((r) => r.situacao !== "sem cte").length;
+    if (res.size > 200 && achadosSSW === 0) throw new Error("nenhuma NF reconhecida no retorno do SSW (leitura da página falhou); não gravo nada");
     await gravar(montar(ssw)); gravados = true; log(`Gravei a 1ª passada · ${Math.round((Date.now() - t0) / 1000)} s`);
     retentando = true;   // nos outros CNPJ: se o SSW bloquear, paro aqui e fico com o que já tenho
     // sem CT-e com o CNPJ da série: procura com os outros CNPJ (a transportadora pode ter emitido com outro)
@@ -800,6 +817,7 @@ async function conferirLote() {
         falta = falta.filter((x) => res.get(x.pedido).situacao === "sem cte"); } }
     log(`Outros CNPJ: ${achou} NFs achadas · total ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
   } catch (e) { log("Parei:", e.message, "· gravo o que já conferi."); }
+  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; log("Nada gravado do SSW nesta rodada."); return; }
   const achadosS = new Set(achados); const final = gravados ? montar(ssw.filter((l) => achadosS.has(l.pedido))) : montar(ssw);
   await gravar(final.concat(gravados ? [] : semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
   if (gravados) await gravar(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null })));
