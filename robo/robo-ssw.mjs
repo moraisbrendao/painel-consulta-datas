@@ -369,13 +369,14 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
 }
 if (MODO === "diag-lote4") {   // testa a leitura do lote: só contagens e estrutura mascarada da 1ª linha
   await entrarSupabase(); await carregarSenhasDB();
-  const L = await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*flog*&situacao=eq.entregue&nf=not.is.null&limit=20`);
+  const L = await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*${encodeURIComponent(process.env.TRANSP || "flog")}*&nf=not.is.null&limit=${Number(process.env.SSW_LIMITE || 20)}`);
   const it = L.map((x) => ({ n: sem0(String(x.nf).split("-")[0].trim()), se: String(x.nf).split("-")[1], t: x.transportadora })).filter((x) => cnpjDaSerie(x.se));
   const cnpj = cnpjDaSerie((it[0] || {}).se);
   if (!cnpj) log("sem NFs"); else {
     const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: it.map((x) => x.n).join("\r\n"), cnpj, chave: chaveDe(it[0].t), urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
     const m = lerLote(r.txt), c = {}; m.forEach((v) => (c[v.situacao] = (c[v.situacao] || 0) + 1));
     log("HTTP", r.status, "bytes", r.txt.length, "enviadas", it.length, "lidas", m.size, "casam", it.filter((x) => m.has(x.n)).length, JSON.stringify(c));
+    log("NFs distintas", new Set(it.map((x) => x.n)).size, "séries", new Set(it.map((x) => x.se)).size);
     log("tr total", (r.txt.match(/<tr\b/gi) || []).length, "tr com background", (r.txt.match(/<tr[^>]*background-color/gi) || []).length, "opx", (r.txt.match(/opx\(/g) || []).length);
     const corpo = r.txt.replace(/\s+/g, " "), i0 = corpo.search(/<tr[^>]*opx/i);
     const mask = (t) => t.replace(/\d+/g, "#").replace(/>[^<]+</g, (z) => ">" + z.slice(1, -1).replace(/[A-Za-zÀ-ú]{2,}/g, (w) => (OK_PAL.test(w) || /^(situa|entreg|unidade|data|hora|nota|fiscal|previs|mercadoria|informa|dispon)/i.test(w) ? w : "x")) + "<");
