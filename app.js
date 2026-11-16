@@ -194,6 +194,7 @@
   }
 
   // leitura de planilha sem montar o texto formatado de cada célula (o painel só usa os valores): ~2x mais rápido
+  const LINHA_RODAPE = /^filtros aplicados/i;
   const LEITURA_RAPIDA = { cellNF: false, cellText: false, cellHTML: false, cellFormula: false, cellStyles: false };
   // envia os lotes: o 1º sozinho (ele limpa/prepara), os outros 3 de cada vez
   // tira os campos vazios de cada linha antes de mandar (o banco entende campo ausente como vazio): o envio fica bem menor
@@ -280,7 +281,7 @@
         buscarTudo("tratativas", "pedido"),
         sb.from("base_pedidos").select("pedido", { count: "exact", head: true }),
       ]);
-      base = b.filter((p) => !(p.extra && p.extra.fonte === "intelipost"));   // a base (BI) manda; nada vem só da Intelipost
+      base = b.filter((p) => !(p.extra && p.extra.fonte === "intelipost") && !LINHA_RODAPE.test(p.pedido || ""));   // a base (BI) manda; nada vem só da Intelipost
       trat = new Map(t.map((x) => [x.pedido, x]));
       info = i.data && i.data[0];
       infoFech = fi.data && fi.data[0];
@@ -799,7 +800,7 @@
       linhas = [];
       for (const r of rows.slice(iCab + 1)) {
         const ped = r[idx.pedido] == null ? "" : String(r[idx.pedido]).trim();
-        if (!ped || vistos.has(ped)) continue;
+        if (!ped || vistos.has(ped) || LINHA_RODAPE.test(ped)) continue;   // rodapé do BI ("Filtros aplicados: …") não é pedido
         vistos.add(ped);
         const o = {};
         for (const k of Object.keys(COLUNAS)) {
@@ -1136,7 +1137,7 @@
       catch (e1) { if (!/column|coluna|does not exist/i.test(e1.message || "")) throw e1; semColunas = true; lista = await buscarTudo("base_pedidos", "pedido", G_COLS); }
       if (minha !== gGeracao) return;
       gAvisoColunas = semColunas; gBaseEm = baseEm;
-      gDados = lista.map((b) => {
+      gDados = lista.filter((b) => !LINHA_RODAPE.test(b.pedido || "")).map((b) => {
         const nf = String(b.nf || ""), m = nf.match(/^(.*?)-\s*(\w+)\s*$/);
         return { pedido: b.pedido, nf: m ? m[1] : nf, serie: m ? m[2].replace(/^0+(?=\d)/, "") : "", canal: b.canal, uf: b.uf, cidade: b.cidade || null, transp: b.transportadora,
           status: b.status_intelipost, micro: b.micro_status, origem: b.origem, criado: b.data_criacao || null, despacho: b.data_expedicao, entrega: b.data_entrega || null,
@@ -1717,8 +1718,8 @@
     }
     const todos = L.map((r) => {
       const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "";
-      let e = rd ? TROCA.esperadoPromob(rd, r.serie) : null, fonte = "redespacho";
-      if (!e || e.erro) { e = TROCA.esperadoPromob(bd, r.serie); fonte = "promob"; }
+      // com redespacho, vale SEMPRE o redespacho (a da coluna BD só faz a transferência, ex.: Intechlog)
+      const e = TROCA.esperadoPromob(rd || bd, r.serie), fonte = rd ? "redespacho" : "promob";
       const sit = !bd && !rd ? "sem" : e.erro ? "sem" : TROCA.mesmaTransp(r.transp, e.grupo) ? "ok" : "div";
       return { r, bd, rd, e, fonte, sit };
     });

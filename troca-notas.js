@@ -143,12 +143,18 @@
     ["Zelog", "Zelog Transportes", 19536], ["Anjun", "Anjun Express"], ["Passaro", "Passaro transportes"],
   ];
   const chaveAp = (t) => semAcento(t).replace(/[^A-Z0-9]+/g, " ").trim();
+  // transportadoras de pessoa física (MEI): o nome não fica no código, só uma impressão (hash) dele -> apelido por CNPJ
+  const fnv = (s) => { let h = 0x811c9dc5; for (const c of s) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h.toString(16); };
+  const IMPRESSAO = { dd7ff947: "CNPJ 44657205" };
+  const impressao = (nome) => fnv(chaveAp(nome).replace(/( (LTDA|ME|EPP|EIRELI|S A|SA))+$/, "").replace(/ TRANSPORTES?$/, "").trim());
   // nome no Promob + série -> método certo na Intelipost (pela série; se a série não decidir, o ID padrão)
   function esperadoPromob(nomePromob, serie) {
     const nome = String(nomePromob || "").trim();
     if (!nome) return { erro: "sem transportadora no Promob" };
     const n = " " + chaveAp(nome) + " ", dig = nome.replace(/\D/g, "");
-    const ap = APELIDOS.filter(([k]) => k.startsWith("CNPJ ") ? dig.includes(k.slice(5)) : n.includes(" " + chaveAp(k) + " ")).sort((a, b) => b[0].length - a[0].length)[0];
+    const porImpressao = IMPRESSAO[impressao(nome)];
+    const ap = porImpressao ? APELIDOS.find(([k]) => k === porImpressao)
+      : APELIDOS.filter(([k]) => k.startsWith("CNPJ ") ? dig.includes(k.slice(5)) : n.includes(" " + chaveAp(k) + " ")).sort((a, b) => b[0].length - a[0].length)[0];
     if (!ap) return { erro: "não está no DE × PARA" };
     const rows = DEPARA.filter((r) => chaveAp(r.apelido) === chaveAp(ap[1]) || (ap[1].startsWith("CNPJ ") && r.apelido.startsWith("CNPJ ")));
     if (!rows.length) return { erro: "não está no DE × PARA" };
