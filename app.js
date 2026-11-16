@@ -196,7 +196,10 @@
   // leitura de planilha sem montar o texto formatado de cada célula (o painel só usa os valores): ~2x mais rápido
   const LEITURA_RAPIDA = { cellNF: false, cellText: false, cellHTML: false, cellFormula: false, cellStyles: false };
   // envia os lotes: o 1º sozinho (ele limpa/prepara), os outros 3 de cada vez
-  async function enviarLotes(rpc, linhas, tam, args, desde = 0) {
+  // tira os campos vazios de cada linha antes de mandar (o banco entende campo ausente como vazio): o envio fica bem menor
+  const compactar = (lote) => lote.map((l) => { const o = {}; for (const k in l) { const v = l[k]; if (v !== null && v !== undefined && v !== "") o[k] = v; } return o; });
+  async function enviarLotes(rpc, linhas0, tam, args, desde = 0) {
+    const linhas = { length: linhas0.length, slice: (a, b) => compactar(linhas0.slice(a, b)) };
     if (desde === 0 && linhas.length) {   // o 1º lote limpa a tabela: precisa terminar antes dos outros
       let r = await sb.rpc(rpc, args(linhas.slice(0, tam), true));
       if (r.error && /timeout|time out|canceling/i.test(r.error.message || "")) { await new Promise((ok) => setTimeout(ok, 2000)); r = await sb.rpc(rpc, args(linhas.slice(0, tam), true)); }
@@ -205,8 +208,9 @@
     }
     const inicios = []; for (let i = desde; i < linhas.length; i += tam) inicios.push(i);
     let feitos = desde;
-    for (let k = 0; k < inicios.length; k += 3) {
-      const grupo = inicios.slice(k, k + 3);
+    const JUNTOS = 4;
+    for (let k = 0; k < inicios.length; k += JUNTOS) {
+      const grupo = inicios.slice(k, k + JUNTOS);
       const res = await Promise.all(grupo.map((i) => sb.rpc(rpc, args(linhas.slice(i, i + tam), i === 0))));
       // se o banco recusar algum lote (ex.: tempo esgotado com 3 ao mesmo tempo), manda esse lote de novo sozinho
       for (let g = 0; g < grupo.length; g++) {
@@ -214,7 +218,7 @@
         for (let t = 0; r.error && t < 3; t++) { await new Promise((ok) => setTimeout(ok, 1500 * (t + 1))); r = await sb.rpc(rpc, args(linhas.slice(grupo[g], grupo[g] + tam), false)); }
         if (r.error) throw r.error;
       }
-      feitos = Math.min(inicios[Math.min(k + 2, inicios.length - 1)] + tam, linhas.length);
+      feitos = Math.min(inicios[Math.min(k + JUNTOS - 1, inicios.length - 1)] + tam, linhas.length);
       carregando(`Enviando… ${fmt(feitos)} de ${fmt(linhas.length)}`);
     }
   }
@@ -821,7 +825,7 @@
     const nTp = linhas.filter((l) => l.extra && l.extra.transp_promob).length;
     if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\nTransportadora Promob preenchida em ${fmt(nTp)} pedidos.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
     try {
-      const argsBase = (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total: linhas.length });
+      const argsBase = (lote, primeiro) => ({ linhas: compactar(lote), limpar: primeiro, arquivo: arq.name, total: linhas.length });
       carregando(`Enviando… ${fmt(Math.min(2000, linhas.length))} de ${fmt(linhas.length)}`);
       let { error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 2000), true));
       if (error && /extra/i.test(error.message || "") && baseExtraOk) {   // banco sem a parte 32: manda sem as colunas extras
@@ -864,14 +868,15 @@
     if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(ent)} entregues e ${fmt(lista.length - ent)} cancelados.\n` +
       `${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} que está${sairao === 1 ? "" : "ão"} no painel vai${sairao === 1 ? "" : "ão"} sair.\n\nEnviar?`)) return;
     try {
-      const LOTE = 5000, qtd = lista.length;
-      if (!lista.length) lista.push({ pedido: "", status: null });
-      for (let i = 0; i < lista.length; i += LOTE) {
-        carregando(`Enviando… ${fmt(Math.min(i + LOTE, lista.length))} de ${fmt(lista.length)}`);
-        const { error } = await sb.rpc("importar_fechados", { linhas: lista.slice(i, i + LOTE), limpar: i === 0,
-          arquivo: arq.name, total_linhas: res.total, fechados: qtd });
-        if (error) throw error;
-      }
+      const qtd = lista.length;
+      // só interessam os pedidos que estão na base (a base inteira, inclusive os que já saíram do painel):
+      // o arquivo traz ~70 mil pedidos de 3 meses, mas a base tem ~13 mil. Manda só esses (bem mais rápido).
+      carregando("Separando os pedidos da base…");
+      if (!gDados) await carregarGerencial();
+      const daBase = gDados && gDados.length ? new Set(gDados.map((r) => r.pedido)) : null;
+      const enviar = daBase ? lista.filter((x) => daBase.has(x.pedido)) : lista.slice();
+      if (!enviar.length) enviar.push({ pedido: "", status: null });
+      await enviarLotes("importar_fechados", enviar, 5000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total_linhas: res.total, fechados: qtd }));
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
