@@ -2473,7 +2473,7 @@
       let cfL = cfLista; if (!cfL.length) { try { cfL = await buscarTudo("conferencia_ssw", "pedido"); } catch (_) { cfL = []; } }
       const cfPrev = new Map((cfL || []).filter((x) => x.detalhe && x.detalhe.previsao).map((x) => [x.pedido, String(x.detalhe.previsao).slice(0, 10)]));
       const prevSSW = (ped) => { const a = (ssw.get(ped) || {}).previsao, b = cfPrev.get(ped); return [a, b].filter(Boolean).map((x) => String(x).slice(0, 10)).sort().pop() || null; };
-      const linhas = [], cont = { vencida: 0, jaFeito: 0, igual: 0 };
+      const linhas = [], cont = { vencida: 0, antes: 0, jaFeito: 0, igual: 0 };
       for (const p of base) {
         if (/ENTREGUE|CANCELAD/i.test(`${p.status || ""} ${p.status_intelipost || ""}`)) continue;
         const t = trat.get(p.pedido), prom = String(p.prev_original || p.prev_atual || "").slice(0, 10);
@@ -2481,6 +2481,7 @@
         if (!d) { const s2 = prevSSW(p.pedido); if (s2 && prom && String(s2).slice(0, 10) > prom) d = String(s2).slice(0, 10); }
         if (!d) continue;
         if (d < hoje) { cont.vencida++; continue; }
+        if (prom && prom >= d) { cont.antes++; continue; }   // a data prometida ao cliente já é igual ou depois da nova data
         const f = naFila.get(p.pedido); if (f && String(f.nova_data).slice(0, 10) === d && f.status !== "erro") { cont.jaFeito++; continue; }
         if (String(p.prev_atual || "").slice(0, 10) === d) { cont.igual++; continue; }
         linhas.push(`${p.pedido} ${br(d)}`);
@@ -2488,7 +2489,7 @@
       const atual = $("ap-texto").value.trim(), ja = new Set(atual.split(/\r?\n/).map((l) => l.trim().split(/[\s;,]+/)[0]).filter(Boolean));
       const novas = linhas.filter((l) => !ja.has(l.split(" ")[0]));
       $("ap-texto").value = (atual ? atual + "\n" : "") + novas.join("\n"); mostrarConferencia();
-      toast(`${fmt(novas.length)} pedido(s) trazidos do Preventivo e SSW. Fora: ${fmt(cont.vencida)} com data vencida · ${fmt(cont.jaFeito)} já mandados com essa data · ${fmt(cont.igual)} já com essa data na Intelipost. Confira e clique em Alterar na Intelipost.`);
+      toast(`${fmt(novas.length)} pedido(s) trazidos do Preventivo e SSW. Fora: ${fmt(cont.vencida)} com data vencida · ${fmt(cont.antes)} com a data prometida igual ou depois da nova · ${fmt(cont.jaFeito)} já mandados com essa data · ${fmt(cont.igual)} já com essa data na Intelipost. Confira e clique em Alterar na Intelipost.`);
     } catch (err) { toast("Não consegui trazer: " + (err.message || err), true); }
     finally { bt.disabled = false; }
   });
