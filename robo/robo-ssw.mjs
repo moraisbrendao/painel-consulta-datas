@@ -369,7 +369,7 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
 }
 if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai para o código nem para o log)
   const { createHash } = await import("node:crypto"); await entrarSupabase(); await carregarSenhasDB();
-  const alvo = process.env.ALVO_HASH || "06c17d56f26512c0"; let l = null;
+  const alvo = process.env.ALVO_HASH || (/^[0-9a-f]{16}$/.test(process.env.TRANSP || "") ? process.env.TRANSP : "06c17d56f26512c0"); let l = null;
   for (let de = 0; !l; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao,ultimo_evento,data_evento,data_entrega,consultado_em,detalhe&order=pedido&limit=1000&offset=${de}`);
     l = L.find((x) => createHash("sha256").update(x.pedido).digest("hex").slice(0, 16) === alvo) || null; if (L.length < 1000) break; }
   if (!l) log("não achei"); else {
@@ -379,7 +379,7 @@ if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai p
     for (const c of [cs, ...Object.keys(CNPJ_SERIE).filter((x) => x !== cs)]) for (const ch of [chaveDe(l.transportadora), ""]) {
       const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: sem0(num), cnpj: c, chave: ch, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
       const m = lerLote(r.txt), v = m.get(sem0(num)); await new Promise((ok) => setTimeout(ok, 1200));
-      if (v && v.situacao !== "sem cte") { log(`CNPJ ...${c.slice(-6)} ${ch ? "com senha" : "sem senha"}: melhor=${v.situacao}/${v.sigla} · semRaj=${v._semRaj ? v._semRaj.situacao + "/" + v._semRaj.sigla : "—"} · temRaj=${v._temRaj} · pegaLote=${JSON.stringify(pegaLote(m, { n: sem0(num), transportadora: l.transportadora, nf: l.nf }) || {}).replace(/\d{5,}/g, "#")}`); }
+      if (v && v.situacao !== "sem cte") { let em = "?"; if (v.det) { const d = await pagina("https://ssw.inf.br" + v.det).catch(() => null); em = d ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "—").slice(0, 40) : "?"; } log(`CNPJ ...${c.slice(-6)} ${ch ? "com senha" : "sem senha"}: emissor=${em} · melhor=${v.situacao}/${v.sigla} · semRaj=${v._semRaj ? v._semRaj.situacao + "/" + v._semRaj.sigla : "—"} · temRaj=${v._temRaj} · pegaLote=${JSON.stringify(pegaLote(m, { n: sem0(num), transportadora: l.transportadora, nf: l.nf }) || {}).replace(/\d{5,}/g, "#")}`); }
       if (!ch) break; }
   }
 }
