@@ -1544,3 +1544,56 @@ create policy "logistica altera" on public.apelidos_transp for all to authentica
   using ((select not public.e_sac())) with check ((select not public.e_sac()));
 revoke all on public.apelidos_transp from anon;
 grant select, insert, update, delete on public.apelidos_transp to authenticated;
+
+-- =================================================================
+-- 35) Consulta de entregas (SAC): ocorrência e reposição em andamento embaixo de cada nota
+-- O detalhamento de tickets passa a guardar o ID do ticket de reposição e a fila atual dele.
+-- =================================================================
+alter table public.detalhe_nf add column if not exists repo_ticket text;   -- IDs dos tickets de reposição da nota, separados por vírgula
+alter table public.detalhe_nf add column if not exists repo_fila text;
+
+create or replace function public.importar_detalhe_nf(linhas jsonb, limpar boolean)
+returns integer language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if limpar then delete from public.detalhe_nf where true; end if;
+  insert into public.detalhe_nf (nf, tem_ocorr, ocorr_status, ocorr_msg, ocorr_em, tem_repo, repo_nf, tem_at, repo_ticket, repo_fila)
+  select r.nf, r.tem_ocorr, r.ocorr_status, left(r.ocorr_msg, 1000), r.ocorr_em, r.tem_repo, r.repo_nf, r.tem_at, left(r.repo_ticket, 200), r.repo_fila
+  from jsonb_to_recordset(linhas) as r(nf text, tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em text, tem_repo boolean, repo_nf text, tem_at boolean, repo_ticket text, repo_fila text)
+  where r.nf is not null and r.nf <> ''
+  on conflict (nf) do update set tem_ocorr = excluded.tem_ocorr, ocorr_status = excluded.ocorr_status, ocorr_msg = excluded.ocorr_msg,
+    ocorr_em = excluded.ocorr_em, tem_repo = excluded.tem_repo, repo_nf = excluded.repo_nf, tem_at = excluded.tem_at,
+    repo_ticket = excluded.repo_ticket, repo_fila = excluded.repo_fila;
+  return (select count(*) from public.detalhe_nf);
+end $$;
+revoke all on function public.importar_detalhe_nf(jsonb, boolean) from public, anon;
+grant execute on function public.importar_detalhe_nf(jsonb, boolean) to authenticated;
+
+-- mesma regra do painel (chaveNF): tira zeros à esquerda e ".0" de cada parte do "número-série"
+create or replace function public.chave_nf(v text) returns text language sql immutable as $$
+  select string_agg(regexp_replace(regexp_replace(trim(p), '\.0+$', ''), '^0+(?=\d)', ''), '-' order by i)
+  from unnest(string_to_array(trim(coalesce(v, '')), '-')) with ordinality as x(p, i)
+$$;
+
+drop function if exists public.consultar_sac();
+create or replace function public.consultar_sac()
+returns table (pedido text, nf text, canal text, transportadora text, micro_status text,
+               prometido date, nova_data date, observacao text, atualizado_em timestamptz, link_rastreio text,
+               tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em text, tem_repo boolean, repo_ticket text, repo_fila text, repo_nf text)
+language sql stable security definer set search_path = public
+as $$
+  select b.pedido, b.nf, b.canal, b.transportadora, b.micro_status,
+         coalesce(b.prev_original, b.prev_atual), t.nova_data, t.observacao, t.atualizado_em, b.link_rastreio,
+         d.tem_ocorr, d.ocorr_status, d.ocorr_msg, d.ocorr_em, d.tem_repo, d.repo_ticket, d.repo_fila, d.repo_nf
+  from public.base_pedidos b
+  left join public.tratativas t on t.pedido = b.pedido
+  left join public.detalhe_nf d on d.nf = public.chave_nf(b.nf)
+  where auth.uid() is not null
+    and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+    and (coalesce(b.prev_original, b.prev_atual) <= (now() at time zone 'America/Sao_Paulo')::date + 1
+         or t.nova_data <= (now() at time zone 'America/Sao_Paulo')::date + 1)
+  order by b.pedido
+$$;
+revoke all on function public.consultar_sac() from public, anon;
+grant execute on function public.consultar_sac() to authenticated;

@@ -574,3 +574,9 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .rp-var.sobe { color: #c0392b; } .rp-var.desce { color: #1a7f4e; }
 .kpi.kpi-info { cursor: default; }
 .rp-tab th.num { text-align: right; }
+.sac-marca { margin-top: 4px; font-size: 11.5px; font-weight: 600; line-height: 1.35; }
+.sac-marca.oc { color: #b4231b; }
+.sac-marca.rp { color: #1f5fae; }
+.sac-marca a { font-weight: 600; }
+.sac-rastreio { white-space: nowrap; }
+.sac-rastreio div { margin-top: 4px; font-size: 12px; }

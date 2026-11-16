@@ -2963,13 +2963,16 @@
         if (x.ocorr_em && String(x.ocorr_em) > d) return;   // fica a ocorrência com a mensagem mais recente
         Object.assign(x, { tem_ocorr: true, ocorr_status: txt(cS >= 0 ? r[cS] : null), ocorr_msg: (txt(cM >= 0 ? r[cM] : null) || "").slice(0, 1000) || null, ocorr_em: d || null }); }); }
     const rp = aba("REPOSICOES");
-    if (rp) { const cN = rp.c("NOTA TICKET"), cR = rp.c("NF EMITIDA PROMOB"), cD = rp.c("DATA EMISSAO PROMOB");
+    if (rp) { const cN = rp.c("NOTA TICKET"), cR = rp.c("NF EMITIDA PROMOB"), cD = rp.c("DATA EMISSAO PROMOB"), cId = rp.c("ID TICKET"), cF = rp.c("FILA ATUAL DO TICKET"), cC = rp.c("DATA CRIACAO TICKET");
       if (cN >= 0) rp.rows.forEach((r) => { const x = r && de(r[cN]); if (!x) return; x.tem_repo = true;
         const nova = cR >= 0 ? txt(r[cR]) : null, d = txt(cD >= 0 ? r[cD] : null) || "";
-        if (nova && (!x.repo_nf || d >= (x._rd || ""))) { x.repo_nf = chaveNF(nova); x._rd = d; } }); }
+        if (nova && (!x.repo_nf || d >= (x._rd || ""))) { x.repo_nf = chaveNF(nova); x._rd = d; }
+        const id = cId >= 0 ? txt(r[cId]) : null, dc = txt(cC >= 0 ? r[cC] : null) || "";
+        if (id) { const ids = x.repo_ticket ? x.repo_ticket.split(",") : []; if (!ids.includes(id)) ids.push(id); x.repo_ticket = ids.slice(-5).join(","); }
+        if (cF >= 0 && txt(r[cF]) && dc >= (x._rc || "")) { x.repo_fila = txt(r[cF]); x._rc = dc; } }); }
     const at = aba("ASSISTENCIA TECNICA");
     if (at) { const cN = at.c("NOTA TICKET"); if (cN >= 0) at.rows.forEach((r) => { const x = r && de(r[cN]); if (x) x.tem_at = true; }); }
-    return [...m.values()].map(({ _rd, ...x }) => x);
+    return [...m.values()].map(({ _rd, _rc, ...x }) => x);
   }
 
   // ---------------- reposição (planilha TABELA DE ACOMPANHAMENTO do BI, aba Export) ----------------
@@ -3201,12 +3204,31 @@
   setInterval(() => { if (perfil === "sac" && !document.hidden && Date.now() - sacCarregadoEm > 5 * 60000) carregarSac(); }, 60000);
 
   function desenharSacLogistica() {
+    if (!detNF) { carregarDetNF().then((m) => { if (m.size && paginaAtual === "sac") desenharSacLogistica(); }); }
+    if (!senhasSSW.length) carregarSenhas().catch(() => {});
+    const det = detNF || new Map();
     montarSac(base.map((p) => {
-      const t = trat.get(p.pedido) || {};
+      const t = trat.get(p.pedido) || {}, d = det.get(chaveNF(p.nf)) || {};
       return { pedido: p.pedido, nf: p.nf, canal: p.canal, transportadora: p.transportadora, micro_status: p.micro_status,
         prometido: p.prev_original || p.prev_atual, nova_data: t.nova_data, observacao: t.observacao,
-        atualizado_em: t.atualizado_em, link_rastreio: p.link_rastreio };
+        atualizado_em: t.atualizado_em, link_rastreio: p.link_rastreio,
+        tem_ocorr: d.tem_ocorr, ocorr_status: d.ocorr_status, ocorr_msg: d.ocorr_msg, ocorr_em: d.ocorr_em,
+        tem_repo: d.tem_repo, repo_ticket: d.repo_ticket, repo_fila: d.repo_fila, repo_nf: d.repo_nf };
     }));
+  }
+  // embaixo da nota: ocorrência e reposição em andamento (detalhamento de tickets)
+  const linkTicket = (id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)}</a>`;
+  function marcasSac(l) {
+    let h = "";
+    if (l.tem_ocorr) {
+      const dica = [l.ocorr_msg ? "Última mensagem: " + l.ocorr_msg : "", l.ocorr_em ? "em " + br(l.ocorr_em) : ""].filter(Boolean).join(" ");
+      h += `<div class="sac-marca oc" title="${esc(dica)}">⚠ Ocorrência${l.ocorr_status ? " · " + esc(l.ocorr_status) : ""}</div>`;
+    }
+    if (l.tem_repo) {
+      const ids = String(l.repo_ticket || "").split(",").filter(Boolean);
+      h += `<div class="sac-marca rp" title="${esc(l.repo_fila ? "Fila: " + l.repo_fila : "")}">↻ Reposição${ids.length ? " " + ids.map(linkTicket).join(" ") : ""}${l.repo_nf ? ` <span class="s">NF ${esc(l.repo_nf)}</span>` : ""}</div>`;
+    }
+    return h;
   }
 
   // SAC vê só os vencidos, os que vencem hoje e os que vencem amanhã
@@ -3228,13 +3250,13 @@
   }
 
   function filtrarSac(manter) {
-    const busca = norm($("sac-busca").value).replace(/\s/g, "");
+    const buscas = norm($("sac-busca").value).split(/[\s,;]+/).filter(Boolean);   // um ou vários números
     const canal = $("sac-canal").value, transp = $("sac-transp").value, nova = $("sac-nova").value;
     const hoje = hojeISO(), amanha = limiteSac();
     const dia = (l) => String(l.nova_data || l.prometido || "").slice(0, 10);   // nova data vale como vencimento
     const naSv = { todos: () => true, vencidos: (l) => dia(l) < hoje, hoje: (l) => dia(l) === hoje, amanha: (l) => dia(l) === amanha };
     const passa = (l) =>
-      (!busca || [l.nf, l.pedido].some((v) => norm(v).replace(/\s/g, "").includes(busca))) &&
+      (!buscas.length || buscas.some((b) => [l.nf, l.pedido].some((v) => norm(v).replace(/\s/g, "").includes(b)))) &&
       (!canal || l.canal === canal) && (!transp || l.transportadora === transp) &&
       (!nova || (nova === "com" && l.nova_data) || (nova === "sem" && !l.nova_data) || (nova === "obs" && l.observacao));
     const base1 = sacLinhas.filter(passa);
@@ -3259,12 +3281,13 @@
     const total = sacFiltrados.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
     sacPagina = Math.min(sacPagina, paginas);
     $("sac-linhas").innerHTML = sacFiltrados.slice((sacPagina - 1) * POR_PAGINA, sacPagina * POR_PAGINA).map((l) => `<tr>
-        <td><b>${esc(l.nf || "—")}</b></td><td>${esc(l.pedido)}</td><td>${esc(l.canal || "")}</td><td>${esc(l.transportadora || "—")}</td>
+        <td><b>${esc(l.nf || "—")}</b>${marcasSac(l)}</td><td>${esc(l.pedido)}</td><td>${esc(l.canal || "")}</td><td>${esc(l.transportadora || "—")}</td>
         <td><span class="ms">${esc(l.micro_status || "—")}</span></td>
         <td>${br(l.prometido) || "—"}<div>${chipData(l.prometido)}</div></td>
         <td>${l.nova_data ? `<b>${br(l.nova_data)}</b><div>${chipData(l.nova_data)}</div>` : `<span class="s">—</span>`}</td>
         <td class="col-obs">${l.observacao ? esc(l.observacao) : `<span class="s">—</span>`}${l.observacao && l.atualizado_em ? `<div class="s">${new Date(l.atualizado_em).toLocaleDateString("pt-BR")}</div>` : ""}</td>
-        <td>${/^https?:\/\//i.test(l.link_rastreio || "") ? `<a href="${esc(l.link_rastreio)}" target="_blank" rel="noopener noreferrer">Rastreio ↗</a>` : ""}</td>
+        <td class="sac-rastreio">${l.nf ? `<button class="btn mini contorno" data-ssw="${esc(l.nf)}" data-transp="${esc(l.transportadora || "")}" data-pedido="${esc(l.pedido)}" title="Abre o rastreio dessa nota na transportadora">${rastreioDe(l.transportadora) ? "Ver na " + esc(rastreioDe(l.transportadora)[1]) : "Ver rastreio"} ↗</button>` : ""}
+          ${/^https?:\/\//i.test(l.link_rastreio || "") ? `<div><a href="${esc(l.link_rastreio)}" target="_blank" rel="noopener noreferrer" title="Rastreio da Intelipost">Intelipost ↗</a></div>` : ""}</td>
       </tr>`).join("");
     $("sac-vazio").hidden = total > 0;
     $("sac-paginacao").innerHTML = total > POR_PAGINA
@@ -3281,13 +3304,16 @@
     filtrarSac();
   });
   ["sac-canal", "sac-transp", "sac-nova"].forEach((id) => $(id).addEventListener("change", () => filtrarSac()));
+  $("sac-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido); });
   $("sac-paginacao").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-p]"); if (!b) return;
     sacPagina += Number(b.dataset.p); desenharSac(); $("pagina-sac").scrollIntoView({ block: "start" });
   });
   $("sac-baixar").addEventListener("click", () => {
-    const linhas = [["Nota fiscal", "Pedido", "Canal", "Transportadora", "Micro status", "Prometido ao cliente", "Nova data", "Observação da Logística", "Rastreio"]]
-      .concat(sacFiltrados.map((l) => [l.nf, l.pedido, l.canal, l.transportadora, l.micro_status, br(l.prometido), br(l.nova_data), l.observacao || "", l.link_rastreio || ""]));
+    const linhas = [["Nota fiscal", "Pedido", "Canal", "Transportadora", "Micro status", "Prometido ao cliente", "Nova data", "Observação da Logística", "Rastreio",
+      "Ocorrência", "Última mensagem da ocorrência", "Reposição (tickets)", "Fila da reposição", "NF da reposição"]]
+      .concat(sacFiltrados.map((l) => [l.nf, l.pedido, l.canal, l.transportadora, l.micro_status, br(l.prometido), br(l.nova_data), l.observacao || "", l.link_rastreio || "",
+        l.tem_ocorr ? l.ocorr_status || "Sim" : "", l.ocorr_msg || "", l.tem_repo ? l.repo_ticket || "Sim" : "", l.repo_fila || "", l.repo_nf || ""]));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Consulta");
     XLSX.writeFile(wb, `consulta_sac_${sacVisao.replace(/\+/g, "-")}_${hojeISO()}.xlsx`);
