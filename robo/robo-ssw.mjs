@@ -743,7 +743,7 @@ async function conferirTudo(minutos) {
 // ===== Conferência em lotes de 100 NFs (formulário da ajuda do SSW, NFs separadas por quebra de linha CRLF) =====
 // Pedido da Brenda (16/11): todas as transportadoras do SSW, 100 em 100; sem senha e com senha (senha cadastrada);
 // NF que não aparece com o CNPJ da série é procurada com os outros CNPJ; se não aparecer em nenhum = sem CT-e.
-const sem0 = (n) => String(n || "").replace(/^0+(?=\d)/, "");
+function sem0(n) { return String(n || "").replace(/^0+(?=\d)/, ""); }
 function lerLote(html) {   // uma linha por NF: número, data/hora do último evento, situação, descrição (pode ter a previsão)
   const out = new Map(), iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
   for (const bloco of html.split(/<tr style="background-color:#(?:FFFFFF|F0F0F0);(?:cursor:pointer;)?"/i).slice(1)) {
