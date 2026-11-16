@@ -309,6 +309,47 @@ if (MODO === "diag-track3r") {   // documentação pública da API da Track3r (s
     log(u, "→", r.status, "·", rotas || r.txt.replace(/<script[\s\S]*?<\/script>|<style[\s\S]*?<\/style>/gi, " ").replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 1500));
   }
 }
+if (MODO === "diag-lote") {   // consulta em lote (até 100 NFs) pelo formulário da ajuda do SSW: só contagens e estrutura mascarada
+  await entrarSupabase(); await carregarSenhasDB();
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  const alvos = (process.env.TRANSP || "atual,vm transportes,petrymar,flog").split(",").map((s) => s.trim()).filter(Boolean);
+  for (const alvo of alvos) {
+    const L = [];
+    for (const sit of ["entregue", "nao entregue", "sem cte"]) L.push(...await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*${encodeURIComponent(alvo)}*&situacao=eq.${encodeURIComponent(sit)}&nf=not.is.null&limit=40`));
+    const porC = {}; L.forEach((x) => { const [n, se] = String(x.nf).split("-").map((v) => (v || "").trim()); const c = cnpjDaSerie(se); if (c && n) (porC[c] ||= []).push({ ...x, n }); });
+    const [cnpj, itens] = Object.entries(porC).sort((a, b) => b[1].length - a[1].length)[0] || [];
+    if (!itens) { log(`${alvo}: sem NFs para testar`); continue; }
+    const chave = chaveDe(itens[0].transportadora);
+    log(`== ${alvo}: ${itens.length} NFs (${JSON.stringify(itens.reduce((m, x) => (m[x.situacao] = (m[x.situacao] || 0) + 1, m), {}))}) · senha ${chave ? "sim" : "não"}`);
+    for (const [url, rot, comChave] of [["https://ssw.inf.br/2/ssw_resultSSW", "form ajuda", !!chave], ["https://ssw.inf.br/2/ssw_resultSSW", "form ajuda sem senha", false]]) {
+      if (rot.includes("sem senha") && !chave) continue;
+      const t0 = Date.now();
+      const r = await pagina(url, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: itens.map((x) => x.n).join("\n"), cnpj, chave: comChave ? chave : "", urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+      const html = r.txt, linhas = html.split(/<tr[\s>]/i).slice(1);
+      log(`${rot}: HTTP ${r.status} · ${Date.now() - t0} ms · ${html.length} bytes · <tr> ${linhas.length} · links detalhe ${(html.match(/SSWDetalhado|opx\(/g) || []).length}`);
+      let achou = 0, bate = 0; const conf = {};
+      for (const x of itens) {
+        const re = new RegExp("(^|\\D)0*" + x.n + "(\\D|$)"), tr = linhas.filter((l) => re.test(sohTexto("<tr " + l).join(" ")));
+        if (!tr.length) { conf[x.situacao + "→não listada"] = (conf[x.situacao + "→não listada"] || 0) + 1; continue; }
+        achou++; const t = sohTexto("<tr " + tr.join(" ")).join(" ");
+        const v = /MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(t) ? "entregue" : /n[ãa]o dispon/i.test(t) ? "sem cte" : /permiss/i.test(t) ? "sem permissao" : "nao entregue";
+        if (v === x.situacao) bate++; const k = `${x.situacao}→${v}${tr.length > 1 ? " (" + tr.length + " linhas)" : ""}${/SSWDetalhado|opx\(/.test(tr.join(" ")) ? " c/link" : ""}`; conf[k] = (conf[k] || 0) + 1;
+      }
+      log(`  NFs listadas ${achou}/${itens.length} · situação igual à do robô ${bate} · ${JSON.stringify(conf)}`);
+      log("  cabeçalhos:", sohTexto(html).slice(0, 14).map(limpo).join(" | ").slice(0, 600));
+      const ex = linhas.find((l) => /\d{2}\/\d{2}\/\d{2}/.test(l)); if (ex) log("  linha exemplo:", sohTexto("<tr " + ex).map(limpo).join(" | ").slice(0, 400), "· tags:", tags("<tr " + ex, /<(td|a|input|form)[^>]*>/gi).map((y) => y.replace(/\d{4,}/g, "#").replace(/style="[^"]*"/g, "")).slice(0, 12).join(" "));
+      await dorme(4000);
+    }
+    // NF que não aparece com o CNPJ da série: tenta os outros CNPJ (1 lote por CNPJ)
+    const faltam = itens.filter((x) => x.situacao === "sem cte").map((x) => x.n);
+    if (faltam.length) { let extra = 0;
+      for (const c of Object.keys(CNPJ_SERIE).filter((c) => c !== cnpj)) {
+        const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: faltam.join("\n"), cnpj: c, chave, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+        const t = sohTexto(r.txt).join(" "); const n = faltam.filter((f) => new RegExp("(^|\\D)0*" + f + "(\\D|$)").test(t)).length; extra += n;
+        log(`  'sem CT-e' com outro CNPJ (#${c.slice(-4)}): ${n}/${faltam.length} aparecem · HTTP ${r.status}`); await dorme(3000);
+      } }
+  }
+}
 if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem senha): 1 NF e lote de NFs — só contagens
   await entrarSupabase();
   const P = await chamar("conferencia_ssw?select=nf,transportadora,situacao&situacao=in.(sem%20permissao,sem%20cte,fora%20do%20ssw)&limit=400");
