@@ -1377,11 +1377,11 @@
   $("g-limpar").addEventListener("click", () => { Object.values(gSel).forEach((s) => s.clear()); ["g-de", "g-ate", "g-nf"].forEach((id) => ($(id).value = "")); montarFiltrosG(); filtrosGMudaram(); });
   $("g-paginacao").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; gPagina += Number(b.dataset.p); desenharGLista(false); });
   // Excel da Visão Gerencial no modelo "multimoveis-atrasados-em-aberto" (55 colunas, pedido da Brenda 13/11)
-  let detNF = null;   // nf -> ocorrência / reposição / assistência técnica (aba do detalhamento, parte 32)
+  let detNF = null, detNFErro = "";   // nf -> ocorrência / reposição / assistência técnica (aba do detalhamento, parte 32)
   async function carregarDetNF() {
     if (detNF) return detNF;
-    try { const L = await buscarTudo("detalhe_nf", "nf"); detNF = new Map(L.map((x) => [x.nf, x])); } catch (_) { detNF = new Map(); }
-    return detNF;
+    try { const L = await buscarTudo("detalhe_nf", "nf"); detNF = new Map(L.map((x) => [x.nf, x])); detNFErro = ""; return detNF; }
+    catch (err) { detNFErro = err.message || String(err); return new Map(); }   // não guarda o erro: tenta de novo no próximo Excel
   }
   // colunas que não ficam na memória da Visão Gerencial: busca só dos pedidos que vão para o Excel
   async function extrasDe(pedidos) {
@@ -1434,6 +1434,10 @@
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
     carregando("");
     XLSX.writeFile(wb, `multimoveis-${(gSelecao ? gSelecao.titulo : G_NOME[gCard]).normalize("NFD").replace(/[^\w]+/g, "-").replace(/-+$/, "").toLowerCase()}_${hoje}.xlsx`);
+    const nDet = lista.filter((r) => det.has(chaveNF(r.serie ? `${r.nf}-${r.serie}` : r.nf))).length;
+    if (detNFErro) toast("Ocorrências e reposições não vieram: " + detNFErro, true);
+    else if (!det.size) toast('Ocorrências e reposições estão vazias: envie o detalhamento de tickets de novo no botão "Enviar tickets".', true);
+    else toast(`Excel baixado. ${fmt(nDet)} de ${fmt(lista.length)} pedidos têm ocorrência, reposição ou AT no detalhamento (${fmt(det.size)} notas guardadas).`);
   }
   $("g-exportar").addEventListener("click", baixarGLista);
 
@@ -2743,7 +2747,7 @@
     }
     carregando("");
     await carregar();
-    if (avisoDet) toast("Tickets atualizados" + avisoDet, true); else toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto.`);
+    if (avisoDet) toast("Tickets atualizados" + avisoDet, true); else toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto · ${fmt(detLinhas.filter((x) => x.tem_ocorr).length)} notas com ocorrência e ${fmt(detLinhas.filter((x) => x.repo_nf).length)} com NF de reposição guardadas.`);
   });
 
   // abas Ocorrências, Reposições e Assistência Técnica do detalhamento_tickets360 → uma linha por NF
