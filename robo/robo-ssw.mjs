@@ -766,38 +766,44 @@ async function conferirLote() {
   for (const l of ssw) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()); const c = cnpjDaSerie(ser);
     if (!num || !c) { semNf.push(l); continue; } const ch = chaveDe(l.transportadora), k = c + "|" + ch; (grupos.get(k) || grupos.set(k, []).get(k)).push({ ...l, n: sem0(num) }); }
   const PAUSA = Number(process.env.SSW_PAUSA || 1200), dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
-  let consultas = 0, bloq = 0;
+  let consultas = 0, bloq = 0, retentando = false;
   async function lote(cnpj, chave, nums) {
     for (;;) {
       const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
         body: new URLSearchParams({ NR: nums.join("\r\n"), cnpj, chave, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() }).catch(() => null);
       consultas++; await dorme(PAUSA);
-      if (r && r.status === 200) { bloq = 0; return lerLote(r.txt); }
-      if (++bloq > 3) throw new Error("SSW bloqueando");
+      if (r && r.status === 200) return lerLote(r.txt);
+      if (++bloq > 3 || retentando) throw new Error("SSW bloqueando");
       log(`SSW respondeu ${r ? r.status : "sem resposta"}; espero ${bloq} min.`); await dorme(bloq * 60000);
     }
   }
   const res = new Map(), cont = {};   // pedido → resultado
+  const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido);
+    const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}), ...(r._cnpj && r._cnpj !== cnpjDaSerie(String(l.nf).split("-")[1]) ? { cnpj_outro: r._cnpj.slice(-6) } : {}) };
+    return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
+  const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
+  let gravados = false; const achados = [];
   try {
     for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
       for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
         parte.forEach((x) => res.set(x.pedido, { ...(m.get(x.n) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
     log(`SSW: ${ssw.length - semNf.length} NFs em ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+    await gravar(montar(ssw)); gravados = true; log(`Gravei a 1ª passada · ${Math.round((Date.now() - t0) / 1000)} s`);
+    retentando = true;   // nos outros CNPJ: se o SSW bloquear, paro aqui e fico com o que já tenho
     // sem CT-e com o CNPJ da série: procura com os outros CNPJ (a transportadora pode ter emitido com outro)
     const outros = Object.keys(CNPJ_SERIE); let achou = 0;
     for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
       let falta = itens.filter((x) => res.get(x.pedido).situacao === "sem cte");
       for (const c of outros.filter((c) => c !== cnpj)) { if (!falta.length) break;
         for (let i = 0; i < falta.length; i += 100) { const parte = falta.slice(i, i + 100), m = await lote(c, chave, [...new Set(parte.map((x) => x.n))]);
-          parte.forEach((x) => { const r = m.get(x.n); if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); achou++; } }); }
+          parte.forEach((x) => { const r = m.get(x.n); if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); achou++; achados.push(x.pedido); } }); }
         falta = falta.filter((x) => res.get(x.pedido).situacao === "sem cte"); } }
     log(`Outros CNPJ: ${achou} NFs achadas · total ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
   } catch (e) { log("Parei:", e.message, "· gravo o que já conferi."); }
-  const linhas = ssw.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido); cont[r.situacao] = (cont[r.situacao] || 0) + 1;
-    const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}), ...(r._cnpj && r._cnpj !== cnpjDaSerie(String(l.nf).split("-")[1]) ? { cnpj_outro: r._cnpj.slice(-6) } : {}) };
-    return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; })
-    .concat(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null })));
-  for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120)));
+  const achadosS = new Set(achados); const final = gravados ? montar(ssw.filter((l) => achadosS.has(l.pedido))) : montar(ssw);
+  await gravar(final.concat(gravados ? [] : semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
+  if (gravados) await gravar(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null })));
+  res.forEach((r) => (cont[r.situacao] = (cont[r.situacao] || 0) + 1));
   await pJad;
   log("Conferência em lote:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), `· sem NF/série ${semNf.length} · ${Math.round((Date.now() - t0) / 1000)} s no total`);
 }
