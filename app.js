@@ -165,6 +165,7 @@
       if (volta === "alterar") { carregarAlterar(); const b = voltaAp && document.querySelector(`#ap-abas [data-ap="${voltaAp}"]`); if (b) b.click(); }
       if (volta === "conferencia") carregarConferencia();
       ligarTempoReal();
+      setTimeout(() => carregarSenhas().catch(() => {}), 3000);   // senhas do SSW para os botões de rastreio de todas as páginas
     }
   }
 
@@ -2683,8 +2684,8 @@
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
     const c = cnpjDaSerie(ser);
     if (!num || !c) return toast("Essa NF não tem série com CNPJ conhecido.", true);
-    const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/resultSSW"; f.target = "_blank"; f.rel = "noopener";
-    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", senhaDe(transp)]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
+    const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/ssw_resultSSW"; f.target = "_blank"; f.rel = "noopener";
+    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", senhaDe(transp)], ["urlori", "https://ssw.inf.br/ajuda/rastreamento.html"]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
     document.body.appendChild(f); f.submit(); f.remove();
   }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
@@ -3228,7 +3229,7 @@
       const ids = String(l.repo_ticket || "").split(",").filter(Boolean);
       const rot = ids.length ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(ids[0])}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">↻ Reposição</a>` : "↻ Reposição";
       const dica = ids.length ? (l.repo_fila ? "Fila: " + l.repo_fila : "") : "Sem número do ticket: suba de novo o detalhamento de tickets";
-      h += `<div class="sac-marca rp" title="${esc(dica)}">${rot}${ids.length ? " " + ids.map(linkTicket).join(" ") : ""}${l.repo_nf ? ` <span class="s">NF ${esc(l.repo_nf)}</span>` : ""}${l.repo_fila ? `<div class="s">${esc(l.repo_fila)}</div>` : ""}</div>`;
+      h += `<div class="sac-marca rp" title="${esc(dica)}">${rot}${ids.length ? " " + ids.map(linkTicket).join(" ") : ""}${l.repo_nf ? ` <span class="s">NF ${esc(l.repo_nf)}</span>` : ""}${!l.repo_nf && l.repo_fila ? `<div class="s">Sem NF ainda: está na fila ${esc(l.repo_fila)}</div>` : l.repo_fila ? `<div class="s">${esc(l.repo_fila)}</div>` : ""}</div>`;
     }
     return h;
   }
