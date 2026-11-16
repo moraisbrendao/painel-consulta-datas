@@ -1514,40 +1514,12 @@ revoke all on function public.importar_detalhe_nf(jsonb, boolean) from public, a
 grant execute on function public.importar_detalhe_nf(jsonb, boolean) to authenticated;
 
 -- =================================================================
--- 33) Pedidos em aberto que só estão no arquivo da Intelipost
--- O botão "Enviar Intelipost" também guarda os pedidos que NÃO estão entregues nem cancelados.
--- O painel (base_aberta) mostra a base + esses pedidos que não vieram na base.
+-- 33) DESFEITA (2026-11-16): o arquivo da Intelipost NÃO acrescenta pedidos; a base (BI) manda em tudo.
+-- A Intelipost só tira da base os entregues/cancelados (Preventivo e Consulta SAC) e alimenta a Conferência SSW.
 -- =================================================================
-create table if not exists public.intelipost_abertos (like public.base_pedidos including all);
-alter table public.intelipost_abertos enable row level security;
-drop policy if exists "logados leem" on public.intelipost_abertos;
-create policy "logados leem" on public.intelipost_abertos for select to authenticated using ((select not public.e_sac()));
-revoke all on public.intelipost_abertos from anon;
-grant select on public.intelipost_abertos to authenticated;
-
-create or replace function public.importar_abertos(linhas jsonb, limpar boolean)
-returns integer language plpgsql security definer set search_path = public
-as $$
-begin
-  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
-  if limpar then delete from public.intelipost_abertos where true; end if;
-  insert into public.intelipost_abertos
-  select * from jsonb_populate_recordset(null::public.intelipost_abertos, linhas) r
-  where r.pedido is not null and r.pedido <> ''
-  on conflict (pedido) do nothing;
-  update public.fechados_info set enviado_em = now() where id = 1;   -- muda a "versão" para o painel baixar de novo
-  return (select count(*) from public.intelipost_abertos);
-end $$;
-revoke all on function public.importar_abertos(jsonb, boolean) from public, anon;
-grant execute on function public.importar_abertos(jsonb, boolean) to authenticated;
-
 create or replace view public.base_aberta with (security_invoker = true) as
   select b.* from public.base_pedidos b
   where coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
-    and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
-  union all
-  select a.* from public.intelipost_abertos a
-  where not exists (select 1 from public.base_pedidos b where b.pedido = a.pedido)
-    and not exists (select 1 from public.intelipost_fechados f where f.pedido = a.pedido);
-revoke all on public.base_aberta from anon;
-grant select on public.base_aberta to authenticated;
+    and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido);
+drop function if exists public.importar_abertos(jsonb, boolean);
+drop table if exists public.intelipost_abertos;
