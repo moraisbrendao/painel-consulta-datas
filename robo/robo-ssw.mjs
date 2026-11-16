@@ -253,6 +253,9 @@ if (MODO === "diag-ajuda") {   // página pública de ajuda do SSW (sem dados de
   const p = await pagina("https://ssw.inf.br/ajuda/rastreamento.html");
   log("status:", p.status);
   log(p.txt.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/<[^>]+>/g, (t) => /form|input|textarea|action|name=/i.test(t) ? t : " ").replace(/\s+/g, " ").slice(0, 6000));
+  for (const m of p.txt.matchAll(/<script[^>]*>([\s\S]*?)<\/script>|<script[^>]*src="([^"]+)"/gi)) log("SCRIPT", m[2] || "", (m[1] || "").replace(/\s+/g, " ").slice(0, 1500));
+  for (const src of ["/scripts/rastreamento4.js", "/ajuda/rastreamento.js"]) { const j = await pagina("https://ssw.inf.br" + src).catch(() => null); if (!j) continue;
+    log("JS", src, j.status, j.txt.length); const t = j.txt.replace(/\s+/g, " "); for (const k of ["NR", "split", "textarea", "submit", "resultSSW", "\\n"]) { let i = -1, c = 0; while ((i = t.indexOf(k, i + 1)) >= 0 && c++ < 3) log(`  [${k}]`, t.slice(Math.max(0, i - 200), i + 250)); } }
 }
 if (MODO === "diag-jadlog") {   // API da Jadlog: manual público + teste com 2 NFs (só status e nomes de campos)
   const manual = await pagina("http://integracoes.jadlog.com.br").catch((e) => ({ status: e.message, txt: "" }));
