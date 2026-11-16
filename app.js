@@ -1688,65 +1688,105 @@
   // ---------------- transportadora divergente (coluna H × coluna BD da base) ----------------
   // H = transportadora na Intelipost; BD = "Transportadora Promob" (a da nota). A certa sai do DE × PARA pela série da nota
   // (planilha "modelos_eloggia_ajuste tp"); se tiver redespacho no Promob (BE), vale o redespacho.
-  let dvPromob = null, dvGer = -1, dvCard = "div", dvLista = [], dvBusca = "";
+  // Tabela de apelidos da planilha "Ajuste_Transportadoras" (aba Apelidos): transportadora da coluna H -> apelido ->
+  // trecho que tem que aparecer no nome da transportadora do Promob (coluna BD) -> ID considerado.
+  // Transvanio (MEI): o Promob mostra o nome do dono; aqui é reconhecida pelo CNPJ ou pela impressão do nome (troca-notas.js).
+  const AJ_TP = [
+    ["Aceville", "Aceville", "Aceville", 230], ["Atual Cargas", "Atual Cargas", "Atual Cargas", 33], ["Bento Brasil", "Bento Brasil", "Bento Brasil", 1345],
+    ["Costa Transportes", "Costa Transportes", "Costa", 20844], ["DLOG Transportes", "DLOG Transportes", "Dlog", 21816], ["Dominalog", "Dominalog", "Dominalog", 196],
+    ["Flog Transportes", "Flog Transportes", "Flog", 4946], ["Formato Transportes", "Formato Transportes", "Formato", 880], ["IDH Transportes", "IDH Transportes", "IDH", 15578],
+    ["JadLog", "LDC", "LDC", 22], ["MF Transportes", "MF Transportes", "MF Almeida", 21601], ["Frota Interna", "Frota Interna", "Frota Interna", 20028],
+    ["Petrymar", "Petrymar", "Petrymar", 10897], ["PROLOG TRANSPORTES E LOGISTICA LTDA", "PROLOG TRANSPORTES E LOGISTICA LTDA", "Prolog", 9704],
+    ["RAJLOG SERVICOS LOGISTICOS", "RAJLOG SERVICOS LOGISTICOS", "Rajlog", 23558], ["Rapido Alem Paraiba", "Rapido Alem Paraiba", "Rapido Alem Paraiba", 22359],
+    ["Reunidas", "Reunidas", "Reunidas", 149], ["SAJOB OPERACOES E LOGISTICAS LTDA", "SAJOB OPERACOES E LOGISTICAS LTDA", "Sajob", 16749],
+    ["VM TRANSPORTES", "VM TRANSPORTES", "Tempo Justo", 601], ["Termaco", "Termaco", "Termaco", 76], ["Tradicional Log", "Tradicional Log", "Tradicional Log", 17241],
+    ["Trans Sua Log", "JS Oliveira", "J S De Oliveira", 15128], ["TRANSCAI TRANSPORTES", "TRANSCAI TRANSPORTES", "Transcai", 21511], ["Transiga", "Via Cargas", "Via Cargas", 22575],
+    ["Transito Brasil", "HB Transportes", "HB Transportes", 617], ["Translaguna", "Translaguna", "Translaguna", 624], ["Translovato", "Translovato", "Translovato", 256],
+    ["Transportadora BLZ", "BLZ", "BLZ", 14980], ["Transvanio", "Transvanio (CNPJ 44.657.205)", "CNPJ 44657205", 20062], ["Trilog Express", "Trilog Express", "Trilog", 21211],
+    ["Tsl Solucoes Transportes E Logistica Ltd", "LLS", "LLS", 18001], ["Zafer Standard", "Zafer Standard", "Zafer", 22950], ["Zelog Transportes", "Zelog Transportes", "Zelog", 19536],
+  ].map(([h, apelido, chave, id]) => ({ h, apelido, chave, id }));
+  const ajPorH = new Map(AJ_TP.map((x) => [norm(x.h), x]));
+  // o trecho (chave) aparece no nome do Promob? (como o PROCURAR do Excel: sem diferença de maiúscula)
+  function ajTem(chave, nome) {
+    if (!nome) return false;
+    if (chave.startsWith("CNPJ ")) return nome.replace(/\D/g, "").includes(chave.slice(5)) || TROCA.ehCnpjImpressao(nome) === chave;
+    return norm(nome).includes(norm(chave));
+  }
+  const ajIdPromob = (nome) => { if (!nome) return null; const x = AJ_TP.find((a) => ajTem(a.chave, nome)); return x || null; };
+
+  let dvPromob = null, dvGer = -1, dvCard = "div", dvLista = [], dvBusca = "", dvGrupo = null, dvResumo = [];
   async function carregarDvPromob() {
     if (dvPromob && dvGer === gGeracao) return true;
     try {
-      const L = await buscarComCache("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho,cep:extra->>cep", gBaseEm);
+      const L = await buscarComCache("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho,pr:extra->>promob,cep:extra->>cep", gBaseEm);
       dvPromob = new Map(L.map((x) => [x.pedido, x])); dvGer = gGeracao; return true;
     } catch (err) { dvPromob = new Map(); dvGer = gGeracao; $("dv-info").textContent = /extra/i.test(err.message || "") ? "Falta rodar a parte 32 do schema.sql e enviar a base de novo." : "Não consegui ler: " + err.message; return false; }
   }
-  const DV_CARD = {
-    div: (x) => x.sit === "div", sem: (x) => x.sit === "sem", ok: (x) => x.sit === "ok", todos: () => true,
-  };
+  const DV_CARD = { div: (x) => x.sit === "div", ok: (x) => x.sit === "ok", sem: (x) => x.sit === "sem", todos: () => true };
+  const DV_NOME = { div: "Divergente", ok: "OK", sem: "Sem apelido cadastrado" };
+  const dvChave = (x) => `${x.r.transp || ""}\u0001${x.promob}`;
   async function desenharDivTP() {
-    // fica em Alterar pedidos: usa a base inteira, só os pedidos em andamento (sem entregues e cancelados)
+    // fica em Alterar pedidos: usa a base inteira, só os pedidos em trânsito (sem entregues e cancelados)
     if (!gDados) {
       $("dv-info").textContent = "Carregando os pedidos da base…";
       if (!gCarregando) await carregarGerencial(); else { setTimeout(() => { if (!$("ap-sec-dv").hidden) desenharDivTP(); }, 1500); return; }
       if (!gDados) { $("dv-info").textContent = "Não consegui carregar a base. Atualize a página."; return; }
     }
     prepararG();
-    const L = gDados.filter((r) => !r._fechado);
     if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
     const temPromob = [...dvPromob.values()].some((x) => x.tp);
-    if (!temPromob) {
-      const antiga = [...dvPromob.values()].some((x) => x.cep);
-      $("dv-info").textContent = antiga
-        ? 'A base atual foi enviada com a versão antiga do painel, que ainda não guardava a coluna "Transportadora Promob". Aperte Ctrl+F5 para atualizar a página e envie a base de novo.'
-        : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e envie a base de novo no botão "Carregar planilha".';
-    }
-    const todos = L.map((r) => {
-      const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "";
-      // com redespacho, vale SEMPRE o redespacho (a da coluna BD só faz a transferência, ex.: Intechlog)
-      const e = TROCA.esperadoPromob(rd || bd, r.serie), fonte = rd ? "redespacho" : "promob";
-      const sit = !bd && !rd ? "sem" : e.erro ? "sem" : TROCA.mesmaTransp(r.transp, e.grupo) ? "ok" : "div";
-      return { r, bd, rd, e, fonte, sit };
+    const todos = [];
+    gDados.forEach((r) => {
+      if (r._fechado) return;
+      const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "", promob = rd || bd;
+      if (!r.transp && !promob) return;
+      const ap = ajPorH.get(norm(r.transp));
+      const sit = !ap ? "sem" : ajTem(ap.chave, promob) ? "ok" : "div";
+      todos.push({ r, bd, rd, promob, ped: p.pr || "", ap, sit, idp: ajIdPromob(promob) });
     });
-    document.querySelectorAll("#dv-cards .kpi[data-dv]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(todos.filter(DV_CARD[b.dataset.dv]).length); b.classList.toggle("ativa", b.dataset.dv === dvCard); });
+    const n = (k) => todos.filter(DV_CARD[k]).length, nOk = n("ok"), nDiv = n("div");
+    document.querySelectorAll("#dv-cards .kpi[data-dv]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(n(b.dataset.dv)); b.classList.toggle("ativa", b.dataset.dv === dvCard); });
+    $("dv-pct").textContent = `${nOk + nDiv ? ((nDiv / (nOk + nDiv)) * 100).toFixed(2).replace(".", ",") : "0"}% divergente`;
     const nTp = [...dvPromob.values()].filter((x) => x.tp).length;
-    if (temPromob) $("dv-info").textContent = `Transportadora Promob na base: ${fmt(nTp)} de ${fmt(dvPromob.size)} pedidos · ${fmt(todos.filter(DV_CARD.div).length)} pedidos em andamento com a transportadora da Intelipost diferente da nota (Promob) · ${fmt(L.length)} pedidos em andamento na base`;
+    $("dv-info").textContent = !temPromob
+      ? ([...dvPromob.values()].some((x) => x.cep) ? 'A base atual foi enviada com a versão antiga do painel, que ainda não guardava a coluna "Transportadora Promob". Aperte Ctrl+F5 e carregue a planilha de novo.'
+        : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e carregue a planilha de novo.')
+      : `Transportadora Promob na base: ${fmt(nTp)} de ${fmt(dvPromob.size)} pedidos · ${fmt(todos.length)} pedidos em trânsito`;
+    // resumo: transportadora (H) × transportadora Promob, só os divergentes (como a aba "Divergências")
+    const g = new Map();
+    todos.filter(DV_CARD.div).forEach((x) => { const k = dvChave(x); const y = g.get(k) || { k, h: x.r.transp || "", ap: x.ap, promob: x.promob, idp: x.idp, qtd: 0 }; y.qtd++; g.set(k, y); });
+    dvResumo = [...g.values()].sort((a, b) => a.h.localeCompare(b.h) || b.qtd - a.qtd);
+    const faz = (idp, h) => !idp ? '<span class="chip cinza">transportadora do Promob não cadastrada</span>'
+      : `Intelipost: trocar <b>${esc(h || "—")}</b> por <b>${esc(idp.h)}</b> (ID ${idp.id}) · BI: <b>${esc(idp.h)}</b>`;
+    $("dv-resumo").innerHTML = dvResumo.length ? dvResumo.map((y) => `<tr class="clicavel${dvGrupo === y.k ? " aberta" : ""}" data-dvg="${esc(y.k)}"><td>${esc(y.h)}</td><td>${esc(y.ap ? y.ap.apelido : "")}</td><td>${esc(y.promob || "— sem transportadora no Promob")}</td><td class="num"><b>${fmt(y.qtd)}</b></td><td>${y.idp ? y.idp.id : '<span class="s">Não cadastrada</span>'}</td><td>${faz(y.idp, y.h)}</td></tr>`).join("")
+      : '<tr><td colspan="6" class="s">Sem divergências.</td></tr>';
     const q = norm(dvBusca);
-    dvLista = todos.filter(DV_CARD[dvCard]).filter((x) => !q || [x.r.pedido, x.r.nf, x.r.transp, x.bd, x.rd].some((v) => norm(v).includes(q)));
-    dvLista.sort((a, b) => (b.r._atraso - a.r._atraso) || String(a.r.transp || "").localeCompare(String(b.r.transp || "")));
-    $("dv-titulo").textContent = `${{ div: "Divergentes em andamento", sem: "Sem DE × PARA", ok: "Iguais", todos: "Todos" }[dvCard]} (${fmt(dvLista.length)})`;
+    dvLista = todos.filter(DV_CARD[dvCard]).filter((x) => !dvGrupo || dvChave(x) === dvGrupo)
+      .filter((x) => !q || [x.r.pedido, x.ped, x.r.nf, x.r.transp, x.bd, x.rd].some((v) => norm(v).includes(q)));
+    dvLista.sort((a, b) => String(a.r.transp || "").localeCompare(String(b.r.transp || "")) || (b.r._atraso - a.r._atraso));
+    $("dv-titulo").textContent = `${{ div: "Pedidos com divergência", ok: "Pedidos OK", sem: "Sem apelido cadastrado", todos: "Todos os pedidos em trânsito" }[dvCard]} (${fmt(dvLista.length)})`;
+    $("dv-sub-lista").innerHTML = dvGrupo ? `Só: ${esc(dvGrupo.replace("\u0001", " × "))} · <button class="link" id="dv-limpa-grupo">ver todos</button>` : "";
     $("dv-linhas").innerHTML = dvLista.slice(0, 500).map((x) => {
-      const ok = x.e.ok, certo = ok ? `<b>${esc(ok.metodo)}</b> <span class="s">ID ${ok.id}${x.e.padrao ? " · padrão" : ""}</span>` : `<span class="s">${esc(x.e.erro || "")}</span>`;
-      const faz = x.sit === "div" && ok ? `Intelipost: trocar <b>${esc(x.r.transp || "—")}</b> por <b>${esc(ok.metodo)}</b> (ID ${ok.id}) · BI: <b>${esc(ok.transp)}</b>` : x.sit === "ok" ? `<span class="chip verde">certo</span>` : `<span class="chip cinza">conferir à mão</span>`;
-      return `<tr><td class="mono">${esc(x.r.pedido)}</td><td>${esc(x.r.nf)}${x.r.serie ? "-" + esc(x.r.serie) : ""}</td><td><span class="ms">${esc(x.r.status || "")}</span>${x.r._atraso ? `<div><span class="chip vermelho">atrasado ${x.r._atraso} d</span></div>` : ""}</td>
-        <td>${esc(x.r.transp || "—")}</td><td>${esc(x.bd || "—")}${x.rd ? `<div class="s">redespacho: ${esc(x.rd)}</div>` : ""}</td><td>${certo}${ok ? `<div class="s">${esc(ok.transp)}</div>` : ""}</td><td>${faz}</td></tr>`;
-    }).join("") + (dvLista.length > 500 ? `<tr><td colspan="7" class="s">Mostrando 500 de ${fmt(dvLista.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
+      const st = x.sit === "ok" ? '<span class="chip verde">OK</span>' : x.sit === "div" ? '<span class="chip vermelho">Divergente</span>' : '<span class="chip laranja">Sem apelido cadastrado</span>';
+      return `<tr><td class="mono">${esc(x.ped)}</td><td class="mono">${esc(x.r.pedido)}</td><td>${esc(x.r.nf)}${x.r.serie ? "-" + esc(x.r.serie) : ""}</td><td><span class="ms">${esc(x.r.status || "")}</span>${x.r._atraso ? `<div><span class="chip vermelho">atrasado ${x.r._atraso} d</span></div>` : ""}</td>
+        <td>${esc(x.r.transp || "—")}</td><td>${esc(x.promob || "—")}${x.rd ? `<div class="s">redespacho · nota: ${esc(x.bd || "—")}</div>` : ""}</td><td>${x.idp ? x.idp.id : '<span class="s">Não cadastrada</span>'}</td><td>${st}</td></tr>`;
+    }).join("") + (dvLista.length > 500 ? `<tr><td colspan="8" class="s">Mostrando 500 de ${fmt(dvLista.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
     $("dv-vazio").hidden = dvLista.length > 0;
   }
-  $("dv-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-dv]"); if (!b) return; dvCard = b.dataset.dv; desenharDivTP(); });
+  $("dv-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-dv]"); if (!b) return; dvCard = b.dataset.dv; dvGrupo = null; desenharDivTP(); });
+  $("dv-resumo").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-dvg]"); if (!tr) return; dvGrupo = dvGrupo === tr.dataset.dvg ? null : tr.dataset.dvg; dvCard = "div"; desenharDivTP(); });
+  $("dv-sub-lista").addEventListener("click", (e) => { if (e.target.id === "dv-limpa-grupo") { dvGrupo = null; desenharDivTP(); } });
   let esperaDv; $("dv-busca").addEventListener("input", (e) => { dvBusca = e.target.value; clearTimeout(esperaDv); esperaDv = setTimeout(desenharDivTP, 250); });
   $("dv-exportar").addEventListener("click", () => {
-    if (!dvLista.length) return toast("Nada para exportar.", true);
-    const linhas = [["Pedido Intelipost", "Nota-Série", "Status", "Dias de atraso", "Transportadora na Intelipost (H)", "Transportadora Promob (BD)", "Redespacho Promob", "Método certo na Intelipost", "ID do método", "Transportadora certa (BI)", "Situação"]]
-      .concat(dvLista.map((x) => [x.r.pedido, x.r.serie ? `${x.r.nf}-${x.r.serie}` : x.r.nf, x.r.status || "", x.r._atraso || "", x.r.transp || "", x.bd, x.rd, x.e.ok ? x.e.ok.metodo : "", x.e.ok ? x.e.ok.id : "", x.e.ok ? x.e.ok.transp : "",
-        x.sit === "div" ? "Divergente" : x.sit === "ok" ? "Igual" : "Sem DE × PARA: " + (x.e.erro || "")]));
-    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Divergentes");
-    XLSX.writeFile(wb, `transportadora_divergente_${hojeISO()}.xlsx`);
+    if (!dvLista.length && !dvResumo.length) return toast("Nada para exportar.", true);
+    const res = [["Transportadora (H)", "Apelido Esperado", "Transportadora Promob (BD)", "Qtd", "ID Transportadora Promob (BD)", "Trocar na Intelipost para"]]
+      .concat(dvResumo.map((y) => [y.h, y.ap ? y.ap.apelido : "", y.promob, y.qtd, y.idp ? y.idp.id : "Não cadastrada", y.idp ? y.idp.h : ""]));
+    const ped = [["Pedido Promob", "Pedido Intelipost", "Nota", "Status Intelipost", "Transportadora (col. H)", "Transportadora Promob (col. BD)", "Transportadora Redespacho Promob (col. BE)", "ID Transportadora Promob (BD)", "Situação"]]
+      .concat(dvLista.map((x) => [x.ped, x.r.pedido, x.r.serie ? `${x.r.nf}-${x.r.serie}` : x.r.nf, x.r.status || "", x.r.transp || "", x.bd, x.rd, x.idp ? x.idp.id : "Não cadastrada", DV_NOME[x.sit]]));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), "Divergências");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(ped), "Pedidos");
+    XLSX.writeFile(wb, `ajuste_transportadoras_${hojeISO()}.xlsx`);
   });
 
   // ---------------- histórico diário (parte 31) ----------------

@@ -172,7 +172,7 @@
     return grupo.some((r) => contem(pw, tiraLocal(palavras(r.transp))) || contem(pw, tiraLocal(palavras(r.metodo))));
   }
 
-  const api = { DEPARA, metodoPara, transpDaTroca, somaDiasUteis, palavras, esperadoPromob, mesmaTransp };
+  const api = { DEPARA, metodoPara, transpDaTroca, somaDiasUteis, palavras, esperadoPromob, mesmaTransp, ehCnpjImpressao: (nome) => IMPRESSAO[impressao(nome)] || null };
   if (typeof window !== "undefined") window.TROCA = api;
   if (typeof module !== "undefined") module.exports = api;
 })();

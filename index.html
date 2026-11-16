@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=99">
+  <link rel="stylesheet" href="styles.css?v=100">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -686,29 +686,42 @@
             <span class="ap-ic">⇄</span>
             <div>
               <h2>Transportadora divergente</h2>
-              <p class="sub">Pedidos em andamento em que a transportadora da Intelipost (coluna H da base) não é a da nota no Promob (coluna BD; se tiver redespacho, vale o redespacho). O método certo sai do DE × PARA pela série da nota. Entregues e cancelados ficam de fora.</p>
+              <p class="sub">Comparativo da Transportadora (coluna H) × Transportadora Promob (coluna BD) da base, igual à planilha "Ajuste_Transportadoras": pela tabela de apelidos, o nome da coluna H tem que aparecer na transportadora do Promob. Se a coluna BE (redespacho) estiver preenchida, vale o redespacho. Só pedidos em trânsito: entregues e cancelados ficam de fora.</p>
               <p id="dv-info" class="info-base">Carregando…</p>
             </div>
           </div>
         </section>
         <section class="kpis" id="dv-cards">
-          <button class="kpi vermelho ativa" data-dv="div"><span class="kpi-rot">Divergentes em andamento</span><b class="kpi-num">–</b><small>para acertar na Intelipost e no BI</small><i>↗</i></button>
-          <button class="kpi" data-dv="sem"><span class="kpi-rot">Sem DE × PARA</span><b class="kpi-num">–</b><small>transportadora do Promob não reconhecida</small><i>↗</i></button>
-          <button class="kpi verde" data-dv="ok"><span class="kpi-rot">Iguais</span><b class="kpi-num">–</b><small>Intelipost bate com a nota</small><i>↗</i></button>
-          <button class="kpi" data-dv="todos"><span class="kpi-rot">Todos</span><b class="kpi-num">–</b><small>pedidos em andamento</small><i>↗</i></button>
+          <button class="kpi vermelho ativa" data-dv="div"><span class="kpi-rot">Divergente</span><b class="kpi-num">–</b><small id="dv-pct">% divergente</small><i>↗</i></button>
+          <button class="kpi verde" data-dv="ok"><span class="kpi-rot">OK</span><b class="kpi-num">–</b><small>Intelipost bate com o Promob</small><i>↗</i></button>
+          <button class="kpi laranja" data-dv="sem"><span class="kpi-rot">Sem apelido cadastrado</span><b class="kpi-num">–</b><small>transportadora da coluna H fora da tabela</small><i>↗</i></button>
+          <button class="kpi" data-dv="todos"><span class="kpi-rot">Todos</span><b class="kpi-num">–</b><small>pedidos em trânsito</small><i>↗</i></button>
         </section>
         <section class="cartao">
           <div class="cartao-topo">
-            <div><h2 id="dv-titulo">Divergentes</h2><p class="sub">"BI" = nome da transportadora como deve ficar no relatório.</p></div>
+            <div><h2>Resumo das divergências</h2><p class="sub">Transportadora (H) × Transportadora Promob. Clique numa linha para ver os pedidos dela.</p></div>
+          </div>
+          <div class="tabela-wrap">
+            <table class="tabela-pedidos">
+              <thead><tr><th>Transportadora (H)</th><th>Apelido esperado</th><th>Transportadora Promob (BD / redespacho)</th><th class="num">Qtd</th><th>ID Transportadora Promob</th><th>O que fazer</th></tr></thead>
+              <tbody id="dv-resumo"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="cartao">
+          <div class="cartao-topo">
+            <div><h2 id="dv-titulo">Pedidos</h2><p class="sub" id="dv-sub-lista"></p></div>
             <div class="acoes-robo"><input id="dv-busca" type="search" placeholder="Procurar pedido, NF ou transportadora"><button id="dv-exportar" class="btn contorno">Baixar Excel</button></div>
           </div>
           <div class="tabela-wrap">
             <table class="tabela-pedidos">
-              <thead><tr><th>Pedido</th><th>NF</th><th>Status</th><th>Na Intelipost (H)</th><th>No Promob (BD)</th><th>Certo na Intelipost</th><th>O que fazer</th></tr></thead>
+              <thead><tr><th>Pedido Promob</th><th>Pedido Intelipost</th><th>Nota</th><th>Status</th><th>Transportadora (H)</th><th>Transportadora Promob</th><th>ID Transportadora Promob</th><th>Situação</th></tr></thead>
               <tbody id="dv-linhas"></tbody>
             </table>
             <p id="dv-vazio" class="vazio" hidden>Nenhum pedido.</p>
           </div>
+        </section>
+      </div>
         </section>
       </div>
 
@@ -931,9 +944,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=99"></script>
-  <script src="mapa-brasil.js?v=99"></script>
-  <script src="troca-notas.js?v=99"></script>
-  <script src="app.js?v=99"></script>
+  <script src="config.js?v=100"></script>
+  <script src="mapa-brasil.js?v=100"></script>
+  <script src="troca-notas.js?v=100"></script>
+  <script src="app.js?v=100"></script>
 </body>
 </html>
