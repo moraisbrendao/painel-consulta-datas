@@ -279,6 +279,23 @@ if (MODO === "diag-jadlog") {   // API da Jadlog: manual público + teste com 2 
     }
   }
 }
+if (MODO === "diag-jadobs") {   // onde estão as "Observações" do rastreio da Jadlog: chaves da API + páginas do site (só estrutura, sem dados)
+  await entrarSupabase(); const tok = process.env.JADLOG_TOKEN || "";
+  const L = (await chamar("conferencia_ssw?select=nf,detalhe&transportadora=ilike.*jadlog*&situacao=eq.nao%20entregue&limit=200")).filter((x) => x.detalhe && x.detalhe.cte).slice(0, 3);
+  log("notas com CT-e:", L.length);
+  const chaves = (o, p = "") => o && typeof o === "object" ? Object.entries(o).flatMap(([k, v]) => Array.isArray(v) ? [`${p}${k}[${v.length}]`, ...chaves(v[0], `${p}${k}[0].`)] : v && typeof v === "object" ? chaves(v, `${p}${k}.`) : [`${p}${k}`]) : [];
+  for (const l of L) {
+    const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()), cte = String(l.detalhe.cte), cod = String(l.detalhe.codigo || "");
+    if (tok) { const r = await fetch("https://www.jadlog.com.br/embarcador/api/tracking/consultar", { method: "POST", headers: { "Content-Type": "application/json", Authorization: `Bearer ${tok}` }, body: JSON.stringify({ consulta: [{ df: { nf: num, serie: ser, tpDocumento: 2, cnpjRemetente: cnpjDaSerie(ser) } }] }) });
+      const j = await r.json().catch(() => null); log("API chaves:", j ? [...new Set(chaves(j))].join(" | ").slice(0, 1500) : r.status); }
+    for (const u of [`https://www.jadlog.com.br/siteInstitucional/tracking_dev.jad?cte=${cte}`, `https://www.jadlog.com.br/siteInstitucional/tracking.jad?cte=${cte}`, `https://www.jadlog.com.br/jadlog/tracking?cte=${cte}`, cod ? `https://www.jadlog.com.br/siteInstitucional/tracking_dev.jad?shipmentId=${cod}` : null].filter(Boolean)) {
+      const r = await pagina(u).catch((e) => ({ status: e.message, txt: "" })); const t = r.txt || "";
+      const ths = tags(t, /<th[^>]*>[\s\S]{0,80}?<\/th>/gi).map((x) => x.replace(/<[^>]+>/g, "").trim()).filter(Boolean);
+      log(`${u.replace(/=\d+/, "=#").replace(/=[A-Za-z0-9]{6,}$/, "=#")}: ${r.status} · ${t.length} bytes · observ: ${/observa/i.test(t) ? "sim" : "não"} · captcha: ${/captcha/i.test(t) ? "sim" : "não"} · tr: ${(t.match(/<tr/gi) || []).length} · th: ${ths.slice(0, 20).join(" | ")}`);
+      const i = t.search(/Observa/i); if (i >= 0) log("  perto de Observação:", t.slice(i, i + 1500).replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").replace(/\d{4,}/g, "#").replace(/[A-Za-zÀ-ú]{3,}/g, (w) => (/^(cte|nota|fiscal|data|descri|status|usu|observ|iniciado|andamento|finaliz|concl)/i.test(w) ? w : "x")).slice(0, 600));
+      await new Promise((ok) => setTimeout(ok, 1500)); }
+  }
+}
 if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrutura do resultado (sem dados de cliente)
   const URL_B = "https://sistema.bentobrasil.com.br/rastreamentoCarga.php";
   const f = await pagina(URL_B);
