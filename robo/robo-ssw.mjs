@@ -376,6 +376,9 @@ if (MODO === "diag-lote4") {   // testa a leitura do lote: só contagens e estru
     const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: it.map((x) => x.n).join("\r\n"), cnpj, chave: chaveDe(it[0].t), urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
     const m = lerLote(r.txt), c = {}; m.forEach((v) => (c[v.situacao] = (c[v.situacao] || 0) + 1));
     log("HTTP", r.status, "bytes", r.txt.length, "enviadas", it.length, "lidas", m.size, "casam", it.filter((x) => m.has(x.n)).length, JSON.stringify(c));
+    let k = 0; for (const bloco of r.txt.split(/<tr\b/i).slice(1)) { if (!/opx\(/.test(bloco.slice(0, 300)) || k++ >= 6) continue;
+      const tds = bloco.split(/<td\b/i).slice(1), dl = (t) => sohTexto("<td " + (t || "")).join(" | ").replace(/\d+/g, (d) => "d" + d.length).replace(/[A-Za-zÀ-ú]{2,}/g, (w) => (/^(mercadoria|entregue|previs|entrega|informa|dispon|situa)/i.test(w) ? w : "x"));
+      log(`linha ${k}: tds ${tds.length} · inicio ${bloco.slice(0, 60).replace(/\d+/g, "#").replace(/id=[^&'"]+/g, "id=*")} · td0 [${dl(tds[0])}] · td1 [${dl(tds[1])}] · td2 [${dl(tds[2]).slice(0, 160)}]`); }
     log("NFs distintas", new Set(it.map((x) => x.n)).size, "séries", new Set(it.map((x) => x.se)).size);
     log("tr total", (r.txt.match(/<tr\b/gi) || []).length, "tr com background", (r.txt.match(/<tr[^>]*background-color/gi) || []).length, "opx", (r.txt.match(/opx\(/g) || []).length);
     const corpo = r.txt.replace(/\s+/g, " "), i0 = corpo.search(/<tr[^>]*opx/i);
