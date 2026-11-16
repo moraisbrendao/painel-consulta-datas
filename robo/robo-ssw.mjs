@@ -781,10 +781,16 @@ async function conferirLote() {
     log(`Jadlog (API): ${linhas.length} conferidos · ${Math.round((Date.now() - t0) / 1000)} s`); } })().catch((e) => log("Jadlog parou:", String(e.message).slice(0, 80)));
   // SSW: tudo que não é Jadlog, Bento, Trânsito Brasil (sistemas próprios) nem fora do SSW
   const ssw = lista.filter((l) => !EH_JADLOG.test(l.transportadora || "") && !EH_BENTO.test(l.transportadora || "") && !(EH_TRANSITO.test(l.transportadora || "") && !(l.detalhe && l.detalhe.emissor)) && !FORA_SSW.test(l.transportadora || ""));
-  const grupos = new Map(), semNf = [];   // CNPJ da série + senha da transportadora
-  for (const l of ssw) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()); const c = cnpjDaSerie(ser);
-    if (!num || !c) { semNf.push(l); continue; } const ch = chaveDe(l.transportadora), k = c + "|" + ch; (grupos.get(k) || grupos.set(k, []).get(k)).push({ ...l, n: sem0(num) }); }
-  const PAUSA = Number(process.env.SSW_PAUSA || 1200), dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  // CNPJ: o da série, ou o outro CNPJ em que essa NF já foi achada antes (detalhe.cnpj_outro)
+  const TODOS = Object.keys(CNPJ_SERIE), cheio = (suf) => (suf ? TODOS.find((c) => c.endsWith(suf)) : null);
+  const aprendido = new Map();   // transportadora → CNPJ → vezes que a NF foi achada nele (fora o da série)
+  const conta = (t, c) => { const m = aprendido.get(t) || aprendido.set(t, new Map()).get(t); m.set(c, (m.get(c) || 0) + 1); };
+  lista.forEach((l) => { const c = cheio(l.detalhe && l.detalhe.cnpj_outro); if (c) conta(l.transportadora, c); });
+  const grupos = new Map(), semNf = [];
+  for (const l of ssw) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()); const cs = cnpjDaSerie(ser);
+    if (!num || !cs) { semNf.push(l); continue; } const c = cheio(l.detalhe && l.detalhe.cnpj_outro) || cs;
+    const ch = chaveDe(l.transportadora), k = c + "|" + ch; (grupos.get(k) || grupos.set(k, []).get(k)).push({ ...l, n: sem0(num), cs, c1: c }); }
+  const PAUSA = Number(process.env.SSW_PAUSA || 1200), REPESCA = Number(process.env.SSW_REPESCA || 60), dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
   let consultas = 0, bloq = 0, retentando = false;
   async function lote(cnpj, chave, nums) {
     for (;;) {
@@ -796,12 +802,15 @@ async function conferirLote() {
       log(`SSW respondeu ${r ? r.status : "sem resposta"}; espero ${bloq} min.`); await dorme(bloq * 60000);
     }
   }
-  const res = new Map(), cont = {};   // pedido → resultado
-  const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido);
-    const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}), ...(r._cnpj && r._cnpj !== cnpjDaSerie(String(l.nf).split("-")[1]) ? { cnpj_outro: r._cnpj.slice(-6) } : {}) };
+  const res = new Map(), cont = {}, tentados = new Map();   // pedido → resultado · pedido → CNPJs (6 últimos) já tentados sem achar
+  const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
+    const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
+    const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}) };
+    if (r.situacao !== "sem cte") delete det.tentados;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
-  let gravados = false; const achados = [];
+  let gravados = false; const mexidos = new Set(); let achou = 0;
   try {
     for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
       for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
@@ -810,21 +819,30 @@ async function conferirLote() {
     const achadosSSW = [...res.values()].filter((r) => r.situacao !== "sem cte").length;
     if (res.size > 200 && achadosSSW === 0) throw new Error("nenhuma NF reconhecida no retorno do SSW (leitura da página falhou); não gravo nada");
     await gravar(montar(ssw)); gravados = true; log(`Gravei a 1ª passada · ${Math.round((Date.now() - t0) / 1000)} s`);
-    retentando = true;   // nos outros CNPJ: se o SSW bloquear, paro aqui e fico com o que já tenho
-    // sem CT-e com o CNPJ da série: procura com os outros CNPJ (a transportadora pode ter emitido com outro)
-    const outros = Object.keys(CNPJ_SERIE); let achou = 0;
-    for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
-      let falta = itens.filter((x) => res.get(x.pedido).situacao === "sem cte");
-      for (const c of outros.filter((c) => c !== cnpj)) { if (!falta.length) break;
-        for (let i = 0; i < falta.length; i += 100) { const parte = falta.slice(i, i + 100), m = await lote(c, chave, [...new Set(parte.map((x) => x.n))]);
-          parte.forEach((x) => { const r = m.get(x.n); if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); achou++; achados.push(x.pedido); } }); }
-        falta = falta.filter((x) => res.get(x.pedido).situacao === "sem cte"); } }
-    log(`Outros CNPJ: ${achou} NFs achadas · total ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
-  } catch (e) { log("Parei:", e.message, "· gravo o que já conferi."); }
+    // Repescagem das sem CT-e nos outros CNPJ, em partes: até SSW_REPESCA lotes por rodada; cada NF lembra os CNPJ já tentados
+    // e tenta primeiro os CNPJ em que essa transportadora mais emite. Se o SSW bloquear, para e fica para a próxima rodada.
+    retentando = true; const c0 = consultas;
+    const itens = [...grupos.values()].flat().filter((x) => res.get(x.pedido).situacao === "sem cte");
+    itens.forEach((x) => tentados.set(x.pedido, [...new Set([...((x.detalhe && x.detalhe.tentados) || []), x.c1.slice(-6)])]));
+    const proximo = (x) => { const ap = aprendido.get(x.transportadora) || new Map(), ja = tentados.get(x.pedido);
+      return [x.cs, ...[...ap.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]), ...TODOS].find((c) => !ja.includes(c.slice(-6))); };
+    for (let rodada = 0; consultas - c0 < REPESCA; rodada++) {
+      const g = new Map(); let algum = false;
+      for (const x of itens) { if (res.get(x.pedido).situacao !== "sem cte") continue; const c = proximo(x);
+        if (!c) { if (rodada === 0) { tentados.set(x.pedido, []); mexidos.add(x.pedido); } continue; }   // já tentou todos: recomeça o ciclo na próxima rodada
+        algum = true; const k = c + "|" + chaveDe(x.transportadora); (g.get(k) || g.set(k, []).get(k)).push(x); }
+      if (!algum) break;
+      for (const [k, xs] of g) { const [c, chave] = k.split("|");
+        for (let i = 0; i < xs.length && consultas - c0 < REPESCA; i += 100) { const parte = xs.slice(i, i + 100), m = await lote(c, chave, [...new Set(parte.map((x) => x.n))]);
+          parte.forEach((x) => { const r = m.get(x.n); mexidos.add(x.pedido);
+            if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); conta(x.transportadora, c); achou++; }
+            else tentados.get(x.pedido).push(c.slice(-6)); }); } }
+    }
+    log(`Outros CNPJ: ${achou} NFs achadas em ${consultas - c0} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+  } catch (e) { log("Parei:", e.message, `· outros CNPJ: ${achou} achadas até aqui · gravo o que já conferi.`); }
   if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; log("Nada gravado do SSW nesta rodada."); return; }
-  const achadosS = new Set(achados); const final = gravados ? montar(ssw.filter((l) => achadosS.has(l.pedido))) : montar(ssw);
-  await gravar(final.concat(gravados ? [] : semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
-  if (gravados) await gravar(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null })));
+  const final = gravados ? montar(ssw.filter((l) => mexidos.has(l.pedido))) : montar(ssw);
+  await gravar(final.concat(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
   res.forEach((r) => (cont[r.situacao] = (cont[r.situacao] || 0) + 1));
   await pJad;
   log("Conferência em lote:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), `· sem NF/série ${semNf.length} · ${Math.round((Date.now() - t0) / 1000)} s no total`);
