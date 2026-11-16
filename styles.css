@@ -663,3 +663,22 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .c-mais[open] > summary::before { content: "▾ "; }
 .c-mais[open] { padding-bottom: 12px; }
 .c-mais > .cartao, .c-mais > .c-duas { margin: 0 16px 16px; }
+
+/* Passo a passo */
+#pagina-ajuda .aj-sec { padding: 0; margin-bottom: 12px; }
+#pagina-ajuda .aj-sec > summary { cursor: pointer; padding: 14px 18px; list-style: none; display: flex; gap: 10px; align-items: baseline; }
+#pagina-ajuda .aj-sec > summary::-webkit-details-marker { display: none; }
+#pagina-ajuda .aj-sec > summary::after { content: "▸"; margin-left: auto; color: var(--texto-2); }
+#pagina-ajuda .aj-sec[open] > summary::after { content: "▾"; }
+#pagina-ajuda .aj-sec > summary .sub { font-size: 12.5px; }
+#pagina-ajuda .aj-ic { width: 22px; text-align: center; }
+#pagina-ajuda .aj-corpo { padding: 0 22px 16px 50px; line-height: 1.55; }
+#pagina-ajuda .aj-corpo ol { padding-left: 20px; margin: 8px 0; }
+#pagina-ajuda .aj-corpo li { margin: 6px 0; }
+#pagina-ajuda .aj-atencao { background: #fdf6e3; border-left: 3px solid var(--amarelo); padding: 8px 12px; border-radius: 6px; }
+#aj-busca { font: inherit; padding: 8px 12px; border: 1px solid var(--borda); border-radius: 8px; min-width: 280px; }
+@media print {
+  #tela-painel .menu-lateral, .topo, #pagina-ajuda .acoes-robo, #pagina-ajuda [data-ir] { display: none !important; }
+  #tela-painel { display: block; }
+  #pagina-ajuda .aj-sec { break-inside: avoid; box-shadow: none; border: 1px solid #ccc; }
+}

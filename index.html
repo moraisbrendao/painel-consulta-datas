@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=122">
+  <link rel="stylesheet" href="styles.css?v=123">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -45,6 +45,7 @@
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
       <button class="menu-item so-log" data-pagina="documentos"><span class="menu-icone">🗎</span>Consulta Documento</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
+      <button class="menu-item" data-pagina="ajuda"><span class="menu-icone">❔</span>Passo a passo</button>
       <button class="menu-item so-admin" data-pagina="logins"><span class="menu-icone">🔑</span>Logins</button>
     </nav>
     <div class="lado">
@@ -63,6 +64,7 @@
           <span class="ic-up">⇪</span><span id="rot-tickets">Carregar tickets</span><input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
         </label>
         <span id="usuario" class="usuario"></span>
+        <button id="btn-ajuda" class="btn contorno" title="Como usar esta aba">❔ Ajuda</button>
         <button id="btn-trocar-senha" class="btn contorno">Trocar senha</button>
         <button id="btn-sair" class="btn contorno">Sair</button>
       </div>
@@ -877,6 +879,9 @@
       </section>
     </main>
 
+    <!-- ============ PASSO A PASSO ============ -->
+    <main class="conteudo" id="pagina-ajuda" hidden></main>
+
     <!-- ============ CONSULTA DOCUMENTO ============ -->
     <main class="conteudo" id="pagina-documentos" hidden>
       <section class="filtros-cartao filtros-cf" aria-label="Filtros">
@@ -1236,12 +1241,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=122"></script>
-  <script src="mapa-brasil.js?v=122"></script>
-  <script src="troca-notas.js?v=122"></script>
-  <script src="app.js?v=122"></script>
-  <script src="ordenar.js?v=122"></script>
-  <script src="menu.js?v=122"></script>
-  <script src="documentos.js?v=122"></script>
+  <script src="config.js?v=123"></script>
+  <script src="mapa-brasil.js?v=123"></script>
+  <script src="troca-notas.js?v=123"></script>
+  <script src="app.js?v=123"></script>
+  <script src="ordenar.js?v=123"></script>
+  <script src="menu.js?v=123"></script>
+  <script src="ajuda.js?v=123"></script>
+  <script src="documentos.js?v=123"></script>
 </body>
 </html>

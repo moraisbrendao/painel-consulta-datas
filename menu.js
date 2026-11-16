@@ -8,3 +8,8 @@
   aplicar(r);
   bt.addEventListener("click", () => { r = !r; aplicar(r); try { localStorage.setItem("painel.menuRecolhido", r ? "1" : "0"); } catch (e) {} });
 })();
+// botão ❔ Ajuda do topo: passo a passo da aba aberta
+(function () {
+  const b = document.getElementById("btn-ajuda"); if (!b) return;
+  b.addEventListener("click", () => { const at = document.querySelector("#tela-painel .menu-item.ativo"); if (window.__abrirAjuda) window.__abrirAjuda(at ? at.dataset.pagina : "rotina"); });
+})();

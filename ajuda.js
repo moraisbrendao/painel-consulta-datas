@@ -1,0 +1,143 @@
+// Passo a passo do E-loggia: como usar cada aba (para quem cobre a Logística). Só texto; nenhum dado.
+(function () {
+  const el = document.getElementById("pagina-ajuda");
+  if (!el) return;
+  // [id da página, título, para que serve, quando usar, passos, atenção]
+  const A = [
+    ["rotina", "Rotina do dia (comece por aqui)", "A ordem do dia para manter o E-loggia em dia.", "Todo dia, logo cedo, e de novo depois do almoço.", [
+      "Entre no E-loggia com o seu login (e-mail e senha). Se esqueceu a senha, peça a alguém com acesso à aba <b>Logins</b> para gerar uma senha provisória.",
+      "No topo, clique em <b>Carregar planilha</b> e escolha a planilha da base (BI, aba <b>Export</b>). Ela é a fonte de tudo: Visão Gerencial, Preventivo, canais, UF etc. Espere a mensagem de que terminou.",
+      "Clique em <b>Enviar Intelipost</b> e escolha o arquivo <b>transactions</b> exportado da Intelipost. Ele tira do painel o que já foi entregue ou cancelado.",
+      "Clique em <b>Carregar tickets</b> e escolha o <b>detalhamento_tickets360</b> (recebido por e-mail). Ele mostra a fila do ticket de cada pedido.",
+      "Abra o <b>Preventivo</b> e trate os cards <b>Já vencidos</b>, <b>Vencem hoje</b> e <b>Vencem amanhã</b>: cobre a transportadora, preencha a <b>Nova data</b> e a <b>Observação</b>.",
+      "Em <b>Alterar pedidos</b>, rode as filas <b>Aguardando entrega</b> e <b>Aguardando entrega AT</b> (subir o relatório do Multi360) e confira as <b>Ocorrências</b>.",
+      "Em <b>Alterar pedidos › Nova previsão de entrega</b>, clique em <b>↓ Trazer do Preventivo e SSW</b>, confira e clique em <b>Alterar na Intelipost</b>.",
+      "Na <b>Conferência SSW</b>, veja o card <b>Falta atualizar a Intelipost</b> e dê baixa na Intelipost nos pedidos que já foram entregues.",
+    ], "No topo aparece a data da planilha carregada. Se estiver amarelo (planilha antiga), carregue de novo. Tudo que alguém salva aparece para toda a Logística na hora."],
+
+    ["gerencial", "Visão Gerencial", "Mostra a foto geral dos pedidos: em aberto, atrasados, em risco, parados e a performance contra a meta.", "Para saber como está a operação e para tirar listas por transportadora, UF, cidade ou canal.", [
+      "Use o cartão <b>Filtros</b> (canal, UF, transportadora, série, origem, status, micro status, nota fiscal, datas). Pode escolher mais de um em cada filtro.",
+      "Clique nos cards (Atrasados, Em risco, Parados…) para ver a lista daquele grupo.",
+      "No quadro <b>Atraso por transportadora, UF, cidade e canal</b>: clique numa transportadora para ver só os estados, cidades e canais dela (filtro cruzado). Clique de novo para tirar.",
+      "A lista de pedidos aparece embaixo. Use <b>Baixar Excel</b> ou <b>Extrair tabelas</b> para levar para a planilha.",
+    ], "Clique no título de qualquer coluna para ordenar (maior → menor → original)."],
+
+    ["entregas", "Entregas e SLA", "Só os pedidos já entregues: SLA, entregues no prazo e com atraso por transportadora.", "Para reunião com transportadora e para medir o SLA.", [
+      "Escolha os filtros no topo (mesmos da Visão Gerencial).",
+      "Clique numa transportadora para ver as entregas com atraso dela.",
+      "Use <b>Baixar Excel</b> para mandar a lista para a transportadora.",
+    ], "Se a base só tiver pedidos em aberto, esta página fica vazia."],
+
+    ["transp", "Transportadoras", "Desempenho de cada transportadora: volume, em aberto, atrasados, em risco, atraso médio, SLA e histórico.", "Para comparar transportadoras e acompanhar a evolução.", [
+      "Veja a tabela <b>Detalhe por transportadora</b>.",
+      "Marque até 8 na coluna <b>Comparar</b> para ver lado a lado (a melhor de cada linha fica em negrito).",
+      "Clique no nome para abrir os pedidos dela na Visão Gerencial.",
+    ], ""],
+
+    ["uf", "Atrasos por UF", "Mapa do Brasil com o percentual de atraso por estado, cidades e transportadoras de cada estado.", "Para descobrir onde está o atraso e quem atende cada região.", [
+      "Clique num estado no mapa (ou use <b>Ranking e tabela</b>).",
+      "Embaixo aparecem <b>Quem atende e por quais séries</b> e <b>Cidades</b>.",
+      "Clique numa <b>transportadora</b>: as cidades e o mapa passam a mostrar só ela. Clique numa <b>cidade</b>: as transportadoras mostram só quem atende ali. Clique de novo (ou no ✕) para tirar.",
+      "Use <b>Baixar atrasados do estado</b> para a lista (segue a seleção).",
+    ], ""],
+
+    ["canais", "Análise de canais", "Mostra, por canal de venda, os pedidos que precisam de ação primeiro. Amazon e Mercado Livre têm o índice de reclamações (meta abaixo de 1%) e o risco de cada pedido.", "Todo dia, principalmente para Amazon e Mercado Livre.", [
+      "Escolha o <b>Canal</b> no alto à direita.",
+      "Trate na ordem: card <b>1 · Atrasados sem nova data</b>, depois <b>2 · Vencem hoje ou amanhã</b>, depois <b>3 · Risco alto</b> (só Amazon/ML).",
+      "Na lista, preencha a <b>Nova data</b> e a <b>Observação</b> ali mesmo (vale também no Preventivo). Clique na linha para ver o detalhe do pedido.",
+      "Para Amazon/ML: abra <b>Ver análise completa</b> (no fim da página) e use <b>Enviar impactos</b> com a planilha de impactos do canal (Amazon: aba Impactos; ML: Baixar vendas afetadas). No ✎ informe as vendas dos últimos 60 dias.",
+      "<b>Copiar resumo</b> copia um texto pronto para e-mail ou WhatsApp.",
+    ], ""],
+
+    ["preventivo", "Preventivo", "A lista de trabalho da Logística: pedidos em aberto pela data prometida ao cliente, para agir antes de atrasar.", "Todo dia, várias vezes.", [
+      "Clique nos cards: <b>Já vencidos</b>, <b>Vencem hoje</b>, <b>Vencem amanhã</b>, <b>Vencem em até 5 dias</b>, <b>Parados no rastreio</b>, <b>Data do SSW</b> (pode marcar vários).",
+      "Use a tabela <b>por micro status</b> e o <b>Range de vencimento</b> para filtrar (clique no número ou no nome da coluna).",
+      "Na lista, para cada pedido: veja o rastreio (<b>Rastreio ↗</b>), cobre a transportadora e preencha <b>Nova data</b> e <b>Observação</b>. Salva sozinho, para todos.",
+      "Para muitos pedidos: <b>Modelo de retornos</b> → preencha no Excel → <b>Enviar retornos</b>.",
+      "<b>Exportar (Excel)</b> baixa a lista que está na tela.",
+    ], "A nova data passa a valer como vencimento do pedido. \"🤖 data do SSW\" quer dizer que o robô preencheu pela previsão do SSW; se você mudar à mão, ele não mexe mais."],
+
+    ["responsaveis", "Responsáveis", "Define quem cuida de cada micro status.", "Quando entra um micro status novo ou muda alguém da equipe.", [
+      "Clique em <b>+ Adicionar responsável</b> para cadastrar a pessoa ou área.",
+      "Na tabela, escolha o responsável de cada micro status (os pendentes aparecem primeiro). Salva na hora.",
+    ], "O número vermelho no menu mostra quantos micro status estão sem dono."],
+
+    ["reposicao", "Reposição", "Indicadores de reposição pré e pós-entrega, por mês, transportadora e motivo.", "Para o acompanhamento mensal de reposições.", [
+      "Clique em <b>⇪ Subir tabela de acompanhamento</b> e escolha a TABELA DE ACOMPANHAMENTO (BI, aba Export).",
+      "Para os dados da nova NF e transportadora da reposição, suba também o detalhamento de tickets (Alterar pedidos › Ajuste Intelipost).",
+      "Use as abas <b>Visão geral</b>, <b>Pré-entrega</b>, <b>Pós-entrega</b> e <b>Detalhamento operacional</b>, e os filtros de mês, transportadora, tipo e motivo.",
+      "<b>Baixar Excel</b> leva os tickets filtrados.",
+    ], "Tipo \"Reposição\" = pré-entrega; \"Reposição Pós Entrega\" = pós-entrega. Transportadora = redespacho (coluna R) se tiver, senão a coluna Q."],
+
+    ["alterar", "Alterar pedidos", "Onde a Logística manda os robôs alterarem a Intelipost e o Multi360. Tem 6 botões no alto; cada um abre uma tela.", "Todo dia.", [
+      "<b>📅 Nova previsão de entrega</b>: escreva uma linha por pedido (<i>PEDIDO dd/mm/aaaa</i>) ou suba a planilha, ou clique em <b>↓ Trazer do Preventivo e SSW</b>. Confira a lista e clique em <b>➤ Alterar na Intelipost</b>. Em \"O que o robô fez\" aparece o resultado (Alterado / Não alterou e o motivo). Datas vencidas, iguais à prometida ou antes dela ficam de fora.",
+      "<b>⇄ Ajuste Intelipost</b> (troca de notas): <b>⇪ Subir detalhamento_tickets</b> (aba Reposições). Clique no ticket para ver nova NF, série, chave, data e método; marque as etapas e quem pegou. Parcial não mexe nos volumes; Total altera todos; série 4 só ação no ticket.",
+      "<b>🚚 Fila Aguardando entrega</b> e <b>🔧 Aguardando entrega AT</b>: extraia o relatório da fila no Multi360 e clique em <b>⇪ Subir relatório</b>. O robô abre cada ticket, pega a nova NF no chat, confere o rastreio e, se entregue, dá baixa \"Nota entregue?\" → Sim com o print. Trate os cards <b>Não entregues</b> e <b>Conferir à mão</b> e escreva a observação.",
+      "<b>⇄ Transportadora divergente</b>: compara a transportadora da Intelipost com a do Promob. Trate os <b>Divergentes</b> e cadastre transportadora nova em <b>Transportadoras e apelidos</b>. O Excel tem a aba de resumo e a aba <b>Pedidos</b> com a lista completa.",
+      "<b>⚑ Ocorrências</b>: pedidos com destinatário ausente, endereço não localizado, aguardando instrução, mudou-se, carga recusada ou estabelecimento fechado. Clique em <b>Mandar pendentes para o robô</b> (ele cadastra no portal 360multi a cada 10 min) ou baixe os templates e cadastre à mão. Depois, <b>Enviar ocorrências cadastradas</b> com a planilha do dia.",
+    ], "Tudo que vai para a Intelipost ou o Multi360 pede confirmação antes. Se o robô parar, aparece um aviso vermelho no alto da tela."],
+
+    ["conferencia", "Conferência SSW", "O robô confere no rastreio (SSW, Jadlog, Bento, Trânsito, Transiga) se os pedidos em aberto na Intelipost já foram entregues.", "Todo dia, para dar baixa na Intelipost.", [
+      "Clique em <b>Importar pedidos (Intelipost)</b> e escolha o arquivo transactions da Intelipost.",
+      "O robô confere sozinho: de 30 em 30 min das 6h às 18h e de 2 em 2 h à noite. Para conferir na hora, <b>🔄 Conferir tudo agora</b>.",
+      "Trate o card <b>Falta atualizar a Intelipost</b> (entregue no rastreio, mas não na Intelipost).",
+      "Use <b>Ver no SSW</b> para abrir o rastreio da nota; na Jadlog abre uma janela com o histórico.",
+      "<b>Senhas do SSW</b>: cadastre a senha de rastreio das transportadoras que pedem (ex.: Trans Sua, VM, Aceville, Flog).",
+    ], "\"Sem CT-e ainda\" = a transportadora ainda não emitiu o CT-e. VM Transportes e Tempo Justo são a mesma transportadora. Para Dominalog, Tempo Justo, Trans Sua e Transvanio (séries 25, 34, 35) vale o rastreio da Dominalog; Rajlog é só milk run."],
+
+    ["documentos", "Consulta Documento", "Acha a chave das notas e monta o PDF (DANFE) e o XML para mandar às transportadoras.", "Quando a transportadora pede o PDF/XML da nota.", [
+      "Digite a nota em <b>Digite a nota</b> (ex.: <i>12365-35</i>) e aperte Enter, ou suba a planilha com NF e Transportadora (<b>Modelo da planilha</b>).",
+      "Em cada nota, clique em <b>Copiar chave ↗</b>: a chave é copiada e abre o site de consulta. Cole a chave, resolva o captcha e baixe o XML.",
+      "Clique em <b>Enviar XMLs</b> e escolha os XMLs baixados (pode ser vários ou um .zip).",
+      "Em <b>Por transportadora</b>, clique em <b>Baixar .zip</b> (XML + PDF de cada nota) e mande para a transportadora.",
+    ], "Os XMLs ficam só no seu computador; nada vai para o banco."],
+
+    ["sac", "Consulta SAC", "Consulta para o SAC: pedidos vencidos ou que vencem hoje/amanhã, com a nova data e a observação da Logística.", "Quando o cliente pergunta do pedido.", [
+      "Busque pelo pedido ou NF, ou use os cards <b>Já vencidos</b>, <b>Vencem hoje</b>, <b>Vencem amanhã</b>.",
+      "Leia a <b>Nova data</b> e a <b>Observação</b> que a Logística informou.",
+      "<b>Baixar Excel</b> leva a lista.",
+    ], "Quem é do SAC entra vendo só esta consulta, sem editar nada."],
+
+    ["logins", "Logins", "Quem entra no E-loggia (só administradores veem).", "Quando entra ou sai alguém, ou alguém esquece a senha.", [
+      "Login novo: no Supabase › Authentication › Users › <b>Add user</b> › Create new user (marque <b>Auto Confirm User</b>) e passe o e-mail e a senha para a pessoa.",
+      "Esqueceu a senha: clique em <b>Gerar senha provisória</b> e passe para a pessoa; no primeiro acesso ela cria uma senha dela.",
+      "Para alguém ver só a Consulta SAC, adicione o e-mail em <b>Logins do SAC</b>.",
+    ], ""],
+  ];
+  const ICONE = { rotina: "★", gerencial: "▦", entregas: "✓", transp: "🚚", uf: "⌖", canais: "◎", preventivo: "◷", responsaveis: "👤", reposicao: "↻", alterar: "✎", conferencia: "☑", documentos: "🗎", sac: "☎", logins: "🔑" };
+  const sec = ([id, tit, serve, quando, passos, atencao]) => `
+    <details class="cartao aj-sec" data-aj="${id}"${id === "rotina" ? " open" : ""}>
+      <summary><span class="aj-ic">${ICONE[id] || "•"}</span><b>${tit}</b><span class="sub"> · ${serve}</span></summary>
+      <div class="aj-corpo">
+        <p><b>Para que serve:</b> ${serve}</p>
+        <p><b>Quando usar:</b> ${quando}</p>
+        <ol>${passos.map((x) => `<li>${x}</li>`).join("")}</ol>
+        ${atencao ? `<p class="aj-atencao">⚠ ${atencao}</p>` : ""}
+        ${id !== "rotina" ? `<p><button class="link" data-ir="${id === "documentos" ? "documentos" : id}">Abrir a aba ${tit} ›</button></p>` : ""}
+      </div>
+    </details>`;
+  el.innerHTML = `
+    <div class="titulo-pagina com-acoes">
+      <div>
+        <h1>Passo a passo</h1>
+        <p class="sub">Como usar cada aba do E-loggia. Comece pela <b>Rotina do dia</b>. Clique no nome da aba para abrir as instruções.</p>
+      </div>
+      <div class="acoes-robo">
+        <input id="aj-busca" type="search" placeholder="Procurar (ex.: nova data, SSW, ocorrência)">
+        <button id="aj-abrir" class="btn contorno" type="button">Abrir tudo</button>
+        <button id="aj-imprimir" class="btn contorno" type="button">Imprimir / PDF</button>
+      </div>
+    </div>
+    ${A.map(sec).join("")}`;
+  const busca = el.querySelector("#aj-busca");
+  busca.addEventListener("input", () => {
+    const q = busca.value.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim();
+    el.querySelectorAll(".aj-sec").forEach((d) => { const t = d.textContent.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase(); const ok = !q || t.includes(q); d.hidden = !ok; if (q && ok) d.open = true; });
+  });
+  el.querySelector("#aj-abrir").addEventListener("click", (e) => { const abrir = e.target.textContent === "Abrir tudo"; el.querySelectorAll(".aj-sec").forEach((d) => (d.open = abrir)); e.target.textContent = abrir ? "Fechar tudo" : "Abrir tudo"; });
+  el.querySelector("#aj-imprimir").addEventListener("click", () => { el.querySelectorAll(".aj-sec").forEach((d) => (d.open = true)); setTimeout(() => window.print(), 100); });
+  el.addEventListener("click", (e) => { const b = e.target.closest("[data-ir]"); if (!b) return; const m = document.querySelector(`.menu-item[data-pagina="${b.dataset.ir}"]`); if (m) m.click(); });
+  // botão "❔" do topo: abre o passo a passo já na aba em que a pessoa está
+  window.__abrirAjuda = (pag) => { const m = document.querySelector('.menu-item[data-pagina="ajuda"]'); if (m) m.click();
+    const d = el.querySelector(`.aj-sec[data-aj="${pag === "ocorrencias" || pag === "divtp" ? "alterar" : pag}"]`); if (d) { d.open = true; setTimeout(() => d.scrollIntoView({ behavior: "smooth", block: "start" }), 50); } };
+})();
