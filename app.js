@@ -284,7 +284,8 @@
       trat = new Map(t.map((x) => [x.pedido, x]));
       info = i.data && i.data[0];
       infoFech = fi.data && fi.data[0];
-      ocultos = Math.max(0, (tot.count || 0) - base.length);
+      const soIntelipost = base.filter((p) => p.extra && p.extra.fonte === "intelipost").length;
+      ocultos = Math.max(0, (tot.count || 0) - (base.length - soIntelipost));
       await Promise.all([carregarOcorrencias(), carregarResponsaveis(), carregarFila(), carregarTickets(), carregarSSW()]);
       if (perfil !== "sac") carregarReposicoes();
     } catch (err) {
@@ -295,7 +296,7 @@
       return;
     }
     $("info-base").textContent = info
-      ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(base.length)} pedidos em aberto · clique nos cards e nos micro status para ver a lista e exportar · ${info.arquivo || "planilha"} enviada em ${new Date(info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${info.enviado_por ? " por " + info.enviado_por : ""}`
+      ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(base.length)} pedidos em aberto${(() => { const n = base.filter((p) => p.extra && p.extra.fonte === "intelipost").length; return n ? ` (${fmt(n)} só no arquivo da Intelipost)` : ""; })()} · clique nos cards e nos micro status para ver a lista e exportar · ${info.arquivo || "planilha"} enviada em ${new Date(info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${info.enviado_por ? " por " + info.enviado_por : ""}`
       : "Ainda não há base. Clique em \"Carregar planilha\" e escolha o arquivo exportado.";
     $("info-intelipost").textContent = infoFech
       ? `Intelipost: ${infoFech.arquivo || "arquivo"} de ${new Date(infoFech.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${fmt(ocultos)} pedido${ocultos === 1 ? "" : "s"} da base já entregue${ocultos === 1 ? "" : "s"} ou cancelado${ocultos === 1 ? "" : "s"} fora${ocultos === 1 ? "" : "m"} tirado${ocultos === 1 ? "" : "s"} do painel.`
@@ -849,7 +850,7 @@
     try {
       const dados = await arq.arrayBuffer();
       res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-intelipost.js?v=75");
+        const w = new Worker("leitor-intelipost.js?v=97");
         w.onmessage = (m) => {
           if (m.data.etapa) carregando(m.data.etapa);
           else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); }
@@ -865,8 +866,9 @@
     const naBase = new Set(lista.map((x) => x.pedido));
     const sairao = base.filter((p) => naBase.has(p.pedido)).length;
     const ent = lista.filter((x) => x.status === "Entregue").length;
+    let avisoAb = "";
     if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(ent)} entregues e ${fmt(lista.length - ent)} cancelados.\n` +
-      `${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} que está${sairao === 1 ? "" : "ão"} no painel vai${sairao === 1 ? "" : "ão"} sair.\n\nEnviar?`)) return;
+      `${fmt(sairao)} pedido${sairao === 1 ? " que está" : "s que estão"} no painel ${sairao === 1 ? "vai" : "vão"} sair.\n${fmt((res.abertos || []).length)} pedidos em aberto no arquivo também vão aparecer no painel (mesmo os que não estão na base).\n\nEnviar?`)) return;
     try {
       const qtd = lista.length;
       // só interessam os pedidos que estão na base (a base inteira, inclusive os que já saíram do painel):
@@ -877,11 +879,16 @@
       const enviar = daBase ? lista.filter((x) => daBase.has(x.pedido)) : lista.slice();
       if (!enviar.length) enviar.push({ pedido: "", status: null });
       await enviarLotes("importar_fechados", enviar, 5000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total_linhas: res.total, fechados: qtd }));
+      // pedidos EM ABERTO do arquivo: o painel mostra também os que não vieram na base (parte 33)
+      if (res.abertos && res.abertos.length) {
+        try { await enviarLotes("importar_abertos", res.abertos, 2000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro })); }
+        catch (e2) { avisoAb = /importar_abertos|function|schema cache/i.test(e2.message || "") ? " · Para mostrar os pedidos em aberto que não estão na base, rode a parte 33 do schema.sql no Supabase." : " · Em aberto não foram: " + e2.message; }
+      }
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
     carregando("");
-    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.`);
+    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel · ${fmt((res.abertos || []).length)} em aberto no arquivo.${avisoAb}`, !!avisoAb);
     carregar();
   });
   // =================================================================
