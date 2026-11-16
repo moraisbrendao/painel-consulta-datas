@@ -1523,3 +1523,24 @@ create or replace view public.base_aberta with (security_invoker = true) as
     and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido);
 drop function if exists public.importar_abertos(jsonb, boolean);
 drop table if exists public.intelipost_abertos;
+
+-- =================================================================
+-- 34) Tabela de apelidos das transportadoras (página Transportadora divergente)
+-- A Logística cadastra no painel: transportadora da coluna H, apelido, trecho buscado no nome do Promob e ID do método.
+-- =================================================================
+create table if not exists public.apelidos_transp (
+  h              text primary key,
+  apelido        text,
+  chave          text not null,
+  id_metodo      integer,
+  atualizado_por text default (auth.jwt() ->> 'email'),
+  atualizado_em  timestamptz default now()
+);
+alter table public.apelidos_transp enable row level security;
+drop policy if exists "logistica le" on public.apelidos_transp;
+create policy "logistica le" on public.apelidos_transp for select to authenticated using ((select not public.e_sac()));
+drop policy if exists "logistica altera" on public.apelidos_transp;
+create policy "logistica altera" on public.apelidos_transp for all to authenticated
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
+revoke all on public.apelidos_transp from anon;
+grant select, insert, update, delete on public.apelidos_transp to authenticated;

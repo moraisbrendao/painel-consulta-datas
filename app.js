@@ -154,9 +154,16 @@
       irPara("sac");
       carregarSac();
     } else {
-      irPara("gerencial");
+      // Ctrl+F5 / atualizar: volta para a página (e a aba de Alterar pedidos) em que a pessoa estava
+      let volta = "gerencial", voltaAp = "";
+      try { volta = localStorage.getItem("painel.pagina") || "gerencial"; voltaAp = localStorage.getItem("painel.ap") || ""; } catch (_) {}
+      const botaoMenu = document.querySelector(`.menu-item[data-pagina="${volta}"]`);
+      if (!botaoMenu || (volta === "logins" && !document.body.dataset.admin) || volta === "sac") volta = "gerencial";
+      irPara(volta);
       carregarGerencial();   // a Visão Gerencial não depende do resto: começa junto
       carregar();
+      if (volta === "alterar") { carregarAlterar(); const b = voltaAp && document.querySelector(`#ap-abas [data-ap="${voltaAp}"]`); if (b) b.click(); }
+      if (volta === "conferencia") carregarConferencia();
       ligarTempoReal();
     }
   }
@@ -1705,14 +1712,73 @@
     ["Transportadora BLZ", "BLZ", "BLZ", 14980], ["Transvanio", "Transvanio (CNPJ 44.657.205)", "CNPJ 44657205", 20062], ["Trilog Express", "Trilog Express", "Trilog", 21211],
     ["Tsl Solucoes Transportes E Logistica Ltd", "LLS", "LLS", 18001], ["Zafer Standard", "Zafer Standard", "Zafer", 22950], ["Zelog Transportes", "Zelog Transportes", "Zelog", 19536],
   ].map(([h, apelido, chave, id]) => ({ h, apelido, chave, id }));
-  const ajPorH = new Map(AJ_TP.map((x) => [norm(x.h), x]));
+  // a tabela de verdade fica no banco (parte 34), cadastrada pela Logística; a lista acima é só o ponto de partida
+  let ajLista = AJ_TP.slice(), ajPorH = new Map(ajLista.map((x) => [norm(x.h), x])), ajOk = false, ajCarregado = false;
+  function ajMontar(L) { L = L.filter((x) => x.h && x.chave); ajLista = L; ajPorH = new Map(L.map((x) => [norm(x.h), x])); }
+  async function carregarApelidos() {
+    const { data, error } = await sb.from("apelidos_transp").select("h,apelido,chave,id_metodo,atualizado_por,atualizado_em").order("h");
+    ajCarregado = true;
+    if (error) { ajOk = false; $("aj-sub").textContent = 'Para cadastrar transportadoras aqui, rode a parte 34 do schema.sql no Supabase. Por enquanto vale a tabela da planilha "Ajuste_Transportadoras".'; desenharApelidos(); return; }
+    ajOk = true;
+    if (!data.length) {   // 1ª vez: grava a tabela da planilha para vocês editarem
+      const ins = await sb.from("apelidos_transp").insert(AJ_TP.map((x) => ({ h: x.h, apelido: x.apelido, chave: x.chave, id_metodo: x.id })));
+      if (!ins.error) return carregarApelidos();
+    }
+    ajMontar(data.map((x) => ({ h: x.h, apelido: x.apelido || x.h, chave: x.chave, id: x.id_metodo, por: x.atualizado_por, em: x.atualizado_em })));
+    desenharApelidos();
+  }
+  function desenharApelidos() {
+    $("aj-qtd").textContent = fmt(ajLista.length);
+    $("aj-linhas").innerHTML = ajLista.map((x, i) => `<tr><td>${esc(x.h)}</td><td>${esc(x.apelido || "")}</td><td><b>${esc(x.chave)}</b></td><td>${x.id ?? ""}</td>
+      <td class="nowrap">${ajOk ? `<button class="link" data-aj-ed="${i}" title="Editar">✎</button> <button class="link" data-aj-del="${i}" title="Apagar">🗑</button>` : ""}</td></tr>`).join("");
+    ["aj-h", "aj-ap", "aj-ch", "aj-id", "aj-salvar"].forEach((id) => ($(id).disabled = !ajOk));
+  }
+  async function salvarApelidos(linhas) {
+    const { error } = await sb.from("apelidos_transp").upsert(linhas.map((x) => ({ h: x.h, apelido: x.apelido || x.h, chave: x.chave, id_metodo: x.id ?? null, atualizado_em: new Date().toISOString() })), { onConflict: "h" });
+    if (error) { toast("Não consegui salvar: " + error.message, true); return false; }
+    await carregarApelidos(); desenharDivTP(); return true;
+  }
+  $("aj-abrir").addEventListener("click", () => { $("aj-corpo").hidden = !$("aj-corpo").hidden; if (!ajCarregado) carregarApelidos(); });
+  $("aj-salvar").addEventListener("click", async () => {
+    const x = { h: $("aj-h").value.trim(), apelido: $("aj-ap").value.trim(), chave: $("aj-ch").value.trim(), id: $("aj-id").value ? Number($("aj-id").value) : null };
+    if (!x.h || !x.chave) return toast("Preencha pelo menos a transportadora (coluna H) e a chave de busca.", true);
+    if (await salvarApelidos([x])) { ["aj-h", "aj-ap", "aj-ch", "aj-id"].forEach((id) => ($(id).value = "")); toast(`${x.h} salva.`); }
+  });
+  $("aj-linhas").addEventListener("click", async (e) => {
+    const ed = e.target.closest("[data-aj-ed]"), del = e.target.closest("[data-aj-del]");
+    if (ed) { const x = ajLista[+ed.dataset.ajEd]; $("aj-h").value = x.h; $("aj-ap").value = x.apelido || ""; $("aj-ch").value = x.chave; $("aj-id").value = x.id ?? ""; $("aj-h").focus(); }
+    if (del) { const x = ajLista[+del.dataset.ajDel]; if (!confirm(`Apagar ${x.h} da tabela de apelidos?`)) return;
+      const { error } = await sb.from("apelidos_transp").delete().eq("h", x.h); if (error) return toast("Não consegui apagar: " + error.message, true);
+      await carregarApelidos(); desenharDivTP(); }
+  });
+  $("aj-modelo").addEventListener("click", () => {
+    const L = [["Transportadora (col. H)", "Apelido", "Chave de busca na col. BD", "ID considerado"]].concat(ajLista.map((x) => [x.h, x.apelido || "", x.chave, x.id ?? ""]));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(L), "Apelidos"); XLSX.writeFile(wb, "apelidos_transportadoras.xlsx");
+  });
+  $("aj-arquivo").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+    if (!ajOk) return toast("Rode a parte 34 do schema.sql no Supabase primeiro.", true);
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", ...LEITURA_RAPIDA });
+      const nome = wb.SheetNames.find((n) => norm(n) === "APELIDOS") || wb.SheetNames[0];
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, raw: true, defval: null });
+      const cab = (rows[0] || []).map(norm), c = (re) => cab.findIndex((x) => re.test(x));
+      const cH = c(/^TRANSPORTADORA/), cA = c(/^APELIDO/), cC = c(/^CHAVE/), cI = c(/^ID (CONSIDERADO|PADRAO|DO METODO)|^ID$/);
+      if (cH < 0 || cC < 0) throw new Error('A planilha precisa das colunas "Transportadora (col. H)" e "Chave de busca na col. BD".');
+      const L = rows.slice(1).filter((r) => r && r[cH] && r[cC]).map((r) => ({ h: String(r[cH]).trim(), apelido: cA >= 0 && r[cA] ? String(r[cA]).trim() : "", chave: String(r[cC]).trim(),
+        id: cI >= 0 && r[cI] != null && !isNaN(parseInt(r[cI], 10)) ? parseInt(r[cI], 10) : null }));
+      if (!L.length) throw new Error("A planilha não tem linhas.");
+      if (!confirm(`${arq.name}\n\n${fmt(L.length)} transportadora(s). As que já existem são atualizadas e as novas, acrescentadas.\n\nEnviar?`)) return;
+      if (await salvarApelidos(L)) toast(`${fmt(L.length)} transportadora(s) salvas.`);
+    } catch (err) { toast(err.message, true); }
+  });
   // o trecho (chave) aparece no nome do Promob? (como o PROCURAR do Excel: sem diferença de maiúscula)
   function ajTem(chave, nome) {
     if (!nome) return false;
     if (chave.startsWith("CNPJ ")) return nome.replace(/\D/g, "").includes(chave.slice(5)) || TROCA.ehCnpjImpressao(nome) === chave;
     return norm(nome).includes(norm(chave));
   }
-  const ajIdPromob = (nome) => { if (!nome) return null; const x = AJ_TP.find((a) => ajTem(a.chave, nome)); return x || null; };
+  const ajIdPromob = (nome) => { if (!nome) return null; const x = ajLista.find((a) => ajTem(a.chave, nome)); return x || null; };
 
   let dvPromob = null, dvGer = -1, dvCard = "div", dvLista = [], dvBusca = "", dvGrupo = null, dvResumo = [];
   async function carregarDvPromob() {
@@ -1733,6 +1799,7 @@
       if (!gDados) { $("dv-info").textContent = "Não consegui carregar a base. Atualize a página."; return; }
     }
     prepararG();
+    if (!ajCarregado) await carregarApelidos();
     if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
     const temPromob = [...dvPromob.values()].some((x) => x.tp);
     const todos = [];
@@ -2147,12 +2214,14 @@
     XLSX.writeFile(wb, `alterar_pedidos_${hojeISO()}.xlsx`);
   });
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
+    try { localStorage.setItem("painel.ap", b.dataset.ap); } catch (_) {}
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
     $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv";
     if (b.dataset.ap === "dv") desenharDivTP();
     if (b.dataset.ap === "troca") carregarTrocas();
     if (b.dataset.ap === "ag" || b.dataset.ap === "at") { agFila = b.dataset.ap === "at" ? "AT" : "AE"; agCard = "tratar"; agBusca = ""; $("ag-busca").value = "";
       $("ag-h2").textContent = agFila === "AT" ? "Aguardando entrega AT" : "Fila Aguardando entrega";
+      $("ag-dica-fila").textContent = agFila === "AT" ? "fila Aguardando entrega (AT)" : "fila Aguardando entrega";
       $("ag-qual").textContent = `Suba o relatório de tickets da fila "${agFila === "AT" ? "Aguardando entrega (AT)" : "Aguardando entrega"}" do Multi360.`;
       $("ag-linhas").innerHTML = ""; carregarAguardando(); } });
   setInterval(() => { if (paginaAtual === "alterar" && !document.hidden) carregarAlterar(true); }, 60000);
@@ -2192,7 +2261,7 @@
       const [lista, inf] = await Promise.all([buscarTudo("troca_notas", "ticket"), sb.from("troca_notas_info").select("*").limit(1)]);
       tnLista = lista; tnInfo = (inf.data && inf.data[0]) || null; tnCarregado = true;
     } catch (err) {
-      $("tn-info").textContent = /troca_notas|does not exist|schema cache/i.test(err.message || "") ? "Para usar a Troca de notas, rode de novo o supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
+      $("tn-info").textContent = /troca_notas|does not exist|schema cache/i.test(err.message || "") ? "Para usar o Ajuste Intelipost, rode de novo o supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
       return;
     }
     desenharTrocas();
@@ -2356,10 +2425,10 @@
       itens = [...porTk.values()];
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    if (!confirm(`${arq.name}\n\nFila "Ajuste de dados na Intelipost": ${fmt(totalFila)} linha(s).\n${fmt(itens.filter((x) => x.tipo === "TOTAL").length)} ticket(s) Total e ${fmt(itens.filter((x) => x.tipo === "PARCIAL").length)} Parcial entram na Troca de notas${outros ? ` (${fmt(outros)} linha(s) sem tipo Total/Parcial ficam de fora)` : ""}.\n\nQuem pegou e as etapas marcadas continuam salvos. Enviar?`)) return;
+    if (!confirm(`${arq.name}\n\nFila "Ajuste de dados na Intelipost": ${fmt(totalFila)} linha(s).\n${fmt(itens.filter((x) => x.tipo === "TOTAL").length)} ticket(s) Total e ${fmt(itens.filter((x) => x.tipo === "PARCIAL").length)} Parcial entram no Ajuste Intelipost${outros ? ` (${fmt(outros)} linha(s) sem tipo Total/Parcial ficam de fora)` : ""}.\n\nQuem pegou e as etapas marcadas continuam salvos. Enviar?`)) return;
     const { error } = await sb.rpc("importar_troca_notas", { itens, arquivo: arq.name });
     if (error) return toast("Erro ao enviar: " + error.message + (/importar_troca_notas|schema cache/i.test(error.message) ? " (rode de novo o supabase/schema.sql)" : ""), true);
-    toast(`${fmt(itens.length)} ticket(s) na Troca de notas.`); await carregarTrocas();
+    toast(`${fmt(itens.length)} ticket(s) no Ajuste Intelipost.`); await carregarTrocas();
   });
   $("tn-baixar").addEventListener("click", () => {
     const L = tnLista.filter(tnDoTipo).filter(TN_CARD[tnCard]); if (!L.length) return toast("Nada para exportar.", true);
@@ -2426,6 +2495,21 @@
     }
     desenharAguardando();
   }
+  // o relatório do Multi360 traz o pedido do marketplace; mostra o pedido da Intelipost (da base: pela NF antiga ou pelo fim do número)
+  let agMapaGer = -1, agPorNF = new Map(), agPorFim = new Map();
+  function pedidoIntelipost(t) {
+    const fonte = gDados && gDados.length ? gDados : base;
+    if (agMapaGer !== (gDados ? gGeracao : -2) || !agPorNF.size) {
+      agPorNF = new Map(); agPorFim = new Map();
+      fonte.forEach((r) => { const nf = r.serie !== undefined ? (r.serie ? `${r.nf}-${r.serie}` : r.nf) : r.nf; if (nf) agPorNF.set(chaveNF(nf), r.pedido); });
+      agMapaGer = gDados ? gGeracao : -2;
+    }
+    const p = t.nf_original && agPorNF.get(chaveNF(t.nf_original));
+    if (p) return p;
+    const ped = String(t.pedido || "").trim();
+    if (ped.length >= 8) { const f = fonte.find((r) => String(r.pedido || "").endsWith(ped)); if (f) return f.pedido; }
+    return null;
+  }
   function desenharAguardando() {
     $("ag-info").textContent = agInfo ? `${agInfo.arquivo || "relatório"} · enviado em ${new Date(agInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${agInfo.enviado_por ? " por " + agInfo.enviado_por : ""} · ${fmt(agLista.length)} tickets`
       : "Suba o relatório de tickets da fila Aguardando entrega para começar.";
@@ -2434,14 +2518,14 @@
     document.querySelectorAll("#ag-cards .kpi[data-ag]").forEach((b) => { const k = b.dataset.ag; b.querySelector(".kpi-num").textContent = fmt(k === "todos" ? agLista.length : agLista.filter((t) => agGrupo(t) === k).length); b.classList.toggle("ativa", k === agCard); });
     const q = norm(agBusca);
     const L = agLista.filter((t) => agCard === "todos" || agGrupo(t) === agCard)
-      .filter((t) => !q || [t.ticket, t.pedido, t.pedido_promob, t.nf_nova, t.nf_original].some((v) => norm(v).includes(q)))
+      .filter((t) => !q || [t.ticket, t.pedido, pedidoIntelipost(t), t.pedido_promob, t.nf_nova, t.nf_original].some((v) => norm(v).includes(q)))
       .sort((a, b) => String(a.ticket_criado || "").localeCompare(String(b.ticket_criado || "")) || String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
     $("ag-titulo").textContent = `${AG_NOME[agCard]} (${fmt(L.length)})`;
     $("ag-linhas").innerHTML = L.slice(0, 500).map((t) => {
       const o = agObs.get(t.ticket);
       return `<tr><td><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}" target="_blank" rel="noopener">${esc(t.ticket)}</a>${t.ticket_criado ? `<div class="s">${br(t.ticket_criado)}</div>` : ""}</td>
         <td>${esc(t.tipo || "")}${t.tipo_reposicao ? `<div class="s">${esc(t.tipo_reposicao)}</div>` : ""}</td>
-        <td class="mono">${esc(t.pedido || "")}<div class="s">NF antiga ${esc(t.nf_original || "—")}</div></td>
+        <td class="mono">${(() => { const pi = pedidoIntelipost(t); return pi ? `${esc(pi)}${pi !== t.pedido && t.pedido ? `<div class="s">marketplace ${esc(t.pedido)}</div>` : ""}` : esc(t.pedido || ""); })()}<div class="s">NF antiga ${esc(t.nf_original || "—")}</div></td>
         <td>${t.nf_nova ? `<b>${esc(t.nf_nova)}</b>${t.nf_emitida_em ? `<div class="s">emitida ${br(t.nf_emitida_em)}</div>` : ""}` : "—"}</td>
         <td>${esc(agTransp(t))}</td><td>${agStatus(t)}${agBotao(t)}</td><td>${agRobo(t)}</td>
         <td class="col-obs"><input data-ag-obs="${esc(t.ticket)}" value="${esc(o ? o.observacao : "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s quem">${o ? esc((o.atualizado_por || "").split("@")[0]) + " · " + new Date(o.atualizado_em).toLocaleDateString("pt-BR") : ""}</div></td></tr>`;
@@ -2506,8 +2590,8 @@
   $("ag-baixar").addEventListener("click", () => {
     const L = agLista.filter((t) => agCard === "todos" || agGrupo(t) === agCard); if (!L.length) return toast("Nada para exportar.", true);
     const SIT = { entregue: "Entregue", "nao entregue": "Não entregue", "sem cte": "Sem CT-e ainda", "sem rastreio": "Sem rastreio automático", "sem permissao": "Pede senha no SSW", "sem nf nova": "NF nova não achada", pendente: "Robô ainda não olhou" };
-    const linhas = [["Ticket", "Tipo", "Tipo de reposição", "Pedido", "Pedido Promob", "NF antiga", "Nova NF", "NF emitida em", "Transportadora", "Status no rastreio", "Último evento", "Data do evento", "Data de entrega", "Insucesso", "Fonte", "Robô", "Observação", "Observação por"]]
-      .concat(L.map((t) => { const o = agObs.get(t.ticket) || {}; return [t.ticket, t.tipo, t.tipo_reposicao, t.pedido, t.pedido_promob, t.nf_original, t.nf_nova, br(t.nf_emitida_em), agTransp(t), SIT[t.situacao] || t.situacao, t.ultimo_evento, br(t.data_evento), br(t.data_entrega), t.insucesso, t.fonte, [t.baixa_status, t.baixa_msg].filter(Boolean).join(" · "), o.observacao || "", o.atualizado_por || ""]; }));
+    const linhas = [["Ticket", "Tipo", "Tipo de reposição", "Pedido Intelipost", "Pedido marketplace", "Pedido Promob", "NF antiga", "Nova NF", "NF emitida em", "Transportadora", "Status no rastreio", "Último evento", "Data do evento", "Data de entrega", "Insucesso", "Fonte", "Robô", "Observação", "Observação por"]]
+      .concat(L.map((t) => { const o = agObs.get(t.ticket) || {}; return [t.ticket, t.tipo, t.tipo_reposicao, pedidoIntelipost(t) || "", t.pedido, t.pedido_promob, t.nf_original, t.nf_nova, br(t.nf_emitida_em), agTransp(t), SIT[t.situacao] || t.situacao, t.ultimo_evento, br(t.data_evento), br(t.data_entrega), t.insucesso, t.fonte, [t.baixa_status, t.baixa_msg].filter(Boolean).join(" · "), o.observacao || "", o.atualizado_por || ""]; }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Aguardando entrega");
     XLSX.writeFile(wb, `aguardando_entrega${agFila === "AT" ? "_AT" : ""}_${hojeISO()}.xlsx`);
   });
@@ -2711,6 +2795,7 @@
   // ---------------- menu lateral ----------------
   function irPara(pag) {
     paginaAtual = pag;
+    try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
     $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));

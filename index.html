@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=102">
+  <link rel="stylesheet" href="styles.css?v=104">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -668,7 +668,7 @@
         </div>
         <div class="acoes-titulo" id="ap-abas">
           <button class="btn amarelo" data-ap="data">📅 Nova previsão de entrega</button>
-          <button class="btn contorno" data-ap="troca">⇄ Troca de notas</button>
+          <button class="btn contorno" data-ap="troca">⇄ Ajuste Intelipost</button>
           <button class="btn contorno" data-ap="ag">🚚 Fila Aguardando entrega</button>
           <button class="btn contorno" data-ap="at">🔧 Aguardando entrega AT</button>
           <button class="btn contorno" data-ap="dv">⇄ Transportadora divergente</button>
@@ -689,6 +689,26 @@
               <p class="sub">Comparativo da Transportadora (coluna H) × Transportadora Promob (coluna BD) da base, igual à planilha "Ajuste_Transportadoras": pela tabela de apelidos, o nome da coluna H tem que aparecer na transportadora do Promob. Se a coluna BE (redespacho) estiver preenchida, vale o redespacho. Só pedidos em trânsito: entregues e cancelados ficam de fora.</p>
               <p id="dv-info" class="info-base">Carregando…</p>
             </div>
+          </div>
+        </section>
+        <section class="cartao">
+          <div class="cartao-topo">
+            <div><h2>Transportadoras e apelidos</h2><p class="sub" id="aj-sub">Cadastre aqui cada transportadora nova: o nome como aparece na coluna H, o apelido, o trecho que tem que aparecer no nome da transportadora do Promob (coluna BD/BE) e o ID do método na Intelipost. A página passa a usar na hora.</p></div>
+            <div class="acoes-robo"><button id="aj-abrir" class="btn contorno">Ver / editar (<span id="aj-qtd">–</span>)</button><button id="aj-modelo" class="btn contorno">Baixar modelo</button><label class="btn contorno">⇪ Subir planilha<input id="aj-arquivo" type="file" accept=".xlsx,.xls" hidden></label></div>
+          </div>
+          <div id="aj-corpo" hidden>
+            <div class="tabela-wrap">
+              <table class="tabela-pedidos">
+                <thead><tr><th>Transportadora (coluna H)</th><th>Apelido</th><th>Chave de busca no Promob (BD/BE)</th><th>ID do método</th><th></th></tr></thead>
+                <tbody id="aj-linhas"></tbody>
+                <tfoot><tr>
+                  <td><input id="aj-h" placeholder="ex.: Zelog Transportes"></td><td><input id="aj-ap" placeholder="ex.: Zelog Transportes"></td>
+                  <td><input id="aj-ch" placeholder="ex.: Zelog"></td><td><input id="aj-id" type="number" placeholder="ex.: 19536"></td>
+                  <td><button id="aj-salvar" class="btn amarelo">Salvar</button></td>
+                </tr></tfoot>
+              </table>
+            </div>
+            <p class="s">Para mudar uma linha, clique em ✎ (ela sobe para os campos de baixo), ajuste e salve. A chave é procurada dentro do nome do Promob, sem diferença de maiúsculas. Para transportadora identificada pelo CNPJ, escreva "CNPJ" e os números (ex.: CNPJ 44657205).</p>
           </div>
         </section>
         <section class="kpis" id="dv-cards">
@@ -759,13 +779,14 @@
           <div class="ap-cab">
             <span class="ap-ic">⇄</span>
             <div>
-              <h2>Troca de notas (reposição total e parcial)</h2>
+              <h2>Ajuste Intelipost (troca de notas · reposição total e parcial)</h2>
               <p class="sub">Tickets da fila "Ajuste de dados na Intelipost" com reposição Total ou Parcial (na Parcial não se mexe nos volumes). A tela já procura a nova NF, a série, a chave, a data e o método certo na Intelipost (DE × PARA + série). Marque as etapas e quem pegou cada ticket — todos veem.</p>
               <p id="tn-info" class="info-base"></p>
             </div>
           </div>
           <div class="ap-acoes">
-            <label class="btn amarelo">⇪ Subir detalhamento_tickets<input id="tn-arquivo" type="file" accept=".xlsx,.xls,.xlsm" hidden></label>
+            <label class="btn amarelo" title="É o Excel detalhamento_tickets que recebemos dos Projetos por e-mail">⇪ Subir detalhamento_tickets<input id="tn-arquivo" type="file" accept=".xlsx,.xls,.xlsm" hidden></label>
+            <span class="dica-arquivo">📧 Use o <b>detalhamento de tickets (Excel)</b> que recebemos dos <b>Projetos por e-mail</b>.</span>
             <span class="s">usa a aba Reposições</span>
           </div>
         </section>
@@ -804,7 +825,8 @@
             </div>
           </div>
           <div class="ap-acoes">
-            <label class="btn amarelo">⇪ Subir relatório (Excel)<input id="ag-arquivo" type="file" accept=".xlsx,.xls,.xlsm" hidden></label>
+            <label class="btn amarelo" title="Relatório de tickets extraído das filas Aguardando entrega / Aguardando entrega (AT) do Multi360">⇪ Subir relatório (Excel)<input id="ag-arquivo" type="file" accept=".xlsx,.xls,.xlsm" hidden></label>
+            <span class="dica-arquivo">🗂 O relatório é <b>extraído da fila no Multi360</b> (<span id="ag-dica-fila">Aguardando entrega</span>).</span>
             <button id="ag-rodar" class="btn contorno" type="button">🤖 Rodar o robô agora</button>
             <span class="s" id="ag-robo"></span>
           </div>
@@ -931,9 +953,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=102"></script>
-  <script src="mapa-brasil.js?v=102"></script>
-  <script src="troca-notas.js?v=102"></script>
-  <script src="app.js?v=102"></script>
+  <script src="config.js?v=104"></script>
+  <script src="mapa-brasil.js?v=104"></script>
+  <script src="troca-notas.js?v=104"></script>
+  <script src="app.js?v=104"></script>
 </body>
 </html>
