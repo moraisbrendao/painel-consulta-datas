@@ -4,8 +4,11 @@ import { readFileSync, appendFileSync } from "node:fs";
 const cfg = readFileSync(new URL("../config.js", import.meta.url), "utf8");
 const URL_SB = process.env.SB_URL_TESTE || cfg.match(/SUPABASE_URL:\s*"([^"]+)"/)[1];
 const ANON = cfg.match(/SUPABASE_ANON_KEY:\s*"([^"]+)"/)[1];
-let token = null;
+let token = null, renovar = null, venceEm = 0;
 
+// O login do Supabase vale 1 hora. As rodadas longas (conferência de tudo, ~5 h) renovam o login sozinhas;
+// antes disso, tudo o que o robô gravava depois da 1ª hora era recusado ("JWT expired") e se perdia.
+function guardar(j) { token = j.access_token; renovar = j.refresh_token || renovar; venceEm = Date.now() + (Number(j.expires_in) || 3600) * 1000; }
 export async function entrarSupabase() {
   const { ROBO_EMAIL, ROBO_SENHA } = process.env;
   if (!ROBO_EMAIL || !ROBO_SENHA) throw new Error("Faltam os segredos ROBO_EMAIL e ROBO_SENHA no GitHub.");
@@ -14,13 +17,38 @@ export async function entrarSupabase() {
     body: JSON.stringify({ email: ROBO_EMAIL, password: ROBO_SENHA }),
   });
   if (!r.ok) throw new Error("O login do robô no painel (ROBO_EMAIL/ROBO_SENHA) não funcionou: " + r.status);
-  token = (await r.json()).access_token;
+  guardar(await r.json());
+}
+// renova com o refresh token (não manda a senha de novo); só se ele falhar, entra de novo uma vez
+async function renovarLogin() {
+  if (renovar) {
+    const r = await fetch(`${URL_SB}/auth/v1/token?grant_type=refresh_token`, {
+      method: "POST", headers: { apikey: ANON, "Content-Type": "application/json" }, body: JSON.stringify({ refresh_token: renovar }),
+    });
+    if (r.ok) { guardar(await r.json()); return; }
+  }
+  await entrarSupabase();
+}
+let renovando = null;
+async function tokenValido(forcar) {
+  if (forcar || !token || Date.now() > venceEm - 5 * 60 * 1000) {
+    if (!renovando) renovando = renovarLogin().finally(() => { renovando = null; });
+    await renovando;
+  }
+  return token;
+}
+async function pedir(url, opcoes) {
+  for (let i = 0; ; i++) {
+    const r = await fetch(url, { ...opcoes, headers: { ...opcoes.headers, apikey: ANON, Authorization: `Bearer ${await tokenValido(i > 0)}` } });
+    if (r.status === 401 && i === 0) { await r.text(); continue; }   // login venceu no meio: renova e tenta de novo
+    return r;
+  }
 }
 
 async function chamar(caminho, metodo = "GET", corpo) {
-  const r = await fetch(`${URL_SB}/rest/v1/${caminho}`, {
+  const r = await pedir(`${URL_SB}/rest/v1/${caminho}`, {
     method: metodo,
-    headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "return=representation" },
+    headers: { "Content-Type": "application/json", Prefer: "return=representation" },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
   });
   const txt = await r.text();
@@ -44,9 +72,9 @@ export const pegarIntelipost = async (limite = 100) => (await chamar("rpc/pegar_
 export const resultadoIntelipost = (p, st, mot = null) => chamar("rpc/resultado_intelipost", "POST", { p, st, mot });
 export async function lerEstado(nome) { const r = await chamar(`robo_estado?nome=eq.${encodeURIComponent(nome)}&select=valor`); return r && r[0] ? r[0].valor : null; }
 export const gravarEstado = (nome, valor) =>
-  fetch(`${URL_SB}/rest/v1/robo_estado?on_conflict=nome`, {
+  pedir(`${URL_SB}/rest/v1/robo_estado?on_conflict=nome`, {
     method: "POST",
-    headers: { apikey: ANON, Authorization: `Bearer ${token}`, "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
+    headers: { "Content-Type": "application/json", Prefer: "resolution=merge-duplicates" },
     body: JSON.stringify({ nome, valor, atualizado_em: new Date().toISOString() }),
   }).then(async (r) => { if (!r.ok) throw new Error("Supabase robo_estado: " + r.status + " " + (await r.text()).slice(0, 200)); });
 
