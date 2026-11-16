@@ -800,7 +800,10 @@ function lerLote(html) {   // uma linha por NF: número, data/hora do último ev
   const linhas = new Map(), iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
   for (const bloco of html.split(/<tr style="background-color:#(?:FFFFFF|F0F0F0);(?:cursor:pointer;)?"/i).slice(1)) {
     const tds = bloco.split(/<td\b/i).slice(1); if (tds.length < 3) continue;
-    const nf = sem0(((sohTexto("<td " + tds[0])[0] || "").match(/\d+/g) || []).pop()); if (!nf) continue;   // 1ª linha = "série NF" (achada) ou só "NF"; a 2ª é o CT-e
+    const nums0 = (sohTexto("<td " + tds[0])[0] || "").match(/\d+/g) || [];
+    const nf = sem0(nums0.pop()); if (!nf) continue;
+    // com outro CNPJ o SSW mostra "série NF ..." na 1ª célula: guardo a série para não aceitar a NF de mesmo número de outra série (TSL/Tradicional série 34, 16/11)
+    const serieAchada = nums0.length ? sem0(nums0[0]) : null;   // 1ª linha = "série NF" (achada) ou só "NF"; a 2ª é o CT-e
     const quando = (sohTexto("<td " + tds[1]).join(" ").match(/(\d{2}\/\d{2}\/\d{2,4})(?:\s+(\d{2}:\d{2}))?/) || []);
     const sigla = (sohTexto((tds[2].match(/<p class=titulo>[\s\S]*?<font[^>]*>([\s\S]*?)<\/font>/i) || [])[1] || "").join(" ").match(/\(([^)]*)\)/) || [])[1] || "";
     const titulo = sohTexto(((tds[2].match(/<p class=titulo>([\s\S]*?)<\/p>/i) || [])[1] || "").replace(/<font[\s\S]*?<\/font>/gi, "")).join(" ").trim();
@@ -812,21 +815,26 @@ function lerLote(html) {   // uma linha por NF: número, data/hora do último ev
     else if (/MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(titulo)) r = { situacao: "entregue", data_entrega: iso(quando[1]), data_evento: iso(quando[1]), ultimo_evento: "MERCADORIA ENTREGUE" };
     else { const pv = (desc.match(/Previs[aã]o de entrega:\s*(\d{2}\/\d{2}\/\d{2,4})/i) || [])[1];
       r = { situacao: "nao entregue", data_evento: iso(quando[1]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{3,60}$/.test(titulo) ? titulo : null, previsao: pv ? iso(pv) : null }; }
-    r.sigla = sigla.trim().slice(0, 20) || null; r.raj = raj; r.det = (bloco.slice(0, 400).match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1] || null;
+    r.sigla = sigla.trim().slice(0, 20) || null; r.raj = raj; r.serie = serieAchada; r.det = (bloco.slice(0, 400).match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1] || null;
     (linhas.get(nf) || linhas.set(nf, []).get(nf)).push(r);
   }
   // a mesma NF em mais de uma linha: vale entregue; senão o evento mais recente. _semRaj = o mesmo sem as linhas da Rajlog (milk run)
   const rank = (x) => (x.situacao === "entregue" ? 3 : x.situacao === "nao entregue" ? 2 : x.situacao === "sem permissao" ? 1 : 0);
   const melhor = (L) => L.reduce((a, r) => (!a || rank(r) > rank(a) || (rank(r) === rank(a) && String(r.data_evento || "") > String(a.data_evento || "")) ? r : a), null);
   const out = new Map();
-  linhas.forEach((L, nf) => out.set(nf, { ...melhor(L), _semRaj: melhor(L.filter((r) => !r.raj)), _temRaj: L.some((r) => r.raj) }));
+  linhas.forEach((L, nf) => out.set(nf, { ...melhor(L), _semRaj: melhor(L.filter((r) => !r.raj)), _temRaj: L.some((r) => r.raj), _L: L }));
+  lerLote.melhor = melhor;
   return out;
 }
 // Dominalog, Tempo Justo, Trans Sua e Transvanio nas séries 25, 34 e 35: o CT-e da Rajlog é o milk run (coleta), não a entrega ao cliente.
 // Vale só o rastreio da Dominalog; se só tiver a Rajlog, ainda não foi entregue. (Regra da Brenda, 16/11.)
 function REGRA_RAJ(transp, nf) { return /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(transp || "") && ["25", "34", "35"].includes(String(nf || "").split("-")[1]?.trim()); }
 function pegaLote(m, x) {
-  const v = m.get(x.n); if (!v) return null;
+  let v = m.get(x.n); if (!v) return null;
+  const se = sem0(String(x.nf || "").split("-")[1]?.trim() || "");
+  if (se && v._L.some((r) => r.serie && r.serie !== se)) {   // linhas de outra série = outra nota com o mesmo número: descarta
+    const L = v._L.filter((r) => !r.serie || r.serie === se); if (!L.length) return null;
+    const mm = lerLote.melhor; v = { ...mm(L), _semRaj: mm(L.filter((r) => !r.raj)), _temRaj: L.some((r) => r.raj), _L: L }; }
   if (!REGRA_RAJ(x.transportadora, x.nf) || !v._temRaj) return v;
   if (v._semRaj && v._semRaj.situacao !== "sem cte") return v._semRaj;
   const raj = v; return { situacao: "nao entregue", ultimo_evento: "MILK RUN (RAJLOG) - SEM DOMINALOG AINDA", data_evento: raj.data_evento || null, previsao: null, sigla: raj.sigla };
@@ -835,6 +843,9 @@ async function conferirLote() {
   const t0 = Date.now(); await carregarSenhasDB();
   const lista = [];
   for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  // "entregue" achado com outro CNPJ: confere de novo (antes não olhava a série e podia ser outra nota com o mesmo número)
+  { const E = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&detalhe->>cnpj_outro=not.is.null&detalhe->>serie_ok=is.null&limit=2000`).catch(() => []);
+    E.forEach((l) => { l.detalhe = { ...(l.detalhe || {}), tentados: [] }; }); lista.push(...E); if (E.length) log(`Reconfiro ${E.length} entregues achados com outro CNPJ (checagem da série)`); }
   // Série 35 (dropshipping) da TSL: a TSL só faz a first mile; fora do RJ o rastreio que vale é o da transportadora de redespacho (Promob).
   // Para RJ a TSL emite o CT-e da entrega e segue o rastreio da TSL. (Regra da Brenda, 16/11.)
   // (inclui as já "entregues" pela TSL fora do RJ: podem ter sido a entrega da first mile, então reconfere pelo redespacho)
@@ -899,7 +910,7 @@ async function conferirLote() {
   const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
     const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
     const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
-      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6), serie_ok: true } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
     if (r.situacao !== "sem cte") delete det.tentados; if (!r._semSenha) delete det.sem_senha;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
