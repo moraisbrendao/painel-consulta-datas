@@ -294,6 +294,19 @@ if (MODO === "diag-serie") {   // NFs achadas com outro CNPJ (não o da série):
       log(`  ${l.transportadora} série ${ser} · ${rot} · linhas ${bl.length} · 1ª célula: ${cel.map(pad).join(" / ") || "-"} · começa com a série? ${cel.map((t) => (t.match(/\d+/) || [])[0] === ser ? "sim" : "não").join("/")} · outros números=série? ${cel.map((t) => (t.match(/\d+/g) || []).slice(0, -1).includes(ser) ? "sim" : "não").join("/")}`);
       await new Promise((ok) => setTimeout(ok, 1500)); } }
 }
+if (MODO === "diag-serie2") {   // a 1ª célula das NFs achadas (CNPJ da série) traz "série NF"? só contagens
+  await entrarSupabase(); await carregarSenhasDB();
+  const L = await chamar(`conferencia_ssw?select=nf,transportadora,situacao,detalhe&situacao=in.(entregue,nao%20entregue)&detalhe->>cnpj_outro=is.null&order=consultado_em.desc&limit=600`);
+  const G = new Map(); L.forEach((l) => { const [n, se] = String(l.nf).split("-").map((x) => (x || "").trim()), c = cnpjDaSerie(se); if (!c) return; (G.get(c) || G.set(c, []).get(c)).push({ n: sem0(n), se: sem0(se) }); });
+  const cont = { com_serie_igual: 0, com_serie_diferente: 0, sem_serie: 0, nao_achou: 0, sem_cte: 0 };
+  for (const [c, xs] of G) for (let i = 0; i < xs.length; i += 100) { const parte = xs.slice(i, i + 100);
+    const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: parte.map((x) => x.n).join("\r\n"), cnpj: c, chave: "", urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() }).catch(() => null);
+    const m = r ? lerLote(r.txt) : new Map();
+    parte.forEach((x) => { const v = m.get(x.n); if (!v) return cont.nao_achou++; const Ls = v._L.filter((y) => y.situacao !== "sem cte"); if (!Ls.length) return cont.sem_cte++;
+      Ls.forEach((y) => { if (!y.serie) cont.sem_serie++; else if (y.serie === x.se) cont.com_serie_igual++; else cont.com_serie_diferente++; }); });
+    await new Promise((ok) => setTimeout(ok, 1500)); }
+  log("linhas achadas no SSW (CNPJ da série):", JSON.stringify(cont));
+}
 if (MODO === "diag-jadobs") {   // onde estão as "Observações" do rastreio da Jadlog: chaves da API + páginas do site (só estrutura, sem dados)
   await entrarSupabase(); const tok = process.env.JADLOG_TOKEN || "";
   const L = (await chamar("conferencia_ssw?select=nf,detalhe&transportadora=ilike.*jadlog*&situacao=eq.nao%20entregue&limit=200")).filter((x) => x.detalhe && x.detalhe.cte).slice(0, 3);

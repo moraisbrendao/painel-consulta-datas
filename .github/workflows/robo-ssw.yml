@@ -8,7 +8,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [lote, real, conferencia, conferencia-tudo, aguardando, aguardando-teste, jadlog, transito-cte, transportadora, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-jadobs, diag-serie, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-lote, diag-lote2, diag-lote3, diag-lote4, diag-um, diag-emissor, diag-senior-js]
+        options: [lote, real, conferencia, conferencia-tudo, aguardando, aguardando-teste, jadlog, transito-cte, transportadora, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-jadobs, diag-serie, diag-serie2, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-lote, diag-lote2, diag-lote3, diag-lote4, diag-um, diag-emissor, diag-senior-js]
         default: lote
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
