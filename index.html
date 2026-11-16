@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=105">
+  <link rel="stylesheet" href="styles.css?v=106">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -573,45 +573,65 @@
     <main class="conteudo" id="pagina-reposicao" hidden>
       <section class="filtros-cartao filtros-rep" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
-        <label>Criação de<input id="rep-de" type="date"></label>
-        <label>até<input id="rep-ate" type="date"></label>
         <label>Mês<select id="rep-mes"></select></label>
         <label>Transportadora<select id="rep-transp"></select></label>
+        <label>Tipo<select id="rep-tipo"><option value="">Pré e pós entrega</option><option value="pre">Pré entrega</option><option value="pos">Pós entrega</option></select></label>
+        <label>Motivo<select id="rep-motivo"></select></label>
         <button id="rep-limpar" class="link limpar" type="button">Limpar filtros</button>
       </section>
 
       <div class="titulo-pagina com-acoes">
         <div>
           <h1>Reposição</h1>
-          <p class="sub"><b>Pré entrega</b> = ticket criado pelo <b>CCP</b> (coluna Via) que foi para a fila <b>Atribuir transportador</b>.
-            <b>Pós entrega</b> = Tipo <b>Reposição Pós Entrega</b>. A transportadora é a de <b>redespacho</b> quando houver.</p>
+          <p class="sub">Da planilha do BI (TABELA DE ACOMPANHAMENTO): Tipo <b>Reposição</b> = <b>pré entrega</b> · Tipo <b>Reposição Pós Entrega</b> = <b>pós entrega</b>.
+            Mês = data de criação do ticket. Transportadora = coluna Q (Transportadora Final), trocada pela coluna R (Redespacho) quando houver.</p>
           <p id="rep-info" class="info-base">Carregando…</p>
         </div>
         <div class="acoes-robo">
-          <label class="btn amarelo" title="Planilha TABELA DE ACOMPANHAMENTO (aba Export)">Enviar tabela de acompanhamento<input id="arquivo-rep" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
-          <button id="rep-exportar" class="btn contorno">Exportar (Excel)</button>
+          <label class="btn amarelo" title="Planilha TABELA DE ACOMPANHAMENTO do BI (aba Export)">⇪ Subir tabela de acompanhamento<input id="arquivo-rep" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
+          <button id="rep-exportar" class="btn contorno">Baixar Excel</button>
         </div>
       </div>
 
-      <section class="kpis kpis-3" id="rep-visoes" role="tablist">
-        <button class="visao-sac kpi laranja ativa" data-rv="pre"><span class="kpi-rot">Pré entrega</span><b class="kpi-num"></b><small>criado pelo CCP · Atribuir transportador</small><i>↗</i></button>
-        <button class="visao-sac kpi azul" data-rv="pos"><span class="kpi-rot">Pós entrega</span><b class="kpi-num"></b><small>tipo Reposição Pós Entrega</small><i>↗</i></button>
-        <button class="visao-sac kpi " data-rv="todas"><span class="kpi-rot">Todas</span><b class="kpi-num"></b><small>pré + pós entrega</small><i>↗</i></button>
+      <section class="kpis" id="rep-cards">
+        <button class="kpi ativa" data-rt=""><span class="kpi-rot">Reposições</span><b class="kpi-num">–</b><small>pré + pós entrega</small><i>↗</i></button>
+        <button class="kpi laranja" data-rt="pre"><span class="kpi-rot">Pré entrega</span><b class="kpi-num">–</b><small>Tipo "Reposição"</small><i>↗</i></button>
+        <button class="kpi azul" data-rt="pos"><span class="kpi-rot">Pós entrega</span><b class="kpi-num">–</b><small>Tipo "Reposição Pós Entrega"</small><i>↗</i></button>
+        <div class="kpi kpi-info"><span class="kpi-rot">Em aberto</span><b class="kpi-num" id="rep-abertos">–</b><small>status diferente de Resolvido</small></div>
       </section>
 
       <section class="cartao">
-        <h2 id="rep-titulo">Casos por transportadora e motivo</h2>
-        <p class="sub">Quantidade de tickets solicitados (pela data de criação do ticket).</p>
+        <div class="cartao-topo"><div><h2 id="rep-ev-titulo">Evolução por mês</h2><p class="sub">Quantidade de reposições criadas em cada mês (segue os filtros de transportadora, tipo e motivo). Clique num mês para filtrar.</p></div>
+          <div class="rp-legenda"><span class="rp-l pre"></span>Pré entrega <span class="rp-l pos"></span>Pós entrega</div></div>
         <div class="tabela-wrap">
-          <table class="tabela-range tabela-rep">
-            <thead id="rep-cab"></thead>
-            <tbody id="rep-linhas"></tbody>
-            <tfoot id="rep-rodape"></tfoot>
+          <table class="tabela-pedidos rp-tab">
+            <thead><tr><th>Mês</th><th class="num">Pré entrega</th><th class="num">Pós entrega</th><th class="num">Total</th><th class="num">vs mês anterior</th><th class="rp-col-barra"></th></tr></thead>
+            <tbody id="rep-meses"></tbody>
           </table>
-          <p id="rep-vazio" class="vazio" hidden>Nenhuma reposição nesse filtro.</p>
         </div>
       </section>
 
+      <div class="rp-duas">
+        <section class="cartao">
+          <div class="cartao-topo"><div><h2>Por transportadora</h2><p class="sub">Clique numa transportadora para ver só ela e a evolução dela mês a mês.</p></div></div>
+          <div class="tabela-wrap tabela-alta">
+            <table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Transportadora</th><th class="num">Pré</th><th class="num">Pós</th><th class="num">Total</th><th class="num">% do total</th></tr></thead>
+              <tbody id="rep-transps"></tbody>
+            </table>
+          </div>
+        </section>
+        <section class="cartao">
+          <div class="cartao-topo"><div><h2>Por motivo</h2><p class="sub">Clique num motivo para filtrar.</p></div></div>
+          <div class="tabela-wrap tabela-alta">
+            <table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Motivo</th><th class="num">Pré</th><th class="num">Pós</th><th class="num">Total</th></tr></thead>
+              <tbody id="rep-motivos"></tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+      <p id="rep-vazio" class="vazio" hidden>Nenhuma reposição nesse filtro.</p>
     </main>
 
     <main class="conteudo" id="pagina-conferencia" hidden>
@@ -953,9 +973,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=105"></script>
-  <script src="mapa-brasil.js?v=105"></script>
-  <script src="troca-notas.js?v=105"></script>
-  <script src="app.js?v=105"></script>
+  <script src="config.js?v=106"></script>
+  <script src="mapa-brasil.js?v=106"></script>
+  <script src="troca-notas.js?v=106"></script>
+  <script src="app.js?v=106"></script>
 </body>
 </html>
