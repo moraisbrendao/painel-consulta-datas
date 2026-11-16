@@ -1844,6 +1844,8 @@ ${extra}
     $("rt-resp").innerHTML = `<option value="">Todos</option><option value="-">${PENDENTE}</option>` + pessoas.map((x) => `<option value="${x.id}" ${String(x.id) === v ? "selected" : ""}>${esc(x.nome)}</option>`).join("");
     if (v === "-") $("rt-resp").value = "-";
   }
+  // VM Transportes e Tempo Justo são a mesma transportadora (regra da Brenda, 16/11)
+  const rtT = (p) => (/tempo\s*justo|^\s*vm\b|vm transportes/i.test(p.transportadora || "") ? "VM Transportes / Tempo Justo" : p.transportadora || "(sem transportadora)");
   const rtNovaValida = (p) => { const nv = p._t && p._t.nova_data; return !!nv && String(nv).slice(0, 10) >= hojeISO(); };
   let rtSemData = new Map();
   let rtCards = new Set(), rtTransp = null, rtCatSel = null, rtPag = 1, rtLista = [], rtResumo = null, rtResumoEm = 0;
@@ -1870,7 +1872,7 @@ ${extra}
   function rtPassaFiltro(p) {
     const q = norm($("rt-busca").value), tr = $("rt-transp").value, cn = $("rt-canal").value;
     if (q && !norm(p.pedido).includes(q) && !norm(p.nf).includes(q)) return false;
-    if (tr && (p.transportadora || "(sem transportadora)") !== tr) return false;
+    if (tr && (rtT(p)) !== tr) return false;
     if (cn && (p.canal || "(sem canal)") !== cn) return false;
     const rs = $("rt-resp").value;
     if (rs) { const r = rtRespDe(rtCat(p._t && p._t.observacao)); if (rs === "-" ? !!r : !r || String(r.id) !== rs) return false; }
@@ -1880,7 +1882,7 @@ ${extra}
     if (!base.length) { $("rt-info").textContent = "Carregando os pedidos…"; return; }
     const opts = (id, f) => { const el = $(id), v = el.value, xs = [...new Set(base.map(f))].sort((a, b) => a.localeCompare(b, "pt-BR"));
       el.innerHTML = `<option value="">Todas</option>` + xs.map((x) => `<option ${x === v ? "selected" : ""}>${esc(x)}</option>`).join(""); };
-    opts("rt-transp", (p) => p.transportadora || "(sem transportadora)"); opts("rt-canal", (p) => p.canal || "(sem canal)");
+    opts("rt-transp", (p) => rtT(p)); opts("rt-canal", (p) => p.canal || "(sem canal)");
     const L = base.filter(rtPassaFiltro).map((p) => { p._rt = rtBalde(p); return p; });
     const cont = { p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, ok: 0, cobrar: 0 };
     L.forEach((p) => { if (!p._rt) return; cont[p._rt]++; if (p._rt !== "ok") cont.cobrar++; });
@@ -1888,7 +1890,7 @@ ${extra}
     $("menu-rt").hidden = !cont.p1 && !cont.p2; $("menu-rt").textContent = fmt(cont.p1 + cont.p2);
     // por transportadora
     const porT = new Map();
-    L.forEach((p) => { const k = p.transportadora || "(sem transportadora)", x = porT.get(k) || porT.set(k, { k, p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, ok: 0, alvo: 0, cob: 0, queb: 0 }).get(k);
+    L.forEach((p) => { const k = rtT(p), x = porT.get(k) || porT.set(k, { k, p1: 0, p2: 0, p3: 0, p4: 0, p5: 0, p6: 0, ok: 0, alvo: 0, cob: 0, queb: 0 }).get(k);
       if (p._rt) x[p._rt]++;
       if (p._atrasoG || p._dias === 0 || p._dias === 1) { x.alvo++; const nv = p._t && p._t.nova_data; if (nv && String(nv).slice(0, 10) >= hojeISO()) x.cob++; }
       const r = rtResumo && rtResumo.get(p.pedido); if (r) x.queb += r.quebradas || 0; });
@@ -1910,14 +1912,14 @@ ${extra}
     { const G = new Map(), atrasoDe = (p) => (p._atrasoG ? Math.max(0, -(p._dias ?? 0)) : 0);
       L.filter(naCard).forEach((p) => { const c = rtCat(p._t && p._t.observacao), x = G.get(c) || G.set(c, { c, n: 0, soma: 0, nAtr: 0, sem: 0, tr: new Map() }).get(c);
         x.n++; if (p._atrasoG) { x.soma += atrasoDe(p); x.nAtr++; } if (!rtNovaValida(p)) x.sem++;
-        const k = p.transportadora || "(sem transportadora)"; x.tr.set(k, (x.tr.get(k) || 0) + 1); });
+        const k = rtT(p); x.tr.set(k, (x.tr.get(k) || 0) + 1); });
       $("rt-resumo-linhas").innerHTML = [...G.values()].sort((a, b) => b.n - a.n).map((x) => { const r = rtRespDe(x.c), top = [...x.tr.entries()].sort((a, b) => b[1] - a[1]).slice(0, 3);
         return `<tr class="clicavel ${rtCatSel === x.c ? "sel" : ""}" data-rtc="${esc(x.c)}"><td>${esc(x.c)}</td><td>${x.c === RT_SEMOBS || x.c === RT_NAOPAD ? "—" : r ? esc(r.nome) : `<span class="pendente">${PENDENTE}</span>`}</td>
           <td class="num"><b>${fmt(x.n)}</b></td><td class="num">${x.nAtr ? (x.soma / x.nAtr).toFixed(1).replace(".", ",") : "—"}</td><td class="num ${x.sem ? "ruim-t" : ""}">${fmt(x.sem)}</td>
           <td class="s">${top.map(([k, n]) => `${esc(k)} (${fmt(n)})`).join(" · ")}</td></tr>`; }).join("") || `<tr><td colspan="6" class="vazio">Nada nos cards marcados.</td></tr>`; }
     // transportadoras sem nova data e em reposição (independe dos cards)
     { rtSemData = new Map();
-      L.filter((p) => p._rt && p._rt !== "ok").forEach((p) => { const k = p.transportadora || "(sem transportadora)", x = rtSemData.get(k) || rtSemData.set(k, { k, atr: 0, vence: 0, rep: 0, repSem: 0, peds: [] }).get(k);
+      L.filter((p) => p._rt && p._rt !== "ok").forEach((p) => { const k = rtT(p), x = rtSemData.get(k) || rtSemData.set(k, { k, atr: 0, vence: 0, rep: 0, repSem: 0, peds: [] }).get(k);
         const sem = !rtNovaValida(p), rep = norm(rtCat(p._t && p._t.observacao)).includes("REPOSI");
         if (sem && p._atrasoG) x.atr++; else if (sem) x.vence++;
         if (rep) { x.rep++; if (sem) x.repSem++; }
@@ -1927,7 +1929,7 @@ ${extra}
         || `<tr><td colspan="6" class="vazio">Todas as transportadoras com nova data. 🎉</td></tr>`; }
     // lista
     const ordem = { p1: 1, p2: 2, p4: 3, p3: 4, p5: 5, p6: 6, ok: 9 };
-    rtLista = L.filter((p) => naCard(p) && (!rtTransp || (p.transportadora || "(sem transportadora)") === rtTransp)
+    rtLista = L.filter((p) => naCard(p) && (!rtTransp || (rtT(p)) === rtTransp)
       && (!rtCatSel || rtCat(p._t && p._t.observacao) === rtCatSel))
       .sort((a, b) => ordem[a._rt] - ordem[b._rt] || (a._dias ?? 0) - (b._dias ?? 0));
     $("rt-titulo").textContent = `${rtCards.size ? [...rtCards].map((k) => RT_NOMES[k]).join(" + ") : RT_NOMES.cobrar}${rtTransp ? " · " + rtTransp : ""}${rtCatSel ? " · " + rtCatSel : ""} (${fmt(rtLista.length)})`;
@@ -1986,10 +1988,10 @@ ${extra}
     return [["Pedido Intelipost", "NF", "Transportadora", "Nova Data", "Observação", "Motivo da cobrança", "Prometido ao cliente", "Data informada antes", "Último retorno", "Canal", "UF", "Cidade", "Micro status", "Retorno padronizado", "Responsável"]]
       .concat(L.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.transportadora, null, null, RT_NOMES[p._rt], br(p._venc), br(t.nova_data), t.observacao || "", p.canal, p.uf, p.cidade || "", p.micro_status, rtCat(t.observacao), (rtRespDe(rtCat(t.observacao)) || {}).nome || ""]; }));
   }
-  const rtParaCobrar = (tr) => base.filter((p) => rtPassaFiltro(p) && (p._rt = rtBalde(p)) && p._rt !== "ok" && (!tr || (p.transportadora || "(sem transportadora)") === tr));
+  const rtParaCobrar = (tr) => base.filter((p) => rtPassaFiltro(p) && (p._rt = rtBalde(p)) && p._rt !== "ok" && (!tr || (rtT(p)) === tr));
   function rtBaixar(tr) {
     const L = rtParaCobrar(tr); if (!L.length) return toast("Nada para cobrar.", true);
-    const wb = XLSX.utils.book_new(), porT = new Map(); L.forEach((p) => { const k = p.transportadora || "(sem transportadora)"; (porT.get(k) || porT.set(k, []).get(k)).push(p); });
+    const wb = XLSX.utils.book_new(), porT = new Map(); L.forEach((p) => { const k = rtT(p); (porT.get(k) || porT.set(k, []).get(k)).push(p); });
     for (const [k, xs] of [...porT.entries()].sort((a, b) => b[1].length - a[1].length)) {
       const ws = XLSX.utils.aoa_to_sheet(rtLinhasExcel(xs)); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 12 }, { wch: 40 }, { wch: 26 }, { wch: 12 }, { wch: 12 }, { wch: 40 }];
       XLSX.utils.book_append_sheet(wb, ws, k.replace(/[\\/?*[\]:]/g, " ").slice(0, 31) || "Transportadora"); }
@@ -2030,7 +2032,7 @@ ${extra}
   });
   $("rt-copiar").addEventListener("click", async () => {
     const L = base.filter((p) => (p._rt = rtBalde(p))), c = (k) => L.filter((p) => p._rt === k).length, porT = new Map();
-    L.filter((p) => p._rt === "p1" || p._rt === "p2").forEach((p) => { const k = p.transportadora || "(sem transportadora)"; porT.set(k, (porT.get(k) || 0) + 1); });
+    L.filter((p) => p._rt === "p1" || p._rt === "p2").forEach((p) => { const k = rtT(p); porT.set(k, (porT.get(k) || 0) + 1); });
     const t = `Cobrança do dia · ${new Date().toLocaleDateString("pt-BR")}\n`
       + `1) Atrasados sem retorno: ${fmt(c("p1"))}\n2) Promessas quebradas: ${fmt(c("p2"))}\n3) Atrasados só com observação: ${fmt(c("p3"))}\n4) Vencem hoje sem retorno: ${fmt(c("p4"))}\n5) Vencem amanhã sem retorno: ${fmt(c("p5"))}\n6) Nova data vence hoje/amanhã: ${fmt(c("p6"))}\n`
       + `Transportadoras com mais pendências (1 + 2):\n` + [...porT.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, n]) => `  • ${k}: ${fmt(n)}`).join("\n");
