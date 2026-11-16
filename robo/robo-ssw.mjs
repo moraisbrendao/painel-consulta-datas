@@ -365,6 +365,23 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
     mask(r.txt.replace(/\s+/g, " ")).match(/.{1,300}/g).forEach((l) => log("  " + l));
   }
 }
+if (MODO === "diag-lote3") {   // separador das NFs no lote (CRLF, vírgula, espaço...): só contagens e estrutura mascarada
+  await entrarSupabase(); await carregarSenhasDB();
+  const L = (await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*flog*&situacao=in.(entregue,nao%20entregue)&nf=like.*-25&limit=12`));
+  const it = L.map((x) => ({ ...x, n: String(x.nf).split("-")[0].trim() })), cnpj = cnpjDaSerie("25"), chave = chaveDe((it[0] || {}).transportadora);
+  log("NFs:", it.length, JSON.stringify(it.reduce((m, x) => (m[x.situacao] = (m[x.situacao] || 0) + 1, m), {})));
+  for (const [rot, sep] of [["CRLF", "\r\n"], ["virgula", ","], ["espaco", " "], ["ponto-virgula", ";"]]) {
+    const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: it.map((x) => x.n).join(sep), cnpj, chave, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+    const trs = r.txt.split(/<tr[\s>]/i).slice(2).filter((l) => /class="rastreamento"/.test(l));
+    let bate = 0; const conf = {};
+    for (const x of it) { const re = new RegExp("(^|\\D)0*" + x.n + "(\\D|$)"); const tr = trs.filter((l) => re.test(sohTexto("<tr " + l).join(" ")));
+      const t = sohTexto("<tr " + tr.join(" ")).join(" "); const v = !tr.length ? "não listada" : tr.length > 1 && trs.length < 2 ? "?" : /MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(t) ? "entregue" : /n[ãa]o dispon|n[ãa]o encontr/i.test(t) ? "sem cte" : "nao entregue";
+      if (v === x.situacao) bate++; conf[x.situacao + "→" + v] = (conf[x.situacao + "→" + v] || 0) + 1; }
+    log(`${rot}: HTTP ${r.status} · ${r.txt.length} bytes · linhas de resultado ${trs.length} · iguais ao robô ${bate}/${it.length} · ${JSON.stringify(conf)} · links detalhe ${(r.txt.match(/ops\(|opx\(|SSWDetalhado/g) || []).length}`);
+    if (trs[0]) log("  linha 1:", sohTexto("<tr " + trs[0]).map(limpo).join(" | ").slice(0, 300), "· tags:", tags("<tr " + trs[0], /<(td|a|p)[^>]*>/gi).map((y) => y.replace(/\d{3,}/g, "#").replace(/style="[^"]*"/g, "")).slice(0, 10).join(" "));
+    await new Promise((ok) => setTimeout(ok, 3000));
+  }
+}
 if (MODO === "diag-form1") {   // formulário 1 da ajuda (ssw_resultSSW, sem senha): 1 NF e lote de NFs — só contagens
   await entrarSupabase();
   const P = await chamar("conferencia_ssw?select=nf,transportadora,situacao&situacao=in.(sem%20permissao,sem%20cte,fora%20do%20ssw)&limit=400");
