@@ -359,10 +359,10 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
   const L2 = await chamar(`conferencia_ssw?select=nf,transportadora,situacao&transportadora=ilike.*flog*&situacao=eq.nao%20entregue&nf=not.is.null&limit=5`);
   const it = L.concat(L2).map((x) => ({ ...x, n: String(x.nf).split("-")[0].trim(), se: String(x.nf).split("-")[1] }));
   const cnpj = cnpjDaSerie((it[0] || {}).se); if (!cnpj) { log("sem NFs"); } else {
-    const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: it.map((x) => x.n).join("\n"), cnpj, chave: chaveDe(it[0].transportadora), urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
+    const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: it.map((x) => x.n).join("\r\n"), cnpj, chave: chaveDe(it[0].transportadora), urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
     const mask = (t) => t.replace(/\d{3,}/g, "#").replace(/>[^<]+</g, (m) => ">" + m.slice(1, -1).replace(/[A-Za-zÀ-ú]{2,}/g, (w) => (OK_PAL.test(w) || /^(situa|entreg|unidade|data|hora|nota|fiscal|coleta|previs)/i.test(w) ? w : "x")) + "<");
     log("HTTP", r.status, "bytes", r.txt.length, "cookie", r.cookie ? "sim" : "não");
-    mask(r.txt.replace(/\s+/g, " ")).match(/.{1,300}/g).forEach((l) => log("  " + l));
+    const corpo = r.txt.replace(/\s+/g, " "), i0 = corpo.indexOf("<table"); mask(corpo.slice(i0, i0 + 7000)).match(/.{1,300}/g).forEach((l) => log("  " + l));
   }
 }
 if (MODO === "diag-lote3") {   // separador das NFs no lote (CRLF, vírgula, espaço...): só contagens e estrutura mascarada
