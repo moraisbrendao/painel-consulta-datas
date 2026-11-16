@@ -1824,3 +1824,59 @@ select cron.unschedule(jobid) from cron.job where jobname = 'robo-ssw-lote-noite
 -- horários em UTC (Brasília + 3h): 06:00–17:30 de 30 em 30 min, 18:00, depois 20h, 22h, 00h, 02h e 04h
 select cron.schedule('robo-ssw-lote', '0,30 9-20 * * *', 'select public._robo_ssw_lote()');
 select cron.schedule('robo-ssw-lote-noite', '0 21,23,1,3,5,7 * * *', 'select public._robo_ssw_lote()');
+-- 39) Análise de canais: impactos de reputação por canal (Amazon: avaliações negativas, garantia A a Z, estornos;
+--     Mercado Livre: reclamações e mediações). Cada envio substitui a lista do canal. Só a Logística lê.
+create table if not exists public.canal_impactos (
+  canal       text not null,
+  id_pedido   text not null,     -- id do pedido no canal (ex.: 701-1234567-1234567 / 2000012345678901)
+  tipo        text not null default '',
+  data_pedido date,
+  primary key (canal, id_pedido, tipo)
+);
+create table if not exists public.canal_impactos_info (
+  canal       text primary key,
+  arquivo     text,
+  linhas      integer,
+  vendas_60d  integer,           -- vendas do canal nos últimos 60 dias (se informado; senão o painel conta pela base)
+  enviado_por text,
+  enviado_em  timestamptz not null default now()
+);
+alter table public.canal_impactos enable row level security;
+alter table public.canal_impactos_info enable row level security;
+revoke all on public.canal_impactos, public.canal_impactos_info from anon;
+revoke insert, update, delete, truncate on public.canal_impactos, public.canal_impactos_info from authenticated;
+grant select on public.canal_impactos, public.canal_impactos_info to authenticated;
+drop policy if exists "logistica le" on public.canal_impactos;
+drop policy if exists "logistica le" on public.canal_impactos_info;
+create policy "logistica le" on public.canal_impactos for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.canal_impactos_info for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public.importar_impactos(p_canal text, p_arquivo text, linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  delete from public.canal_impactos where canal = p_canal;
+  insert into public.canal_impactos (canal, id_pedido, tipo, data_pedido)
+  select distinct p_canal, left(r.id_pedido, 60), left(coalesce(r.tipo, ''), 60), r.data_pedido
+  from jsonb_to_recordset(linhas) as r(id_pedido text, tipo text, data_pedido date)
+  where coalesce(r.id_pedido, '') <> ''
+  on conflict do nothing;
+  get diagnostics n = row_count;
+  insert into public.canal_impactos_info (canal, arquivo, linhas, enviado_por, enviado_em)
+  values (p_canal, p_arquivo, n, auth.jwt() ->> 'email', now())
+  on conflict (canal) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  return n;
+end $$;
+revoke all on function public.importar_impactos(text, text, jsonb) from public, anon;
+grant execute on function public.importar_impactos(text, text, jsonb) to authenticated;
+
+create or replace function public.salvar_vendas_canal(p_canal text, p_vendas integer)
+returns void language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  insert into public.canal_impactos_info (canal, vendas_60d, enviado_por) values (p_canal, p_vendas, auth.jwt() ->> 'email')
+  on conflict (canal) do update set vendas_60d = excluded.vendas_60d;
+end $$;
+revoke all on function public.salvar_vendas_canal(text, integer) from public, anon;
+grant execute on function public.salvar_vendas_canal(text, integer) to authenticated;

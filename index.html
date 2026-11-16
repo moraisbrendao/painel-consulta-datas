@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=112">
+  <link rel="stylesheet" href="styles.css?v=113">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -37,6 +37,7 @@
       <button class="menu-item so-log" data-pagina="entregas"><span class="menu-icone">✓</span>Entregas e SLA</button>
       <button class="menu-item so-log" data-pagina="transp"><span class="menu-icone">🚚</span>Transportadoras</button>
       <button class="menu-item so-log" data-pagina="uf"><span class="menu-icone">⌖</span>Atrasos por UF</button>
+      <button class="menu-item so-log" data-pagina="canais"><span class="menu-icone">◎</span>Análise de canais</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
@@ -335,6 +336,89 @@
           </div>
         </div>
         <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-pt"><thead id="g-pt-cab"></thead><tbody id="g-pt-linhas"></tbody></table></div>
+      </section>
+    </main>
+
+    <main class="conteudo" id="pagina-canais" hidden>
+      <!-- o cartão de filtros da Visão Gerencial é colocado aqui quando esta página abre (mesmos filtros) -->
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Análise de canais</h1>
+          <p class="sub">Pedidos em aberto por canal: quem segura o atraso, onde, e o que falta tratar. Clique nos cards e nas linhas para cruzar os filtros; clique de novo para tirar.</p>
+          <p id="c-info" class="info-base">Carregando…</p>
+        </div>
+        <div class="acoes-robo">
+          <label class="c-canal-rot">Canal: <select id="c-canal"><option value="">Todos os canais</option></select></label>
+          <button id="c-copiar" class="btn primario">⧉ Copiar a análise</button>
+          <button id="c-extrair" class="btn contorno">⤓ Extrair os atrasos</button>
+        </div>
+      </div>
+      <section class="kpis" id="c-cards">
+        <button class="kpi" data-c="abertos"><span class="kpi-rot">Em aberto</span><b class="kpi-num"></b><small>no canal escolhido</small><i>↗</i></button>
+        <button class="kpi vermelho" data-c="atrasados"><span class="kpi-rot">Atrasados</span><b class="kpi-num"></b><small>em aberto, vencidos</small><i>↗</i></button>
+        <div class="kpi kpi-fixo" id="c-pct"><span class="kpi-rot">% de atraso</span><b class="kpi-num"></b><small>atrasados ÷ em aberto</small></div>
+        <button class="kpi roxo" data-c="repo"><span class="kpi-rot">Com reposição</span><b class="kpi-num"></b><small>atrasados com reposição em andamento</small><i>↗</i></button>
+        <button class="kpi laranja" data-c="ocorr"><span class="kpi-rot">Com ocorrência</span><b class="kpi-num"></b><small>atrasados com ocorrência aberta</small><i>↗</i></button>
+        <button class="kpi vermelho" data-c="semnova"><span class="kpi-rot">Sem nova data</span><b class="kpi-num"></b><small>atrasados sem nova data (ou já vencida)</small><i>↗</i></button>
+      </section>
+      <div id="c-sel" class="g-cruz-sel" hidden></div>
+
+      <section class="cartao" id="c-canais-cartao">
+        <div class="cartao-topo"><div><h2>Canais</h2><p class="sub">Clique num canal para analisar só ele.</p></div></div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Canal</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">% de atraso</th><th class="num">% dos atrasos</th><th class="num">Sem nova data</th><th class="num">Performance</th></tr></thead><tbody id="c-canais"></tbody></table></div>
+      </section>
+
+      <div class="c-duas">
+        <section class="cartao"><h2 class="c-tit">🚚 Transportadoras que seguram o canal</h2>
+          <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz c-lista-rank"><thead><tr><th>Transportadora</th><th class="num">Atrasados</th><th class="num">% dos atrasos</th><th class="num">% da carteira</th><th class="num">Em aberto</th></tr></thead><tbody id="c-transp"></tbody></table></div></section>
+        <section class="cartao"><h2 class="c-tit">⌖ Estados com mais atraso</h2>
+          <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz c-lista-rank"><thead><tr><th>UF</th><th class="num">Atrasados</th><th class="num">% dos atrasos</th><th class="num">% da carteira</th><th class="num">Em aberto</th></tr></thead><tbody id="c-uf"></tbody></table></div></section>
+      </div>
+
+      <div class="c-duas">
+        <section class="cartao"><h2 class="c-tit">◷ A vencer (em aberto, no prazo)</h2>
+          <div class="tabela-wrap"><table class="tabela-range tabela-cruz"><thead><tr><th>Prazo</th><th>Data</th><th class="num">Pedidos</th></tr></thead><tbody id="c-vencer"></tbody></table></div></section>
+        <section class="cartao"><h2 class="c-tit">⚠ Atraso por faixa (em aberto)</h2>
+          <div class="tabela-wrap"><table class="tabela-range tabela-cruz"><thead><tr><th>Faixa</th><th class="num">Pedidos</th><th class="num">%</th><th class="num">Sem nova data</th></tr></thead><tbody id="c-faixas"></tbody></table></div></section>
+      </div>
+
+      <section class="cartao" id="c-metodo" hidden>
+        <div class="cartao-topo">
+          <div><h2 id="c-metodo-tit"></h2><p class="sub" id="c-metodo-sub"></p></div>
+          <div class="acoes-robo">
+            <label class="btn contorno" id="c-imp-rot">⇪ Enviar impactos<input id="c-imp-arq" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label>
+          </div>
+        </div>
+        <section class="kpis" id="c-m-cards">
+          <div class="kpi kpi-fixo" id="c-m-indice"><span class="kpi-rot" id="c-m-indice-rot">Índice</span><b class="kpi-num"></b><small id="c-m-indice-sub"></small></div>
+          <button class="kpi vermelho" data-r="impab"><span class="kpi-rot">Impactos em aberto</span><b class="kpi-num"></b><small>ainda não entregues</small><i>↗</i></button>
+          <button class="kpi vermelho" data-r="Alto"><span class="kpi-rot">Risco ALTO</span><b class="kpi-num"></b><small>score ≥ 5 · tratar primeiro</small><i>↗</i></button>
+          <button class="kpi laranja" data-r="Médio"><span class="kpi-rot">Risco MÉDIO</span><b class="kpi-num"></b><small>score 3 a 4</small><i>↗</i></button>
+          <button class="kpi azul" data-r="Baixo"><span class="kpi-rot">Risco BAIXO</span><b class="kpi-num"></b><small>score até 2</small><i>↗</i></button>
+        </section>
+        <p class="info-base" id="c-m-info"></p>
+        <div class="c-duas">
+          <div><h3>Taxa de impacto por dias de atraso</h3><div class="tabela-wrap"><table class="tabela-range tabela-cruz"><thead><tr><th>Dias de atraso</th><th class="num">Pedidos</th><th class="num">Com impacto</th><th class="num">Taxa</th><th class="num">Pontos</th></tr></thead><tbody id="c-m-faixa"></tbody></table></div></div>
+          <div><h3>Taxa de impacto por transportadora</h3><div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Transportadora</th><th class="num">Pedidos</th><th class="num">Com impacto</th><th class="num">Taxa</th><th class="num">De risco?</th></tr></thead><tbody id="c-m-transp"></tbody></table></div></div>
+        </div>
+        <details class="c-regras"><summary>Como o risco é calculado</summary>
+          <p>Score = pontos de <b>dias de atraso</b> (no prazo 0 · 1–5 dias 1 · 6–10 dias 2 · 11–20 dias 3 · 21+ dias 5) + <b>alterações da data prevista</b> (0 a 3, uma por alteração) + <b>status crítico</b> (falha na entrega / averiguar falha: 2) + <b>transportadora de risco</b> (taxa de impacto ≥ 2× a média, com pelo menos 30 pedidos: 1) + <b>sem atualização no rastreio ≥ 10 dias</b> (1). ALTO ≥ 5, MÉDIO ≥ 3. Mesma metodologia da planilha "Recuperação Amazon", usada para Amazon e Mercado Livre.</p>
+        </details>
+      </section>
+
+      <section class="cartao" id="c-lista-cartao">
+        <div class="cartao-topo">
+          <div><h2 id="c-lista-titulo">Pedidos</h2><p class="sub">A lista segue os cards e as linhas clicadas.</p></div>
+          <button id="c-exportar" class="btn contorno">Baixar Excel</button>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>Pedido</th><th>NF</th><th>Canal</th><th>Transportadora</th><th>UF</th><th>Status</th><th>Prometido</th><th class="num">Atraso (d)</th><th>Nova data</th><th>Observação</th><th>Marcas</th><th>Risco</th></tr></thead>
+            <tbody id="c-linhas"></tbody>
+          </table>
+          <p id="c-vazio" class="vazio" hidden>Nenhum pedido.</p>
+        </div>
+        <div id="c-paginacao" class="paginacao"></div>
       </section>
     </main>
 
@@ -1085,10 +1169,10 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=112"></script>
-  <script src="mapa-brasil.js?v=112"></script>
-  <script src="troca-notas.js?v=112"></script>
-  <script src="app.js?v=112"></script>
-  <script src="ordenar.js?v=112"></script>
+  <script src="config.js?v=113"></script>
+  <script src="mapa-brasil.js?v=113"></script>
+  <script src="troca-notas.js?v=113"></script>
+  <script src="app.js?v=113"></script>
+  <script src="ordenar.js?v=113"></script>
 </body>
 </html>

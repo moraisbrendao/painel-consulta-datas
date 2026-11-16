@@ -1248,8 +1248,8 @@
     prepararG(); montarFiltrosG(); desenharGAtual();
   }
   // Visão Gerencial e Entregas e SLA usam os mesmos dados e os mesmos filtros
-  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp"];
-  function desenharGAtual() { if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else desenharGerencial(); }
+  const G_PAGINAS = ["gerencial", "entregas", "uf", "transp", "canais"];
+  function desenharGAtual() { if (paginaAtual === "canais") desenharCanaisPag(); else if (paginaAtual === "entregas") desenharEntregas(); else if (paginaAtual === "uf") desenharUF(); else if (paginaAtual === "transp") desenharTransp(); else desenharGerencial(); }
   function selecionar(titulo, filtro) { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(true); }
 
   function desenharGerencial() {
@@ -1492,6 +1492,245 @@
   $("g-canais").addEventListener("click", (e) => { const b = e.target.closest("[data-canal]"); if (!b) return; const c = b.dataset.canal, k = b.dataset.ck;
     selecionar(`${c} · ${{ v: "todos", a: "em aberto", t: "atrasados" }[k]}`, (L) => L.filter((r) => (r.canal || "(sem canal)") === c && (k === "v" || (k === "a" ? !r._fechado : r._atraso > 0)))); });
   $("g-pt-linhas").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-ptt]"); if (!tr) return; verPedidosTransp(tr.dataset.ptt); });
+
+  // ---------------- Análise de canais (pedido da Brenda 16/11) ----------------
+  // Mesma base e filtros da Visão Gerencial. Amazon e Mercado Livre têm a metodologia própria do canal (índice de impactos ≤ 1%)
+  // e a previsão de risco da planilha "Recuperação Amazon" (score por atraso, alterações, status crítico, transportadora de risco, rastreio parado).
+  const cSel = { canal: "", card: null, transp: null, uf: null, faixa: null, venc: null, risco: null };
+  let cDetTentou = false, cPagina = 1, cLista = [], cImp = { canal: null, lista: [], info: null }, cImpCarregado = {};
+  const C_FAIXAS = [["1 a 2 dias", 1, 2], ["3 a 5 dias", 3, 5], ["6 a 10 dias", 6, 10], ["11 a 20 dias", 11, 20], ["Acima de 20 dias", 21, 99999]];
+  const C_PTS_ATR = [["No prazo", -99999, 0, 0], ["1 a 5 dias", 1, 5, 1], ["6 a 10 dias", 6, 10, 2], ["11 a 20 dias", 11, 20, 3], ["21+ dias", 21, 99999, 5]];
+  const C_METODO = {
+    amazon: { nome: "Amazon", tit: "Amazon · Índice de pedidos com problemas", rot: "Índice de pedidos com problemas", meta: 0.01,
+      sub: "Meta: abaixo de 1% em 60 dias. Soma de avaliações negativas, reivindicações da Garantia de A a Z e pedidos de estorno. A A a Z pode ser aberta a partir do momento em que a data de entrega passa e fica 60 dias na métrica: o canal é 100% preventivo (o cliente nem recebe o link de rastreio).",
+      arquivo: "Envie a planilha de impactos da Amazon (colunas ID do pedido, Data do pedido e as marcações X de Avaliações negativas, Reivindicações da Garantia de A a Z e Pedidos de estorno)." },
+    ml: { nome: "Mercado Livre", tit: "Mercado Livre · Reclamações", rot: "Reclamações", meta: 0.01,
+      sub: "Máximo de 1% das vendas com reclamação (60 dias); acima disso perde a medalha e campanhas. Atraso não é removido do impacto mesmo se o cliente desistir. Mediações: retorno concreto dentro do prazo, senão o valor volta ao cliente.",
+      arquivo: "Envie as vendas afetadas do Mercado Livre (\"Baixar vendas afetadas\"): o painel acha o nº da venda em qualquer coluna; se houver coluna de tipo (reclamação/mediação) ela é usada." },
+  };
+  const metodoDe = (canal) => (/amazon/i.test(canal || "") ? "amazon" : /mercado\s*livre/i.test(canal || "") ? "ml" : null);
+  const idCanal = (pedido) => String(pedido || "").replace(/^[A-Z_]+/i, "").trim();   // AMAZON_GLOBAL_API701-… → 701-…; MERCADO_LIVRE2000… → 2000…
+  const novaDe = (r) => { const t = trat.get(r.pedido); return t && t.nova_data ? t.nova_data : null; };
+  const semNova = (r) => { const n = novaDe(r); return !n || n < hojeISO(); };
+  const detDe = (r) => (detNF ? detNF.get(chaveNF(`${r.nf}-${r.serie}`)) : null);
+  const atrDias = (r) => (r._d === null ? null : -r._d);   // >0 = dias de atraso pela data prometida original
+  const faixaC = (r) => { const d = r._atraso ? Math.max(1, atrDias(r) || r._atraso) : 0; return d ? C_FAIXAS.findIndex(([, a, b]) => d >= a && d <= b) : -1; };
+
+  async function carregarImpactos(canalM) {
+    if (!canalM || cImpCarregado[canalM]) return;
+    cImpCarregado[canalM] = "carregando";
+    const nome = C_METODO[canalM].nome;
+    try {
+      const [l, i] = await Promise.all([sb.from("canal_impactos").select("id_pedido,tipo,data_pedido").eq("canal", nome).limit(5000), sb.from("canal_impactos_info").select("*").eq("canal", nome).limit(1)]);
+      if (l.error) throw l.error;
+      cImpCarregado[canalM] = { lista: l.data || [], info: (i.data || [])[0] || null };
+    } catch (err) { cImpCarregado[canalM] = { lista: [], info: null, erro: err.message || String(err) }; }
+    if (paginaAtual === "canais") desenharCanaisPag();
+  }
+
+  // previsão de risco (planilha Recuperação Amazon)
+  function riscoCanal(L, imp) {
+    const ids = new Set(imp.map((x) => x.id_pedido)), comImp = (r) => ids.has(idCanal(r.pedido));
+    const ref = hojeISO(), lim = somaDias(ref, -20);
+    const periodo = L.filter((r) => r._sit !== "cancelado" && r.criado && r.criado <= lim);   // pedidos que já tiveram tempo de virar impacto
+    const dias = (r) => { if (!r.prevOrig && !r._prom) return null; const o = r.prevOrig || r._prom; return r.entrega ? diasEntre(o, r.entrega) : r._fechado ? null : diasEntre(o, ref); };
+    const fx = C_PTS_ATR.map(([n, a, b, p]) => { const ps = periodo.filter((r) => { const d = dias(r); return d !== null && d >= a && d <= b; }); return { n, a, b, p, q: ps.length, i: ps.filter(comImp).length }; });
+    const media = periodo.length ? periodo.filter(comImp).length / periodo.length : 0;
+    const porT = new Map(); periodo.forEach((r) => { const t = r.transp || "(sem transportadora)", x = porT.get(t) || { t, q: 0, i: 0 }; x.q++; if (comImp(r)) x.i++; porT.set(t, x); });
+    const tr = [...porT.values()].map((x) => ({ ...x, tx: x.q ? x.i / x.q : 0, risco: x.q >= 30 && media > 0 && x.i / x.q >= 2 * media })).sort((a, b) => b.i - a.i || b.q - a.q);
+    const tRisco = new Set(tr.filter((x) => x.risco).map((x) => x.t));
+    const score = new Map();
+    L.forEach((r) => { if (r._fechado) return;
+      const d = dias(r), pa = d === null ? 0 : (C_PTS_ATR.find(([, a, b]) => d >= a && d <= b) || [0, 0, 0, 0])[3];
+      const pal = Math.min(3, r.trocas || 0), pst = /FALHA NA ENTREGA|AVERIGUAR FALHA/i.test(`${r.micro || ""} ${r.status || ""}`) ? 2 : 0;
+      const ptr = tRisco.has(r.transp || "(sem transportadora)") ? 1 : 0, psa = r._parado !== null && r._parado >= 10 ? 1 : 0, s = pa + pal + pst + ptr + psa;
+      score.set(r.pedido, { s, nivel: s >= 5 ? "Alto" : s >= 3 ? "Médio" : "Baixo", imp: comImp(r) }); });
+    return { fx, tr, media, score, comImp, periodo: periodo.length };
+  }
+
+  function cBase() {   // pedidos do canal (todos os status), já com os filtros do topo
+    const L = gFiltrados();
+    return cSel.canal ? L.filter((r) => (r.canal || "(sem canal)") === cSel.canal) : L;
+  }
+  const C_CARD = { abertos: (r) => !r._fechado, atrasados: (r) => r._atraso > 0, repo: (r) => r._atraso > 0 && !!(detDe(r) || {}).tem_repo,
+    ocorr: (r) => r._atraso > 0 && !!(detDe(r) || {}).tem_ocorr, semnova: (r) => r._atraso > 0 && semNova(r) };
+  function cPassa(r, menos, risco) {
+    if (r._fechado) return false;
+    if (menos !== "card" && cSel.card && !C_CARD[cSel.card](r)) return false;
+    if (menos !== "transp" && cSel.transp !== null && (r.transp || "(sem transportadora)") !== cSel.transp) return false;
+    if (menos !== "uf" && cSel.uf !== null && (r.uf || "(sem UF)") !== cSel.uf) return false;
+    if (menos !== "faixa" && cSel.faixa !== null && faixaC(r) !== cSel.faixa) return false;
+    if (menos !== "venc" && cSel.venc !== null && !(!r._atraso && (cSel.venc === 8 ? r._d > 7 : r._d === cSel.venc))) return false;
+    if (menos !== "risco" && cSel.risco !== null && risco) { const x = risco.score.get(r.pedido); if (cSel.risco === "impab" ? !(x && x.imp) : !(x && x.nivel === cSel.risco)) return false; }
+    return true;
+  }
+
+  function desenharCanaisPag() {
+    if (!gDados) return;
+    if (!detNF && !cDetTentou) { cDetTentou = true; carregarDetNF().then(() => { if (paginaAtual === "canais" && detNF) desenharCanaisPag(); }); }
+    const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1).replace(".", ",") + "%" : "—"), pct0 = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "—");
+    // select de canais (por volume em aberto)
+    const todos = gFiltrados(), porC = new Map();
+    todos.forEach((r) => { if (r._fechado) return; const c = r.canal || "(sem canal)", x = porC.get(c) || { c, ab: 0, at: 0, sn: 0 }; x.ab++; if (r._atraso) { x.at++; if (semNova(r)) x.sn++; } porC.set(c, x); });
+    const canais = [...porC.values()].sort((a, b) => b.ab - a.ab);
+    if (cSel.canal && !porC.has(cSel.canal)) cSel.canal = "";
+    $("c-canal").innerHTML = `<option value="">Todos os canais</option>` + canais.map((x) => `<option value="${esc(x.c)}" ${x.c === cSel.canal ? "selected" : ""}>${esc(x.c)} (${fmt(x.ab)})</option>`).join("");
+    const totAt = canais.reduce((s, x) => s + x.at, 0), meta = Math.min(100, Math.max(50, parseFloat($("g-meta").value) || 97)) / 100;
+    $("c-canais-cartao").hidden = !!cSel.canal;
+    $("c-canais").innerHTML = canais.map((x) => { const pf = x.ab ? 1 - x.at / x.ab : 1, ok = pf >= meta;
+      return `<tr class="clicavel" data-cc="${esc(x.c)}"><td>${esc(x.c)}${metodoDe(x.c) ? ' <span class="chip ambar">métrica do canal</span>' : ""}</td><td class="num neutro">${fmt(x.ab)}</td><td class="num">${fmt(x.at)}</td><td class="num">${pct(x.at, x.ab)}</td><td class="num">${pct0(x.at, totAt)}</td><td class="num">${fmt(x.sn)}</td><td class="num ${ok ? "ok" : "ruim"}">${ok ? "●" : "↘"} ${(pf * 100).toFixed(2).replace(".", ",")}%</td></tr>`; }).join("");
+
+    const B = cBase(), mK = metodoDe(cSel.canal);
+    let risco = null;
+    if (mK) { carregarImpactos(mK); const im = cImpCarregado[mK]; if (im && im !== "carregando") risco = riscoCanal(B, im.lista); }
+    if (!mK) cSel.risco = null;
+    // cards (seguem transportadora / UF / faixa / risco, não o próprio card)
+    const base = B.filter((r) => cPassa(r, "card", risco));
+    const cont = Object.fromEntries(Object.entries(C_CARD).map(([k, f]) => [k, base.filter(f).length]));
+    document.querySelectorAll("#c-cards .kpi[data-c]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.c]); b.classList.toggle("ativa", cSel.card === b.dataset.c); });
+    $("c-pct").querySelector(".kpi-num").textContent = pct(cont.atrasados, cont.abertos);
+    $("c-pct").className = "kpi kpi-fixo " + (cont.abertos && cont.atrasados / cont.abertos > 1 - meta ? "laranja" : "verde");
+    // transportadoras e estados (atrasados)
+    const rank = (d, f, id) => { const A = B.filter((r) => cPassa(r, d, risco)), m = new Map(), at = A.filter((r) => r._atraso).length;
+      A.forEach((r) => { const k = f(r), x = m.get(k) || { k, ab: 0, at: 0 }; x.ab++; if (r._atraso) x.at++; m.set(k, x); });
+      $(id).innerHTML = [...m.values()].filter((x) => x.at || cSel[d] === x.k).sort((a, b) => b.at - a.at || b.ab - a.ab).map((x) => `<tr class="clicavel ${cSel[d] === x.k ? "sel" : ""}" data-cd="${d}" data-ck="${esc(x.k)}"><td>${esc(x.k)}</td><td class="num ruim-t">${fmt(x.at)}</td><td class="num">${pct0(x.at, at)}</td><td class="num">${pct0(x.at, x.ab)}</td><td class="num neutro">${fmt(x.ab)}</td></tr>`).join("")
+        || `<tr><td colspan="5" class="vazio">Nenhum atraso nesse filtro.</td></tr>`; };
+    rank("transp", (r) => r.transp || "(sem transportadora)", "c-transp");
+    rank("uf", (r) => r.uf || "(sem UF)", "c-uf");
+    // a vencer D0..D+7 e após
+    const V = B.filter((r) => cPassa(r, "venc", risco) && !r._atraso && r._d !== null && r._d >= 0), hoje = hojeISO();
+    $("c-vencer").innerHTML = [0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => { const n = V.filter((r) => (i === 8 ? r._d > 7 : r._d === i)).length;
+      return `<tr class="clicavel ${cSel.venc === i ? "sel" : ""}" data-cd="venc" data-ck="${i}"><td>${i === 8 ? "Após D+7" : i === 0 ? "Hoje (D0)" : "D+" + i}</td><td>${i === 8 ? "depois de " + br(somaDias(hoje, 7)) : br(somaDias(hoje, i))}</td><td class="num">${fmt(n)}</td></tr>`; }).join("")
+      + `<tr class="tot-linha"><td>Total a vencer</td><td></td><td class="num">${fmt(V.length)}</td></tr>`;
+    const F = B.filter((r) => cPassa(r, "faixa", risco) && r._atraso), tF = F.length;
+    $("c-faixas").innerHTML = C_FAIXAS.map(([n], i) => { const xs = F.filter((r) => faixaC(r) === i);
+      return `<tr class="clicavel ${cSel.faixa === i ? "sel" : ""}" data-cd="faixa" data-ck="${i}"><td>${n}</td><td class="num">${fmt(xs.length)}</td><td class="num">${pct0(xs.length, tF)}</td><td class="num">${fmt(xs.filter(semNova).length)}</td></tr>`; }).join("")
+      + `<tr class="tot-linha"><td>Total em atraso</td><td class="num">${fmt(tF)}</td><td class="num">${tF ? "100%" : "—"}</td><td class="num">${fmt(F.filter(semNova).length)}</td></tr>`;
+    // metodologia do canal (Amazon / Mercado Livre)
+    $("c-metodo").hidden = !mK;
+    if (mK) {
+      const M = C_METODO[mK], im = cImpCarregado[mK];
+      $("c-metodo-tit").textContent = M.tit; $("c-metodo-sub").textContent = M.sub; $("c-m-indice-rot").textContent = M.rot;
+      if (!im || im === "carregando") $("c-m-info").textContent = "Carregando os impactos do canal…";
+      else {
+        const v60 = B.filter((r) => r._sit !== "cancelado" && r.criado && r.criado >= somaDias(hoje, -60)).length, vendas = (im.info && im.info.vendas_60d) || v60;
+        const n = im.lista.length ? new Set(im.lista.map((x) => x.id_pedido)).size : 0, idx = vendas ? n / vendas : 0;
+        const el = $("c-m-indice"); el.querySelector(".kpi-num").textContent = im.lista.length ? (idx * 100).toFixed(2).replace(".", ",") + "%" : "—";
+        el.className = "kpi kpi-fixo " + (!im.lista.length ? "" : idx < M.meta ? "verde" : "vermelho");
+        $("c-m-indice-sub").innerHTML = im.lista.length ? `${fmt(n)} de ${fmt(vendas)} pedidos · 60 dias · meta abaixo de 1% <button class="link" id="c-vendas">${im.info && im.info.vendas_60d ? "vendas informadas" : "vendas pela base"} ✎</button>` : "envie a lista de impactos";
+        const tipos = new Map(); im.lista.forEach((x) => tipos.set(x.tipo || "(sem tipo)", (tipos.get(x.tipo || "(sem tipo)") || 0) + 1));
+        $("c-m-info").innerHTML = im.erro ? `Não consegui ler os impactos (${esc(im.erro)}). Rode a parte 39 do supabase/schema.sql.`
+          : im.info && im.info.enviado_em ? `Impactos: <b>${esc(im.info.arquivo || "")}</b> enviado em ${new Date(im.info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${im.info.enviado_por ? " por " + esc(im.info.enviado_por) : ""} · ${[...tipos].map(([t, q]) => `${esc(t)}: ${fmt(q)}`).join(" · ")} · ${fmt(risco.periodo)} pedidos do canal na base para calcular as taxas (média ${(risco.media * 100).toFixed(1).replace(".", ",")}%).`
+          : M.arquivo;
+        if (risco) {
+          const ab = B.filter((r) => cPassa(r, "risco", risco)), cnt = { impab: 0, Alto: 0, Médio: 0, Baixo: 0 };
+          ab.forEach((r) => { const x = risco.score.get(r.pedido); if (!x) return; cnt[x.nivel]++; if (x.imp) cnt.impab++; });
+          document.querySelectorAll("#c-m-cards .kpi[data-r]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(cnt[b.dataset.r]); b.classList.toggle("ativa", cSel.risco === b.dataset.r); });
+          $("c-m-faixa").innerHTML = risco.fx.map((x) => `<tr><td>${x.n}</td><td class="num">${fmt(x.q)}</td><td class="num">${fmt(x.i)}</td><td class="num">${pct(x.i, x.q)}</td><td class="num">${x.p}</td></tr>`).join("");
+          $("c-m-transp").innerHTML = risco.tr.map((x) => `<tr class="clicavel ${cSel.transp === x.t ? "sel" : ""}" data-cd="transp" data-ck="${esc(x.t)}"><td>${esc(x.t)}</td><td class="num">${fmt(x.q)}</td><td class="num">${fmt(x.i)}</td><td class="num">${pct(x.i, x.q)}</td><td class="num ${x.risco ? "ruim" : ""}">${x.risco ? "Sim" : "Não"}</td></tr>`).join("");
+        }
+      }
+    }
+    // seleção
+    const nomes = { card: (v) => ({ abertos: "Em aberto", atrasados: "Atrasados", repo: "Com reposição", ocorr: "Com ocorrência", semnova: "Sem nova data" }[v]), transp: (v) => v, uf: (v) => "UF " + v,
+      faixa: (v) => "Atraso " + C_FAIXAS[v][0], venc: (v) => (v === 8 ? "Vence após D+7" : v === 0 ? "Vence hoje" : "Vence em D+" + v), risco: (v) => (v === "impab" ? "Impactos em aberto" : "Risco " + v) };
+    const sel = Object.keys(nomes).filter((k) => cSel[k] !== null);
+    $("c-sel").hidden = !sel.length;
+    $("c-sel").innerHTML = sel.map((k) => `<span class="chip-sel">${esc(nomes[k](cSel[k]))} <button class="link" data-cx="${k}" title="Tirar">✕</button></span>`).join("") + (sel.length ? ' <button class="link" data-cx="tudo">Limpar seleção</button>' : "");
+    // lista
+    cLista = B.filter((r) => cPassa(r, null, risco)).sort((a, b) => (b._atraso - a._atraso) || String(a._prom || "9").localeCompare(String(b._prom || "9")));
+    cLista._risco = risco;
+    $("c-lista-titulo").textContent = `${cSel.canal || "Todos os canais"} · ${sel.length ? sel.map((k) => nomes[k](cSel[k])).join(" · ") : "Pedidos em aberto"} (${fmt(cLista.length)})`;
+    $("c-info").textContent = `${cSel.canal || "Todos os canais"} · ${fmt(cont.abertos)} em aberto · ${fmt(cont.atrasados)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}`;
+    desenharCLista();
+  }
+  function desenharCLista() {
+    const total = cLista.length, pags = Math.max(1, Math.ceil(total / POR_PAGINA)); cPagina = Math.min(Math.max(1, cPagina), pags);
+    const risco = cLista._risco;
+    $("c-linhas").innerHTML = cLista.slice((cPagina - 1) * POR_PAGINA, cPagina * POR_PAGINA).map((r) => {
+      const t = trat.get(r.pedido) || {}, d = detDe(r) || {}, x = risco ? risco.score.get(r.pedido) : null;
+      const marcas = [d.tem_repo ? '<span class="chip roxo">reposição</span>' : "", d.tem_ocorr ? '<span class="chip laranja">ocorrência</span>' : "", x && x.imp ? '<span class="chip vermelho">impacto</span>' : ""].join(" ");
+      return `<tr><td><div class="p">${esc(r.pedido)}</div></td><td>${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""}</td><td>${esc(r.canal)}</td><td>${esc(r.transp)}</td><td>${esc(r.uf)}</td>
+        <td><span class="ms">${esc(r.micro)}</span></td><td>${br(r._prom) || "—"}</td><td class="num ${r._atraso ? "ruim-t" : ""}">${r._atraso ? fmt(r._atraso) : "—"}</td>
+        <td>${t.nova_data ? br(t.nova_data) : '<span class="s">—</span>'}</td><td class="c-obs">${esc(t.observacao || "")}</td><td>${marcas}</td>
+        <td>${x ? `<span class="chip ${x.nivel === "Alto" ? "vermelho" : x.nivel === "Médio" ? "ambar" : "cinza"}">${x.nivel} · ${x.s}</span>` : ""}</td></tr>`; }).join("");
+    $("c-vazio").hidden = total > 0;
+    $("c-paginacao").innerHTML = total > POR_PAGINA ? `<button class="btn" data-p="-1" ${cPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cPagina} de ${pags}</span><button class="btn" data-p="1" ${cPagina === pags ? "disabled" : ""}>Próxima ›</button>` : "";
+  }
+  const cMudou = () => { cPagina = 1; desenharCanaisPag(); };
+  $("c-canal").addEventListener("change", () => { cSel.canal = $("c-canal").value; cSel.risco = null; cMudou(); });
+  $("c-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-c]"); if (!b) return; cSel.card = cSel.card === b.dataset.c ? null : b.dataset.c; cMudou(); });
+  $("c-m-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-r]"); if (!b) return; cSel.risco = cSel.risco === b.dataset.r ? null : b.dataset.r; cMudou(); });
+  $("pagina-canais").addEventListener("click", async (e) => {
+    const cc = e.target.closest("tr[data-cc]"); if (cc) { cSel.canal = cc.dataset.cc; return cMudou(); }
+    const tr = e.target.closest("tr[data-cd]");
+    if (tr) { const d = tr.dataset.cd, k = d === "faixa" || d === "venc" ? +tr.dataset.ck : tr.dataset.ck; cSel[d] = cSel[d] === k ? null : k; return cMudou(); }
+    const x = e.target.closest("[data-cx]");
+    if (x) { if (x.dataset.cx === "tudo") ["card", "transp", "uf", "faixa", "venc", "risco"].forEach((k) => (cSel[k] = null)); else cSel[x.dataset.cx] = null; return cMudou(); }
+    if (e.target.id === "c-vendas") {
+      const mK = metodoDe(cSel.canal); if (!mK) return;
+      const v = prompt(`Vendas do canal ${C_METODO[mK].nome} nos últimos 60 dias (o mesmo número do painel do canal). Deixe vazio para contar pela base.`, (cImpCarregado[mK].info || {}).vendas_60d || "");
+      if (v === null) return; const n = parseInt(String(v).replace(/\D/g, ""), 10) || null;
+      const { error } = await sb.rpc("salvar_vendas_canal", { p_canal: C_METODO[mK].nome, p_vendas: n }); if (error) return toast("Erro: " + error.message, true);
+      delete cImpCarregado[mK]; carregarImpactos(mK); return;
+    }
+    const pb = e.target.closest("#c-paginacao button[data-p]"); if (pb) { cPagina += Number(pb.dataset.p); desenharCLista(); }
+  });
+  // lista de impactos do canal: acha o id do pedido em qualquer coluna; usa as marcações X / coluna de tipo quando houver
+  $("c-imp-arq").addEventListener("change", async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; const mK = metodoDe(cSel.canal); if (!f || !mK) return;
+    try {
+      carregando("Lendo os impactos…");
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array", cellDates: true }), RX = mK === "amazon" ? /\b\d{3}-\d{7}-\d{7}\b/ : /\b2\d{15}\b/, out = new Map();
+      for (const nome of wb.SheetNames) {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[nome], { header: 1, defval: "", raw: true }); let cab = null;
+        for (const row of rows) {
+          const cel = row.map((v) => (v instanceof Date ? v : String(v ?? "").trim()));
+          if (!cab && cel.filter((v) => typeof v === "string" && /pedido|venda|reivindica|avalia|estorno|reclama|media/i.test(v)).length >= 1 && !cel.some((v) => typeof v === "string" && RX.test(v))) { cab = cel.map((v) => norm(String(v))); continue; }
+          const idCel = cel.find((v) => typeof v === "string" && RX.test(v)); if (!idCel) continue;
+          const id = idCel.match(RX)[0]; let tipo = "", data = null;
+          if (cab) {
+            const marc = cab.map((h, i) => [h, cel[i]]).filter(([h, v]) => /^x$/i.test(String(v)) && !/IMPACTA/.test(h)).map(([h]) => h);
+            if (marc.length) tipo = marc.map((h) => (/REIVINDICA|GARANTIA/.test(h) ? "Garantia A a Z" : /AVALIA/.test(h) ? "Avaliação negativa" : /ESTORNO/.test(h) ? "Estorno" : h)).join(" + ");
+            const it = cab.findIndex((h) => /^(TIPO|MOTIVO|ESTADO|SITUACAO)/.test(h)); if (!tipo && it >= 0) tipo = String(cel[it] || "");
+            const id2 = cab.findIndex((h) => /DATA/.test(h)); if (id2 >= 0) { const v = cel[id2]; data = v instanceof Date ? v.toISOString().slice(0, 10) : typeof v === "number" ? new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10) : null; }
+          }
+          if (!tipo) tipo = mK === "ml" ? "Reclamação" : "";
+          if (/media/i.test(tipo)) tipo = "Mediação"; else if (mK === "ml" && /reclama/i.test(tipo)) tipo = "Reclamação";
+          out.set(id + "|" + tipo, { id_pedido: id, tipo: tipo.slice(0, 60), data_pedido: data });
+        }
+      }
+      if (!out.size) throw new Error(mK === "amazon" ? "não achei nenhum ID de pedido da Amazon (formato 701-1234567-1234567)." : "não achei nenhum número de venda do Mercado Livre (16 dígitos começando com 2).");
+      const { data, error } = await sb.rpc("importar_impactos", { p_canal: C_METODO[mK].nome, p_arquivo: f.name, linhas: [...out.values()] });
+      if (error) throw error;
+      delete cImpCarregado[mK]; await carregarImpactos(mK);
+      const base = new Set(gDados.map((r) => idCanal(r.pedido))), achados = [...new Set([...out.values()].map((x) => x.id_pedido))].filter((x) => base.has(x)).length;
+      toast(`${fmt(data)} impactos guardados para ${C_METODO[mK].nome} · ${fmt(achados)} encontrados na base.`);
+    } catch (err) { toast("Não consegui ler: " + (err.message || err), true); }
+    finally { carregando(false); }
+  });
+  function linhasCExcel(L) {
+    const risco = cLista._risco;
+    return [["Pedido", "NF", "Série", "Canal", "Transportadora", "UF", "Cidade", "Status", "Micro status", "Prometido", "Dias de atraso", "Faixa", "Nova data", "Observação", "Reposição", "Ocorrência", "Impacto", "Risco", "Score", "Alterações da data", "Dias sem atualização"]]
+      .concat(L.map((r) => { const t = trat.get(r.pedido) || {}, d = detDe(r) || {}, x = risco ? risco.score.get(r.pedido) : null, fi = faixaC(r);
+        return [r.pedido, r.nf, r.serie, r.canal, r.transp, r.uf, r.cidade || "", r.status, r.micro, br(r._prom), r._atraso || 0, fi >= 0 ? C_FAIXAS[fi][0] : "", t.nova_data ? br(t.nova_data) : "", t.observacao || "",
+          d.tem_repo ? "Sim" : "", d.tem_ocorr ? "Sim" : "", x && x.imp ? "Sim" : "", x ? x.nivel : "", x ? x.s : "", r.trocas || 0, r._parado ?? ""]; }));
+  }
+  $("c-exportar").addEventListener("click", () => { if (!cLista.length) return toast("Nada para exportar.", true);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhasCExcel(cLista)), "Pedidos"); XLSX.writeFile(wb, `analise_canais_${(cSel.canal || "todos").replace(/\W+/g, "_")}_${hojeISO()}.xlsx`); });
+  $("c-extrair").addEventListener("click", () => { const A = cLista.filter((r) => r._atraso); if (!A.length) return toast("Nenhum atraso nessa seleção.", true);
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhasCExcel(A)), "Atrasos"); XLSX.writeFile(wb, `atrasos_${(cSel.canal || "todos").replace(/\W+/g, "_")}_${hojeISO()}.xlsx`); });
+  $("c-copiar").addEventListener("click", async () => {
+    const txt = (id) => [...document.querySelectorAll(`#${id} tr`)].slice(0, 5).map((tr) => `  • ${tr.cells[0].textContent.trim()}: ${tr.cells[1].textContent.trim()} atrasados (${tr.cells[3].textContent.trim()})`).join("\n");
+    const k = (c) => document.querySelector(`#c-cards [data-c="${c}"] .kpi-num`).textContent;
+    let t = `Análise de canais · ${cSel.canal || "Todos os canais"} · ${new Date().toLocaleDateString("pt-BR")}\n`
+      + `Em aberto: ${k("abertos")} · Atrasados: ${k("atrasados")} (${$("c-pct").querySelector(".kpi-num").textContent})\n`
+      + `Atrasados com reposição: ${k("repo")} · com ocorrência: ${k("ocorr")} · sem nova data: ${k("semnova")}\n`
+      + `Transportadoras que mais seguram o canal:\n${txt("c-transp")}\nEstados com mais atraso:\n${txt("c-uf")}`;
+    if (!$("c-metodo").hidden) t += `\n${$("c-m-indice-rot").textContent}: ${$("c-m-indice").querySelector(".kpi-num").textContent} (meta abaixo de 1%) · risco alto: ${document.querySelector('#c-m-cards [data-r="Alto"] .kpi-num').textContent} · médio: ${document.querySelector('#c-m-cards [data-r="Médio"] .kpi-num').textContent}`;
+    try { await navigator.clipboard.writeText(t); toast("Análise copiada: é só colar no e-mail ou no WhatsApp."); } catch (_) { prompt("Copie o texto:", t); }
+  });
+
   // a lista de pedidos fica na Visão Gerencial: abre ela já filtrada pela transportadora
   function verPedidosTransp(t) {
     if (paginaAtual !== "gerencial") { irPara("gerencial"); montarGerencial(); }
@@ -2846,7 +3085,7 @@
   function irPara(pag) {
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }

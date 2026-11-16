@@ -611,3 +611,14 @@ table thead th { cursor: pointer; user-select: none; }
 table thead th.ord-desc::after { content: " ▼"; font-size: 10px; }
 table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .tabela-cruz thead th { white-space: normal; line-height: 1.2; vertical-align: bottom; }
+
+/* Análise de canais */
+.c-duas { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 14px; }
+.c-duas > .cartao { margin: 0; }
+.c-duas + .cartao, .c-duas + .c-duas { margin-top: 14px; }
+.c-tit { font-size: 13px; text-transform: uppercase; letter-spacing: .03em; color: #4b5563; margin: 0 0 8px; }
+.c-canal-rot select { padding: 6px 8px; border-radius: 8px; border: 1px solid #d1d5db; min-width: 190px; }
+.ruim-t { color: #b91c1c; font-weight: 600; }
+.c-obs { max-width: 260px; font-size: 12px; color: #4b5563; }
+.c-regras { margin-top: 10px; font-size: 13px; color: #4b5563; }
+#c-metodo h3 { font-size: 14px; margin: 12px 0 6px; }
