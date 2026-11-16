@@ -247,6 +247,25 @@
     return dados;
   }
 
+  // topo no estilo do E-loggia do Danilo: arquivo + selo "compartilhada", idade da planilha em dias úteis, botões "Carregar"
+  function diasUteisDesde(iso) {
+    const d = new Date(iso.slice(0, 10) + "T12:00:00"), hoje = new Date(hojeISO() + "T12:00:00"); let n = 0;
+    while (d < hoje) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n++; }
+    return n;
+  }
+  function desenharTopoArquivos() {
+    const quando = (x) => `${new Date(x.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${x.enviado_por ? " por " + x.enviado_por : ""}`;
+    const chip = (x, cls) => `<span class="arq ${cls}" title="Enviada em ${esc(quando(x))} · todos os logins veem esta mesma planilha">▤ ${esc(x.arquivo || "planilha")} <b class="selo">compartilhada</b></span>`;
+    let h = (info ? chip(info, "") : "") + (ticketsInfo ? chip(ticketsInfo, "tk") : "");
+    if (info) {
+      const du = diasUteisDesde(diaLocal(info.enviado_em)), dt = new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+      h += `<span class="arq-data ${du ? "velha" : "nova"}" title="Envie a base do dia para os números ficarem atualizados">planilha de ${dt} · ${du ? `${du} dia${du > 1 ? "s" : ""} út${du > 1 ? "eis" : "il"} atrás` : "de hoje"}</span>`;
+    }
+    $("topo-arquivos").innerHTML = h;
+    $("rot-base").textContent = "Carregar planilha";
+    $("rot-tickets").textContent = ticketsInfo ? "Tickets carregados" : "Carregar tickets";
+  }
+
   async function carregar() {
     $("info-base").textContent = "Carregando…";
     try {
@@ -273,16 +292,14 @@
     }
     $("info-base").textContent = info
       ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(base.length)} pedidos em aberto · clique nos cards e nos micro status para ver a lista e exportar · ${info.arquivo || "planilha"} enviada em ${new Date(info.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${info.enviado_por ? " por " + info.enviado_por : ""}`
-      : "Ainda não há base. Clique em \"Enviar base\" e escolha o arquivo exportado.";
+      : "Ainda não há base. Clique em \"Carregar planilha\" e escolha o arquivo exportado.";
     $("info-intelipost").textContent = infoFech
       ? `Intelipost: ${infoFech.arquivo || "arquivo"} de ${new Date(infoFech.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} · ${fmt(ocultos)} pedido${ocultos === 1 ? "" : "s"} da base já entregue${ocultos === 1 ? "" : "s"} ou cancelado${ocultos === 1 ? "" : "s"} fora${ocultos === 1 ? "" : "m"} tirado${ocultos === 1 ? "" : "s"} do painel.`
       : "Envie o arquivo da Intelipost (\"Enviar Intelipost\") para tirar do painel os pedidos entregues e cancelados.";
-    $("topo-arquivos").innerHTML = [info && info.arquivo, ticketsInfo && ticketsInfo.arquivo].filter(Boolean)
-      .map((a, i) => `<span class="arq ${i ? "tk" : ""}">▤ ${esc(a)}</span>`).join("")
-      + (info ? `<span class="arq-data">base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" })}</span>` : "");
+    desenharTopoArquivos();
     $("info-tickets").textContent = !ticketsOk ? "" : ticketsInfo
       ? `Tickets: ${ticketsInfo.arquivo || "planilha"} de ${new Date(ticketsInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${ticketsInfo.enviado_por ? " por " + ticketsInfo.enviado_por : ""} · ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel com ticket aberto.`
-      : "Envie a planilha de tickets (\"Enviar tickets\") para ver em que fila está o ticket de cada pedido.";
+      : "Envie a planilha de tickets (\"Carregar tickets\") para ver em que fila está o ticket de cada pedido.";
     montarOpcoes();
     redesenhar();
     desenharOcorrencias();
@@ -1079,7 +1096,7 @@
   });
 
   // ---------------- visão gerencial ----------------
-  // Fonte: a base ("Enviar base", aba Export), todos os pedidos dela. Data prometida = Data Original Estimada (senão a atual).
+  // Fonte: a base ("Carregar planilha", aba Export), todos os pedidos dela. Data prometida = Data Original Estimada (senão a atual).
   // Atrasado = "Range de Atrasos" começando com "Vencido" (se a coluna existir).
   let gDados = null, gCarregando = false, gCard = "abertos", gSelecao = null, gLista = [], gPagina = 1, gTodos = false, gJanela = 14, gPtModo = "sit";
   const gSel = { canal: new Set(), uf: new Set(), transp: new Set(), serie: new Set(), origem: new Set(), status: new Set(), micro: new Set() };
@@ -1238,7 +1255,7 @@
     $("g-alerta-texto").innerHTML = `A performance está em <b>${pct(perf)}</b>: ${fmt(cont.atrasados)} atrasados sobre ${fmt(denom)} ${sobre}. Na meta, o máximo seria <b>${fmt(maxAtr)}</b>.`;
     $("g-perf-nota").innerHTML = `A <b>performance</b> está sendo calculada sobre <b>${sobre}</b> (${fmt(cont.atrasados)} atrasados ÷ ${fmt(denom)}). <button class="link" id="g-modo" type="button">${gTodos ? "Calcular só sobre os pedidos em aberto" : "Calcular sobre todos os pedidos"}</button> daria ${pct(outro ? 1 - cont.atrasados / outro : 1)}.`;
     $("g-info").textContent = info ? `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos · clique nos cards e nas barras dos gráficos para ver a lista e exportar`
-      : 'Envie a base ("Enviar base") para montar a Visão Gerencial.';
+      : 'Envie a base ("Carregar planilha") para montar a Visão Gerencial.';
     if (gAvisoColunas) $("g-info").textContent += " · Para usar o Range de Atrasos e as datas de criação e entrega, rode de novo o supabase/schema.sql e envie a base de novo.";
 
     // de quem é o atraso
@@ -1490,13 +1507,13 @@
     XLSX.writeFile(wb, `multimoveis-${(gSelecao ? gSelecao.titulo : G_NOME[gCard]).normalize("NFD").replace(/[^\w]+/g, "-").replace(/-+$/, "").toLowerCase()}_${hoje}.xlsx`);
     const nDet = lista.filter((r) => det.has(chaveNF(r.serie ? `${r.nf}-${r.serie}` : r.nf))).length;
     if (detNFErro) toast("Ocorrências e reposições não vieram: " + detNFErro, true);
-    else if (!det.size) toast('Ocorrências e reposições estão vazias: envie o detalhamento de tickets de novo no botão "Enviar tickets".', true);
+    else if (!det.size) toast('Ocorrências e reposições estão vazias: envie o detalhamento de tickets de novo no botão "Carregar tickets".', true);
     else toast(`Excel baixado. ${fmt(nDet)} de ${fmt(lista.length)} pedidos têm ocorrência, reposição ou AT no detalhamento (${fmt(det.size)} notas guardadas).`);
   }
   $("g-exportar").addEventListener("click", baixarGLista);
 
   // ---------------- transportadoras ----------------
-  // Fonte: a mesma base da Visão Gerencial (botão "Enviar base"), com os mesmos filtros do topo.
+  // Fonte: a mesma base da Visão Gerencial (botão "Carregar planilha"), com os mesmos filtros do topo.
   // Volume = pedidos sem os cancelados. Atraso médio = dias entre a data prometida e a entrega, nos entregues com atraso.
   // SLA entrega = entregues no prazo ÷ entregues.
   const T_CORES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#6250d6", "#e34948"];   // até 8 transportadoras na comparação (cor fica com a transportadora)
@@ -1533,7 +1550,7 @@
     if (!gDados) return;
     const L = gFiltrados(); gFiltradosCache = L;
     tStats = statsTransp(L);
-    $("t-info").textContent = !info ? 'Envie a base ("Enviar base") para montar esta página.'
+    $("t-info").textContent = !info ? 'Envie a base ("Carregar planilha") para montar esta página.'
       : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(L.length)} pedidos nos filtros`;
     const soma = (k) => tStats.reduce((a, x) => a + x[k], 0);
     const ent = soma("ent"), ab = soma("ab");
@@ -1689,7 +1706,7 @@
       const antiga = [...dvPromob.values()].some((x) => x.cep);
       $("dv-info").textContent = antiga
         ? 'A base atual foi enviada com a versão antiga do painel, que ainda não guardava a coluna "Transportadora Promob". Aperte Ctrl+F5 para atualizar a página e envie a base de novo.'
-        : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e envie a base de novo no botão "Enviar base".';
+        : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e envie a base de novo no botão "Carregar planilha".';
     }
     const todos = L.map((r) => {
       const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "";
@@ -1804,8 +1821,8 @@
     $("e-alerta-titulo").textContent = faltam ? `Faltaram ${fmt(faltam)} entregas no prazo para bater a meta de ${metaTxt}.` : `Meta de ${metaTxt} batida.`;
     $("e-alerta-texto").innerHTML = `O SLA está em <b>${pctBR(sla)}</b> — ${fmt(atraso)} entrega${atraso === 1 ? "" : "s"} saíra${atraso === 1 ? "" : "m"} com atraso.`;
     const totalBase = gDados.length, entBase = gDados.filter((r) => norm(r.status).startsWith("ENTREGUE")).length;
-    $("e-info").textContent = !info ? 'Envie a base ("Enviar base") para montar esta página.'
-      : !entBase ? `A base enviada (${fmt(totalBase)} pedidos) não tem pedidos com status Entregue. Para ver o SLA, envie no botão "Enviar base" uma exportação que inclua os entregues.`
+    $("e-info").textContent = !info ? 'Envie a base ("Carregar planilha") para montar esta página.'
+      : !entBase ? `A base enviada (${fmt(totalBase)} pedidos) não tem pedidos com status Entregue. Para ver o SLA, envie no botão "Carregar planilha" uma exportação que inclua os entregues.`
       : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(E.length)} entregues com esses filtros · meta de ${metaTxt} (a mesma da Visão Gerencial)`;
     // por transportadora
     const m = new Map();
@@ -1870,7 +1887,7 @@
     if (!gDados) return;
     const L = gFiltrados(); uDados = agruparUF(L); uFiltrados = L;
     const ab = [...uDados.values()].reduce((a, x) => a + x.ab, 0), atr = [...uDados.values()].reduce((a, x) => a + x.atr, 0);
-    $("u-info").textContent = !info ? 'Envie a base ("Enviar base") para montar esta página.'
+    $("u-info").textContent = !info ? 'Envie a base ("Carregar planilha") para montar esta página.'
       : `Base de ${new Date(info.enviado_em).toLocaleDateString("pt-BR")} · ${fmt(atr)} atrasados de ${fmt(ab)} pedidos em aberto em ${uDados.size} estados · o número em cada estado é a quantidade de atrasados`;
     $("u-mapa-cartao").hidden = uModo !== "mapa"; $("u-ranking-cartao").hidden = uModo !== "ranking";
     if (uModo === "mapa") (uForma === "mapa" ? desenharMapaBR : desenharQuadrados)();

@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=94">
+  <link rel="stylesheet" href="styles.css?v=95">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -53,13 +53,13 @@
       <div class="topo-direita">
         <span id="topo-arquivos" class="topo-arquivos so-log"></span>
         <label class="btn amarelo so-log" title="Planilha exportada (aba Export) com os pedidos">
-          Enviar base<input id="arquivo" type="file" accept=".xlsx,.xlsm,.xls" hidden>
+          <span class="ic-up">⇪</span><span id="rot-base">Carregar planilha</span><input id="arquivo" type="file" accept=".xlsx,.xlsm,.xls" hidden>
         </label>
         <label class="btn contorno so-log" title="Arquivo transactions da Intelipost: tira do painel os entregues e cancelados">
           Enviar Intelipost<input id="arquivo-intelipost" type="file" accept=".xlsx,.xls,.csv" hidden>
         </label>
         <label class="btn lilas so-log" title="Planilha detalhamento_tickets360 (aba Tickets): mostra a fila do ticket de cada pedido">
-          Enviar tickets<input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
+          <span class="ic-up">⇪</span><span id="rot-tickets">Carregar tickets</span><input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
         </label>
         <span id="usuario" class="usuario"></span>
         <button id="btn-trocar-senha" class="btn contorno">Trocar senha</button>
@@ -240,7 +240,7 @@
       <div class="titulo-pagina">
         <div>
           <h1>Transportadoras</h1>
-          <p class="sub">Tudo da base enviada no botão "Enviar base", de todas as transportadoras. Os filtros do topo (transportadora, canal, UF…) mudam tudo aqui.</p>
+          <p class="sub">Tudo da base enviada no botão "Carregar planilha", de todas as transportadoras. Os filtros do topo (transportadora, canal, UF…) mudam tudo aqui.</p>
           <p id="t-info" class="info-base">Carregando…</p>
         </div>
       </div>
@@ -931,9 +931,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=94"></script>
-  <script src="mapa-brasil.js?v=94"></script>
-  <script src="troca-notas.js?v=94"></script>
-  <script src="app.js?v=94"></script>
+  <script src="config.js?v=95"></script>
+  <script src="mapa-brasil.js?v=95"></script>
+  <script src="troca-notas.js?v=95"></script>
+  <script src="app.js?v=95"></script>
 </body>
 </html>
