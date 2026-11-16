@@ -2,9 +2,7 @@
 name: Robô do SSW
 
 on:
-  schedule:
-    - cron: "20,50 9-23 * * *"   # conferência em lotes de 100: a cada 30 min, das 06:20 às 20:50 (Brasília)
-    - cron: "20,50 0-2 * * *"    # e das 21:20 às 23:50 (Brasília)
+  # rodadas automáticas: chamadas pelo Supabase (pg_cron, parte 38): 30 em 30 min das 06h às 18h e de 2 em 2 h das 18h às 06h (Brasília)
   workflow_dispatch:
     inputs:
       modo:

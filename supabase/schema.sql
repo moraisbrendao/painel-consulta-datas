@@ -1820,4 +1820,7 @@ begin
 end $$;
 revoke all on function public._robo_ssw_lote() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-ssw-lote';
-select cron.schedule('robo-ssw-lote', '20,50 0-2,9-23 * * *', 'select public._robo_ssw_lote()');
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-ssw-lote-noite';
+-- horários em UTC (Brasília + 3h): 06:00–17:30 de 30 em 30 min, 18:00, depois 20h, 22h, 00h, 02h e 04h
+select cron.schedule('robo-ssw-lote', '0,30 9-20 * * *', 'select public._robo_ssw_lote()');
+select cron.schedule('robo-ssw-lote-noite', '0 21,23,1,3,5,7 * * *', 'select public._robo_ssw_lote()');
