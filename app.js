@@ -105,7 +105,7 @@
       else { const { data } = await sb.auth.getSession(); if (data && data.session) abrirSessao(data.session); }
     }
   });
-  $("btn-sair").addEventListener("click", () => sb.auth.signOut());
+  $("btn-sair").addEventListener("click", () => { cacheLimpar(); sb.auth.signOut(); });
 
   function abrirSessao(sessao) {
     if (usuarioId === sessao.user.id) return;
@@ -193,14 +193,60 @@
     return lista;
   }
 
+  // leitura de planilha sem montar o texto formatado de cada célula (o painel só usa os valores): ~2x mais rápido
+  const LEITURA_RAPIDA = { cellNF: false, cellText: false, cellHTML: false, cellFormula: false, cellStyles: false };
+  // envia os lotes: o 1º sozinho (ele limpa/prepara), os outros 3 de cada vez
+  async function enviarLotes(rpc, linhas, tam, args, desde = 0) {
+    if (desde === 0 && linhas.length) {   // o 1º lote limpa a tabela: precisa terminar antes dos outros
+      const r = await sb.rpc(rpc, args(linhas.slice(0, tam), true)); if (r.error) throw r.error;
+      carregando(`Enviando… ${fmt(Math.min(tam, linhas.length))} de ${fmt(linhas.length)}`); desde = tam;
+    }
+    const inicios = []; for (let i = desde; i < linhas.length; i += tam) inicios.push(i);
+    let feitos = desde;
+    for (let k = 0; k < inicios.length; k += 3) {
+      const res = await Promise.all(inicios.slice(k, k + 3).map((i) => sb.rpc(rpc, args(linhas.slice(i, i + tam), i === 0))));
+      const err = res.find((r) => r.error); if (err) throw err.error;
+      feitos = Math.min(inicios[Math.min(k + 2, inicios.length - 1)] + tam, linhas.length);
+      carregando(`Enviando… ${fmt(feitos)} de ${fmt(linhas.length)}`);
+    }
+  }
+
+  // ---------- cópia local (IndexedDB) das tabelas grandes ----------
+  // A base muda uma vez por dia: guarda a cópia no navegador junto com a data do envio ("versão").
+  // Se a versão no banco for a mesma, abre na hora sem baixar os ~13 mil pedidos de novo.
+  const CACHE_DB = "eloggia-cache";
+  function abrirCache() {
+    return new Promise((ok) => {
+      try { const r = indexedDB.open(CACHE_DB, 1); r.onupgradeneeded = () => r.result.createObjectStore("t"); r.onsuccess = () => ok(r.result); r.onerror = () => ok(null); }
+      catch (_) { ok(null); }
+    });
+  }
+  async function cacheLer(chave) {
+    const db = await abrirCache(); if (!db) return null;
+    return new Promise((ok) => { try { const q = db.transaction("t").objectStore("t").get(chave); q.onsuccess = () => ok(q.result || null); q.onerror = () => ok(null); } catch (_) { ok(null); } });
+  }
+  async function cacheGravar(chave, valor) {
+    const db = await abrirCache(); if (!db) return;
+    try { db.transaction("t", "readwrite").objectStore("t").put(valor, chave); } catch (_) { /* sem espaço: segue sem cópia */ }
+  }
+  function cacheLimpar() { try { indexedDB.deleteDatabase(CACHE_DB); } catch (_) {} }
+  // versao vazia/nula = não usa cópia
+  async function buscarComCache(tabela, ordem, colunas, versao) {
+    const chave = `${tabela}|${colunas || "*"}`;
+    if (versao) { const c = await cacheLer(chave); if (c && c.versao === versao && Array.isArray(c.dados)) return c.dados; }
+    const dados = await buscarTudo(tabela, ordem, colunas);
+    if (versao) cacheGravar(chave, { versao, dados });
+    return dados;
+  }
+
   async function carregar() {
     $("info-base").textContent = "Carregando…";
     try {
-      const [b, t, i, fi, tot] = await Promise.all([
-        buscarTudo("base_aberta", "pedido"),
+      const [i, fi] = await Promise.all([sb.from("base_info").select("*").limit(1), sb.from("fechados_info").select("*").limit(1)]);
+      const vBase = i.data && i.data[0] ? i.data[0].enviado_em : "", vFech = fi.data && fi.data[0] ? fi.data[0].enviado_em : "";
+      const [b, t, tot] = await Promise.all([
+        buscarComCache("base_aberta", "pedido", "*", vBase && `${vBase}|${vFech}`),
         buscarTudo("tratativas", "pedido"),
-        sb.from("base_info").select("*").limit(1),
-        sb.from("fechados_info").select("*").limit(1),
         sb.from("base_pedidos").select("pedido", { count: "exact", head: true }),
       ]);
       base = b;
@@ -711,7 +757,7 @@
     await new Promise((r) => setTimeout(r, 50));
     let linhas;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", cellDates: false, dense: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", cellDates: false, dense: true, ...LEITURA_RAPIDA });
       const nomeAba = wb.SheetNames.find((n) => norm(n) === "EXPORT") || wb.SheetNames[0];
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
       const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "PEDIDO INTELIPOST") && r.some((c) => norm(c) === "MICRO STATUS INTELIPOST"));
@@ -750,13 +796,13 @@
     const nTp = linhas.filter((l) => l.extra && l.extra.transp_promob).length;
     if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedidos encontrados.\nTransportadora Promob preenchida em ${fmt(nTp)} pedidos.\n\nEssa planilha vai substituir a base atual para todos.\nAs observações já feitas continuam salvas.\n\nEnviar?`)) return;
     try {
-      for (let i = 0; i < linhas.length; i += 2000) {
-        carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
-        let { error } = await sb.rpc("importar_base", { linhas: linhas.slice(i, i + 2000), limpar: i === 0, arquivo: arq.name, total: linhas.length });
-        if (error && /extra/i.test(error.message || "") && baseExtraOk) {   // banco sem a parte 32: manda sem as colunas extras
-          baseExtraOk = false; linhas.forEach((l) => delete l.extra); i -= 2000; continue; }
-        if (error) throw error;
-      }
+      const argsBase = (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total: linhas.length });
+      carregando(`Enviando… ${fmt(Math.min(2000, linhas.length))} de ${fmt(linhas.length)}`);
+      let { error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 2000), true));
+      if (error && /extra/i.test(error.message || "") && baseExtraOk) {   // banco sem a parte 32: manda sem as colunas extras
+        baseExtraOk = false; linhas.forEach((l) => delete l.extra); ({ error } = await sb.rpc("importar_base", argsBase(linhas.slice(0, 2000), true))); }
+      if (error) throw error;
+      await enviarLotes("importar_base", linhas, 2000, argsBase, 2000);
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
@@ -988,7 +1034,7 @@
     await new Promise((r) => setTimeout(r, 50));
     let linhas;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, ...LEITURA_RAPIDA });
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
       const ehNota = (c) => { const n = norm(c); return n === "NF" || n === "NOTA" || (n.includes("NOTA") && !n.includes("CHAVE") && !n.includes("SERIE") && !n.includes("VALOR") && !n.includes("DATA")) || n === "NUMERO NF"; };
       const iCab = rows.findIndex((r) => r && r.some(ehNota));
@@ -1054,7 +1100,7 @@
       let lista, semColunas = false;
       const inf = await sb.from("base_info").select("enviado_em").limit(1);
       const baseEm = inf.data && inf.data[0] ? inf.data[0].enviado_em : null;
-      try { lista = await buscarTudo("base_pedidos", "pedido", G_COLS + G_COLS_NOVAS); }
+      try { lista = await buscarComCache("base_pedidos", "pedido", G_COLS + G_COLS_NOVAS, baseEm); }
       catch (e1) { if (!/column|coluna|does not exist/i.test(e1.message || "")) throw e1; semColunas = true; lista = await buscarTudo("base_pedidos", "pedido", G_COLS); }
       if (minha !== gGeracao) return;
       gAvisoColunas = semColunas; gBaseEm = baseEm;
@@ -1380,7 +1426,7 @@
   let detNF = null, detNFErro = "";   // nf -> ocorrência / reposição / assistência técnica (aba do detalhamento, parte 32)
   async function carregarDetNF() {
     if (detNF) return detNF;
-    try { const L = await buscarTudo("detalhe_nf", "nf"); detNF = new Map(L.map((x) => [x.nf, x])); detNFErro = ""; return detNF; }
+    try { const L = await buscarComCache("detalhe_nf", "nf", "*", ticketsInfo ? ticketsInfo.enviado_em : ""); detNF = new Map(L.map((x) => [x.nf, x])); detNFErro = ""; return detNF; }
     catch (err) { detNFErro = err.message || String(err); return new Map(); }   // não guarda o erro: tenta de novo no próximo Excel
   }
   // colunas que não ficam na memória da Visão Gerencial: busca só dos pedidos que vão para o Excel
@@ -1613,7 +1659,7 @@
   async function carregarDvPromob() {
     if (dvPromob && dvGer === gGeracao) return true;
     try {
-      const L = await buscarTudo("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho,cep:extra->>cep");
+      const L = await buscarComCache("base_pedidos", "pedido", "pedido,tp:extra->>transp_promob,rd:extra->>redespacho,cep:extra->>cep", gBaseEm);
       dvPromob = new Map(L.map((x) => [x.pedido, x])); dvGer = gGeracao; return true;
     } catch (err) { dvPromob = new Map(); dvGer = gGeracao; $("dv-info").textContent = /extra/i.test(err.message || "") ? "Falta rodar a parte 32 do schema.sql e enviar a base de novo." : "Não consegui ler: " + err.message; return false; }
   }
@@ -2210,7 +2256,7 @@
     carregando("Lendo a aba Reposições…"); await new Promise((r) => setTimeout(r, 50));
     let itens = [], totalFila = 0, outros = 0;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true, ...LEITURA_RAPIDA });
       const aba = wb.SheetNames.find((n) => norm(n).startsWith("REPOSI"));
       if (!aba) throw new Error('Não achei a aba "Reposições" nessa planilha.');
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, raw: true, defval: null });
@@ -2358,7 +2404,7 @@
     carregando("Lendo o relatório…"); await new Promise((r) => setTimeout(r, 50));
     let itens = [], foraFila = 0;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true, ...LEITURA_RAPIDA });
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
       const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "ID DO TICKET" || norm(c) === "ID TICKET"));
       if (iCab < 0) throw new Error('Não achei a coluna "ID do Ticket". Use o relatório de tickets do Multi360.');
@@ -2625,7 +2671,7 @@
     await new Promise((r) => setTimeout(r, 50));
     const mudancas = new Map(); let lidas = 0, naoAchados = [], datasInvalidas = 0;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, ...LEITURA_RAPIDA });
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: null });
       const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "RETORNO" || norm(c).startsWith("NOVA DATA") || norm(c).startsWith("OBSERVA")));
       if (iCab < 0) throw new Error('Não achei as colunas "Nova Data" e "Observação" no modelo.');
@@ -2687,7 +2733,8 @@
   }
   async function carregarTickets() {
     try {
-      const [lista, inf] = await Promise.all([buscarTudo("tickets_abertos", "nf"), sb.from("tickets_info").select("*").limit(1)]);
+      const inf = await sb.from("tickets_info").select("*").limit(1);
+      const lista = await buscarComCache("tickets_abertos", "nf", "*", inf.data && inf.data[0] ? inf.data[0].enviado_em : "");
       tickets = new Map(lista.map((t) => [chaveNF(t.nf), t]));
       ticketsInfo = (inf.data && inf.data[0]) || null; ticketsOk = true;
     } catch (_) { ticketsOk = false; ticketsInfo = null; }
@@ -2700,7 +2747,7 @@
     await new Promise((r) => setTimeout(r, 50));
     let linhas, total = 0, detLinhas = [];
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true, ...LEITURA_RAPIDA });
       const nomeAba = wb.SheetNames.find((n) => norm(n) === "TICKETS") || wb.SheetNames[0];
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
       const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "FILA"));
@@ -2729,20 +2776,13 @@
     carregando("");
     if (!confirm(`${arq.name}\n\n${fmt(total)} tickets abertos, em ${fmt(linhas.length)} notas.\nSubstitui a planilha de tickets anterior para todos.\n\nEnviar?`)) return;
     try {
-      for (let i = 0; i < linhas.length; i += 2000) {
-        carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
-        const { error } = await sb.rpc("importar_tickets", { linhas: linhas.slice(i, i + 2000), limpar: i === 0, arquivo: arq.name, total });
-        if (error) throw error;
-      }
+      await enviarLotes("importar_tickets", linhas, 2000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total }));
     } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
     // abas Ocorrências, Reposições e Assistência Técnica (colunas do Excel da Visão Gerencial, parte 32)
     let avisoDet = "";
     if (detLinhas.length) {
-      for (let i = 0; i < detLinhas.length; i += 2000) {
-        carregando(`Enviando ocorrências e reposições… ${fmt(Math.min(i + 2000, detLinhas.length))} de ${fmt(detLinhas.length)}`);
-        const { error } = await sb.rpc("importar_detalhe_nf", { linhas: detLinhas.slice(i, i + 2000), limpar: i === 0 });
-        if (error) { avisoDet = /importar_detalhe_nf|function/i.test(error.message) ? " (ocorrências e reposições não foram: falta rodar a parte 32 do schema.sql)" : " (ocorrências e reposições: " + error.message + ")"; break; }
-      }
+      try { await enviarLotes("importar_detalhe_nf", detLinhas, 2000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro })); }
+      catch (error) { avisoDet = /importar_detalhe_nf|function/i.test(error.message) ? " (ocorrências e reposições não foram: falta rodar a parte 32 do schema.sql)" : " (ocorrências e reposições: " + error.message + ")"; }
       detNF = null;
     }
     carregando("");
@@ -2850,7 +2890,7 @@
     await new Promise((r) => setTimeout(r, 50));
     let linhas, total = 0;
     try {
-      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true });
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, ...LEITURA_RAPIDA });
       const nomeAba = wb.SheetNames.find((n) => norm(n) === "EXPORT") || wb.SheetNames[0];
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[nomeAba], { header: 1, raw: true, defval: null });
       const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "FILA") && r.some((c) => norm(c) === "TICKET"));
@@ -2876,11 +2916,7 @@
     const nPre = linhas.filter(ePre).length;
     if (!confirm(`${arq.name}\n\n${fmt(total)} tickets na planilha, ${fmt(linhas.length)} de reposição (${fmt(nPre)} pré entrega, ${fmt(linhas.filter(ePos).length)} pós entrega).\nTickets já guardados são atualizados; os novos são acrescentados.\n\nEnviar?`)) return;
     try {
-      for (let i = 0; i < linhas.length; i += 2000) {
-        carregando(`Enviando… ${fmt(Math.min(i + 2000, linhas.length))} de ${fmt(linhas.length)}`);
-        const { error } = await sb.rpc("importar_reposicoes_tk", { linhas: linhas.slice(i, i + 2000), primeiro: i === 0, arquivo: arq.name, total });
-        if (error) throw error;
-      }
+      await enviarLotes("importar_reposicoes_tk", linhas, 2000, (lote, primeiro) => ({ linhas: lote, primeiro, arquivo: arq.name, total }));
     } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
     await carregarReposicoes();
     carregando("");
