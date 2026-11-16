@@ -1803,8 +1803,10 @@
     if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
     const temPromob = [...dvPromob.values()].some((x) => x.tp);
     const todos = [];
+    // em aberto = o que está no Preventivo: sem entregue/cancelado na base E sem entregue/cancelado no arquivo da Intelipost
+    const abertos = base && base.length ? new Set(base.map((p) => p.pedido)) : null;
     gDados.forEach((r) => {
-      if (r._fechado) return;
+      if (r._fechado || (abertos && !abertos.has(r.pedido))) return;
       const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "", promob = rd || bd;
       if (!r.transp && !promob) return;
       const ap = ajPorH.get(norm(r.transp));
@@ -1818,7 +1820,7 @@
     $("dv-info").textContent = !temPromob
       ? ([...dvPromob.values()].some((x) => x.cep) ? 'A base atual foi enviada com a versão antiga do painel, que ainda não guardava a coluna "Transportadora Promob". Aperte Ctrl+F5 e carregue a planilha de novo.'
         : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e carregue a planilha de novo.')
-      : `Transportadora Promob na base: ${fmt(nTp)} de ${fmt(dvPromob.size)} pedidos · ${fmt(todos.length)} pedidos em trânsito`;
+      : `Transportadora Promob na base: ${fmt(nTp)} de ${fmt(dvPromob.size)} pedidos · ${fmt(todos.length)} pedidos em aberto (sem entregues e cancelados da base e do arquivo da Intelipost)`;
     // resumo: transportadora (H) × transportadora Promob, só os divergentes (como a aba "Divergências")
     const g = new Map();
     todos.filter(DV_CARD.div).forEach((x) => { const k = dvChave(x); const y = g.get(k) || { k, h: x.r.transp || "", ap: x.ap, promob: x.promob, idp: x.idp, qtd: 0 }; y.qtd++; g.set(k, y); });
