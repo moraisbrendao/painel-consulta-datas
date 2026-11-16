@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=116">
+  <link rel="stylesheet" href="styles.css?v=117">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -39,7 +39,6 @@
       <button class="menu-item so-log" data-pagina="uf"><span class="menu-icone">⌖</span>Atrasos por UF</button>
       <button class="menu-item so-log" data-pagina="canais"><span class="menu-icone">◎</span>Análise de canais</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
-      <button class="menu-item so-log" data-pagina="ocorrencias"><span class="menu-icone">⚑</span>Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
@@ -950,6 +949,7 @@
           <button class="btn contorno" data-ap="ag">🚚 Fila Aguardando entrega</button>
           <button class="btn contorno" data-ap="at">🔧 Aguardando entrega AT</button>
           <button class="btn contorno" data-ap="dv">⇄ Transportadora divergente</button>
+          <button class="btn contorno" data-ap="oc">⚑ Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
         </div>
       </div>
 
@@ -958,6 +958,7 @@
         <div><b id="ap-robo-titulo"></b><p id="ap-robo-texto"></p></div>
       </section>
 
+      <div id="ap-sec-oc" hidden></div>
       <div id="ap-sec-dv" hidden>
         <section class="cartao ap-cartao">
           <div class="ap-cab">
@@ -1231,12 +1232,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=115"></script>
-  <script src="mapa-brasil.js?v=115"></script>
-  <script src="troca-notas.js?v=115"></script>
-  <script src="app.js?v=115"></script>
-  <script src="ordenar.js?v=115"></script>
-  <script src="menu.js?v=115"></script>
-  <script src="documentos.js?v=116"></script>
+  <script src="config.js?v=117"></script>
+  <script src="mapa-brasil.js?v=117"></script>
+  <script src="troca-notas.js?v=117"></script>
+  <script src="app.js?v=117"></script>
+  <script src="ordenar.js?v=117"></script>
+  <script src="menu.js?v=117"></script>
+  <script src="documentos.js?v=117"></script>
 </body>
 </html>

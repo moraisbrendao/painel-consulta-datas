@@ -157,6 +157,7 @@
       // Ctrl+F5 / atualizar: volta para a página (e a aba de Alterar pedidos) em que a pessoa estava
       let volta = "gerencial", voltaAp = "";
       try { volta = localStorage.getItem("painel.pagina") || "gerencial"; voltaAp = localStorage.getItem("painel.ap") || ""; } catch (_) {}
+      if (volta === "ocorrencias") { volta = "alterar"; voltaAp = "oc"; }   // Ocorrências agora fica dentro de Alterar pedidos
       const botaoMenu = document.querySelector(`.menu-item[data-pagina="${volta}"]`);
       if (!botaoMenu || (volta === "logins" && !document.body.dataset.admin) || volta === "sac") volta = "gerencial";
       irPara(volta);
@@ -1050,7 +1051,7 @@
   $("robo-enviar").addEventListener("click", () => mandarRobo(false));
   $("robo-testar").addEventListener("click", () => mandarRobo(true));
   setInterval(async () => {
-    if (!usuarioId || perfil === "sac" || paginaAtual !== "ocorrencias" || document.hidden) return;
+    if (!usuarioId || perfil === "sac" || paginaAtual !== "alterar" || $("ap-sec-oc").hidden || document.hidden) return;
     const antes = JSON.stringify(fila.map((f) => [f.id, f.status]));
     await carregarFila();
     if (antes !== JSON.stringify(fila.map((f) => [f.id, f.status]))) { await carregarOcorrencias(); desenharOcorrencias(); redesenhar(true); }
@@ -2505,7 +2506,8 @@
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     try { localStorage.setItem("painel.ap", b.dataset.ap); } catch (_) {}
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv";
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv"; $("ap-sec-oc").hidden = b.dataset.ap !== "oc";
+    if (b.dataset.ap === "oc") { const de = $("pagina-ocorrencias"), para = $("ap-sec-oc"); while (de.firstChild) para.appendChild(de.firstChild); desenharOcorrencias(); }
     if (b.dataset.ap === "dv") desenharDivTP();
     if (b.dataset.ap === "troca") carregarTrocas();
     if (b.dataset.ap === "ag" || b.dataset.ap === "at") { agFila = b.dataset.ap === "at" ? "AT" : "AE"; agCard = "tratar"; agBusca = ""; $("ag-busca").value = "";
