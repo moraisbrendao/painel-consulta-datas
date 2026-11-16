@@ -866,7 +866,7 @@
     const sairao = base.filter((p) => naBase.has(p.pedido)).length;
     const ent = lista.filter((x) => x.status === "Entregue").length;
     if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(ent)} entregues e ${fmt(lista.length - ent)} cancelados.\n` +
-      `${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} que está${sairao === 1 ? "" : "ão"} no painel vai${sairao === 1 ? "" : "ão"} sair.\n\nEnviar?`)) return;
+      `${fmt(sairao)} pedido${sairao === 1 ? " que está" : "s que estão"} no painel ${sairao === 1 ? "vai" : "vão"} sair.\n\nEnviar?`)) return;
     try {
       const qtd = lista.length;
       // só interessam os pedidos que estão na base (a base inteira, inclusive os que já saíram do painel):
