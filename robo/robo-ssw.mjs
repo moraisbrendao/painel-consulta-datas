@@ -780,7 +780,7 @@ function lerLote(html) {   // uma linha por NF: número, data/hora do último ev
     else if (/MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(titulo)) r = { situacao: "entregue", data_entrega: iso(quando[1]), data_evento: iso(quando[1]), ultimo_evento: "MERCADORIA ENTREGUE" };
     else { const pv = (desc.match(/Previs[aã]o de entrega:\s*(\d{2}\/\d{2}\/\d{2,4})/i) || [])[1];
       r = { situacao: "nao entregue", data_evento: iso(quando[1]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{3,60}$/.test(titulo) ? titulo : null, previsao: pv ? iso(pv) : null }; }
-    r.sigla = sigla.trim().slice(0, 20) || null; r.raj = raj;
+    r.sigla = sigla.trim().slice(0, 20) || null; r.raj = raj; r.det = (bloco.slice(0, 400).match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1] || null;
     (linhas.get(nf) || linhas.set(nf, []).get(nf)).push(r);
   }
   // a mesma NF em mais de uma linha: vale entregue; senão o evento mais recente. _semRaj = o mesmo sem as linhas da Rajlog (milk run)
@@ -810,7 +810,7 @@ async function conferirLote() {
     const tem = new Set(lista.map((l) => l.pedido)); jaEnt.forEach((l) => { if (!tem.has(l.pedido)) lista.push({ ...l, _jaEnt: true }); }); }
   { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&or=(transportadora.ilike.*dominalog*,transportadora.ilike.*tempo*justo*,transportadora.ilike.*trans*sua*,transportadora.ilike.*transvanio*)&limit=5000`).catch(() => []);
     const tem = new Set(lista.map((l) => l.pedido)); let n = 0;
-    L.forEach((l) => { if (REGRA_RAJ(l.transportadora, l.nf) && !tem.has(l.pedido) && (!l.detalhe || !l.detalhe.sigla || /^RAJ/i.test(l.detalhe.sigla))) { lista.push(l); n++; } });
+    L.forEach((l) => { if (REGRA_RAJ(l.transportadora, l.nf) && !tem.has(l.pedido) && !(l.detalhe && /dominalog/i.test(l.detalhe.emissor || ""))) { lista.push(l); n++; } });
     if (n) log(`Rajlog (milk run): reconfiro ${n} já marcados como entregues`); }
   { const tsl = lista.filter((l) => /\btsl\b/i.test(l.transportadora || "") && String(l.nf || "").split("-")[1]?.trim() === "35");
     let rj = 0, redesp = 0, semRd = 0; const B = new Map();
@@ -867,7 +867,7 @@ async function conferirLote() {
   const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
     const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
     const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
-      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r.sigla ? { sigla: r.sigla } : {}) };
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
     if (r.situacao !== "sem cte") delete det.tentados;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
@@ -877,6 +877,16 @@ async function conferirLote() {
       for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
         parte.forEach((x) => res.set(x.pedido, { ...(pegaLote(m, x) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
     log(`SSW: ${ssw.length - semNf.length} NFs em ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+    // Dominalog/Tempo Justo/Trans Sua/Transvanio (séries 25, 34, 35): "entregue" só vale se quem emitiu o CT-e é a Dominalog
+    // (outras transportadoras nessas notas são milk run / first mile). Confere no detalhe do SSW quem está transportando.
+    { let ok = 0, nao = 0; const cache = new Map();
+      for (const x of [...grupos.values()].flat()) { const r = res.get(x.pedido); if (!r || r.situacao !== "entregue" || !REGRA_RAJ(x.transportadora, x.nf)) continue;
+        let em = cache.get(r.det);
+        if (em === undefined && r.det) { const d = await pagina("https://ssw.inf.br" + r.det).catch(() => null); consultas++; await dorme(PAUSA);
+          em = d && d.status === 200 ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null : null; cache.set(r.det, em); }
+        if (em && /dominalog/i.test(em)) { ok++; r.emissor = em; continue; }
+        nao++; res.set(x.pedido, { situacao: "nao entregue", ultimo_evento: `ENTREGUE POR ${(em || r.sigla || "OUTRA").toUpperCase()} (NÃO É A DOMINALOG)`.slice(0, 60), data_evento: r.data_evento || null, previsao: null, sigla: r.sigla, _cnpj: r._cnpj }); }
+      if (ok + nao) log(`Dominalog (séries 25/34/35): ${ok} entregues confirmados pela Dominalog · ${nao} eram de outra transportadora (ficam como não entregue)`); }
     const achadosSSW = [...res.values()].filter((r) => r.situacao !== "sem cte").length;
     if (res.size > 200 && achadosSSW === 0) throw new Error("nenhuma NF reconhecida no retorno do SSW (leitura da página falhou); não gravo nada");
     await gravar(montar(ssw)); gravados = true; log(`Gravei a 1ª passada · ${Math.round((Date.now() - t0) / 1000)} s`);
