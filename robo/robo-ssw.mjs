@@ -723,7 +723,90 @@ async function conferirTudo(minutos) {
   log(`Conferir tudo: ${lista.length.toLocaleString("pt-BR")} pedido(s) ainda não conferidos desde o clique.`);
   return conferirLista(lista, minutos);
 }
-if (MODO === "conferencia" || MODO === "conferencia-tudo") { await entrarSupabase(); await conferir(Number(process.env.SSW_MINUTOS || 320)); }
+// ===== Conferência em lotes de 100 NFs (formulário da ajuda do SSW, NFs separadas por quebra de linha CRLF) =====
+// Pedido da Brenda (16/11): todas as transportadoras do SSW, 100 em 100; sem senha e com senha (senha cadastrada);
+// NF que não aparece com o CNPJ da série é procurada com os outros CNPJ; se não aparecer em nenhum = sem CT-e.
+const sem0 = (n) => String(n || "").replace(/^0+(?=\d)/, "");
+function lerLote(html) {   // uma linha por NF: número, data/hora do último evento, situação, descrição (pode ter a previsão)
+  const out = new Map(), iso = (d) => { const [dd, mm, aa] = d.split("/"); return `${aa.length === 2 ? "20" + aa : aa}-${mm}-${dd}`; };
+  for (const bloco of html.split(/<tr style="background-color:#(?:FFFFFF|F0F0F0);(?:cursor:pointer;)?"/i).slice(1)) {
+    const tds = bloco.split(/<td\b/i).slice(1); if (tds.length < 3) continue;
+    const nf = sem0((sohTexto("<td " + tds[0]).join(" ").match(/\d+/) || [])[0]); if (!nf) continue;
+    const quando = (sohTexto("<td " + tds[1]).join(" ").match(/(\d{2}\/\d{2}\/\d{2,4})(?:\s+(\d{2}:\d{2}))?/) || []);
+    const titulo = sohTexto(((tds[2].match(/<p class=titulo>([\s\S]*?)<\/p>/i) || [])[1] || "").replace(/<font[\s\S]*?<\/font>/gi, "")).join(" ").trim();
+    const desc = sohTexto((tds[2].match(/<p class=tdb>([\s\S]*?)<\/p>/i) || [])[1] || "").join(" ");
+    const tudo = titulo + " " + desc;
+    let r;
+    if (/n[ãa]o tem permiss[ãa]o/i.test(tudo)) r = { situacao: "sem permissao" };
+    else if (/informa[cç][aã]o n[ãa]o dispon/i.test(tudo) || !quando[1]) r = { situacao: "sem cte" };
+    else if (/MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(titulo)) r = { situacao: "entregue", data_entrega: iso(quando[1]), data_evento: iso(quando[1]), ultimo_evento: "MERCADORIA ENTREGUE" };
+    else { const pv = (desc.match(/Previs[aã]o de entrega:\s*(\d{2}\/\d{2}\/\d{2,4})/i) || [])[1];
+      r = { situacao: "nao entregue", data_evento: iso(quando[1]), ultimo_evento: /^[A-ZÀ-Ú0-9 \-\/.]{3,60}$/.test(titulo) ? titulo : null, previsao: pv ? iso(pv) : null }; }
+    const ant = out.get(nf);   // a mesma NF em mais de uma linha: vale entregue; senão o evento mais recente
+    const rank = (x) => (x.situacao === "entregue" ? 3 : x.situacao === "nao entregue" ? 2 : x.situacao === "sem permissao" ? 1 : 0);
+    if (!ant || rank(r) > rank(ant) || (rank(r) === rank(ant) && String(r.data_evento || "") > String(ant.data_evento || ""))) out.set(nf, r);
+  }
+  return out;
+}
+async function conferirLote() {
+  const t0 = Date.now(); await carregarSenhasDB();
+  const lista = [];
+  for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`); lista.push(...L); if (L.length < 1000) break; }
+  // Jadlog: API própria (10 por chamada), rápida
+  const jad = lista.filter((l) => EH_JADLOG.test(l.transportadora || ""));
+  if (jad.length && process.env.JADLOG_TOKEN) { const m = await jadlog(jad).catch(() => new Map());
+    const linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido); return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : null }; });
+    for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
+    log(`Jadlog (API): ${linhas.length} conferidos.`); }
+  // SSW: tudo que não é Jadlog, Bento, Trânsito Brasil (sistemas próprios) nem fora do SSW
+  const ssw = lista.filter((l) => !EH_JADLOG.test(l.transportadora || "") && !EH_BENTO.test(l.transportadora || "") && !(EH_TRANSITO.test(l.transportadora || "") && !(l.detalhe && l.detalhe.emissor)) && !FORA_SSW.test(l.transportadora || ""));
+  const grupos = new Map(), semNf = [];   // CNPJ da série + senha da transportadora
+  for (const l of ssw) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()); const c = cnpjDaSerie(ser);
+    if (!num || !c) { semNf.push(l); continue; } const ch = chaveDe(l.transportadora), k = c + "|" + ch; (grupos.get(k) || grupos.set(k, []).get(k)).push({ ...l, n: sem0(num) }); }
+  const PAUSA = Number(process.env.SSW_PAUSA || 1200), dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
+  let consultas = 0, bloq = 0;
+  async function lote(cnpj, chave, nums) {
+    for (;;) {
+      const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({ NR: nums.join("\r\n"), cnpj, chave, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() }).catch(() => null);
+      consultas++; await dorme(PAUSA);
+      if (r && r.status === 200) { bloq = 0; return lerLote(r.txt); }
+      if (++bloq > 3) throw new Error("SSW bloqueando");
+      log(`SSW respondeu ${r ? r.status : "sem resposta"}; espero ${bloq} min.`); await dorme(bloq * 60000);
+    }
+  }
+  const res = new Map(), cont = {};   // pedido → resultado
+  try {
+    for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
+      for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
+        parte.forEach((x) => res.set(x.pedido, { ...(m.get(x.n) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
+    log(`SSW: ${ssw.length - semNf.length} NFs em ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+    // sem CT-e com o CNPJ da série: procura com os outros CNPJ (a transportadora pode ter emitido com outro)
+    const outros = Object.keys(CNPJ_SERIE); let achou = 0;
+    for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
+      let falta = itens.filter((x) => res.get(x.pedido).situacao === "sem cte");
+      for (const c of outros.filter((c) => c !== cnpj)) { if (!falta.length) break;
+        for (let i = 0; i < falta.length; i += 100) { const parte = falta.slice(i, i + 100), m = await lote(c, chave, [...new Set(parte.map((x) => x.n))]);
+          parte.forEach((x) => { const r = m.get(x.n); if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); achou++; } }); }
+        falta = falta.filter((x) => res.get(x.pedido).situacao === "sem cte"); } }
+    log(`Outros CNPJ: ${achou} NFs achadas · total ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+  } catch (e) { log("Parei:", e.message, "· gravo o que já conferi."); }
+  const linhas = ssw.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido); cont[r.situacao] = (cont[r.situacao] || 0) + 1;
+    const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}), ...(r._cnpj && r._cnpj !== cnpjDaSerie(String(l.nf).split("-")[1]) ? { cnpj_outro: r._cnpj.slice(-6) } : {}) };
+    return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; })
+    .concat(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null })));
+  for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120)));
+  log("Conferência em lote:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), `· sem NF/série ${semNf.length} · ${Math.round((Date.now() - t0) / 1000)} s no total`);
+}
+if (MODO === "lote") {
+  await entrarSupabase();
+  // rodada automática (a cada 30 min): se outra rodada terminou há menos de 15 min, não repete
+  const u = await chamar("conferencia_ssw?select=consultado_em&consultado_em=not.is.null&order=consultado_em.desc&limit=1").catch(() => []);
+  if (process.env.AUTO === "1" && u[0] && Date.now() - Date.parse(u[0].consultado_em) < 15 * 60000) log("Conferido há menos de 15 min; pulo esta rodada.");
+  else await conferirLote();
+}
+// conferência ao importar a lista e "Conferir tudo agora": agora pelo lote de 100 (Brenda, 16/11)
+if (MODO === "conferencia" || MODO === "conferencia-tudo") { await entrarSupabase(); await conferirLote(); if (MODO === "conferencia-tudo") await chamar("rpc/fim_conferencia_tudo", "POST", {}).catch(() => {}); }
 if (MODO === "transito-cte") {   // AJUSTE ÚNICO (13/11): Trânsito Brasil sem registro na Senior → transportadora que emitiu o CT-e no SSW
   await entrarSupabase();
   const L = await chamar("conferencia_ssw?select=pedido,nf,transportadora,detalhe&transportadora=ilike.*sito*brasil*&situacao=eq.sem%20cte&limit=1000");
