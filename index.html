@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=127">
+  <link rel="stylesheet" href="styles.css?v=128">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -926,6 +926,21 @@
       </section>
 
       <section class="cartao">
+        <div class="cartao-topo"><div><h2>Resumo por retorno</h2><p class="sub">Pedidos dos cards marcados, pelo retorno padronizado da transportadora e o responsável. Clique numa linha para ver os pedidos.</p></div></div>
+        <div class="tabela-wrap"><table class="tabela-range rt-tab">
+          <thead><tr><th>Retorno padronizado</th><th>Responsável</th><th class="num">Pedidos</th><th class="num">Dias de atraso (média)</th><th class="num">Sem nova data válida</th><th>Transportadoras com mais pedidos</th></tr></thead>
+          <tbody id="rt-resumo-linhas"></tbody></table></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo"><div><h2>Transportadoras sem nova data e em reposição</h2><p class="sub">Atrasados e vencendo hoje/amanhã que ainda <b>não têm nova data válida</b> (sem data ou com a data já vencida), e os que estão <b>em reposição</b>. Independe dos cards. Clique para ver os pedidos.</p></div>
+          <button id="rt-semdata-excel" class="btn contorno" type="button">⤓ Excel</button></div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-range rt-tab">
+          <thead><tr><th>Transportadora</th><th class="num">Atrasados sem nova data</th><th class="num">Vencem hoje/amanhã sem nova data</th><th class="num">Total sem nova data</th><th class="num">Em reposição</th><th class="num">Reposição sem nova data</th></tr></thead>
+          <tbody id="rt-semdata-linhas"></tbody></table></div>
+      </section>
+
+      <section class="cartao">
         <div class="cartao-topo"><div><h2>Como padronizar o retorno</h2><p class="sub">Diga as palavras e para onde elas vão. Qualquer retorno que contenha uma delas vira essa categoria (vale a 1ª regra da lista que bater). Escolha o responsável de cada categoria. Vale para todos.</p></div></div>
         <div id="rt-regras-aviso" class="aviso-perfil" hidden>⚠ Para guardar as regras e os responsáveis, rode a <b>parte 43</b> do supabase/schema.sql no Supabase. Enquanto isso valem as regras de fábrica.</div>
         <div class="rt-regra-form">
@@ -1315,13 +1330,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=127"></script>
-  <script src="mapa-brasil.js?v=127"></script>
-  <script src="troca-notas.js?v=127"></script>
-  <script src="app.js?v=127"></script>
-  <script src="ordenar.js?v=127"></script>
-  <script src="menu.js?v=127"></script>
-  <script src="ajuda.js?v=127"></script>
-  <script src="documentos.js?v=127"></script>
+  <script src="config.js?v=128"></script>
+  <script src="mapa-brasil.js?v=128"></script>
+  <script src="troca-notas.js?v=128"></script>
+  <script src="app.js?v=128"></script>
+  <script src="ordenar.js?v=128"></script>
+  <script src="menu.js?v=128"></script>
+  <script src="ajuda.js?v=128"></script>
+  <script src="documentos.js?v=128"></script>
 </body>
 </html>

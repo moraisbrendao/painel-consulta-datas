@@ -67,6 +67,8 @@
       "<b>Retornos padronizados</b> mostra o retorno (observação) de cada pedido já padronizado (Entrega agendada, Em rota de entrega, Pendência transportadora, Ocorrência - pendência SAC…) com o <b>responsável</b>. Clique para ver os pedidos. Use o filtro <b>Responsável</b> para cada um ver só os seus.",
       "Em <b>Como padronizar o retorno</b>: escreva a categoria e as palavras (separadas por vírgula) e clique em <b>Guardar regra</b>. Vale a 1ª regra da lista que bater. Escolha o responsável de cada categoria no seletor ao lado do nome. O que cair em <b>Não padronizado</b> precisa de uma regra nova.",
       "Na lista dá para preencher <b>Nova data</b> e <b>Observação</b> direto. Clique no pedido para ver o <b>Histórico de retornos</b> dele.",
+      "<b>Resumo por retorno</b>: para os cards marcados, quantos pedidos há em cada retorno padronizado, o responsável, a média de dias de atraso e quantos ainda estão sem nova data válida.",
+      "<b>Transportadoras sem nova data e em reposição</b>: por transportadora, os atrasados e os que vencem hoje/amanhã sem nova data válida, e os que estão em reposição. <b>⤓ Excel</b> baixa a lista.",
       "<b>⧉ Copiar resumo do dia</b> copia os números do dia para mandar no grupo.",
     ], "Pedido que já aparece entregue no arquivo da Intelipost sai da cobrança. Um retorno só vale se a nova data for de hoje em diante."],
 

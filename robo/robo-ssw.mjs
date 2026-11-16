@@ -307,6 +307,28 @@ if (MODO === "diag-serie2") {   // a 1ª célula das NFs achadas (CNPJ da série
     await new Promise((ok) => setTimeout(ok, 1500)); }
   log("linhas achadas no SSW (CNPJ da série):", JSON.stringify(cont));
 }
+if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem nova data válida e em reposição (só contagens)
+  await entrarSupabase();
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), am = new Date(Date.now() + 21 * 3600e3).toISOString().slice(0, 10);
+  const B = []; for (let de = 0; ; de += 1000) { const x = await chamar(`base_aberta_bi?select=pedido,transportadora,prev_original,range_atrasos,entregue_ip&order=pedido&limit=1000&offset=${de}`); B.push(...x); if (x.length < 1000) break; }
+  const T = new Map(); for (let de = 0; ; de += 1000) { const x = await chamar(`tratativas?select=pedido,nova_data,observacao&order=pedido&limit=1000&offset=${de}`); x.forEach((t) => T.set(t.pedido, t)); if (x.length < 1000) break; }
+  const R = await chamar("retorno_regras?select=categoria,palavras&order=ordem").catch(() => []);
+  const nrm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+  const regRep = R.length ? R.filter((r) => nrm(r.categoria).includes("REPOSI")).flatMap((r) => r.palavras.map(nrm)) : ["REPOSI", "FALTA DE VOL", "FALTA VOLUME", "EXTRAVIO", "AVARIA", "MERCADORIA SINISTRADA", "CTRC BAIXADO"];
+  const repDe = (o) => { const t = nrm(o); if (!t) return false; if (!R.length) return regRep.some((w) => t.includes(w));
+    const c = R.find((r) => r.palavras.some((w) => w && t.includes(nrm(w)))); return !!c && nrm(c.categoria).includes("REPOSI"); };
+  const por = {}; let tot = { atr: 0, vence: 0, rep: 0, repSem: 0 };
+  for (const b of B) { if (b.entregue_ip) continue; const t = T.get(b.pedido) || {}, prom = String(b.prev_original || "").slice(0, 10);
+    const atr = /^VENCIDO/i.test(nrm(b.range_atrasos)) || (!b.range_atrasos && prom && prom < hoje), vence = !atr && (prom === hoje || prom === am);
+    const nv = String(t.nova_data || "").slice(0, 10), valida = nv && nv >= hoje, rep = repDe(t.observacao);
+    if (!atr && !vence && !rep) continue;
+    const k = /tempo\s*justo|^\s*vm\b|vm transportes/i.test(b.transportadora || "") ? "VM Transportes / Tempo Justo" : (b.transportadora || "(sem transportadora)");
+    const x = por[k] || (por[k] = { atr: 0, vence: 0, rep: 0, repSem: 0 });
+    if (!valida && atr) { x.atr++; tot.atr++; } else if (!valida && vence) { x.vence++; tot.vence++; }
+    if (rep) { x.rep++; tot.rep++; if (!valida) { x.repSem++; tot.repSem++; } } }
+  log(`hoje ${hoje} · em aberto ${B.length} · regras ${R.length || "fábrica"} · TOTAL atrasados sem nova data ${tot.atr} · vencem hoje/amanhã sem nova data ${tot.vence} · em reposição ${tot.rep} (sem nova data ${tot.repSem})`);
+  Object.entries(por).filter(([, x]) => x.atr + x.vence + x.rep).sort((a, b) => (b[1].atr + b[1].vence) - (a[1].atr + a[1].vence)).forEach(([k, x]) => log(`  ${k} · atrasados s/ data ${x.atr} · vencem s/ data ${x.vence} · reposição ${x.rep} (s/ data ${x.repSem})`));
+}
 if (MODO === "diag-jadobs") {   // onde estão as "Observações" do rastreio da Jadlog: chaves da API + páginas do site (só estrutura, sem dados)
   await entrarSupabase(); const tok = process.env.JADLOG_TOKEN || "";
   const L = (await chamar("conferencia_ssw?select=nf,detalhe&transportadora=ilike.*jadlog*&situacao=eq.nao%20entregue&limit=200")).filter((x) => x.detalhe && x.detalhe.cte).slice(0, 3);
