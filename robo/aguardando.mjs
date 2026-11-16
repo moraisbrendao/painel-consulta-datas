@@ -156,7 +156,11 @@ async function printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina }) {
       const caixa = await pg.evaluate(() => {
         const td = [...document.querySelectorAll("td")].filter((e) => /MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(e.innerText || "")).pop();
         const tb = td && td.closest("table"); if (!tb) return null; const r = tb.getBoundingClientRect();
-        return { x: 0, y: 0, width: Math.ceil(Math.min(document.documentElement.scrollWidth, r.right + 12)), height: Math.ceil(r.bottom + window.scrollY + 3) };
+        // começa no título "Rastreamento pelo remetente" (o que vem antes dele — formulário, campos — fica fora do print)
+        const tit = [...document.querySelectorAll("h1,h2,h3,h4,b,strong,font,div,span,td,p")].filter((e) => /^\s*Rastreamento pelo remetente\s*$/i.test(e.innerText || "")).pop();
+        const topo = tit ? Math.max(0, Math.floor(tit.getBoundingClientRect().top + window.scrollY - 6)) : Math.max(0, Math.floor(r.top + window.scrollY - 60));
+        const fim = Math.ceil(r.bottom + window.scrollY + 3);
+        return { x: 0, y: topo, width: Math.ceil(Math.min(document.documentElement.scrollWidth, r.right + 12)), height: fim - topo };
       }).catch(() => null);
       if (caixa && caixa.height > 50) { await pg.screenshot({ path: arq, clip: caixa, fullPage: true }); return; }
     } else if (t.fonte === "Bento Brasil") {
