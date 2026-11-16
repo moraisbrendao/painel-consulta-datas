@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=114">
+  <link rel="stylesheet" href="styles.css?v=115">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -44,6 +44,7 @@
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
+      <button class="menu-item so-log" data-pagina="documentos"><span class="menu-icone">🗎</span>Consulta Documento</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
       <button class="menu-item so-admin" data-pagina="logins"><span class="menu-icone">🔑</span>Logins</button>
     </nav>
@@ -875,6 +876,59 @@
       </section>
     </main>
 
+    <!-- ============ CONSULTA DOCUMENTO ============ -->
+    <main class="conteudo" id="pagina-documentos" hidden>
+      <section class="filtros-cartao filtros-cf" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label>Pedido, NF ou chave<input id="dc-busca" type="search" placeholder="# pedido, nota ou chave"></label>
+        <label>Transportadora<select id="dc-transp"></select></label>
+        <button id="dc-limpar" class="link limpar" type="button">Limpar filtros</button>
+      </section>
+
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Consulta Documento</h1>
+          <p class="sub">1) Envie a planilha com a <b>NF</b> e a <b>transportadora</b>: o painel acha a <b>chave</b> de cada nota na base. 2) Em cada nota, <b>Copiar chave</b> abre o site de consulta (você resolve o captcha lá e baixa o XML). 3) Envie os <b>XMLs</b> (pode ser vários de uma vez ou um .zip): o painel monta o <b>PDF (DANFE)</b> e separa um <b>.zip por transportadora</b>.</p>
+          <p id="dc-info" class="info-base">Nenhuma planilha enviada ainda.</p>
+        </div>
+        <div class="acoes-robo">
+          <button id="dc-modelo" class="btn contorno" type="button">Modelo da planilha</button>
+          <label class="btn amarelo" title="Planilha com as colunas NF e Transportadora">Enviar planilha<input id="dc-arq" type="file" accept=".xlsx,.xls,.csv" hidden></label>
+          <label class="btn lilas" title="Arquivos XML das notas (ou um .zip com eles)">Enviar XMLs<input id="dc-xml" type="file" accept=".xml,.zip" multiple hidden></label>
+          <button id="dc-zip-tudo" class="btn contorno" type="button">Baixar tudo (.zip)</button>
+        </div>
+      </div>
+
+      <section class="kpis" id="dc-cards">
+        <button class="kpi ativa" data-dc="todos"><span class="kpi-rot">Notas da planilha</span><b class="kpi-num">0</b><small>todas as linhas enviadas</small><i>↗</i></button>
+        <button class="kpi azul" data-dc="chave"><span class="kpi-rot">Chave encontrada</span><b class="kpi-num">0</b><small>achada na base</small><i>↗</i></button>
+        <button class="kpi vermelho" data-dc="semchave"><span class="kpi-rot">Sem chave na base</span><b class="kpi-num">0</b><small>NF não está na base ou sem chave</small><i>↗</i></button>
+        <button class="kpi laranja" data-dc="falta"><span class="kpi-rot">Falta o XML</span><b class="kpi-num">0</b><small>baixe no site e envie aqui</small><i>↗</i></button>
+        <button class="kpi roxo" data-dc="pronto"><span class="kpi-rot">Pronto para enviar</span><b class="kpi-num">0</b><small>XML recebido, PDF montado</small><i>↗</i></button>
+      </section>
+
+      <section class="cartao">
+        <h2>Por transportadora</h2>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>Transportadora</th><th>Notas</th><th>Com chave</th><th>XML recebido</th><th>Falta XML</th><th></th></tr></thead>
+            <tbody id="dc-transp-linhas"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <section class="cartao">
+        <h2 id="dc-titulo">Notas</h2>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos">
+            <thead><tr><th>NF</th><th>Transportadora</th><th>Pedido</th><th>Chave</th><th>XML</th><th></th></tr></thead>
+            <tbody id="dc-linhas"></tbody>
+          </table>
+          <p id="dc-vazio" class="vazio">Envie a planilha para começar.</p>
+        </div>
+      </section>
+    </main>
+
     <!-- ============ CONSULTA SAC ============ -->
     <main class="conteudo" id="pagina-alterar" hidden>
       <div class="titulo-pagina com-acoes">
@@ -1169,11 +1223,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=114"></script>
-  <script src="mapa-brasil.js?v=114"></script>
-  <script src="troca-notas.js?v=114"></script>
-  <script src="app.js?v=114"></script>
-  <script src="ordenar.js?v=114"></script>
-  <script src="menu.js?v=114"></script>
+  <script src="config.js?v=115"></script>
+  <script src="mapa-brasil.js?v=115"></script>
+  <script src="troca-notas.js?v=115"></script>
+  <script src="app.js?v=115"></script>
+  <script src="ordenar.js?v=115"></script>
+  <script src="menu.js?v=115"></script>
+  <script src="documentos.js?v=115"></script>
 </body>
 </html>

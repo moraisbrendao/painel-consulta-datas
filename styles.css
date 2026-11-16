@@ -635,3 +635,13 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 #tela-painel.menu-recolhido .menu-item .menu-icone { font-size: 17px; margin: 0; }
 #tela-painel.menu-recolhido .menu-item .menu-cont { position: absolute; top: 4px; right: 6px; font-size: 9px; padding: 0 4px; }
 @media (max-width: 900px) { .btn-recolher { display: none; } }
+
+/* Consulta Documento */
+#pagina-documentos .btn.pequeno { padding: 4px 10px; font-size: 12px; min-height: 0; }
+#pagina-documentos .acoes-linha { white-space: nowrap; }
+#pagina-documentos td.mono { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11.5px; }
+#pagina-documentos .chip { background: var(--cinza-bg); color: var(--texto-2); }
+#pagina-documentos .chip.ok { background: #dcf5e8; color: #1a7f4e; }
+#dc-info.erro { color: var(--vermelho); }
+@media (min-width: 1001px) { #dc-cards { grid-template-columns: repeat(5, minmax(0, 1fr)); } }
+#dc-linhas td:first-child b { white-space: nowrap; }

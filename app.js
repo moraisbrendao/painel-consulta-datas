@@ -5,7 +5,7 @@
 //   aparecer como entregue ou cancelado no arquivo da Intelipost)
 (function () {
   const CFG = window.PAINEL_CONFIG;
-  const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+  const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY); window.__sb = sb;
   const $ = (id) => document.getElementById(id);
   const esc = (v) => String(v ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const fmt = (n) => Number(n || 0).toLocaleString("pt-BR");
@@ -3085,7 +3085,7 @@
   function irPara(pag) {
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Consulta Documento", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
