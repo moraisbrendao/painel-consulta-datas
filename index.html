@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=109">
+  <link rel="stylesheet" href="styles.css?v=110">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -573,18 +573,24 @@
     <main class="conteudo" id="pagina-reposicao" hidden>
       <section class="filtros-cartao filtros-rep" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
+        <label>Ano<select id="rep-ano"></select></label>
         <label>Mês<select id="rep-mes"></select></label>
+        <label>De<input id="rep-de" type="date"></label>
+        <label>Até<input id="rep-ate" type="date"></label>
+        <label>Pré ou pós<select id="rep-tipo"><option value="">Pré e pós entrega</option><option value="pre">Pré-entrega</option><option value="pos">Pós-entrega</option></select></label>
         <label>Transportadora<select id="rep-transp"></select></label>
-        <label>Tipo<select id="rep-tipo"><option value="">Pré e pós entrega</option><option value="pre">Pré entrega</option><option value="pos">Pós entrega</option></select></label>
         <label>Motivo<select id="rep-motivo"></select></label>
+        <label>Filial<select id="rep-filial"></select></label>
+        <label>Status<select id="rep-status"></select></label>
+        <label>Responsável<select id="rep-resp"></select></label>
         <button id="rep-limpar" class="link limpar" type="button">Limpar filtros</button>
       </section>
 
       <div class="titulo-pagina com-acoes">
         <div>
           <h1>Reposição</h1>
-          <p class="sub">Da planilha do BI (TABELA DE ACOMPANHAMENTO): Tipo <b>Reposição</b> = <b>pré entrega</b> · Tipo <b>Reposição Pós Entrega</b> = <b>pós entrega</b>.
-            Mês = data de criação do ticket. Transportadora = coluna Q (Transportadora Final), trocada pela coluna R (Redespacho) quando houver.</p>
+          <p class="sub">Contagem pela TABELA DE ACOMPANHAMENTO (um ticket por linha): Tipo <b>Reposição</b> = <b>pré-entrega</b> · Tipo <b>Reposição Pós Entrega</b> = <b>pós-entrega</b>.
+            Nova NF, datas de emissão e saída e transportadora Promob vêm do histórico do detalhamento Tickets360 (aba Reposições).</p>
           <p id="rep-info" class="info-base">Carregando…</p>
         </div>
         <div class="acoes-robo">
@@ -593,42 +599,136 @@
         </div>
       </div>
 
-      <section class="kpis" id="rep-cards">
-        <button class="kpi ativa" data-rt=""><span class="kpi-rot">Reposições</span><b class="kpi-num">–</b><small>pré + pós entrega</small><i>↗</i></button>
-        <button class="kpi laranja" data-rt="pre"><span class="kpi-rot">Pré entrega</span><b class="kpi-num">–</b><small>Tipo "Reposição"</small><i>↗</i></button>
-        <button class="kpi azul" data-rt="pos"><span class="kpi-rot">Pós entrega</span><b class="kpi-num">–</b><small>Tipo "Reposição Pós Entrega"</small><i>↗</i></button>
-        <div class="kpi kpi-info"><span class="kpi-rot">Em aberto</span><b class="kpi-num" id="rep-abertos">–</b><small>status diferente de Resolvido</small></div>
-      </section>
+      <div class="acoes-titulo rp-abas" id="rep-abas">
+        <button class="btn amarelo" data-ra="geral">▦ Visão geral</button>
+        <button class="btn contorno" data-ra="pre">Pré-entrega</button>
+        <button class="btn contorno" data-ra="pos">Pós-entrega</button>
+        <button class="btn contorno" data-ra="det">☰ Detalhamento operacional</button>
+      </div>
 
-      <section class="cartao">
-        <div class="cartao-topo"><div><h2 id="rep-ev-titulo">Evolução por mês</h2><p class="sub">Quantidade de reposições criadas em cada mês (segue os filtros de transportadora, tipo e motivo). Clique num mês para filtrar.</p></div>
-          <div class="rp-legenda"><span class="rp-l pre"></span>Pré entrega <span class="rp-l pos"></span>Pós entrega</div></div>
-        <div class="tabela-wrap">
-          <table class="tabela-pedidos rp-tab">
-            <thead><tr><th>Mês</th><th class="num">Pré entrega</th><th class="num">Pós entrega</th><th class="num">Total</th><th class="num">vs mês anterior</th><th class="rp-col-barra"></th></tr></thead>
-            <tbody id="rep-meses"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <div class="rp-duas">
+      <!-- 1) visão geral -->
+      <div id="rp-geral">
+        <section class="kpis" id="rpg-cards"></section>
         <section class="cartao">
-          <div class="cartao-topo"><div><h2>Por transportadora</h2><p class="sub">Clique numa transportadora para ver só ela e a evolução dela mês a mês.</p></div></div>
-          <div class="tabela-wrap tabela-alta">
+          <div class="cartao-topo"><div><h2 id="rep-ev-titulo">Evolução mensal · pré-entrega × pós-entrega</h2><p class="sub">Tickets criados em cada mês (segue os filtros, menos o mês). Clique num mês para ver os tickets.</p></div>
+            <div class="rp-legenda"><span class="rp-l pre"></span>Pré-entrega <span class="rp-l pos"></span>Pós-entrega</div></div>
+          <div class="tabela-wrap">
             <table class="tabela-pedidos rp-tab">
-              <thead><tr><th>Transportadora</th><th class="num">Pré</th><th class="num">Pós</th><th class="num">Total</th><th class="num">% do total</th></tr></thead>
-              <tbody id="rep-transps"></tbody>
+              <thead><tr><th>Mês</th><th class="num">Pré-entrega</th><th class="num">Pós-entrega</th><th class="num">Total</th><th class="num">vs mês anterior</th><th class="rp-col-barra"></th></tr></thead>
+              <tbody id="rep-meses"></tbody>
             </table>
           </div>
         </section>
+        <div class="rp-duas">
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Transportadora da entrega original (com redespacho)</h2><p class="sub">Coluna R (redespacho) quando preenchida, senão a Q. Clique para ver os tickets.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Transportadora</th><th class="num">Pré</th><th class="num">Pós</th><th class="num">Total</th><th class="num">% do total</th></tr></thead>
+              <tbody id="rpg-transps"></tbody></table></div>
+          </section>
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Principais motivos</h2><p class="sub">Clique para ver os tickets.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Motivo</th><th class="num">Pré</th><th class="num">Pós</th><th class="num">Total</th><th class="num">%</th></tr></thead>
+              <tbody id="rpg-motivos"></tbody></table></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- 2 e 3) pré-entrega e pós-entrega: mesma tela -->
+      <div id="rp-fluxo" hidden>
+        <section class="kpis" id="rpf-cards"></section>
+        <p class="sub rp-nota" id="rpf-nota"></p>
+        <div class="rp-duas">
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Evolução mensal</h2><p class="sub">Tickets criados no mês e quantos deles ainda estão abertos. Clique num mês para ver os tickets.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Mês</th><th class="num">Tickets</th><th class="num">vs mês anterior</th><th class="num">Ainda abertos</th><th class="rp-col-barra"></th></tr></thead>
+              <tbody id="rpf-meses"></tbody></table></div>
+          </section>
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Aging dos tickets em aberto</h2><p class="sub">Dias desde a criação do ticket até hoje.</p></div></div>
+            <div class="tabela-wrap"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Faixa</th><th class="num">Tickets</th><th class="num">%</th><th class="rp-col-barra"></th></tr></thead>
+              <tbody id="rpf-aging"></tbody></table></div>
+            <p class="sub" id="rpf-parados"></p>
+          </section>
+        </div>
+        <div class="rp-duas">
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Ranking das transportadoras</h2><p class="sub">Transportadora da entrega original (com redespacho). Clique para ver os tickets.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Transportadora</th><th class="num">Tickets</th><th class="num">%</th><th class="num">Abertos</th><th class="num">Resolução (mediana, dias)</th></tr></thead>
+              <tbody id="rpf-transps"></tbody></table></div>
+          </section>
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Ranking dos motivos</h2><p class="sub">Clique para ver os tickets.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">%</th><th class="num">Abertos</th></tr></thead>
+              <tbody id="rpf-motivos"></tbody></table></div>
+          </section>
+        </div>
         <section class="cartao">
-          <div class="cartao-topo"><div><h2>Por motivo</h2><p class="sub">Clique num motivo para filtrar.</p></div></div>
-          <div class="tabela-wrap tabela-alta">
-            <table class="tabela-pedidos rp-tab">
-              <thead><tr><th>Motivo</th><th class="num">Pré</th><th class="num">Pós</th><th class="num">Total</th></tr></thead>
-              <tbody id="rep-motivos"></tbody>
+          <div class="cartao-topo"><div><h2>Transportadoras × motivos</h2><p class="sub">As 12 transportadoras e os 6 motivos com mais tickets. Quanto mais escura a célula, maior a concentração.</p></div></div>
+          <div class="tabela-wrap"><table class="tabela-pedidos rp-tab rp-matriz"><thead id="rpf-matriz-cab"></thead><tbody id="rpf-matriz"></tbody></table></div>
+        </section>
+        <div class="rp-duas">
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Tempos da nova NF</h2><p class="sub">Dias corridos, só quando as duas datas existem. Datas reais da NF (Promob), nunca a data do arquivo.</p></div></div>
+            <div class="tabela-wrap"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Tempo</th><th class="num">Tickets com as 2 datas</th><th class="num">Média</th><th class="num">Mediana</th><th class="num">Datas a conferir</th></tr></thead>
+              <tbody id="rpf-tempos"></tbody></table></div>
+          </section>
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Transportadora da reposição (Promob)</h2><p class="sub">Transp. nota reposição (Promob), só dos tickets que estão no detalhamento. Nome pela lista de apelidos (Alterar pedidos › Transportadora divergente).</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Transportadora (Promob)</th><th class="num">Tickets</th><th class="num">Com nova NF</th><th class="num">Com saída</th></tr></thead>
+              <tbody id="rpf-promob"></tbody></table></div>
+          </section>
+        </div>
+        <div class="rp-duas">
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Pendências por transportadora</h2><p class="sub">Tickets em aberto.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Transportadora</th><th class="num">Abertos</th><th class="num">Mais de 30 dias</th><th class="num">Sem atualização &gt; 2 dias</th></tr></thead>
+              <tbody id="rpf-pend-tr"></tbody></table></div>
+          </section>
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Pendências por responsável</h2><p class="sub">Tickets em aberto.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Responsável</th><th class="num">Abertos</th><th class="num">Mais de 30 dias</th><th class="num">Sem atualização &gt; 2 dias</th></tr></thead>
+              <tbody id="rpf-pend-resp"></tbody></table></div>
+          </section>
+        </div>
+        <div class="rp-duas">
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Por filial</h2><p class="sub">Central de Distribuição. Clique para ver os tickets.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Filial</th><th class="num">Tickets</th><th class="num">%</th><th class="num">Abertos</th></tr></thead>
+              <tbody id="rpf-filial"></tbody></table></div>
+          </section>
+          <section class="cartao">
+            <div class="cartao-topo"><div><h2>Tickets mais antigos em aberto</h2><p class="sub">Os 10 com mais dias em aberto.</p></div></div>
+            <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
+              <thead><tr><th>Ticket</th><th>Transportadora</th><th>Fila (detalhamento)</th><th class="num">Dias</th></tr></thead>
+              <tbody id="rpf-antigos"></tbody></table></div>
+          </section>
+        </div>
+      </div>
+
+      <!-- 4) detalhamento operacional -->
+      <div id="rp-det" hidden>
+        <section class="cartao">
+          <div class="cartao-topo"><div><h2 id="rpd-titulo">Tickets</h2><p class="sub">Um ticket por linha. Os filtros do topo valem aqui também.</p></div>
+            <label class="rp-busca">Buscar<input id="rpd-busca" type="search" placeholder="ticket, NF, pedido ou nova NF"></label></div>
+          <div class="tabela-wrap">
+            <table class="tabela-pedidos rp-tab rp-det">
+              <thead><tr><th>Ticket</th><th>NF original</th><th>Nova NF</th><th>Pedido</th><th>Pré/pós</th><th>Tipo de reposição</th><th>Transp. entrega original (c/ redesp.)</th><th>Transp. da reposição (Promob)</th>
+                <th>Motivo</th><th>Filial</th><th>Responsável</th><th>Criado</th><th>Emissão nova NF</th><th>Saída nova NF</th><th>Status</th><th class="num">Dias em aberto</th><th>Finalizado</th><th class="num">Valor do pedido</th></tr></thead>
+              <tbody id="rpd-linhas"></tbody>
             </table>
           </div>
+          <nav id="rpd-pag" class="paginacao"></nav>
         </section>
       </div>
       <p id="rep-vazio" class="vazio" hidden>Nenhuma reposição nesse filtro.</p>
@@ -973,9 +1073,9 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=109"></script>
-  <script src="mapa-brasil.js?v=109"></script>
-  <script src="troca-notas.js?v=109"></script>
-  <script src="app.js?v=109"></script>
+  <script src="config.js?v=110"></script>
+  <script src="mapa-brasil.js?v=110"></script>
+  <script src="troca-notas.js?v=110"></script>
+  <script src="app.js?v=110"></script>
 </body>
 </html>

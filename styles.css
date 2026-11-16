@@ -580,3 +580,18 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .sac-marca a { font-weight: 600; }
 .sac-rastreio { white-space: nowrap; }
 .sac-rastreio div { margin-top: 4px; font-size: 12px; }
+.rp-abas { margin: 4px 0 14px; flex-wrap: wrap; }
+.filtros-rep { flex-wrap: wrap; }
+.filtros-rep label { min-width: 120px; }
+.rp-nota { margin: -6px 0 12px; color: #8a5a00; }
+.rp-tab tr[data-f] { cursor: pointer; }
+.rp-tab tr[data-f]:hover td { background: #fff8db; }
+.rp-matriz td.rp-calor { background: rgba(42, 120, 214, var(--a)); }
+.rp-busca { display: flex; flex-direction: column; font-size: 12px; color: #5b6475; gap: 4px; }
+.rp-busca input { min-width: 260px; padding: 8px 10px; border: 1px solid #d5dae3; border-radius: 8px; }
+.rp-det td { white-space: nowrap; font-size: 12.5px; }
+.kpi.kpi-info.laranja .kpi-num { color: #eb6834; }
+.kpi.kpi-info.azul .kpi-num { color: #2a78d6; }
+.kpi.kpi-info.vermelho .kpi-num { color: #c62828; }
+#rpg-cards, #rpf-cards { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); }
+.rp-matriz th, .rp-matriz td { font-size: 12px; padding: 6px 8px; }

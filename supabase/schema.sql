@@ -1597,3 +1597,161 @@ as $$
 $$;
 revoke all on function public.consultar_sac() from public, anon;
 grant execute on function public.consultar_sac() to authenticated;
+
+-- =================================================================
+-- 36) BI de Reposições
+-- a) Mais colunas da TABELA DE ACOMPANHAMENTO (um ticket por linha: é a contagem oficial)
+-- b) Histórico acumulado da aba Reposições do detalhamento Tickets360: cada envio é guardado e nada é apagado
+-- =================================================================
+alter table public.reposicoes_tk add column if not exists filial         text;      -- Central de Distribuição
+alter table public.reposicoes_tk add column if not exists responsavel    text;
+alter table public.reposicoes_tk add column if not exists atualizado_em  timestamp; -- Data da Última Atualização
+alter table public.reposicoes_tk add column if not exists finalizado_em  timestamp; -- Data de Finalização
+alter table public.reposicoes_tk add column if not exists tempo_resolucao numeric;  -- Tempo de Resolução do Ticket (dia)
+alter table public.reposicoes_tk add column if not exists estagnada      text;      -- Flag - Ticket Sem Atualização > 2 Dias
+alter table public.reposicoes_tk add column if not exists transp_final   text;      -- coluna Q
+alter table public.reposicoes_tk add column if not exists transp_redesp  text;      -- coluna R
+alter table public.reposicoes_tk add column if not exists pedido         text;      -- Hub - Número do Marketplace
+alter table public.reposicoes_tk add column if not exists valor_pedido   numeric;   -- Hub - Valor Total (valor do pedido, não da reposição)
+
+create or replace function public.importar_reposicoes_tk(linhas jsonb, primeiro boolean, arquivo text, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if primeiro then
+    insert into public.reposicoes_tk_info (id, arquivo, linhas, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.reposicoes_tk (ticket, criado_em, criado_por, via, fila, tipo, motivo, status, transportadora, nf,
+    filial, responsavel, atualizado_em, finalizado_em, tempo_resolucao, estagnada, transp_final, transp_redesp, pedido, valor_pedido)
+  select r.ticket, r.criado_em, r.criado_por, r.via, r.fila, r.tipo, r.motivo, r.status, r.transportadora, r.nf,
+    r.filial, r.responsavel, r.atualizado_em, r.finalizado_em, r.tempo_resolucao, r.estagnada, r.transp_final, r.transp_redesp, r.pedido, r.valor_pedido
+  from jsonb_to_recordset(linhas) as r(ticket text, criado_em timestamp, criado_por text, via text, fila text, tipo text,
+    motivo text, status text, transportadora text, nf text, filial text, responsavel text, atualizado_em timestamp,
+    finalizado_em timestamp, tempo_resolucao numeric, estagnada text, transp_final text, transp_redesp text, pedido text, valor_pedido numeric)
+  where r.ticket is not null and r.ticket <> ''
+  on conflict (ticket) do update set criado_em = excluded.criado_em, criado_por = excluded.criado_por, via = excluded.via,
+    fila = excluded.fila, tipo = excluded.tipo, motivo = excluded.motivo, status = excluded.status,
+    transportadora = excluded.transportadora, nf = excluded.nf, filial = excluded.filial, responsavel = excluded.responsavel,
+    atualizado_em = excluded.atualizado_em, finalizado_em = excluded.finalizado_em, tempo_resolucao = excluded.tempo_resolucao,
+    estagnada = excluded.estagnada, transp_final = excluded.transp_final, transp_redesp = excluded.transp_redesp,
+    pedido = excluded.pedido, valor_pedido = excluded.valor_pedido;
+  return (select count(*) from public.reposicoes_tk);
+end $$;
+revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
+
+-- b) envios do detalhamento (um por arquivo) e histórico da aba Reposições (ticket × nova NF × envio). Só inserção.
+create table if not exists public.repo_envios (
+  id           bigserial primary key,
+  arquivo      text,
+  assinatura   text unique,                 -- impressão do conteúdo: o mesmo arquivo não entra duas vezes
+  extraido_em  timestamptz not null,        -- quando o arquivo foi gerado (data do arquivo, conferida por quem envia)
+  enviado_em   timestamptz not null default now(),
+  enviado_por  text default (auth.jwt() ->> 'email'),
+  linhas       integer,
+  tickets      integer
+);
+create table if not exists public.repo_hist (
+  envio_id              bigint not null references public.repo_envios(id),
+  ticket                text not null,
+  nf_nova               text not null default '',   -- '' = ainda sem nova NF
+  data_criacao_ticket   timestamp,
+  id_any                text,
+  id_pedido             text,
+  id_intelipost         text,
+  nota_ticket           text,
+  data_saida_nota_ticket timestamp,
+  tipo_ticket           text,
+  fila_atual            text,
+  tipo_reposicao        text,
+  transp_definida       text,
+  pedido_promob         text,
+  chave_nf_nova         text,
+  data_emissao_nf       timestamp,
+  data_saida_nf         timestamp,
+  transp_promob         text,
+  transp_redesp_promob  text,
+  primary key (envio_id, ticket, nf_nova)
+);
+create index if not exists repo_hist_ticket on public.repo_hist (ticket);
+alter table public.repo_envios enable row level security;
+alter table public.repo_hist enable row level security;
+revoke all on public.repo_envios, public.repo_hist from anon;
+revoke insert, update, delete, truncate on public.repo_envios, public.repo_hist from authenticated;
+grant select on public.repo_envios, public.repo_hist to authenticated;
+drop policy if exists "logistica le" on public.repo_envios;
+drop policy if exists "logistica le" on public.repo_hist;
+create policy "logistica le" on public.repo_envios for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.repo_hist for select to authenticated using ((select not public.e_sac()));
+
+-- abre um envio; devolve o número dele (ou erro se o mesmo arquivo já foi guardado)
+create or replace function public.abrir_envio_repo(p_arquivo text, p_assinatura text, p_extraido_em timestamptz, p_linhas integer, p_tickets integer)
+returns bigint language plpgsql security definer set search_path = public
+as $$
+declare n bigint;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if exists (select 1 from public.repo_envios where assinatura = p_assinatura) then raise exception 'Esse detalhamento já está no histórico.'; end if;
+  insert into public.repo_envios (arquivo, assinatura, extraido_em, enviado_por, linhas, tickets)
+  values (p_arquivo, p_assinatura, p_extraido_em, auth.jwt() ->> 'email', p_linhas, p_tickets) returning id into n;
+  return n;
+end $$;
+revoke all on function public.abrir_envio_repo(text, text, timestamptz, integer, integer) from public, anon;
+grant execute on function public.abrir_envio_repo(text, text, timestamptz, integer, integer) to authenticated;
+
+-- grava as linhas de um envio (em lotes). Só acrescenta: linha repetida do mesmo envio é ignorada, nada é alterado.
+create or replace function public.gravar_hist_repo(p_envio bigint, linhas jsonb)
+returns integer language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'sem permissão'; end if;
+  if not exists (select 1 from public.repo_envios where id = p_envio and enviado_em > now() - interval '1 hour') then raise exception 'envio inválido'; end if;
+  insert into public.repo_hist (envio_id, ticket, nf_nova, data_criacao_ticket, id_any, id_pedido, id_intelipost, nota_ticket, data_saida_nota_ticket,
+    tipo_ticket, fila_atual, tipo_reposicao, transp_definida, pedido_promob, chave_nf_nova, data_emissao_nf, data_saida_nf, transp_promob, transp_redesp_promob)
+  select p_envio, r.ticket, coalesce(r.nf_nova, ''), r.data_criacao_ticket, r.id_any, r.id_pedido, r.id_intelipost, r.nota_ticket, r.data_saida_nota_ticket,
+    r.tipo_ticket, r.fila_atual, r.tipo_reposicao, r.transp_definida, r.pedido_promob, r.chave_nf_nova, r.data_emissao_nf, r.data_saida_nf, r.transp_promob, r.transp_redesp_promob
+  from jsonb_to_recordset(linhas) as r(ticket text, nf_nova text, data_criacao_ticket timestamp, id_any text, id_pedido text, id_intelipost text, nota_ticket text,
+    data_saida_nota_ticket timestamp, tipo_ticket text, fila_atual text, tipo_reposicao text, transp_definida text, pedido_promob text, chave_nf_nova text,
+    data_emissao_nf timestamp, data_saida_nf timestamp, transp_promob text, transp_redesp_promob text)
+  where r.ticket is not null and r.ticket <> ''
+  on conflict do nothing;
+  return (select count(*) from public.repo_hist where envio_id = p_envio);
+end $$;
+revoke all on function public.gravar_hist_repo(bigint, jsonb) from public, anon;
+grant execute on function public.gravar_hist_repo(bigint, jsonb) to authenticated;
+
+-- visão atual consolidada: 1 linha por ticket; cada campo = o valor preenchido mais recente
+create or replace view public.repo_atual with (security_invoker = true) as
+with h as (select x.*, e.extraido_em from public.repo_hist x join public.repo_envios e on e.id = x.envio_id),
+ult as (select max(id) as envio_id from public.repo_envios),
+mud as (   -- mudança de fila ou de NF entre envios
+  select ticket, extraido_em, string_agg(coalesce(fila_atual, '') || '|' || nf_nova, ',' order by nf_nova) as estado from h group by ticket, envio_id, extraido_em),
+mud2 as (select ticket, extraido_em, estado, lag(estado) over (partition by ticket order by extraido_em) as antes from mud)
+select h.ticket,
+  (array_agg(h.data_criacao_ticket order by h.extraido_em desc) filter (where h.data_criacao_ticket is not null))[1] as data_criacao_ticket,
+  (array_agg(h.nota_ticket order by h.extraido_em desc) filter (where h.nota_ticket is not null))[1] as nota_ticket,
+  (array_agg(h.id_intelipost order by h.extraido_em desc) filter (where h.id_intelipost is not null))[1] as id_intelipost,
+  (array_agg(h.fila_atual order by h.extraido_em desc) filter (where h.fila_atual is not null))[1] as fila_atual,
+  (array_agg(h.tipo_reposicao order by h.extraido_em desc) filter (where h.tipo_reposicao is not null))[1] as tipo_reposicao,
+  (array_agg(h.transp_definida order by h.extraido_em desc) filter (where h.transp_definida is not null))[1] as transp_definida,
+  (array_agg(h.pedido_promob order by h.extraido_em desc) filter (where h.pedido_promob is not null))[1] as pedido_promob,
+  string_agg(distinct nullif(h.nf_nova, ''), ', ') as nfs_novas,
+  (array_agg(h.chave_nf_nova order by h.extraido_em desc) filter (where h.chave_nf_nova is not null))[1] as chave_nf_nova,
+  min(h.data_emissao_nf) as data_emissao_nf,
+  min(h.data_saida_nf) as data_saida_nf,
+  (array_agg(h.transp_promob order by h.extraido_em desc) filter (where h.transp_promob is not null))[1] as transp_promob,
+  (array_agg(h.transp_redesp_promob order by h.extraido_em desc) filter (where h.transp_redesp_promob is not null))[1] as transp_redesp_promob,
+  min(h.extraido_em) as primeiro_envio_em,
+  max(h.extraido_em) as ultimo_envio_em,
+  count(distinct h.envio_id) as envios,
+  min(h.extraido_em) filter (where h.nf_nova <> '') as nf_vista_em,
+  (select max(m.extraido_em) from mud2 m where m.ticket = h.ticket and m.antes is distinct from m.estado) as ultima_mudanca_em,
+  bool_or(h.envio_id = (select envio_id from ult)) as no_ultimo_envio
+from h group by h.ticket;
+grant select on public.repo_atual to authenticated;

@@ -2906,7 +2906,7 @@
     if (!ticketsOk) return toast("Rode de novo o supabase/schema.sql no Supabase para usar os tickets.", true);
     carregando("Lendo a planilha de tickets…");
     await new Promise((r) => setTimeout(r, 50));
-    let linhas, total = 0, detLinhas = [];
+    let linhas, total = 0, detLinhas = [], wbDet = null;
     try {
       const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", dense: true, cellDates: true, ...LEITURA_RAPIDA });
       const nomeAba = wb.SheetNames.find((n) => norm(n) === "TICKETS") || wb.SheetNames[0];
@@ -2932,7 +2932,7 @@
       });
       linhas = [...porNF.values()];
       if (!linhas.length) throw new Error("A aba Tickets não tem notas.");
-      detLinhas = lerDetalheNF(wb);
+      detLinhas = lerDetalheNF(wb); wbDet = wb;
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
     if (!confirm(`${arq.name}\n\n${fmt(total)} tickets abertos, em ${fmt(linhas.length)} notas.\nSubstitui a planilha de tickets anterior para todos.\n\nEnviar?`)) return;
@@ -2947,8 +2947,10 @@
       detNF = null;
     }
     carregando("");
+    const avisoHist = wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "";
     await carregar();
-    if (avisoDet) toast("Tickets atualizados" + avisoDet, true); else toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto · ${fmt(detLinhas.filter((x) => x.tem_ocorr).length)} notas com ocorrência e ${fmt(detLinhas.filter((x) => x.repo_nf).length)} com NF de reposição guardadas.`);
+    if (avisoHist && /guardados/.test(avisoHist)) carregarReposicoes();
+    if (avisoDet) toast("Tickets atualizados" + avisoDet + avisoHist, true); else toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto · ${fmt(detLinhas.filter((x) => x.tem_ocorr).length)} notas com ocorrência e ${fmt(detLinhas.filter((x) => x.repo_nf).length)} com NF de reposição guardadas${avisoHist}.`);
   });
 
   // abas Ocorrências, Reposições e Assistência Técnica do detalhamento_tickets360 → uma linha por NF
@@ -2976,23 +2978,47 @@
     return [...m.values()].map(({ _rd, _rc, ...x }) => x);
   }
 
-  // ---------------- reposição (planilha TABELA DE ACOMPANHAMENTO do BI, aba Export) ----------------
-  // Tipo "Reposição" = pré entrega; Tipo "Reposição Pós Entrega" = pós entrega. Mês = data de criação.
-  // Transportadora = coluna R (Redespacho) quando houver, senão a coluna Q (Final).
-  let reps = [], repInfo = null, repOk = true, repTipo = "", repFiltradas = [];
-  const SEM_MOTIVO = "(sem motivo)", SEM_TRANSP = "(sem transportadora)";
+  // ---------------- BI de Reposições ----------------
+  // Contagem oficial = TABELA DE ACOMPANHAMENTO (aba Export, um ticket por linha). Tipo "Reposição" = pré-entrega;
+  // "Reposição Pós Entrega" = pós-entrega. Transportadora da entrega original = coluna R (redespacho) se houver, senão Q.
+  // Nova NF, datas e transportadora Promob = visão consolidada do histórico do detalhamento (parte 36, repo_atual).
+  let reps = [], repInfo = null, repOk = true, repAtual = new Map(), repEnvio = null, repHistOk = true, repAba = "geral", repFiltradas = [], rpdPag = 1;
+  const SEM_MOTIVO = "(sem motivo)", SEM_TRANSP = "(sem transportadora)", SEM_FILIAL = "(sem filial)", SEM_RESP = "(sem responsável)";
   const NOME_MES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
   const rotMes = (m) => (m ? `${NOME_MES[+m.slice(5, 7) - 1]}/${m.slice(0, 4)}` : "(sem data)");
   const tipoRep = (r) => { const t = norm(r.tipo); return t === "REPOSICAO" ? "pre" : t === "REPOSICAO POS ENTREGA" ? "pos" : null; };
   const mesRep = (r) => String(r.criado_em || "").slice(0, 7);
   const trRep = (r) => r.transportadora || SEM_TRANSP;
   const motRep = (r) => r.motivo || SEM_MOTIVO;
+  const filRep = (r) => r.filial || SEM_FILIAL;
+  const respRep = (r) => r.responsavel || SEM_RESP;
+  const abertoRep = (r) => norm(r.status) !== "RESOLVIDO";
+  const diasAberto = (r) => (abertoRep(r) && r.criado_em ? Math.max(0, diasEntre(String(r.criado_em).slice(0, 10), hojeISO())) : null);
+  const semAtualiz = (r) => abertoRep(r) && r.atualizado_em && diasEntre(String(r.atualizado_em).slice(0, 10), hojeISO()) > 2;
+  const ROT_FLUXO = { pre: "Pré-entrega", pos: "Pós-entrega" };
+  const pct = (a, b) => (b ? ((100 * a) / b).toFixed(1).replace(".", ",") + "%" : "–");
+  const mediana = (L) => { if (!L.length) return null; const s = L.slice().sort((a, b) => a - b), k = s.length >> 1; return s.length % 2 ? s[k] : (s[k - 1] + s[k]) / 2; };
+  const dia1 = (n) => (n == null ? "–" : n.toFixed(1).replace(".", ","));
+  // transportadora Promob (razão social) → nome da lista de apelidos (Alterar pedidos › Transportadora divergente)
+  const promobNome = (nome) => {
+    if (!nome) return null;
+    const x = ajLista.filter((a) => ajTem(a.chave, nome)).sort((a, b) => b.chave.length - a.chave.length)[0];
+    return x ? x.h : nome + " (sem apelido)";
+  };
+
   async function carregarReposicoes() {
     try {
       const [lista, inf] = await Promise.all([buscarTudo("reposicoes_tk", "ticket"), sb.from("reposicoes_tk_info").select("*").limit(1)]);
       if (inf.error) throw inf.error;
       reps = lista.filter((r) => (r._t = tipoRep(r))); repInfo = (inf.data && inf.data[0]) || null; repOk = true;
     } catch (_) { repOk = false; reps = []; repInfo = null; }
+    try {
+      const [at, env] = await Promise.all([buscarTudo("repo_atual", "ticket"), sb.from("repo_envios").select("id,arquivo,extraido_em,enviado_em,tickets").order("id", { ascending: false }).limit(1)]);
+      if (env.error) throw env.error;
+      repAtual = new Map(at.map((x) => [String(x.ticket), x])); repEnvio = (env.data && env.data[0]) || null; repHistOk = true;
+    } catch (_) { repHistOk = false; repAtual = new Map(); repEnvio = null; }
+    if (!ajCarregado) await carregarApelidos().catch(() => {});
+    reps.forEach((r) => { r._d = repAtual.get(String(r.ticket)) || null; r._promob = r._d ? promobNome(r._d.transp_promob) : null; });
     montarReposicao();
   }
   function opcoesRep(id, valores, todos, rot = (v) => v) {
@@ -3001,79 +3027,171 @@
     sel.value = valores.includes(atual) ? atual : "";
   }
   function montarReposicao() {
-    $("rep-info").textContent = !repOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase."
-      : repInfo ? `Tabela: ${repInfo.arquivo || "planilha"} enviada em ${new Date(repInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${repInfo.enviado_por ? " por " + repInfo.enviado_por : ""} · ${fmt(reps.length)} reposições`
-      : 'Ainda não há tabela. Clique em "Subir tabela de acompanhamento".';
+    const fd = (iso) => new Date(iso).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    $("rep-info").innerHTML = !repOk ? "Para usar esta página, rode de novo o supabase/schema.sql no Supabase."
+      : (repInfo ? `Tabela: ${esc(repInfo.arquivo || "planilha")} enviada em ${fd(repInfo.enviado_em)} · ${fmt(reps.length)} reposições`
+        : 'Ainda não há tabela. Clique em "Subir tabela de acompanhamento".')
+      + (!repHistOk ? " · <b>Histórico do detalhamento: rode a parte 36 do schema.sql.</b>"
+        : repEnvio ? ` · Detalhamento: ${fmt(repAtual.size)} tickets no histórico, último extraído em ${fd(repEnvio.extraido_em)}` : " · Detalhamento: ainda sem histórico (suba o detalhamento em Carregar tickets).");
     const pt = (a, b) => a.localeCompare(b, "pt-BR");
-    opcoesRep("rep-mes", [...new Set(reps.map(mesRep).filter(Boolean))].sort().reverse(), "Todos os meses", rotMes);
+    const meses = [...new Set(reps.map(mesRep).filter(Boolean))].sort().reverse();
+    opcoesRep("rep-ano", [...new Set(meses.map((m) => m.slice(0, 4)))], "Todos");
+    opcoesRep("rep-mes", meses, "Todos", rotMes);
     opcoesRep("rep-transp", [...new Set(reps.map(trRep))].sort(pt), "Todas");
     opcoesRep("rep-motivo", [...new Set(reps.map(motRep))].sort(pt), "Todos");
-    $("rep-tipo").value = repTipo;
+    opcoesRep("rep-filial", [...new Set(reps.map(filRep))].sort(pt), "Todas");
+    opcoesRep("rep-status", [...new Set(reps.map((r) => r.status || "(sem status)"))].sort(pt), "Todos");
+    opcoesRep("rep-resp", [...new Set(reps.map(respRep))].sort(pt), "Todos");
     filtrarRep();
   }
-  function filtrarRep() {
-    const mes = $("rep-mes").value, tr = $("rep-transp").value, mot = $("rep-motivo").value;
-    repTipo = $("rep-tipo").value;
-    // sem o filtro de mês: base da evolução mês a mês
-    const semMes = reps.filter((r) => (!tr || trRep(r) === tr) && (!mot || motRep(r) === mot));
-    const doMes = mes ? semMes.filter((r) => mesRep(r) === mes) : semMes;
-    const nPre = doMes.filter((r) => r._t === "pre").length, nPos = doMes.length - nPre;
-    const cont = { "": doMes.length, pre: nPre, pos: nPos };
-    document.querySelectorAll("#rep-cards [data-rt]").forEach((b) => { b.classList.toggle("ativa", b.dataset.rt === repTipo); b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.rt]); });
-    repFiltradas = repTipo ? doMes.filter((r) => r._t === repTipo) : doMes;
-    $("rep-abertos").textContent = fmt(repFiltradas.filter((r) => norm(r.status) !== "RESOLVIDO").length);
-    $("rep-vazio").hidden = repFiltradas.length > 0;
-    const daVisao = (r) => !repTipo || r._t === repTipo;
-    const soma = (lista, chave) => {
-      const m = new Map();
-      lista.forEach((r) => { const k = chave(r), x = m.get(k) || { pre: 0, pos: 0 }; x[r._t]++; m.set(k, x); });
-      return m;
-    };
-    const num = (n) => `<td class="num${n ? "" : " vazio-c"}">${n ? fmt(n) : "·"}</td>`;
-    const vis = (x) => (repTipo ? x[repTipo] : x.pre + x.pos);
-    // evolução por mês (sem o filtro de mês)
-    $("rep-ev-titulo").textContent = `Evolução por mês${tr ? " · " + tr : ""}${repTipo ? " · " + (repTipo === "pre" ? "pré entrega" : "pós entrega") : ""}`;
-    const porMes = soma(semMes.filter(daVisao), mesRep);
-    const meses = [...porMes.keys()].sort();
-    const maior = Math.max(1, ...meses.map((m) => vis(porMes.get(m))));
-    let ant = null;
-    $("rep-meses").innerHTML = meses.map((m) => {
-      const x = porMes.get(m), tot = vis(x);
-      let varia = "<td class=\"num vazio-c\">·</td>";
-      if (ant) { const p = Math.round(((tot - ant) / ant) * 100); varia = `<td class="num"><span class="rp-var ${p > 0 ? "sobe" : p < 0 ? "desce" : ""}">${p > 0 ? "▲ +" : p < 0 ? "▼ " : ""}${p}%</span></td>`; }
-      ant = tot || null;
-      const wPre = repTipo === "pos" ? 0 : (x.pre / maior) * 100, wPos = repTipo === "pre" ? 0 : (x.pos / maior) * 100;
-      return `<tr data-mes="${esc(m)}" class="${m === mes ? "sel" : ""}"><td>${esc(rotMes(m))}</td>${num(repTipo === "pos" ? 0 : x.pre)}${num(repTipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(tot)}</td>${varia}`
-        + `<td class="rp-col-barra"><div class="rp-barra"><span class="pre" style="width:${wPre}%"></span><span class="pos" style="width:${wPos}%"></span></div></td></tr>`;
-    }).reverse().join("");
-    // por transportadora (com todos os filtros menos a transportadora, para dar para trocar clicando)
-    const baseTr = reps.filter((r) => (!mes || mesRep(r) === mes) && (!mot || motRep(r) === mot) && daVisao(r));
-    const porTr = soma(baseTr, trRep), totTr = baseTr.length || 1;
-    $("rep-transps").innerHTML = [...porTr.entries()].sort((a, b) => vis(b[1]) - vis(a[1]) || a[0].localeCompare(b[0], "pt-BR"))
-      .map(([t, x]) => `<tr data-tr="${esc(t)}" class="${t === tr ? "sel" : ""}"><td>${esc(t)}</td>${num(x.pre)}${num(x.pos)}<td class="num tot">${fmt(x.pre + x.pos)}</td><td class="num">${((100 * (x.pre + x.pos)) / totTr).toFixed(1).replace(".", ",")}%</td></tr>`).join("");
-    // por motivo (com todos os filtros menos o motivo)
-    const baseMot = reps.filter((r) => (!mes || mesRep(r) === mes) && (!tr || trRep(r) === tr) && daVisao(r));
-    $("rep-motivos").innerHTML = [...soma(baseMot, motRep).entries()].sort((a, b) => vis(b[1]) - vis(a[1]) || a[0].localeCompare(b[0], "pt-BR"))
-      .map(([m, x]) => `<tr data-mot="${esc(m)}" class="${m === mot ? "sel" : ""}"><td>${esc(m)}</td>${num(x.pre)}${num(x.pos)}<td class="num tot">${fmt(x.pre + x.pos)}</td></tr>`).join("");
+  // filtros do topo; "sem" = filtros que essa análise ignora
+  function filtroRep(sem = []) {
+    const v = (id) => (sem.includes(id) ? "" : $(id).value);
+    const ano = v("rep-ano"), mes = v("rep-mes"), de = v("rep-de"), ate = v("rep-ate"), tipo = v("rep-tipo"), tr = v("rep-transp"), mot = v("rep-motivo"),
+      fil = v("rep-filial"), st = v("rep-status"), resp = v("rep-resp");
+    return reps.filter((r) => {
+      const d = String(r.criado_em || "").slice(0, 10);
+      return (!ano || d.slice(0, 4) === ano) && (!mes || d.slice(0, 7) === mes) && (!de || (d && d >= de)) && (!ate || (d && d <= ate)) &&
+        (!tipo || r._t === tipo) && (!tr || trRep(r) === tr) && (!mot || motRep(r) === mot) && (!fil || filRep(r) === fil) &&
+        (!st || (r.status || "(sem status)") === st) && (!resp || respRep(r) === resp);
+    });
   }
-  const alternar = (id, v) => { $(id).value = $(id).value === v ? "" : v; filtrarRep(); };
-  $("rep-cards").addEventListener("click", (e) => { const b = e.target.closest("[data-rt]"); if (!b) return; $("rep-tipo").value = b.dataset.rt; filtrarRep(); });
-  $("rep-meses").addEventListener("click", (e) => { const t = e.target.closest("tr[data-mes]"); if (t) alternar("rep-mes", t.dataset.mes); });
-  $("rep-transps").addEventListener("click", (e) => { const t = e.target.closest("tr[data-tr]"); if (t) alternar("rep-transp", t.dataset.tr); });
-  $("rep-motivos").addEventListener("click", (e) => { const t = e.target.closest("tr[data-mot]"); if (t) alternar("rep-motivo", t.dataset.mot); });
-  ["rep-mes", "rep-transp", "rep-tipo", "rep-motivo"].forEach((id) => $(id).addEventListener("change", filtrarRep));
-  $("rep-limpar").addEventListener("click", () => { ["rep-mes", "rep-transp", "rep-tipo", "rep-motivo"].forEach((id) => ($(id).value = "")); filtrarRep(); });
+  const contaPor = (lista, chave) => { const m = new Map(); lista.forEach((r) => { const k = chave(r); m.set(k, (m.get(k) || []).concat(r)); }); return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR")); };
+  const num = (n) => `<td class="num${n ? "" : " vazio-c"}">${n ? fmt(n) : "·"}</td>`;
+  const kpi = (rot, n, sub, cor = "", extra = "") => `<div class="kpi kpi-info ${cor}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small>${extra}</div>`;
+  const clic = (f, v, txt) => `<a href="#" class="rp-ir" data-f="${f}" data-v="${esc(v)}">${esc(txt)}</a>`;
+
+  function filtrarRep() {
+    document.querySelectorAll("#rep-abas [data-ra]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.ra === repAba); b.classList.toggle("contorno", b.dataset.ra !== repAba); });
+    $("rp-geral").hidden = repAba !== "geral"; $("rp-fluxo").hidden = !["pre", "pos"].includes(repAba); $("rp-det").hidden = repAba !== "det";
+    const fl = repAba === "pre" || repAba === "pos";
+    repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
+    $("rep-vazio").hidden = repFiltradas.length > 0 || repAba === "det";
+    if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
+  }
+
+  function evolucaoMeses(lista, tipo) {
+    const m = new Map(); lista.forEach((r) => { const k = mesRep(r), x = m.get(k) || { pre: 0, pos: 0, ab: 0 }; x[r._t]++; if (abertoRep(r)) x.ab++; m.set(k, x); });
+    return [...m.keys()].sort().map((k) => ({ mes: k, ...m.get(k), tot: tipo ? m.get(k)[tipo] : m.get(k).pre + m.get(k).pos }));
+  }
+  const varia = (tot, ant) => { if (!ant) return `<td class="num vazio-c">·</td>`; const p = Math.round(((tot - ant) / ant) * 100);
+    return `<td class="num"><span class="rp-var ${p > 0 ? "sobe" : p < 0 ? "desce" : ""}">${p > 0 ? "▲ +" : p < 0 ? "▼ " : ""}${p}%</span></td>`; };
+
+  function desenharRepGeral() {
+    const L = repFiltradas, pre = L.filter((r) => r._t === "pre").length, pos = L.length - pre, ab = L.filter(abertoRep).length;
+    const comDet = L.filter((r) => r._d && r._d.tipo_reposicao), tot = comDet.filter((r) => norm(r._d.tipo_reposicao) === "TOTAL").length;
+    $("rpg-cards").innerHTML = kpi("Reposições", fmt(L.length), "tickets (pré + pós)")
+      + kpi("Pré-entrega", fmt(pre), pct(pre, L.length) + " do total", "laranja")
+      + kpi("Pós-entrega", fmt(pos), pct(pos, L.length) + " do total", "azul")
+      + kpi("Em aberto", fmt(ab), "status diferente de Resolvido", "vermelho")
+      + kpi("Resolvidos", fmt(L.length - ab), pct(L.length - ab, L.length) + " do total")
+      + kpi("Totais × parciais", comDet.length ? `${fmt(tot)} × ${fmt(comDet.length - tot)}` : "–", comDet.length ? `só os ${fmt(comDet.length)} tickets com detalhamento` : "sem detalhamento no filtro");
+    const ev = evolucaoMeses(filtroRep(["rep-mes"]), $("rep-tipo").value), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = $("rep-mes").value, tipo = $("rep-tipo").value;
+    $("rep-ev-titulo").textContent = `Evolução mensal · ${tipo ? ROT_FLUXO[tipo].toLowerCase() : "pré-entrega × pós-entrega"}`;
+    $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
+      + `<td class="rp-col-barra"><div class="rp-barra"><span class="pre" style="width:${tipo === "pos" ? 0 : (x.pre / maior) * 100}%"></span><span class="pos" style="width:${tipo === "pre" ? 0 : (x.pos / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
+    const linhaPP = (f, [k, rs]) => { const p = rs.filter((r) => r._t === "pre").length; return `<tr data-f="${f}" data-v="${esc(k)}"><td>${esc(k)}</td>${num(p)}${num(rs.length - p)}<td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td></tr>`; };
+    $("rpg-transps").innerHTML = contaPor(L, trRep).map((e) => linhaPP("rep-transp", e)).join("");
+    $("rpg-motivos").innerHTML = contaPor(L, motRep).map((e) => linhaPP("rep-motivo", e)).join("");
+  }
+
+  function desenharRepFluxo(tipo) {
+    const L = repFiltradas, ab = L.filter(abertoRep), res = L.filter((r) => !abertoRep(r));
+    const comDet = L.filter((r) => r._d), tr = comDet.filter((r) => r._d.tipo_reposicao), tot = tr.filter((r) => norm(r._d.tipo_reposicao) === "TOTAL").length;
+    const nfs = comDet.filter((r) => r._d.nfs_novas).length, sai = comDet.filter((r) => r._d.data_saida_nf).length;
+    const tRes = res.map((r) => Number(r.tempo_resolucao)).filter((n) => Number.isFinite(n) && n >= 0);
+    $("rpf-cards").innerHTML = kpi(`Reposições · ${ROT_FLUXO[tipo]}`, fmt(L.length), "tickets no filtro", tipo === "pre" ? "laranja" : "azul")
+      + kpi("Em aberto", fmt(ab.length), pct(ab.length, L.length) + " do total", "vermelho")
+      + kpi("Resolvidos", fmt(res.length), pct(res.length, L.length) + " do total")
+      + kpi("Tempo de resolução", tRes.length ? dia1(mediana(tRes)) + " dias" : "–", tRes.length ? `mediana de ${fmt(tRes.length)} resolvidos (média ${dia1(tRes.reduce((a, b) => a + b, 0) / tRes.length)})` : "sem resolvidos no filtro")
+      + kpi("Totais × parciais", tr.length ? `${fmt(tot)} × ${fmt(tr.length - tot)}` : "–", tr.length ? `de ${fmt(tr.length)} tickets com detalhamento` : "sem detalhamento")
+      + kpi("Novas NFs emitidas", fmt(nfs), `de ${fmt(comDet.length)} tickets com detalhamento`)
+      + kpi("Novas NFs com saída", fmt(sai), `de ${fmt(comDet.length)} tickets com detalhamento`);
+    $("rpf-nota").textContent = comDet.length < L.length
+      ? `Nova NF, total/parcial, tempos e transportadora Promob só existem para os ${fmt(comDet.length)} de ${fmt(L.length)} tickets que já apareceram no detalhamento Tickets360 (o detalhamento traz só os abertos; o histórico cresce a cada envio).` : "";
+    // evolução (sem o filtro de mês)
+    const ev = evolucaoMeses(filtroRep(["rep-tipo", "rep-mes"]).filter((r) => r._t === tipo), tipo), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = $("rep-mes").value;
+    $("rpf-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td><td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}${num(x.ab)}`
+      + `<td class="rp-col-barra"><div class="rp-barra"><span class="${tipo}" style="width:${(x.tot / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
+    // aging
+    const FX = [["0 a 5 dias", 0, 5], ["6 a 10 dias", 6, 10], ["11 a 20 dias", 11, 20], ["21 a 30 dias", 21, 30], ["Acima de 30 dias", 31, 1e9]];
+    const fx = FX.map(([rot, a, b]) => [rot, ab.filter((r) => { const d = diasAberto(r); return d != null && d >= a && d <= b; }).length]), mx = Math.max(1, ...fx.map((x) => x[1]));
+    $("rpf-aging").innerHTML = fx.map(([rot, n]) => `<tr><td>${rot}</td>${num(n)}<td class="num">${pct(n, ab.length)}</td><td class="rp-col-barra"><div class="rp-barra"><span class="${tipo}" style="width:${(n / mx) * 100}%"></span></div></td></tr>`).join("");
+    $("rpf-parados").textContent = ab.length ? `${fmt(ab.filter(semAtualiz).length)} dos ${fmt(ab.length)} abertos estão sem atualização há mais de 2 dias (Data da Última Atualização).` : "";
+    // rankings
+    $("rpf-transps").innerHTML = contaPor(L, trRep).map(([k, rs]) => { const t = rs.filter((r) => !abertoRep(r)).map((r) => Number(r.tempo_resolucao)).filter(Number.isFinite);
+      return `<tr data-f="rep-transp" data-v="${esc(k)}"><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td>${num(rs.filter(abertoRep).length)}<td class="num">${t.length ? dia1(mediana(t)) : "–"}</td></tr>`; }).join("");
+    $("rpf-motivos").innerHTML = contaPor(L, motRep).map(([k, rs]) => `<tr data-f="rep-motivo" data-v="${esc(k)}"><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td>${num(rs.filter(abertoRep).length)}</tr>`).join("");
+    $("rpf-filial").innerHTML = contaPor(L, filRep).map(([k, rs]) => `<tr data-f="rep-filial" data-v="${esc(k)}"><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td>${num(rs.filter(abertoRep).length)}</tr>`).join("");
+    // matriz transportadora × motivo
+    const trs = contaPor(L, trRep).slice(0, 12), mots = contaPor(L, motRep).slice(0, 6).map((x) => x[0]);
+    const mxm = Math.max(1, ...trs.flatMap(([, rs]) => mots.map((m) => rs.filter((r) => motRep(r) === m).length)));
+    $("rpf-matriz-cab").innerHTML = `<tr><th>Transportadora</th>${mots.map((m) => `<th class="num">${esc(m)}</th>`).join("")}<th class="num">Total</th></tr>`;
+    $("rpf-matriz").innerHTML = trs.map(([t, rs]) => `<tr><td><a href="#" class="rp-ir" data-f="rep-transp" data-v="${esc(t)}">${esc(t)}</a></td>${mots.map((m) => { const n = rs.filter((r) => motRep(r) === m).length;
+      return `<td class="num rp-calor" style="--a:${n ? (0.12 + 0.75 * n / mxm).toFixed(2) : 0}">${n ? fmt(n) : "·"}</td>`; }).join("")}<td class="num tot">${fmt(rs.length)}</td></tr>`).join("");
+    // tempos da nova NF
+    const dd = (a, b) => (a && b ? diasEntre(String(a).slice(0, 10), String(b).slice(0, 10)) : null);
+    const T = [["Abertura → emissão da nova NF", (r) => dd(r.criado_em, r._d && r._d.data_emissao_nf)], ["Emissão → saída da nova NF", (r) => r._d && dd(r._d.data_emissao_nf, r._d.data_saida_nf)], ["Abertura → saída da nova NF", (r) => dd(r.criado_em, r._d && r._d.data_saida_nf)]];
+    $("rpf-tempos").innerHTML = T.map(([rot, f]) => { const v = comDet.map(f).filter((n) => n != null), ok = v.filter((n) => n >= 0), ruim = v.length - ok.length;
+      return `<tr><td>${rot}</td>${num(ok.length)}<td class="num">${ok.length ? dia1(ok.reduce((a, b) => a + b, 0) / ok.length) : "–"}</td><td class="num">${ok.length ? dia1(mediana(ok)) : "–"}</td>${num(ruim)}</tr>`; }).join("");
+    $("rpf-promob").innerHTML = contaPor(comDet.filter((r) => r._promob), (r) => r._promob).map(([k, rs]) => `<tr><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td>${num(rs.filter((r) => r._d.nfs_novas).length)}${num(rs.filter((r) => r._d.data_saida_nf).length)}</tr>`).join("")
+      || `<tr><td colspan="4" class="s">Nenhum ticket desse filtro com transportadora Promob no detalhamento.</td></tr>`;
+    // pendências
+    const pend = (chave, f) => contaPor(ab, chave).map(([k, rs]) => `<tr data-f="${f}" data-v="${esc(k)}"><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td>${num(rs.filter((r) => diasAberto(r) > 30).length)}${num(rs.filter(semAtualiz).length)}</tr>`).join("");
+    $("rpf-pend-tr").innerHTML = pend(trRep, "rep-transp"); $("rpf-pend-resp").innerHTML = pend(respRep, "rep-resp");
+    $("rpf-antigos").innerHTML = ab.slice().sort((a, b) => diasAberto(b) - diasAberto(a)).slice(0, 10).map((r) => `<tr><td>${linkTicket(r.ticket)}</td><td>${esc(trRep(r))}</td><td>${esc((r._d && r._d.fila_atual) || "–")}</td><td class="num tot">${fmt(diasAberto(r))}</td></tr>`).join("");
+  }
+
+  function linhaDet(r) {
+    const d = r._d || {}, ab = abertoRep(r);
+    const nova = d.nfs_novas ? esc(d.nfs_novas) : d.fila_atual ? `<span class="s">Sem NF ainda: está na fila ${esc(d.fila_atual)}</span>` : `<span class="s">${r._d ? "Sem NF" : "não está no detalhamento"}</span>`;
+    return `<tr><td>${linkTicket(r.ticket)}</td><td>${esc(r.nf || "")}</td><td>${nova}</td><td>${esc(r.pedido || "")}</td><td>${ROT_FLUXO[r._t]}</td><td>${esc(d.tipo_reposicao || "")}</td>
+      <td>${esc(r.transportadora || "")}</td><td>${esc(r._promob || "")}</td><td>${esc(r.motivo || "")}</td><td>${esc(r.filial || "")}</td><td>${esc(r.responsavel || "")}</td>
+      <td>${br(r.criado_em)}</td><td>${br(d.data_emissao_nf)}</td><td>${br(d.data_saida_nf)}</td><td>${esc(r.status || "")}</td><td class="num">${ab ? fmt(diasAberto(r)) : ""}</td><td>${br(r.finalizado_em)}</td>
+      <td class="num">${r.valor_pedido != null ? Number(r.valor_pedido).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""}</td></tr>`;
+  }
+  function detFiltradas() {
+    const q = norm($("rpd-busca").value).split(/[\s,;]+/).filter(Boolean);
+    return !q.length ? repFiltradas : repFiltradas.filter((r) => q.some((b) => [r.ticket, r.nf, r.pedido, r._d && r._d.nfs_novas].some((v) => norm(v).includes(b))));
+  }
+  function desenharRepDet() {
+    const L = detFiltradas().slice().sort((a, b) => String(b.criado_em || "").localeCompare(String(a.criado_em || ""))), POR = 100, pags = Math.max(1, Math.ceil(L.length / POR));
+    rpdPag = Math.min(rpdPag, pags);
+    $("rpd-titulo").textContent = `${fmt(L.length)} tickets`;
+    $("rpd-linhas").innerHTML = L.slice((rpdPag - 1) * POR, rpdPag * POR).map(linhaDet).join("") || `<tr><td colspan="18" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
+    $("rpd-pag").innerHTML = L.length > POR ? `<button class="btn" data-p="-1" ${rpdPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rpdPag} de ${pags}</span><button class="btn" data-p="1" ${rpdPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
+  }
+
+  // clique num mês, transportadora, motivo, filial ou responsável: filtra e abre os tickets
+  $("pagina-reposicao").addEventListener("click", (e) => {
+    const a = e.target.closest("[data-f]"); if (!a || !a.closest("#rp-geral, #rp-fluxo")) return;
+    e.preventDefault();
+    if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
+    $(a.dataset.f).value = a.dataset.v; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" });
+  });
+  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
+  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
+  const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp"];
+  FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
+  $("rep-limpar").addEventListener("click", () => { FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });
+  let esperaRpd; $("rpd-busca").addEventListener("input", () => { clearTimeout(esperaRpd); esperaRpd = setTimeout(() => { rpdPag = 1; desenharRepDet(); }, 250); });
+  $("rpd-pag").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; rpdPag += Number(b.dataset.p); desenharRepDet(); });
   $("rep-exportar").addEventListener("click", () => {
-    if (!repFiltradas.length) return toast("Nada para exportar nesse filtro.", true);
-    const ord = repFiltradas.slice().sort((a, b) => String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
-    const linhas = [["Ticket", "Criado em", "Mês", "Pré/Pós", "Transportadora", "Motivo", "Tipo", "Fila", "Status", "Nota fiscal", "Criado por", "Via"]]
-      .concat(ord.map((r) => [r.ticket, r.criado_em ? br(r.criado_em) : "", rotMes(mesRep(r)), r._t === "pre" ? "Pré entrega" : "Pós entrega", r.transportadora || "", r.motivo || "", r.tipo || "", r.fila || "", r.status || "", r.nf || "", r.criado_por || "", r.via || ""]));
-    const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 10 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 34 }, { wch: 28 }, { wch: 22 }, { wch: 30 }, { wch: 22 }, { wch: 14 }, { wch: 22 }, { wch: 10 }];
-    const pm = new Map(); ord.forEach((r) => { const k = mesRep(r), x = pm.get(k) || { pre: 0, pos: 0 }; x[r._t]++; pm.set(k, x); });
-    const ws2 = XLSX.utils.aoa_to_sheet([["Mês", "Pré entrega", "Pós entrega", "Total"]].concat([...pm.keys()].sort().map((k) => [rotMes(k), pm.get(k).pre, pm.get(k).pos, pm.get(k).pre + pm.get(k).pos])));
-    ws2["!cols"] = [{ wch: 12 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
-    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Reposições"); XLSX.utils.book_append_sheet(wb, ws2, "Por mês");
-    XLSX.writeFile(wb, `reposicoes_${repTipo || "todas"}_${hojeISO()}.xlsx`);
+    const L = repAba === "det" ? detFiltradas() : repFiltradas;
+    if (!L.length) return toast("Nada para exportar nesse filtro.", true);
+    const ord = L.slice().sort((a, b) => String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
+    const cab = ["Ticket", "NF original", "Nova NF", "Fila atual (detalhamento)", "Pedido", "Pré/pós", "Tipo de reposição", "Transportadora da entrega original (com redespacho)", "Transportadora Final (Q)", "Transportadora Redespacho (R)",
+      "Transportadora da reposição (Promob)", "Transp. nota reposição (Promob) original", "Transp. redespacho nota reposição (Promob)", "Transportador definido para envio", "Motivo", "Filial", "Responsável", "Criado em", "Mês",
+      "Emissão nova NF", "Saída nova NF", "Status", "Dias em aberto", "Sem atualização > 2 dias", "Finalizado em", "Tempo de resolução (dias)", "Valor do pedido", "No detalhamento"];
+    const linhas = [cab].concat(ord.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", d.nfs_novas || "", d.fila_atual || "", r.pedido || "", ROT_FLUXO[r._t], d.tipo_reposicao || "", r.transportadora || "", r.transp_final || "", r.transp_redesp || "",
+      r._promob || "", d.transp_promob || "", d.transp_redesp_promob || "", d.transp_definida || "", r.motivo || "", r.filial || "", r.responsavel || "", br(r.criado_em), rotMes(mesRep(r)),
+      br(d.data_emissao_nf), br(d.data_saida_nf), r.status || "", abertoRep(r) ? diasAberto(r) : "", semAtualiz(r) ? "Sim" : "", br(r.finalizado_em), r.tempo_resolucao != null ? Math.round(r.tempo_resolucao * 10) / 10 : "",
+      r.valor_pedido != null ? Number(r.valor_pedido) : "", r._d ? "Sim" : "Não"]; }));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = cab.map((c) => ({ wch: Math.min(34, Math.max(10, c.length)) }));
+    const ev = evolucaoMeses(ord);
+    const ws2 = XLSX.utils.aoa_to_sheet([["Mês", "Pré-entrega", "Pós-entrega", "Total", "Ainda abertos"]].concat(ev.map((x) => [rotMes(x.mes), x.pre, x.pos, x.pre + x.pos, x.ab])));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Tickets"); XLSX.utils.book_append_sheet(wb, ws2, "Por mês");
+    XLSX.writeFile(wb, `reposicoes_${repAba}_${hojeISO()}.xlsx`);
   });
   $("arquivo-rep").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = "";
@@ -3090,10 +3208,13 @@
       if (iCab < 0) throw new Error('Não achei as colunas "Ticket" e "Tipo" na aba Export.');
       const cab = rows[iCab].map(norm), col = (n) => cab.indexOf(n);
       const c = { ticket: col("TICKET"), via: col("VIA"), data: col("DATA DE CRIACAO"), por: col("TICKET CRIADO POR"), fila: col("FILA"), tipo: col("TIPO"), motivo: col("MOTIVO"),
-        status: col("STATUS"), redesp: col("TRANSPORTADORA REDESPACHO"), final: col("TRANSPORTADORA FINAL"), nf: col("NOTA FISCAL") };
+        status: col("STATUS"), redesp: col("TRANSPORTADORA REDESPACHO"), final: col("TRANSPORTADORA FINAL"), nf: col("NOTA FISCAL"), filial: col("CENTRAL DE DISTRIBUICAO"),
+        resp: col("RESPONSAVEL"), atual: col("DATA DA ULTIMA ATUALIZACAO"), fim: col("DATA DE FINALIZACAO"), tres: col("TEMPO DE RESOLUCAO DO TICKET (DIA)"),
+        estag: cab.findIndex((x) => x.startsWith("FLAG - TICKET SEM ATUALIZACAO")), pedido: col("HUB - NUMERO DO MARKETPLACE"), valor: col("HUB - VALOR TOTAL") };
       if (c.data < 0) throw new Error('Não achei a coluna "Data de Criação".');
       if (c.final < 0) throw new Error('Não achei a coluna "Transportadora Final".');
       const txt = (r, i) => (i >= 0 && r[i] != null && String(r[i]).trim() !== "" ? String(r[i]).trim() : null);
+      const numero = (r, i) => { const v = i >= 0 ? r[i] : null; const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", ".")); return Number.isFinite(n) ? n : null; };
       const porTk = new Map();
       rows.slice(iCab + 1).forEach((r) => {
         if (!r || txt(r, c.ticket) == null || LINHA_RODAPE.test(txt(r, c.ticket))) return;
@@ -3101,21 +3222,70 @@
         const tipo = txt(r, c.tipo);
         if (!tipoRep({ tipo })) return;
         porTk.set(txt(r, c.ticket), { ticket: txt(r, c.ticket), criado_em: dataCelula(r[c.data], true), criado_por: txt(r, c.por), via: txt(r, c.via),
-          fila: txt(r, c.fila), tipo, motivo: txt(r, c.motivo), status: txt(r, c.status), transportadora: txt(r, c.redesp) || txt(r, c.final), nf: txt(r, c.nf) });
+          fila: txt(r, c.fila), tipo, motivo: txt(r, c.motivo), status: txt(r, c.status), transportadora: txt(r, c.redesp) || txt(r, c.final), nf: txt(r, c.nf),
+          filial: txt(r, c.filial), responsavel: txt(r, c.resp), atualizado_em: c.atual >= 0 ? dataCelula(r[c.atual], true) : null, finalizado_em: c.fim >= 0 ? dataCelula(r[c.fim], true) : null,
+          tempo_resolucao: numero(r, c.tres), estagnada: txt(r, c.estag), transp_final: txt(r, c.final), transp_redesp: txt(r, c.redesp), pedido: txt(r, c.pedido), valor_pedido: numero(r, c.valor) });
       });
       linhas = [...porTk.values()];
       if (!linhas.length) throw new Error('A planilha não tem tickets com Tipo "Reposição" ou "Reposição Pós Entrega".');
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
     const nPre = linhas.filter((r) => tipoRep(r) === "pre").length;
-    if (!confirm(`${arq.name}\n\n${fmt(total)} tickets na planilha, ${fmt(linhas.length)} de reposição (${fmt(nPre)} pré entrega, ${fmt(linhas.length - nPre)} pós entrega).\nTickets já guardados são atualizados; os novos são acrescentados.\n\nEnviar?`)) return;
+    if (!confirm(`${arq.name}\n\n${fmt(total)} tickets na planilha, ${fmt(linhas.length)} de reposição (${fmt(nPre)} pré-entrega, ${fmt(linhas.length - nPre)} pós-entrega).\nTickets já guardados são atualizados; os novos são acrescentados.\n\nEnviar?`)) return;
     try {
       await enviarLotes("importar_reposicoes_tk", linhas, 2000, (lote, primeiro) => ({ linhas: lote, primeiro, arquivo: arq.name, total }));
-    } catch (err) { carregando(""); toast("Erro ao enviar: " + err.message, true); return; }
+    } catch (err) { carregando(""); toast("Erro ao enviar: " + (/column|filial|function/i.test(err.message) ? "rode a parte 36 do schema.sql no Supabase." : err.message), true); return; }
     await carregarReposicoes();
     carregando("");
     toast(`Reposições atualizadas: ${fmt(reps.length)} tickets.`);
   });
+
+  // histórico do detalhamento (aba Reposições): cada envio é guardado; nada é apagado (parte 36)
+  function lerHistRepo(wb) {
+    const n = wb.SheetNames.find((x) => norm(x) === "REPOSICOES"); if (!n) return { linhas: [], lidas: 0 };
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }); if (!rows.length) return { linhas: [], lidas: 0 };
+    const cab = rows[0].map(norm), c = (x) => cab.indexOf(x);
+    const p2 = (k) => String(k).padStart(2, "0");
+    const dt = (v) => (v instanceof Date ? `${v.getFullYear()}-${p2(v.getMonth() + 1)}-${p2(v.getDate())}T${p2(v.getHours())}:${p2(v.getMinutes())}:${p2(v.getSeconds())}` : dataCelula(v, true));
+    const tx = (r, i) => (i >= 0 && r[i] != null && String(r[i]).trim() !== "" ? String(r[i]).trim() : null);
+    const C = { ticket: c("ID TICKET"), criado: c("DATA CRIACAO TICKET"), any: c("ID ANY"), ped: c("ID DO PEDIDO"), ip: c("ID INTELIPOST"), nota: c("NOTA TICKET"), saidaNota: c("DATA SAIDA NOTA TICKET"),
+      tipo: c("TIPO DE TICKET"), fila: c("FILA ATUAL DO TICKET"), trep: c("TIPO DE REPOSICAO"), tdef: c("TRANSPORTADOR DEFINIDO PARA ENVIO"), pp: c("PEDIDO_PROMOB"), nf: c("NF EMITIDA PROMOB"),
+      chave: c("CHAVE ACESSO NF EMITIDA PROMOB"), emi: c("DATA EMISSAO PROMOB"), sai: c("DATA SAIDA PROMOB"), tp: c("TRANSP. NOTA REPOSICAO (PROMOB)"), trd: c("TRANSP. REDESPACHO NOTA REPOSICAO (PROMOB)") };
+    if (C.ticket < 0) return { linhas: [], lidas: 0 };
+    const m = new Map(); let lidas = 0;
+    rows.slice(1).forEach((r) => {
+      const tk = r && tx(r, C.ticket); if (!tk) return; lidas++;
+      const x = { ticket: tk.replace(/\.0+$/, ""), nf_nova: tx(r, C.nf) ? chaveNF(tx(r, C.nf)) : "", data_criacao_ticket: C.criado >= 0 ? dt(r[C.criado]) : null, id_any: tx(r, C.any), id_pedido: tx(r, C.ped),
+        id_intelipost: tx(r, C.ip), nota_ticket: tx(r, C.nota), data_saida_nota_ticket: C.saidaNota >= 0 ? dt(r[C.saidaNota]) : null, tipo_ticket: tx(r, C.tipo), fila_atual: tx(r, C.fila),
+        tipo_reposicao: tx(r, C.trep), transp_definida: tx(r, C.tdef), pedido_promob: tx(r, C.pp), chave_nf_nova: tx(r, C.chave), data_emissao_nf: C.emi >= 0 ? dt(r[C.emi]) : null,
+        data_saida_nf: C.sai >= 0 ? dt(r[C.sai]) : null, transp_promob: tx(r, C.tp), transp_redesp_promob: tx(r, C.trd) };
+      const k = x.ticket + "|" + x.nf_nova, a = m.get(k);
+      // linha repetida do mesmo ticket e NF no mesmo arquivo: fica uma só, com as datas mais recentes preenchidas
+      if (!a) m.set(k, x); else for (const f of Object.keys(x)) if (x[f] != null && x[f] !== "" && (a[f] == null || a[f] === "" || (/^data_/.test(f) && x[f] > a[f]))) a[f] = x[f];
+    });
+    return { linhas: [...m.values()], lidas };
+  }
+  async function guardarHistRepo(arq, wb) {
+    const { linhas, lidas } = lerHistRepo(wb);
+    if (!linhas.length) return "";
+    const tickets = new Set(linhas.map((x) => x.ticket)).size;
+    const d0 = new Date(arq.lastModified || Date.now()), p2 = (k) => String(k).padStart(2, "0");
+    const sug = `${p2(d0.getDate())}/${p2(d0.getMonth() + 1)}/${d0.getFullYear()} ${p2(d0.getHours())}:${p2(d0.getMinutes())}`;
+    const resp = prompt(`Histórico de reposições: ${fmt(tickets)} tickets (${fmt(lidas)} linhas na aba Reposições).\n\nData e hora em que esse detalhamento foi EXTRAÍDO (é a data do arquivo; corrija se precisar):`, sug);
+    if (resp == null) return " · histórico de reposições não guardado (cancelado)";
+    const mm = resp.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:\s+(\d{1,2}):(\d{2}))?$/);
+    if (!mm) return " · histórico não guardado: data inválida (use dd/mm/aaaa hh:mm)";
+    const ext = new Date(+mm[3], +mm[2] - 1, +mm[1], +(mm[4] || 0), +(mm[5] || 0));
+    const json = JSON.stringify(linhas);
+    let assinatura;
+    if (window.crypto && crypto.subtle) { const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(json)); assinatura = [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, "0")).join(""); }
+    else { let h1 = 0x811c9dc5, h2 = 0x01000193; for (let i = 0; i < json.length; i++) { const c = json.charCodeAt(i); h1 = Math.imul(h1 ^ c, 16777619) >>> 0; h2 = Math.imul(h2 + c, 2654435761) >>> 0; } assinatura = "f" + h1.toString(16) + h2.toString(16) + json.length; }
+    const ab = await sb.rpc("abrir_envio_repo", { p_arquivo: arq.name, p_assinatura: assinatura, p_extraido_em: ext.toISOString(), p_linhas: lidas, p_tickets: tickets });
+    if (ab.error) return /já está no histórico/i.test(ab.error.message) ? " · histórico: esse detalhamento já estava guardado" : /abrir_envio_repo|function/i.test(ab.error.message) ? " · histórico: falta rodar a parte 36 do schema.sql" : " · histórico: " + ab.error.message;
+    try { await enviarLotes("gravar_hist_repo", linhas, 500, (lote) => ({ p_envio: ab.data, linhas: lote }), 0); }
+    catch (err) { return " · histórico: erro ao gravar (" + err.message + ")"; }
+    return ` · histórico de reposições: ${fmt(tickets)} tickets guardados`;
+  }
 
   // ---------------- responsáveis por micro status ----------------
   const PENDENTE = "Pendente de responsável";
