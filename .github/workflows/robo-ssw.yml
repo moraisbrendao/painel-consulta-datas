@@ -28,6 +28,10 @@ on:
         description: "Teste: consultar só os N primeiros pedidos (vazio = todos)"
         type: string
         default: ""
+      auto:
+        description: "1 = rodada automática (pula se já conferiu há menos de 15 min)"
+        type: string
+        default: ""
 
 concurrency:
   group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora' || startsWith(github.event.inputs.modo || '', 'aguardando') || github.event.inputs.modo == 'conferencia-tudo') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
@@ -74,7 +78,7 @@ jobs:
         run: node robo/robo-ssw.mjs
         env:
           MODO: ${{ github.event.inputs.modo || 'lote' }}
-          AUTO: ${{ github.event_name == 'schedule' && '1' || '' }}
+          AUTO: ${{ (github.event_name == 'schedule' || github.event.inputs.auto == '1') && '1' || '' }}
           SSW_LIMITE: ${{ github.event.inputs.limite || '' }}
           TRANSP: ${{ github.event.inputs.transp || '' }}
           SSW_PARALELO: ${{ github.event.inputs.paralelo || '' }}

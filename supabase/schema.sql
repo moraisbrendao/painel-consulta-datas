@@ -1801,3 +1801,23 @@ begin
 end $$;
 revoke all on function public.receber_transiga(jsonb) from public, anon, authenticated;
 grant execute on function public.receber_transiga(jsonb) to service_role;
+-- 38) Conferência SSW em lotes a cada 30 min (06:20 às 23:50, Brasília) chamada pelo próprio Supabase,
+--     porque o agendamento do GitHub atrasa ou não dispara. Usa o token do cofre da parte 13 (github_robo_token).
+create extension if not exists pg_cron;
+create or replace function public._robo_ssw_lote()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"lote","auto":"1"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_ssw_lote() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-ssw-lote';
+select cron.schedule('robo-ssw-lote', '20,50 0-2,9-23 * * *', 'select public._robo_ssw_lote()');
