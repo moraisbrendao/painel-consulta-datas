@@ -7,7 +7,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=119">
+  <link rel="stylesheet" href="styles.css?v=120">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -344,30 +344,44 @@
       <div class="titulo-pagina com-acoes">
         <div>
           <h1>Análise de canais</h1>
-          <p class="sub">Pedidos em aberto por canal: quem segura o atraso, onde, e o que falta tratar. Clique nos cards e nas linhas para cruzar os filtros; clique de novo para tirar.</p>
+          <p class="sub">Escolha o canal e trate primeiro os pedidos dos cards vermelho e laranja. A nova data e a observação são salvas aqui mesmo (valem também no Preventivo).</p>
           <p id="c-info" class="info-base">Carregando…</p>
         </div>
         <div class="acoes-robo">
           <label class="c-canal-rot">Canal: <select id="c-canal"><option value="">Todos os canais</option></select></label>
-          <button id="c-copiar" class="btn primario">⧉ Copiar a análise</button>
-          <button id="c-extrair" class="btn contorno">⤓ Extrair os atrasos</button>
+          <button id="c-copiar" class="btn contorno">⧉ Copiar resumo</button>
         </div>
       </div>
-      <section class="kpis" id="c-cards">
+      <section class="kpis c-kpis-acao" id="c-cards">
+        <button class="kpi vermelho" data-c="agir"><span class="kpi-rot">1 · Atrasados sem nova data</span><b class="kpi-num"></b><small>cobrar a transportadora e informar nova data</small><i>↗</i></button>
+        <button class="kpi laranja" data-c="vence"><span class="kpi-rot">2 · Vencem hoje ou amanhã</span><b class="kpi-num"></b><small>sem nova data: agir antes de atrasar</small><i>↗</i></button>
+        <button class="kpi roxo" data-c="alto" hidden><span class="kpi-rot">3 · Risco alto no canal</span><b class="kpi-num"></b><small>podem virar reclamação (Amazon / Mercado Livre)</small><i>↗</i></button>
+        <button class="kpi" data-c="atrasados"><span class="kpi-rot">Todos os atrasados</span><b class="kpi-num"></b><small id="c-pct-txt">em aberto, vencidos</small><i>↗</i></button>
         <button class="kpi" data-c="abertos"><span class="kpi-rot">Em aberto</span><b class="kpi-num"></b><small>no canal escolhido</small><i>↗</i></button>
-        <button class="kpi vermelho" data-c="atrasados"><span class="kpi-rot">Atrasados</span><b class="kpi-num"></b><small>em aberto, vencidos</small><i>↗</i></button>
-        <div class="kpi kpi-fixo" id="c-pct"><span class="kpi-rot">% de atraso</span><b class="kpi-num"></b><small>atrasados ÷ em aberto</small></div>
-        <button class="kpi roxo" data-c="repo"><span class="kpi-rot">Com reposição</span><b class="kpi-num"></b><small>atrasados com reposição em andamento</small><i>↗</i></button>
-        <button class="kpi laranja" data-c="ocorr"><span class="kpi-rot">Com ocorrência</span><b class="kpi-num"></b><small>atrasados com ocorrência aberta</small><i>↗</i></button>
-        <button class="kpi vermelho" data-c="semnova"><span class="kpi-rot">Sem nova data</span><b class="kpi-num"></b><small>atrasados sem nova data (ou já vencida)</small><i>↗</i></button>
       </section>
       <div id="c-sel" class="g-cruz-sel" hidden></div>
 
+      <section class="cartao" id="c-lista-cartao">
+        <div class="cartao-topo">
+          <div><h2 id="c-lista-titulo">Pedidos</h2><p class="sub">Os que mais precisam de ação aparecem primeiro. Ao informar a nova data, o pedido sai da lista "sem nova data".</p></div>
+          <div class="acoes-robo"><button id="c-extrair" class="btn contorno">⤓ Extrair os atrasos</button><button id="c-exportar" class="btn contorno">Baixar Excel</button></div>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos c-tabela-acao">
+            <thead><tr><th>Pedido</th><th>Transportadora</th><th>UF</th><th>Prometido</th><th class="num">Atraso (d)</th><th>Atenção</th><th>Nova data</th><th>Observação</th></tr></thead>
+            <tbody id="c-linhas"></tbody>
+          </table>
+          <p id="c-vazio" class="vazio" hidden>Nenhum pedido aqui. 🎉</p>
+        </div>
+        <div id="c-paginacao" class="paginacao"></div>
+      </section>
+
+      <details class="cartao c-mais" id="c-mais">
+        <summary><b>Ver análise completa</b> <span class="sub">canais, transportadoras, estados, faixas de atraso e metodologia Amazon / Mercado Livre</span></summary>
       <section class="cartao" id="c-canais-cartao">
         <div class="cartao-topo"><div><h2>Canais</h2><p class="sub">Clique num canal para analisar só ele.</p></div></div>
         <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Canal</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">% de atraso</th><th class="num">% dos atrasos</th><th class="num">Sem nova data</th><th class="num">Performance</th></tr></thead><tbody id="c-canais"></tbody></table></div>
       </section>
-
       <div class="c-duas">
         <section class="cartao"><h2 class="c-tit">🚚 Transportadoras que seguram o canal</h2>
           <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz c-lista-rank"><thead><tr><th>Transportadora</th><th class="num">Atrasados</th><th class="num">% dos atrasos</th><th class="num">% da carteira</th><th class="num">Em aberto</th></tr></thead><tbody id="c-transp"></tbody></table></div></section>
@@ -406,20 +420,7 @@
         </details>
       </section>
 
-      <section class="cartao" id="c-lista-cartao">
-        <div class="cartao-topo">
-          <div><h2 id="c-lista-titulo">Pedidos</h2><p class="sub">A lista segue os cards e as linhas clicadas.</p></div>
-          <button id="c-exportar" class="btn contorno">Baixar Excel</button>
-        </div>
-        <div class="tabela-wrap">
-          <table class="tabela-pedidos">
-            <thead><tr><th>Pedido</th><th>NF</th><th>Canal</th><th>Transportadora</th><th>UF</th><th>Status</th><th>Prometido</th><th class="num">Atraso (d)</th><th>Nova data</th><th>Observação</th><th>Marcas</th><th>Risco</th></tr></thead>
-            <tbody id="c-linhas"></tbody>
-          </table>
-          <p id="c-vazio" class="vazio" hidden>Nenhum pedido.</p>
-        </div>
-        <div id="c-paginacao" class="paginacao"></div>
-      </section>
+      </details>
     </main>
 
     <main class="conteudo" id="pagina-uf" hidden>
@@ -1234,12 +1235,12 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=119"></script>
-  <script src="mapa-brasil.js?v=119"></script>
-  <script src="troca-notas.js?v=119"></script>
-  <script src="app.js?v=119"></script>
-  <script src="ordenar.js?v=119"></script>
-  <script src="menu.js?v=119"></script>
-  <script src="documentos.js?v=119"></script>
+  <script src="config.js?v=120"></script>
+  <script src="mapa-brasil.js?v=120"></script>
+  <script src="troca-notas.js?v=120"></script>
+  <script src="app.js?v=120"></script>
+  <script src="ordenar.js?v=120"></script>
+  <script src="menu.js?v=120"></script>
+  <script src="documentos.js?v=120"></script>
 </body>
 </html>

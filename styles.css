@@ -650,3 +650,16 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .dc-digitar .sub { font-weight: 400; color: var(--texto-2); font-size: 12.5px; }
 .dc-digitar-linha { display: flex; gap: 8px; }
 .dc-digitar-linha input { flex: 1; max-width: 520px; font: inherit; padding: 8px 12px; border: 1px solid var(--borda); border-radius: 8px; }
+
+/* Análise de canais: ação primeiro */
+@media (min-width: 1001px) { .c-kpis-acao { grid-template-columns: repeat(5, minmax(0, 1fr)); } .c-kpis-acao:has(.kpi[hidden]) { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.c-tabela-acao input[type="date"] { font: inherit; font-size: 12.5px; padding: 4px 6px; border: 1px solid var(--borda); border-radius: 6px; }
+.c-tabela-acao .c-obs input { font: inherit; font-size: 12.5px; width: 100%; min-width: 180px; padding: 5px 8px; border: 1px solid var(--borda); border-radius: 6px; }
+.c-tabela-acao td .chip { margin: 1px 2px 1px 0; }
+.c-mais { padding: 0; }
+.c-mais > summary { cursor: pointer; padding: 16px 20px; list-style: none; }
+.c-mais > summary::-webkit-details-marker { display: none; }
+.c-mais > summary::before { content: "▸ "; color: var(--texto-2); }
+.c-mais[open] > summary::before { content: "▾ "; }
+.c-mais[open] { padding-bottom: 12px; }
+.c-mais > .cartao, .c-mais > .c-duas { margin: 0 16px 16px; }

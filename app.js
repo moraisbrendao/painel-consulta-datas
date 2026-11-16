@@ -1497,7 +1497,7 @@
   // ---------------- Análise de canais (pedido da Brenda 16/11) ----------------
   // Mesma base e filtros da Visão Gerencial. Amazon e Mercado Livre têm a metodologia própria do canal (índice de impactos ≤ 1%)
   // e a previsão de risco da planilha "Recuperação Amazon" (score por atraso, alterações, status crítico, transportadora de risco, rastreio parado).
-  const cSel = { canal: "", card: null, transp: null, uf: null, faixa: null, venc: null, risco: null };
+  const cSel = { canal: "", card: "agir", transp: null, uf: null, faixa: null, venc: null, risco: null };
   let cDetTentou = false, cPagina = 1, cLista = [], cImp = { canal: null, lista: [], info: null }, cImpCarregado = {};
   const C_FAIXAS = [["1 a 2 dias", 1, 2], ["3 a 5 dias", 3, 5], ["6 a 10 dias", 6, 10], ["11 a 20 dias", 11, 20], ["Acima de 20 dias", 21, 99999]];
   const C_PTS_ATR = [["No prazo", -99999, 0, 0], ["1 a 5 dias", 1, 5, 1], ["6 a 10 dias", 6, 10, 2], ["11 a 20 dias", 11, 20, 3], ["21+ dias", 21, 99999, 5]];
@@ -1554,7 +1554,10 @@
     return cSel.canal ? L.filter((r) => (r.canal || "(sem canal)") === cSel.canal) : L;
   }
   const C_CARD = { abertos: (r) => !r._fechado, atrasados: (r) => r._atraso > 0, repo: (r) => r._atraso > 0 && !!(detDe(r) || {}).tem_repo,
-    ocorr: (r) => r._atraso > 0 && !!(detDe(r) || {}).tem_ocorr, semnova: (r) => r._atraso > 0 && semNova(r) };
+    ocorr: (r) => r._atraso > 0 && !!(detDe(r) || {}).tem_ocorr, semnova: (r) => r._atraso > 0 && semNova(r),
+    agir: (r) => r._atraso > 0 && semNova(r), vence: (r) => !r._atraso && r._d !== null && r._d >= 0 && r._d <= 1 && semNova(r),
+    alto: (r) => { const x = cRiscoAtual && cRiscoAtual.score.get(r.pedido); return !!(x && x.nivel === "Alto"); } };
+  let cRiscoAtual = null;
   function cPassa(r, menos, risco) {
     if (r._fechado) return false;
     if (menos !== "card" && cSel.card && !C_CARD[cSel.card](r)) return false;
@@ -1585,12 +1588,13 @@
     let risco = null;
     if (mK) { carregarImpactos(mK); const im = cImpCarregado[mK]; if (im && im !== "carregando") risco = riscoCanal(B, im.lista); }
     if (!mK) cSel.risco = null;
+    cRiscoAtual = risco; if (!risco && cSel.card === "alto") cSel.card = "agir";
+    $("c-cards").querySelector('[data-c="alto"]').hidden = !risco;
     // cards (seguem transportadora / UF / faixa / risco, não o próprio card)
     const base = B.filter((r) => cPassa(r, "card", risco));
     const cont = Object.fromEntries(Object.entries(C_CARD).map(([k, f]) => [k, base.filter(f).length]));
     document.querySelectorAll("#c-cards .kpi[data-c]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.c]); b.classList.toggle("ativa", cSel.card === b.dataset.c); });
-    $("c-pct").querySelector(".kpi-num").textContent = pct(cont.atrasados, cont.abertos);
-    $("c-pct").className = "kpi kpi-fixo " + (cont.abertos && cont.atrasados / cont.abertos > 1 - meta ? "laranja" : "verde");
+    $("c-pct-txt").textContent = `${pct(cont.atrasados, cont.abertos)} do que está em aberto`;
     // transportadoras e estados (atrasados)
     const rank = (d, f, id) => { const A = B.filter((r) => cPassa(r, d, risco)), m = new Map(), at = A.filter((r) => r._atraso).length;
       A.forEach((r) => { const k = f(r), x = m.get(k) || { k, ab: 0, at: 0 }; x.ab++; if (r._atraso) x.at++; m.set(k, x); });
@@ -1633,16 +1637,19 @@
       }
     }
     // seleção
-    const nomes = { card: (v) => ({ abertos: "Em aberto", atrasados: "Atrasados", repo: "Com reposição", ocorr: "Com ocorrência", semnova: "Sem nova data" }[v]), transp: (v) => v, uf: (v) => "UF " + v,
+    const nomes = { card: (v) => ({ abertos: "Em aberto", atrasados: "Atrasados", repo: "Com reposição", ocorr: "Com ocorrência", semnova: "Sem nova data", agir: "Atrasados sem nova data", vence: "Vencem hoje ou amanhã", alto: "Risco alto" }[v]), transp: (v) => v, uf: (v) => "UF " + v,
       faixa: (v) => "Atraso " + C_FAIXAS[v][0], venc: (v) => (v === 8 ? "Vence após D+7" : v === 0 ? "Vence hoje" : "Vence em D+" + v), risco: (v) => (v === "impab" ? "Impactos em aberto" : "Risco " + v) };
     const sel = Object.keys(nomes).filter((k) => cSel[k] !== null);
     $("c-sel").hidden = !sel.length;
     $("c-sel").innerHTML = sel.map((k) => `<span class="chip-sel">${esc(nomes[k](cSel[k]))} <button class="link" data-cx="${k}" title="Tirar">✕</button></span>`).join("") + (sel.length ? ' <button class="link" data-cx="tudo">Limpar seleção</button>' : "");
     // lista
-    cLista = B.filter((r) => cPassa(r, null, risco)).sort((a, b) => (b._atraso - a._atraso) || String(a._prom || "9").localeCompare(String(b._prom || "9")));
+    // ordem de ação: risco do canal (Amazon/ML) primeiro, depois mais dias de atraso, depois quem vence antes
+    const sc = (r) => (risco && risco.score.get(r.pedido) || {}).s || 0;
+    cLista = B.filter((r) => cPassa(r, null, risco)).sort((a, b) => (sc(b) - sc(a)) || (b._atraso - a._atraso) || String(a._prom || "9").localeCompare(String(b._prom || "9")));
     cLista._risco = risco;
     $("c-lista-titulo").textContent = `${cSel.canal || "Todos os canais"} · ${sel.length ? sel.map((k) => nomes[k](cSel[k])).join(" · ") : "Pedidos em aberto"} (${fmt(cLista.length)})`;
-    $("c-info").textContent = `${cSel.canal || "Todos os canais"} · ${fmt(cont.abertos)} em aberto · ${fmt(cont.atrasados)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}`;
+    const idxTxt = mK && !$("c-metodo").hidden && cImpCarregado[mK] && cImpCarregado[mK].lista && cImpCarregado[mK].lista.length ? ` · ${$("c-m-indice-rot").textContent}: <b>${$("c-m-indice").querySelector(".kpi-num").textContent}</b> (meta abaixo de 1%)` : "";
+    $("c-info").innerHTML = `${esc(cSel.canal || "Todos os canais")} · ${fmt(cont.abertos)} em aberto · ${fmt(cont.atrasados)} atrasados (${pct(cont.atrasados, cont.abertos)})${idxTxt} · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}`;
     desenharCLista();
   }
   function desenharCLista() {
@@ -1650,17 +1657,27 @@
     const risco = cLista._risco;
     $("c-linhas").innerHTML = cLista.slice((cPagina - 1) * POR_PAGINA, cPagina * POR_PAGINA).map((r) => {
       const t = trat.get(r.pedido) || {}, d = detDe(r) || {}, x = risco ? risco.score.get(r.pedido) : null;
-      const marcas = [d.tem_repo ? '<span class="chip roxo">reposição</span>' : "", d.tem_ocorr ? '<span class="chip laranja">ocorrência</span>' : "", x && x.imp ? '<span class="chip vermelho">impacto</span>' : ""].join(" ");
-      return `<tr><td><div class="p">${esc(r.pedido)}</div></td><td>${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""}</td><td>${esc(r.canal)}</td><td>${esc(r.transp)}</td><td>${esc(r.uf)}</td>
-        <td><span class="ms">${esc(r.micro)}</span></td><td>${br(r._prom) || "—"}</td><td class="num ${r._atraso ? "ruim-t" : ""}">${r._atraso ? fmt(r._atraso) : "—"}</td>
-        <td>${t.nova_data ? br(t.nova_data) : '<span class="s">—</span>'}</td><td class="c-obs">${esc(t.observacao || "")}</td><td>${marcas}</td>
-        <td>${x ? `<span class="chip ${x.nivel === "Alto" ? "vermelho" : x.nivel === "Médio" ? "ambar" : "cinza"}">${x.nivel} · ${x.s}</span>` : ""}</td></tr>`; }).join("");
+      const at = [x && x.nivel !== "Baixo" ? `<span class="chip ${x.nivel === "Alto" ? "vermelho" : "ambar"}">risco ${x.nivel.toLowerCase()}</span>` : "", x && x.imp ? '<span class="chip vermelho">já reclamou</span>' : "",
+        d.tem_repo ? '<span class="chip roxo">reposição</span>' : "", d.tem_ocorr ? '<span class="chip laranja">ocorrência</span>' : "",
+        !r._atraso && r._d === 0 ? '<span class="chip laranja">vence hoje</span>' : !r._atraso && r._d === 1 ? '<span class="chip ambar">vence amanhã</span>' : "",
+        t.nova_data && t.nova_data < hojeISO() ? '<span class="chip vermelho">nova data vencida</span>' : ""].filter(Boolean).join(" ");
+      return `<tr data-pedido="${esc(r.pedido)}"><td><div class="p">${esc(r.pedido)}</div><div class="s">NF ${esc(r.nf)}${r.serie ? "-" + esc(r.serie) : ""}${cSel.canal ? "" : " · " + esc(r.canal)} · <span class="ms">${esc(r.micro)}</span></div></td>
+        <td>${esc(r.transp)}</td><td>${esc(r.uf)}</td><td>${br(r._prom) || "—"}</td><td class="num ${r._atraso ? "ruim-t" : ""}">${r._atraso ? fmt(r._atraso) : "—"}</td><td>${at}</td>
+        <td><input type="date" data-c-campo="nova_data" value="${esc(t.nova_data || "")}"></td>
+        <td class="c-obs"><input data-c-campo="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s c-quem"></div></td></tr>`; }).join("");
     $("c-vazio").hidden = total > 0;
     $("c-paginacao").innerHTML = total > POR_PAGINA ? `<button class="btn" data-p="-1" ${cPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${cPagina} de ${pags}</span><button class="btn" data-p="1" ${cPagina === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
   const cMudou = () => { cPagina = 1; desenharCanaisPag(); };
+  $("c-linhas").addEventListener("change", async (e) => {
+    const inp = e.target.closest("[data-c-campo]"); if (!inp) return; const tr = inp.closest("tr[data-pedido]");
+    await gravar(tr.dataset.pedido, inp.dataset.cCampo, inp.value, tr.querySelector(".c-quem"));
+    // a contagem dos cards acompanha; a linha fica na tela até mudar de página ou de card (para não sumir enquanto escreve)
+    if (inp.dataset.cCampo === "nova_data") { const B = cBase(), base = B.filter((r) => cPassa(r, "card", cRiscoAtual));
+      document.querySelectorAll("#c-cards .kpi[data-c]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(base.filter(C_CARD[b.dataset.c]).length); }); }
+  });
   $("c-canal").addEventListener("change", () => { cSel.canal = $("c-canal").value; cSel.risco = null; cMudou(); });
-  $("c-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-c]"); if (!b) return; cSel.card = cSel.card === b.dataset.c ? null : b.dataset.c; cMudou(); });
+  $("c-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-c]"); if (!b) return; cSel.card = cSel.card === b.dataset.c && b.dataset.c !== "abertos" ? "abertos" : b.dataset.c; cMudou(); });
   $("c-m-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-r]"); if (!b) return; cSel.risco = cSel.risco === b.dataset.r ? null : b.dataset.r; cMudou(); });
   $("pagina-canais").addEventListener("click", async (e) => {
     const cc = e.target.closest("tr[data-cc]"); if (cc) { cSel.canal = cc.dataset.cc; return cMudou(); }
@@ -1723,10 +1740,10 @@
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhasCExcel(A)), "Atrasos"); XLSX.writeFile(wb, `atrasos_${(cSel.canal || "todos").replace(/\W+/g, "_")}_${hojeISO()}.xlsx`); });
   $("c-copiar").addEventListener("click", async () => {
     const txt = (id) => [...document.querySelectorAll(`#${id} tr`)].slice(0, 5).map((tr) => `  • ${tr.cells[0].textContent.trim()}: ${tr.cells[1].textContent.trim()} atrasados (${tr.cells[3].textContent.trim()})`).join("\n");
-    const k = (c) => document.querySelector(`#c-cards [data-c="${c}"] .kpi-num`).textContent;
+    const B = cBase().filter((r) => !r._fechado), k = (c) => fmt(B.filter(C_CARD[c]).length);
     let t = `Análise de canais · ${cSel.canal || "Todos os canais"} · ${new Date().toLocaleDateString("pt-BR")}\n`
-      + `Em aberto: ${k("abertos")} · Atrasados: ${k("atrasados")} (${$("c-pct").querySelector(".kpi-num").textContent})\n`
-      + `Atrasados com reposição: ${k("repo")} · com ocorrência: ${k("ocorr")} · sem nova data: ${k("semnova")}\n`
+      + `Em aberto: ${k("abertos")} · Atrasados: ${k("atrasados")} (${$("c-pct-txt").textContent})\n`
+      + `Atrasados sem nova data: ${k("agir")} · vencem hoje ou amanhã sem nova data: ${k("vence")} · atrasados com reposição: ${k("repo")} · com ocorrência: ${k("ocorr")}\n`
       + `Transportadoras que mais seguram o canal:\n${txt("c-transp")}\nEstados com mais atraso:\n${txt("c-uf")}`;
     if (!$("c-metodo").hidden) t += `\n${$("c-m-indice-rot").textContent}: ${$("c-m-indice").querySelector(".kpi-num").textContent} (meta abaixo de 1%) · risco alto: ${document.querySelector('#c-m-cards [data-r="Alto"] .kpi-num').textContent} · médio: ${document.querySelector('#c-m-cards [data-r="Médio"] .kpi-num').textContent}`;
     try { await navigator.clipboard.writeText(t); toast("Análise copiada: é só colar no e-mail ou no WhatsApp."); } catch (_) { prompt("Copie o texto:", t); }
