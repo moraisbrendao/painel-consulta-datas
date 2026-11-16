@@ -379,7 +379,7 @@ if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai p
     for (const c of [cs, ...Object.keys(CNPJ_SERIE).filter((x) => x !== cs)]) for (const ch of [chaveDe(l.transportadora), ""]) {
       const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: sem0(num), cnpj: c, chave: ch, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
       const m = lerLote(r.txt), v = m.get(sem0(num)); await new Promise((ok) => setTimeout(ok, 1200));
-      if (v && v.situacao !== "sem cte") { let em = "?"; if (v.det) { const d = await pagina("https://ssw.inf.br" + v.det).catch(() => null); em = d ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "—").slice(0, 40) : "?"; } log(`CNPJ ...${c.slice(-6)} ${ch ? "com senha" : "sem senha"}: emissor=${em} · melhor=${v.situacao}/${v.sigla} · semRaj=${v._semRaj ? v._semRaj.situacao + "/" + v._semRaj.sigla : "—"} · temRaj=${v._temRaj} · pegaLote=${JSON.stringify(pegaLote(m, { n: sem0(num), transportadora: l.transportadora, nf: l.nf }) || {}).replace(/\d{5,}/g, "#")}`); }
+      if (v && v.situacao !== "sem cte") { let em = "?"; if (v.det) { const d = await pagina("https://ssw.inf.br" + v.det).catch(() => null); em = d ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "—").slice(0, 40) : "?"; } log(`CNPJ ...${c.slice(-6)} ${ch ? "com senha" : "sem senha"}: emissor=${em} · melhor=${v.situacao}/${v.sigla} · semRaj=${v._semRaj ? v._semRaj.situacao + "/" + v._semRaj.sigla : "—"} · temRaj=${v._temRaj} · pegaLote=${JSON.stringify(pegaLote(m, { n: sem0(num), transportadora: l.transportadora, nf: l.nf }) || {}, (k, val) => (k === "det" ? undefined : val)).replace(/\d{5,}/g, "#")}`); }
       if (!ch) break; }
   }
 }
@@ -850,7 +850,7 @@ async function conferirLote() {
   const grupos = new Map(), semNf = [];
   for (const l of ssw) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()); const cs = cnpjDaSerie(ser);
     if (!num || !cs) { semNf.push(l); continue; } const c = cheio(l.detalhe && l.detalhe.cnpj_outro) || cs;
-    const ch = chaveDe(l.transportadora), k = c + "|" + ch; (grupos.get(k) || grupos.set(k, []).get(k)).push({ ...l, n: sem0(num), cs, c1: c }); }
+    const ch = l.detalhe && l.detalhe.sem_senha ? "" : chaveDe(l.transportadora), k = c + "|" + ch; (grupos.get(k) || grupos.set(k, []).get(k)).push({ ...l, n: sem0(num), cs, c1: c }); }
   const PAUSA = Number(process.env.SSW_PAUSA || 1200), REPESCA = Number(process.env.SSW_REPESCA || 60), dorme = (ms) => new Promise((ok) => setTimeout(ok, ms));
   let consultas = 0, bloq = 0, retentando = false;
   async function lote(cnpj, chave, nums) {
@@ -867,15 +867,15 @@ async function conferirLote() {
   const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
     const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
     const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
-      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
-    if (r.situacao !== "sem cte") delete det.tentados;
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
+    if (r.situacao !== "sem cte") delete det.tentados; if (!r._semSenha) delete det.sem_senha;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
-  let gravados = false; const mexidos = new Set(); let achou = 0;
+  let gravados = false; const mexidos = new Set(); let achou = 0; const semSenhaAchou = {};
   try {
     for (const [k, itens] of grupos) { const [cnpj, chave] = k.split("|");
       for (let i = 0; i < itens.length; i += 100) { const parte = itens.slice(i, i + 100), m = await lote(cnpj, chave, [...new Set(parte.map((x) => x.n))]);
-        parte.forEach((x) => res.set(x.pedido, { ...(pegaLote(m, x) || { situacao: "sem cte" }), _cnpj: cnpj })); } }
+        parte.forEach((x) => res.set(x.pedido, { ...(pegaLote(m, x) || { situacao: "sem cte" }), _cnpj: cnpj, _semSenha: !chave && !!chaveDe(x.transportadora) })); } }
     log(`SSW: ${ssw.length - semNf.length} NFs em ${consultas} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
     // Dominalog/Tempo Justo/Trans Sua/Transvanio (séries 25, 34, 35): "entregue" só vale se quem emitiu o CT-e é a Dominalog
     // (outras transportadoras nessas notas são milk run / first mile). Confere no detalhe do SSW quem está transportando.
@@ -894,22 +894,26 @@ async function conferirLote() {
     // e tenta primeiro os CNPJ em que essa transportadora mais emite. Se o SSW bloquear, para e fica para a próxima rodada.
     retentando = true; const c0 = consultas;
     const itens = [...grupos.values()].flat().filter((x) => res.get(x.pedido).situacao === "sem cte");
-    itens.forEach((x) => tentados.set(x.pedido, [...new Set([...((x.detalhe && x.detalhe.tentados) || []), x.c1.slice(-6)])]));
-    const proximo = (x) => { const ap = aprendido.get(x.transportadora) || new Map(), ja = tentados.get(x.pedido);
-      return [x.cs, ...[...ap.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]), ...TODOS].find((c) => !ja.includes(c.slice(-6))); };
+    itens.forEach((x) => tentados.set(x.pedido, [...new Set([...((x.detalhe && x.detalhe.tentados) || []), x.c1.slice(-6) + (x.detalhe && x.detalhe.sem_senha && chaveDe(x.transportadora) ? "s" : "")])]));
+    // Com a senha, o SSW só mostra os CT-e daquela transportadora; se outra emitiu (ex.: VM na Intelipost, CT-e da Tempo Justo), só aparece sem senha.
+    const proximo = (x) => { const ap = aprendido.get(x.transportadora) || new Map(), ja = tentados.get(x.pedido), tem = !!chaveDe(x.transportadora);
+      const cs = [x.cs, ...[...ap.entries()].sort((a, b) => b[1] - a[1]).map((e) => e[0]), ...TODOS];
+      const cand = tem ? [x.cs + "|s", ...cs.flatMap((c) => [c, c + "|s"])] : cs;
+      return cand.find((c) => !ja.includes(c.endsWith("|s") ? c.slice(0, -2).slice(-6) + "s" : c.slice(-6))); };
     for (let rodada = 0; consultas - c0 < REPESCA; rodada++) {
       const g = new Map(); let algum = false;
       for (const x of itens) { if (res.get(x.pedido).situacao !== "sem cte") continue; const c = proximo(x);
         if (!c) { if (rodada === 0) { tentados.set(x.pedido, []); mexidos.add(x.pedido); } continue; }   // já tentou todos: recomeça o ciclo na próxima rodada
-        algum = true; const k = c + "|" + chaveDe(x.transportadora); (g.get(k) || g.set(k, []).get(k)).push(x); }
+        algum = true; const ss = c.endsWith("|s"), k = (ss ? c.slice(0, -2) : c) + "|" + (ss ? "" : chaveDe(x.transportadora)); (g.get(k) || g.set(k, []).get(k)).push(x); }
       if (!algum) break;
       for (const [k, xs] of g) { const [c, chave] = k.split("|");
         for (let i = 0; i < xs.length && consultas - c0 < REPESCA; i += 100) { const parte = xs.slice(i, i + 100), m = await lote(c, chave, [...new Set(parte.map((x) => x.n))]);
           parte.forEach((x) => { const r = pegaLote(m, x); mexidos.add(x.pedido);
-            if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c }); conta(x.transportadora, c); achou++; }
-            else tentados.get(x.pedido).push(c.slice(-6)); }); } }
+            const ss = !chave && !!chaveDe(x.transportadora);
+            if (r && r.situacao !== "sem cte") { res.set(x.pedido, { ...r, _cnpj: c, _semSenha: ss }); conta(x.transportadora, c); achou++; if (ss) semSenhaAchou[x.transportadora] = (semSenhaAchou[x.transportadora] || 0) + 1; }
+            else tentados.get(x.pedido).push(c.slice(-6) + (ss ? "s" : "")); }); } }
     }
-    log(`Outros CNPJ: ${achou} NFs achadas em ${consultas - c0} consultas · ${Math.round((Date.now() - t0) / 1000)} s`);
+    log(`Outros CNPJ: ${achou} NFs achadas em ${consultas - c0} consultas · ${Math.round((Date.now() - t0) / 1000)} s · achadas só sem senha (CT-e de outra transportadora): ${JSON.stringify(semSenhaAchou)}`);
   } catch (e) { log("Parei:", e.message, `· outros CNPJ: ${achou} achadas até aqui · gravo o que já conferi.`); }
   if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; await pTransiga; log("Nada gravado do SSW nesta rodada."); return; }
   const final = gravados ? montar(ssw.filter((l) => mexidos.has(l.pedido))) : montar(ssw);
