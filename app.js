@@ -3226,7 +3226,9 @@
     }
     if (l.tem_repo) {
       const ids = String(l.repo_ticket || "").split(",").filter(Boolean);
-      h += `<div class="sac-marca rp" title="${esc(l.repo_fila ? "Fila: " + l.repo_fila : "")}">↻ Reposição${ids.length ? " " + ids.map(linkTicket).join(" ") : ""}${l.repo_nf ? ` <span class="s">NF ${esc(l.repo_nf)}</span>` : ""}</div>`;
+      const rot = ids.length ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(ids[0])}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">↻ Reposição</a>` : "↻ Reposição";
+      const dica = ids.length ? (l.repo_fila ? "Fila: " + l.repo_fila : "") : "Sem número do ticket: suba de novo o detalhamento de tickets";
+      h += `<div class="sac-marca rp" title="${esc(dica)}">${rot}${ids.length ? " " + ids.map(linkTicket).join(" ") : ""}${l.repo_nf ? ` <span class="s">NF ${esc(l.repo_nf)}</span>` : ""}${l.repo_fila ? `<div class="s">${esc(l.repo_fila)}</div>` : ""}</div>`;
     }
     return h;
   }
@@ -3281,7 +3283,7 @@
     const total = sacFiltrados.length, paginas = Math.max(1, Math.ceil(total / POR_PAGINA));
     sacPagina = Math.min(sacPagina, paginas);
     $("sac-linhas").innerHTML = sacFiltrados.slice((sacPagina - 1) * POR_PAGINA, sacPagina * POR_PAGINA).map((l) => `<tr>
-        <td><b>${esc(l.nf || "—")}</b>${marcasSac(l)}</td><td>${esc(l.pedido)}</td><td>${esc(l.canal || "")}</td><td>${esc(l.transportadora || "—")}</td>
+        <td><b>${esc(l.nf || "—")}</b></td><td>${esc(l.pedido)}${marcasSac(l)}</td><td>${esc(l.canal || "")}</td><td>${esc(l.transportadora || "—")}</td>
         <td><span class="ms">${esc(l.micro_status || "—")}</span></td>
         <td>${br(l.prometido) || "—"}<div>${chipData(l.prometido)}</div></td>
         <td>${l.nova_data ? `<b>${br(l.nova_data)}</b><div>${chipData(l.nova_data)}</div>` : `<span class="s">—</span>`}</td>
