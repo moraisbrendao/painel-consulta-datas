@@ -11,6 +11,20 @@ function iso(v: unknown): string | null {   // "01/03/2024 15:21:19" ou "01/03/2
   return `${m[3]}-${m[2]}-${m[1]}T${m[4] ?? "00"}:${m[5] ?? "00"}:${m[6] ?? "00"}`;
 }
 
+// previsão de entrega: procura em qualquer nível do evento um campo com "previs"/"prevista"/"prazo_entrega" que tenha data
+function acharPrevisao(o: unknown, nivel = 0): string | null {
+  if (!o || typeof o !== "object" || nivel > 4) return null;
+  const ents = Object.entries(o as Record<string, unknown>);
+  for (const [k, v] of ents) if (/previs|prevista|prazo_?entrega|data_?entrega_?prev/i.test(k) && (typeof v === "string" || typeof v === "number")) {
+    const d = iso(v) ?? (String(v).match(/^\d{4}-\d{2}-\d{2}/) ? String(v).slice(0, 10) : null); if (d) return d.slice(0, 10); }
+  for (const [, v] of ents) { const d = acharPrevisao(v, nivel + 1); if (d) return d; }
+  return null;
+}
+function chaves(o: unknown, pre = "", nivel = 0): string[] {   // só os NOMES dos campos (para conferir o formato no log), nunca os valores
+  if (!o || typeof o !== "object" || Array.isArray(o) || nivel > 3) return [];
+  return Object.entries(o as Record<string, unknown>).flatMap(([k, v]) => [pre + k, ...chaves(v, pre + k + ".", nivel + 1)]);
+}
+
 function linha(e: Record<string, any>) {
   const nf = e.nota_fiscal ?? e.documento ?? {};
   const oc = e.ocorrencia ?? null;
@@ -23,7 +37,7 @@ function linha(e: Record<string, any>) {
     codigo: String(oc ? oc.codigo ?? "" : e.codigo_status ?? ""),
     descricao,
     data_evento: quando,
-    previsao: (iso(e.data_prevista) ?? "").slice(0, 10) || null,
+    previsao: (iso(e.data_prevista) ?? "").slice(0, 10) || acharPrevisao(e),
     entregue: /^entreg/i.test(descricao) && !/n[aã]o/i.test(descricao),
   };
 }
@@ -46,6 +60,7 @@ Deno.serve(async (req) => {
     });
     if (!r.ok) { console.log("gravar falhou", r.status); return new Response(JSON.stringify({ erro: "não gravou" }), { status: 500, headers: { "Content-Type": "application/json" } }); }
   }
-  console.log("eventos", eventos.length, "gravados", linhas.length);   // só contagens
+  console.log("eventos", eventos.length, "gravados", linhas.length, "com previsão", linhas.filter((l) => l.previsao).length,
+    "campos", [...new Set(eventos.flatMap((e) => chaves(e)))].filter((k) => !/nome|cpf|cnpj|documento\.numero|endereco|logradouro|telefone|email|foto|comprovante|assinatura|motorista/i.test(k)).join(","));   // só contagens e nomes de campos
   return new Response(JSON.stringify({ ok: true, recebidos: eventos.length }), { status: 200, headers: { "Content-Type": "application/json" } });
 });
