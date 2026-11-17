@@ -29,7 +29,7 @@ async function carregarSenhasDB() {
 }
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
-const FORA_SSW = /formato|transiga/i;
+const FORA_SSW = /transiga/i;   // Transiga: rastreio chega por webhook. A Formato tem rastreio próprio (função formato), nunca SSW
 // Trânsito Brasil não usa SSW: consulta no rastreio dela (Senior), pela NF + CNPJ (série 35 → ...1083, outras → ...0192); só vale se a série bater
 const EH_TRANSITO = /tr[aâ]nsito\s*brasil/i;
 async function transito(itens) {
@@ -111,6 +111,57 @@ async function bento(itens) {
   }
   const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
   log("Bento Brasil (site):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
+  return out;
+}
+// Formato (transformato.com.br): área do cliente com login (segredos FORMATO_USUARIO / FORMATO_SENHA); Consulta NF pelo número, 1 por vez com pausa
+const EH_FORMATO = /formato/i;
+const isoFmt = (d) => { const m = String(d || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (!m) return null; const a = m[3].length === 2 ? "20" + m[3] : m[3]; return `${a}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; };
+function lerFormato(txt) {
+  const L = sohTexto(String(txt || ""));
+  if (L.some((x) => /nota fiscal n[ãa]o encontrada/i.test(x))) return { situacao: "sem cte" };
+  const rot = (re) => { const x = L.find((y) => re.test(y)); return x ? isoFmt(x.replace(re, "")) : null; };
+  const emitido = rot(/^.*CT-?E emitido em:?/i), embarque = rot(/^.*Embarcado em:?/i), deposito = rot(/^.*Em dep[óo]sito na unid[^:]*:/i), rota = rot(/^.*Em entrega na unid[^:]*:/i);
+  const prevL = L.find((y) => /Previs[ãa]o[^:]*de Entrega:/i.test(y)), previsao = prevL ? isoFmt(prevL.split(/:/).slice(1).join(":")) : null;
+  if (!emitido && !embarque) return { situacao: "sem cte" };
+  const iE = L.findIndex((y) => /^Entregue\.?$/i.test(y) || /^Entregue em\b/i.test(y));
+  const dEnt = iE >= 0 ? isoFmt(L.slice(iE, iE + 3).join(" ")) : null;
+  const eventos = [[emitido, "CT-e emitido"], [embarque, "Embarcado"], [deposito, "Em depósito na unidade"], [rota, "Saiu para entrega"], [dEnt, "Entregue"]].filter(([d]) => d).map(([d, st]) => ({ data: d.split("-").reverse().join("/"), status: st, unidade: "" }));
+  const detalhe = { fonte: "Formato", previsao, eventos };
+  if (emitido && emitido < new Date(Date.now() - 150 * 86400000).toISOString().slice(0, 10)) return { situacao: "sem cte", detalhe: { fonte: "Formato", antigo: true } };   // CT-e muito antigo: outra nota com o mesmo número
+  if (dEnt) return { situacao: "entregue", data_entrega: dEnt, data_evento: dEnt, ultimo_evento: "ENTREGUE", previsao, detalhe };
+  const ult = rota ? [rota, "SAIU PARA ENTREGA"] : deposito ? [deposito, "EM DEPOSITO NA UNIDADE"] : embarque ? [embarque, "EMBARCADO"] : [emitido, "CT-E EMITIDO"];
+  return { situacao: "nao entregue", data_evento: ult[0], ultimo_evento: ult[1], previsao, detalhe };
+}
+let formatoCk = null, formatoFalhou = false;
+async function formatoLogin() {
+  if (formatoCk || formatoFalhou) return formatoCk;
+  const US = process.env.FORMATO_USUARIO || "", SE = process.env.FORMATO_SENHA || "";
+  if (!US || !SE) { formatoFalhou = true; log("Formato: faltam os segredos FORMATO_USUARIO / FORMATO_SENHA."); return null; }
+  const B = "https://www.transformato.com.br/", junta = (a, novos) => { const m = new Map(String(a || "").split(/;\s*/).filter(Boolean).map((c) => [c.split("=")[0], c])); novos.forEach((c) => m.set(c.split("=")[0], c)); return [...m.values()].join("; "); };
+  const h = await pagina(B).catch(() => ({ cookie: "" }));
+  const r = await fetch(B + "login.asp", { method: "POST", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded", ...(h.cookie ? { Cookie: h.cookie } : {}) },
+    body: new URLSearchParams({ sistema: "T", username: US, password: SE }).toString() }).catch(() => null);
+  const ck = r ? junta(h.cookie, (r.headers.getSetCookie ? r.headers.getSetCookie() : []).map((c) => c.split(";")[0])) : "";
+  // login certo vai para consultaweb.asp; qualquer outra coisa = não tenta de novo nesta rodada (para não travar a senha)
+  if (!r || r.status !== 302 || !/consultaweb/i.test(r.headers.get("location") || "")) { formatoFalhou = true; log(`Formato: o login não entrou (${r ? r.status : "sem resposta"}); não tento de novo nesta rodada.`); return null; }
+  return (formatoCk = ck);
+}
+async function formato(itens) {
+  const out = new Map(); if (!itens.length) return out;
+  const ck = await formatoLogin(); if (!ck) return out;
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
+  for (const l of itens) {
+    const num = String(l.nf || "").split("-")[0].trim().replace(/^0+(?=\d)/, "");
+    if (!num) { out.set(l.pedido, { situacao: "sem nf" }); continue; }
+    try {
+      const r = await pagina("https://www.transformato.com.br/consnota.asp", { method: "POST", headers: { Cookie: formatoCk, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ nota: num, submit: "Listar" }).toString() });
+      if (r.status !== 200 || /name=["']?password/i.test(r.txt)) { if (++erros > 3) { log(`Formato respondeu ${r.status}${/password/i.test(r.txt) ? " (saiu do login)" : ""}; paro a Formato nesta rodada.`); break; } await dorme(10000); continue; }
+      erros = 0; out.set(l.pedido, lerFormato(r.txt));
+    } catch (e) { if (++erros > 3) break; await dorme(10000); continue; }
+    await dorme(1500);
+  }
+  const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
+  log("Formato (site):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
   return out;
 }
 // Jadlog não usa SSW: consulta pela API dela (segredo JADLOG_TOKEN), por NF + série + CNPJ do remetente, 10 por vez
@@ -703,7 +754,7 @@ if (MODO === "real") {
   const abertos = todos.filter((l) => !fechado(l));
   log(`Entregues ou cancelados deixados de fora: ${(todos.length - abertos.length).toLocaleString("pt-BR")}`);
   let fila = abertos.map((l) => { const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim()); return { ...l, num, c: cnpjDaSerie(ser) }; }).filter((l) => l.num && l.c);
-  for (const [EH, fn] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null], [EH_BENTO, bento], [EH_TRANSITO, transito]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
+  for (const [EH, fn] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null], [EH_BENTO, bento], [EH_TRANSITO, transito], [EH_FORMATO, formato]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
     const jad = fila.filter((l) => EH.test(l.transportadora || "")); fila = fila.filter((l) => !EH.test(l.transportadora || ""));
     const m = await fn(jad), linhas = jad.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
       return { pedido: l.pedido, nf: l.nf, previsao: r.previsao || null, situacao: r.situacao === "entregue" ? "entregue" : r.previsao ? "previsao" : r.situacao === "sem cte" ? "sem cte" : "sem previsao" }; });
@@ -820,7 +871,7 @@ async function conferir(minutos) {
   return conferirLista(lista, minutos);
 }
 async function conferirLista(lista, minutos) {
-  for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
+  for (const [EH, fn, nome] of [[EH_JADLOG, process.env.JADLOG_TOKEN ? jadlog : null, "jadlog"], [EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"], [EH_FORMATO, formato, "formato"]]) if (fn) {   // Jadlog (API) e Bento (site): antes do SSW
     const jad = lista.filter((l) => EH.test(l.transportadora || ""));
     // fora do SSW e rápido: confere de novo toda a transportadora que ainda não foi entregue
     for (let de = 0; ; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe&transportadora=ilike.*${nome}*&${nome === "jadlog" ? "or=(situacao.neq.entregue,detalhe.is.null)" : "situacao=neq.entregue"}&order=pedido&limit=1000&offset=${de}`).catch(() => []);
@@ -832,10 +883,10 @@ async function conferirLista(lista, minutos) {
       return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : r.previsao ? { fonte: nome, previsao: r.previsao } : null }; });
     for (let i = 0; i < linhas.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 50) }).catch((e) => log("Não gravei um lote Jadlog:", e.message.slice(0, 120)));
   }
-  { // transportadora fora do SSW (Bento, Formato, Transiga, Trânsito Brasil): desfaz resultados antigos do SSW (eram da first mile)
+  { // Transiga (fora do SSW): desfaz resultados antigos do SSW (eram da first mile); o que veio do webhook da Transiga fica
     const F = [];
-    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao&situacao=not.in.(fora%20do%20ssw,sem%20nf)&or=(transportadora.ilike.*formato*,transportadora.ilike.*transiga*)&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
-    const fx = F.filter((x) => FORA_SSW.test(x.transportadora || "")).map((x) => ({ pedido: x.pedido, situacao: "fora do ssw", ultimo_evento: null, data_evento: null, data_entrega: null }));
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,transportadora,situacao,detalhe&situacao=not.in.(fora%20do%20ssw,sem%20nf)&transportadora=ilike.*transiga*&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    const fx = F.filter((x) => FORA_SSW.test(x.transportadora || "") && !(x.detalhe && x.detalhe.fonte === "Transiga")).map((x) => ({ pedido: x.pedido, situacao: "fora do ssw", ultimo_evento: null, data_evento: null, data_entrega: null }));
     for (let i = 0; i < fx.length; i += 50) await chamar("rpc/gravar_conferencia", "POST", { linhas: fx.slice(i, i + 50) }).catch(() => {});
     if (fx.length) log(`Conferência SSW: ${fx.length.toLocaleString("pt-BR")} de transportadora fora do SSW corrigidos.`);
     const tira = new Set(fx.map((x) => x.pedido)); for (let i = lista.length - 1; i >= 0; i--) if (tira.has(lista[i].pedido)) lista.splice(i, 1);
@@ -981,8 +1032,16 @@ async function conferirLote() {
         detalhe: { ...(l.detalhe || {}), fonte: "Transiga", previsao: x.previsao || null } }; });
     for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Transiga:", e.message.slice(0, 120)));
     log(`Transiga (webhook): ${linhas.length} de ${tg.length} com rastreio · ${R.size} NFs recebidas até agora`); })().catch((e) => log("Transiga parou:", String(e.message).slice(0, 80)));
+  // Formato: site próprio com login; confere de novo quem não foi consultado na Formato nas últimas 4 h
+  const pFormato = (async () => { const F = [];
+    for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*formato*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    const fm = F.filter((x) => !(x.detalhe && x.detalhe.fonte === "Formato") || !x.consultado_em || Date.now() - Date.parse(x.consultado_em) > 4 * 3600000);
+    if (!fm.length) return; const m = await formato(fm);
+    const linhas = fm.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido); return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : { fonte: "Formato" } }; });
+    for (let i = 0; i < linhas.length; i += 100) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 100) }).catch((e) => log("Não gravei um lote Formato:", e.message.slice(0, 120)));
+    log(`Formato (site): ${linhas.length} de ${fm.length} conferidos · ${Math.round((Date.now() - t0) / 1000)} s`); })().catch((e) => log("Formato parou:", String(e.message).slice(0, 80)));
   // SSW: tudo que não é Jadlog, Bento, Trânsito Brasil (sistemas próprios) nem fora do SSW
-  const ssw = lista.filter((l) => !EH_JADLOG.test(l.transportadora || "") && !EH_BENTO.test(l.transportadora || "") && !(EH_TRANSITO.test(l.transportadora || "") && !(l.detalhe && l.detalhe.emissor)) && !FORA_SSW.test(l.transportadora || ""));
+  const ssw = lista.filter((l) => !EH_JADLOG.test(l.transportadora || "") && !EH_BENTO.test(l.transportadora || "") && !EH_FORMATO.test(l.transportadora || "") && !(EH_TRANSITO.test(l.transportadora || "") && !(l.detalhe && l.detalhe.emissor)) && !FORA_SSW.test(l.transportadora || ""));
   // CNPJ: o da série, ou o outro CNPJ em que essa NF já foi achada antes (detalhe.cnpj_outro)
   const TODOS = Object.keys(CNPJ_SERIE), cheio = (suf) => (suf ? TODOS.find((c) => c.endsWith(suf)) : null);
   const aprendido = new Map();   // transportadora → CNPJ → vezes que a NF foi achada nele (fora o da série)
@@ -1056,11 +1115,11 @@ async function conferirLote() {
     }
     log(`Outros CNPJ: ${achou} NFs achadas em ${consultas - c0} consultas · ${Math.round((Date.now() - t0) / 1000)} s · achadas só sem senha (CT-e de outra transportadora): ${JSON.stringify(semSenhaAchou)}`);
   } catch (e) { log("Parei:", e.message, `· outros CNPJ: ${achou} achadas até aqui · gravo o que já conferi.`); }
-  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; await pTransiga; log("Nada gravado do SSW nesta rodada."); return; }
+  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; await pTransiga; await pFormato; log("Nada gravado do SSW nesta rodada."); return; }
   const final = gravados ? montar(ssw.filter((l) => mexidos.has(l.pedido))) : montar(ssw);
   await gravar(final.concat(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
   res.forEach((r) => (cont[r.situacao] = (cont[r.situacao] || 0) + 1));
-  await pJad; await pTransiga;
+  await pJad; await pTransiga; await pFormato;
   log("Conferência em lote:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), `· sem NF/série ${semNf.length} · ${Math.round((Date.now() - t0) / 1000)} s no total`);
 }
 if (MODO === "lote") {
@@ -1105,5 +1164,5 @@ if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no
 }
 if (MODO === "aguardando" || MODO === "aguardando-teste") {   // aba Alterar pedidos → Fila Aguardando entrega (robo/aguardando.mjs)
   await entrarSupabase();
-  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
+  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
 }

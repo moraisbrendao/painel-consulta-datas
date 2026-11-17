@@ -11,7 +11,7 @@ import { entrarMulti360, lerChatTicket, executarAcao } from "./multi360.mjs";
 const INSUCESSO = [[/AUSENTE/, "DESTINATÁRIO AUSENTE"], [/MUDOU/, "DESTINATÁRIO MUDOU-SE"], [/RECUS/, "CARGA RECUSADA PELO DESTINATARIO"],
   [/FECHAD/, "ESTABELECIMENTO FECHADO"], [/(ENDERE[CÇ]O|LOCAL).*(N[AÃ]O\s*(LOCALIZAD|ENCONTRAD)|INSUFICIENTE|INCORRET|INEXISTENTE|ERRAD)|N[AÃ]O\s*LOCALIZAD/, "ENDEREÇO NÃO LOCALIZADO"]];
 const insucessoDe = (ev) => { const t = String(ev || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase(); const a = INSUCESSO.find(([re]) => re.test(t)); return a ? a[1] : null; };
-const FORA = /transiga|formato/i;   // não usam SSW (regra da Brenda) e ainda não temos o rastreio delas
+const FORA = /transiga|formato/i;   // não usam SSW (regra da Brenda); a Formato tem rastreio próprio (fonte "formato")
 // a transportadora que emitiu o CT-e no SSW é a do ticket? (compara as palavras do nome, sem as genéricas)
 const GEN = /^(TRANS|TRANSPORTES?|TRANSPORTADORA|LOGISTICA|LOG|LTDA|EIRELI|EXPRESS|EXPRESSO|CARGAS?|FILIAL|MATRIZ|STANDARD|SERVICOS|E|DE|DO|DA|ME|SA|S\/A)$/;
 const palavras = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 3 && !GEN.test(w));
@@ -21,7 +21,7 @@ const BR = (iso) => iso ? iso.split("-").reverse().join("/") : "";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export async function rodar(R) {
-  const { chamar, log, jadlog, bento, transito, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
+  const { chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
   const REAL = MODO === "aguardando" && LIBERADO;
   const LIMITE = Number(process.env.SSW_LIMITE || 0);
   const FILA = /^(AE|AT)$/i.test(process.env.TRANSP || "") ? process.env.TRANSP.toUpperCase() : "";   // teste: só uma fila (AE = Aguardando entrega, AT = Aguardando entrega (AT))
@@ -64,6 +64,16 @@ export async function rodar(R) {
     const fontes = {
       jadlog: { nome: "Jadlog", fn: process.env.JADLOG_TOKEN ? (it) => jadlog(it) : null },
       bento: { nome: "Bento Brasil", fn: (it) => bento(it) },
+      formato: { nome: "Formato", fn: formato ? (it) => formato(it) : null },
+      transiga: { nome: "Transiga", fn: async (it) => { const out = new Map();   // rastreio que a Transiga manda por webhook (tabela rastreio_transiga)
+        const ch = (v) => String(v || "").trim().split("-").map((x) => x.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-"), d = (v) => (v ? String(v).slice(0, 10) : null);
+        for (const l of it) { const k = ch(l.nf); if (!k) continue;
+          const x = (await chamar(`rastreio_transiga?select=nf,descricao,data_evento,previsao,entregue,data_entrega&nf=eq.${encodeURIComponent(k)}&limit=1`).catch(() => []))[0];
+          if (!x) { out.set(l.pedido, { situacao: "sem cte" }); continue; }
+          const sit = x.entregue ? "entregue" : /arquivo recebido/i.test(x.descricao || "") ? "sem cte" : "nao entregue";
+          out.set(l.pedido, { situacao: sit, ultimo_evento: (x.descricao || "").toUpperCase().slice(0, 60) || null, data_evento: d(x.data_evento), data_entrega: x.entregue ? d(x.data_entrega || x.data_evento) : null, previsao: x.previsao || null,
+            detalhe: { fonte: "Transiga", previsao: x.previsao || null, eventos: [{ data: BR(d(x.data_entrega || x.data_evento)), status: (x.descricao || "").toUpperCase().slice(0, 60), unidade: "" }] } }); }
+        return out; } },
       transito: { nome: "Trânsito Brasil", fn: (it) => transito(it) },
       ssw: { nome: "SSW", fn: async (it) => { const out = new Map();
         for (const l of it) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()), c = cnpjDaSerie(ser);
@@ -85,7 +95,7 @@ export async function rodar(R) {
           await new Promise((ok) => setTimeout(ok, 3000)); }
         return out; } },
     };
-    const primeira = (t) => EH_JADLOG.test(tp(t)) ? "jadlog" : EH_BENTO.test(tp(t)) ? "bento" : EH_TRANSITO.test(tp(t)) ? "transito" : FORA.test(tp(t)) ? null : "ssw";
+    const primeira = (t) => EH_JADLOG.test(tp(t)) ? "jadlog" : EH_BENTO.test(tp(t)) ? "bento" : EH_TRANSITO.test(tp(t)) ? "transito" : EH_FORMATO && EH_FORMATO.test(tp(t)) ? "formato" : /transiga/i.test(tp(t)) ? "transiga" : FORA.test(tp(t)) ? null : "ssw";
     const resultado = new Map(); const falta = new Map();   // ticket -> fontes ainda a tentar
     for (const t of com) { const f = primeira(t); falta.set(t.ticket, [f, ...["ssw", "jadlog", "transito"].filter((x) => x !== f && !(x === "ssw" && FORA.test(tp(t))))].filter(Boolean)); }
     for (let rodada = 0; rodada < 4; rodada++) {

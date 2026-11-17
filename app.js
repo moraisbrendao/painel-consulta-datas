@@ -424,9 +424,10 @@
   let ssw = new Map();
   async function carregarSSW() { try { ssw = new Map((await buscarTudo("previsao_ssw", "pedido")).map((x) => [x.pedido, x])); } catch (_) { ssw = new Map(); } }
   // transportadoras que não usam SSW (regra da Brenda); nas outras, "Informação não disponível" = CT-e ainda não emitido
-  const FORA_SSW = /formato|transiga/i;   // Jadlog, Bento Brasil e Trânsito Brasil: o robô consulta no sistema delas
+  const FORA_SSW = /transiga/i;   // Jadlog, Bento Brasil, Trânsito Brasil e Formato: o robô consulta no sistema delas
   // transportadora fora do SSW: ignora qualquer resultado antigo do SSW (era da transportadora de first mile)
-  const sitSSW = (sit, transp) => FORA_SSW.test(transp || "") ? (sit === "sem nf" || sit === "pendente" ? sit : "fora do ssw") : sit === "fora do ssw" ? "sem cte" : sit;
+  // Transiga: o robô só grava entregue / não entregue / sem CT-e com o que chega do webhook dela (resultados antigos do SSW ele zera)
+  const sitSSW = (sit, transp) => FORA_SSW.test(transp || "") ? (/^(sem nf|pendente|entregue|nao entregue|sem cte)$/.test(sit) ? sit : "fora do ssw") : sit === "fora do ssw" ? "sem cte" : sit;
   function sswClasse(p) {
     const x = ssw.get(p.pedido);
     if (FORA_SSW.test(p.transportadora || "")) return "Transportadora fora do SSW";
@@ -3180,7 +3181,7 @@ ${extra}
       case "entregue": return `<span class="chip verde">Entregue${t.data_entrega ? " " + br(t.data_entrega) : ""}</span>${fonte}`;
       case "nao entregue": return `${t.insucesso ? `<span class="chip vermelho">${esc(t.insucesso)}</span><div class="s">${ev}</div>` : `<span class="chip ambar">Não entregue</span><div>${ev}</div>`}${prev}${fonte}`;
       case "sem cte": return `<span class="chip cinza">Sem CT-e ainda</span><div class="s">não achei a NF em nenhum rastreio</div>`;
-      case "sem rastreio": return `<span class="chip cinza">Sem rastreio automático</span><div class="s">Transiga/Formato: ver no site</div>`;
+      case "sem rastreio": return `<span class="chip cinza">Sem rastreio automático</span><div class="s">Transiga: ver no site</div>`;
       case "sem permissao": return `<span class="chip ambar">Pede senha no SSW</span><div class="s">cadastre em Conferência SSW → Senhas</div>`;
       case "sem nf nova": return `<span class="chip ambar">NF nova não achada</span><div class="s">${t.fila_360 && !/aguardando entrega/i.test(t.fila_360) ? "ticket: " + esc(t.fila_360) : "sem \"NF … emitida\" no chat"}</div>`;
       case "sem nf": return `<span class="chip ambar">Série sem CNPJ</span>`;
@@ -3335,7 +3336,7 @@ ${extra}
       return `NF ${num} copiada. Entre com o CNPJ ${parseInt(ser, 10) === 35 ? "00349443001083" : "00349443000192"} e cole a NF no filtro (confira a série ${ser}).`; }],
     [/jadlog/i, "Jadlog", (num) => { copiar(num); window.open("https://www.jadlog.com.br/jadlog/home", "_blank", "noopener"); return `NF ${num} copiada. No rastreio da Jadlog, escolha Nota Fiscal e cole.`; }],
     [/transiga/i, "Transiga", (num) => { copiar(num); window.open("https://www.track3r.com.br/auth/login", "_blank", "noopener"); return `NF ${num} copiada. Entre na Track3r e cole a NF em Tracking > Nº da Nota Fiscal.`; }],
-    [/formato/i, "Formato", (num) => { copiar(num); return `NF ${num} copiada. Ainda não tenho o link de rastreio da Formato.`; }],
+    [/formato/i, "Formato", (num) => { copiar(num); window.open("https://www.transformato.com.br/", "_blank", "noopener"); return `NF ${num} copiada. Entre com o login da Multi, clique em Consulta NF e cole a NF.`; }],
   ];
   const rastreioDe = (transp) => RASTREIO_PROPRIO.find(([re]) => re.test(transp || ""));
   // janela com o rastreio que o robô trouxe do sistema da transportadora (Jadlog, Bento Brasil, Trânsito Brasil)
@@ -3354,11 +3355,11 @@ ${extra}
       <h3 class="cf-h3">Histórico</h3>
       ${(d.eventos || []).length ? `<div class="tabela-wrap"><table class="tabela-range cf-hist"><thead><tr><th>Data/hora</th><th>Evento</th><th>Unidade</th></tr></thead><tbody>
         ${[...d.eventos].reverse().map((e) => `<tr><td>${dh(e.data)}</td><td>${esc(e.status)}</td><td>${esc(e.unidade || "")}</td></tr>`).join("")}</tbody></table></div>`
-        : `<p class="s">${x.detalhe ? "A transportadora ainda não mostra eventos para essa nota." : "O robô ainda não consultou essa nota na Jadlog."}</p>`}
+        : `<p class="s">${x.detalhe ? "A transportadora ainda não mostra eventos para essa nota." : `O robô ainda não consultou essa nota na ${/formato/i.test(x.transportadora || "") ? "Formato" : "Jadlog"}.`}</p>`}
       <div class="cartao-topo" style="margin-top:10px"><p class="s" style="margin:0">Dados trazidos pelo robô do sistema da transportadora na última conferência.</p>
-        ${/jadlog/i.test(d.fonte || x.transportadora || "") && x.nf ? `<button class="btn mini contorno" id="cf-site-jadlog">Abrir no site da Jadlog ↗</button>` : ""}</div>`;
+        ${/jadlog|formato/i.test(d.fonte || x.transportadora || "") && x.nf ? `<button class="btn mini contorno" id="cf-site-jadlog">Abrir no site da ${/formato/i.test(d.fonte || x.transportadora || "") ? "Formato" : "Jadlog"} ↗</button>` : ""}</div>`;
     const bs = $("cf-site-jadlog");
-    if (bs) bs.addEventListener("click", () => { const msg = rastreioDe("Jadlog")[2](String(x.nf).split("-")[0].trim()); if (msg) toast(msg); });
+    if (bs) bs.addEventListener("click", () => { const msg = rastreioDe(/formato/i.test(d.fonte || x.transportadora || "") ? "Formato" : "Jadlog")[2](String(x.nf).split("-")[0].trim()); if (msg) toast(msg); });
     $("modal").hidden = false; document.body.classList.add("sem-rolagem");
   }
   // senhas de rastreio do SSW cadastradas no painel (parte 23)
@@ -3389,12 +3390,12 @@ ${extra}
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
     let x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));
     // fora da Conferência SSW a lista não está carregada: busca só esse pedido (ou a NF) no que o robô já conferiu
-    if (!x && (pedido || nf) && /jadlog/i.test(transp || "")) {
+    if (!x && (pedido || nf) && /jadlog|formato/i.test(transp || "")) {
       const q = (k, v) => sb.from("conferencia_ssw").select("*").eq(k, v).limit(1).then((r) => (r.data && r.data[0]) || null, () => null);
       x = (pedido && (await q("pedido", pedido))) || (nf && (await q("nf", nf))) || null;
     }
-    // Jadlog: sempre a janela com os dados do robô (pedido da Brenda); o site da Jadlog fica num botão dentro dela
-    if (/jadlog/i.test(transp || "") || (x && /jadlog/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
+    // Jadlog e Formato (site com login): sempre a janela com os dados do robô; o site fica num botão dentro dela
+    if (/jadlog|formato/i.test(transp || "") || (x && /jadlog|formato/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
     const prop = rastreioDe(transp);
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
     const c = cnpjDaSerie(ser);
