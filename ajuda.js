@@ -50,6 +50,13 @@
       "<b>Copiar resumo</b> copia um texto pronto para e-mail ou WhatsApp.",
     ], ""],
 
+    ["drop", "Dropshipping", "Controle só dos pedidos com origem Dropshipping na base: em aberto, atrasados, parados no rastreio, provável extravio, reposição, ocorrência e outros problemas.", "Todo dia, para cobrar a transportadora e o fornecedor do dropshipping.", [
+      "Clique num card (ou numa linha das tabelas Diagnóstico e Por transportadora) para filtrar a lista.",
+      "A coluna <b>Diagnóstico</b> diz o que provavelmente aconteceu: 15 dias ou mais sem movimento no rastreio = provável extravio; 8 a 14 dias = parado.",
+      "Use <b>Ver rastreio</b> para conferir na transportadora; grave a nova data e a observação na própria linha (valem em todas as abas).",
+      "Baixar Excel leva a lista filtrada com diagnóstico, ocorrência, reposição e a nova data.",
+    ], "Reposição e ocorrência vêm do último detalhamento de tickets enviado. O fornecedor aparece depois do próximo envio da base."],
+
     ["preventivo", "Preventivo", "A lista de trabalho da Logística: pedidos em aberto pela data prometida ao cliente, para agir antes de atrasar.", "Todo dia, várias vezes.", [
       "Clique nos cards: <b>Atrasados</b> (mesmo número da Visão Gerencial), <b>Vencem hoje</b>, <b>Vencem amanhã</b>, <b>Vencem em até 5 dias</b>, <b>Parados no rastreio</b>, <b>Data do SSW</b> (pode marcar vários).",
       "Use a tabela <b>por micro status</b> e o <b>Range de vencimento</b> para filtrar (clique no número ou no nome da coluna).",
