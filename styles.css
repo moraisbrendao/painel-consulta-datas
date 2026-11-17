@@ -378,7 +378,7 @@ body:not([data-admin]) .so-admin { display: none !important; }
 .seg button.ativo { background: var(--marinho); color: #fff; }
 .g-resumo p { margin: 0 0 6px; font-size: 13px; }
 .g-resumo .link, .g-links .link { font-size: 13px; text-decoration: underline; padding: 0; font-weight: 700; }
-.link.vermelho { color: var(--vermelho); } .link.laranja { color: #c2410c; } .link.verde { color: var(--verde); }
+.link.vermelho { color: var(--vermelho); } .link.laranja { color: #c2410c; } .link.verde { color: var(--verde); } .link.roxo { color: #7c3aed; }
 .g-links { display: flex; gap: 18px; flex-wrap: wrap; margin: 8px 0; }
 .g-atr h2 { font-size: 15px; }
 .g-svg svg { width: 100%; height: auto; display: block; }

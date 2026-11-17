@@ -1326,11 +1326,15 @@ ${extra}
 
     // de quem é o atraso
     const atr = L.filter(G_CARD.atrasados);
-    const semExp = atr.filter((r) => r._semExp), sairam = atr.filter((r) => !r._semExp && r._prom && r.despacho > r._prom), deFato = atr.filter((r) => !r._semExp && !(r._prom && r.despacho > r._prom));
-    $("g-atr").innerHTML = atr.length ? `<h2>🚚 Dos ${fmt(atr.length)} atrasados, ${fmt(deFato.length)} são de fato da transportadora.</h2>
-      <p class="g-links"><button class="link vermelho" data-atr="fato">${fmt(deFato.length)} para cobrar</button><button class="link laranja" data-atr="sairam">${fmt(sairam.length)} saíram atrasados daqui</button><button class="link" data-atr="semexp">${fmt(semExp.length)} nem foram expedidos</button></p>
-      <p class="s">Pedido que saiu daqui depois da data prometida já nasceu atrasado: levar ele para a reunião com a transportadora é perder a razão.</p>` : "<h2>🚚 Nenhum pedido atrasado nesse filtro.</h2>";
-    gAtr = { fato: deFato, sairam, semexp: semExp };
+    // pedido com ocorrência ou reposição (detalhamento de tickets) não entra na cobrança da transportadora
+    if (!detNF && !gDetTentou) { gDetTentou = true; carregarDetNF().then((m) => { if (m.size && G_PAGINAS.includes(paginaAtual)) montarGerencial(); }); }
+    const ocRep = (r) => { const d = detNF && detNF.get(chaveNF(r.serie ? `${r.nf}-${r.serie}` : r.nf)); return !!(d && (d.tem_ocorr || d.tem_repo)); };
+    const semExp = atr.filter((r) => r._semExp), sairam = atr.filter((r) => !r._semExp && r._prom && r.despacho > r._prom),
+      daTransp = atr.filter((r) => !r._semExp && !(r._prom && r.despacho > r._prom)), comOcRep = daTransp.filter(ocRep), deFato = daTransp.filter((r) => !ocRep(r));
+    $("g-atr").innerHTML = atr.length ? `<h2>🚚 Dos ${fmt(atr.length)} atrasados, ${fmt(deFato.length)} são de fato erro da transportadora.</h2>
+      <p class="g-links"><button class="link vermelho" data-atr="fato">${fmt(deFato.length)} para cobrar</button><button class="link roxo" data-atr="ocrep">${fmt(comOcRep.length)} têm ocorrência ou reposição</button><button class="link laranja" data-atr="sairam">${fmt(sairam.length)} saíram atrasados daqui</button><button class="link" data-atr="semexp">${fmt(semExp.length)} nem foram expedidos</button></p>
+      <p class="s">Pedido que saiu daqui depois da data prometida já nasceu atrasado, e pedido com ocorrência ou reposição aberta no detalhamento de tickets não é só culpa da transportadora: levar eles para a reunião é perder a razão.${detNF ? "" : " (Carregando ocorrências e reposições…)"}</p>` : "<h2>🚚 Nenhum pedido atrasado nesse filtro.</h2>";
+    gAtr = { fato: deFato, ocrep: comOcRep, sairam, semexp: semExp };
 
     desenharProdutividade(L, hoje);
     desenharFaixas(atr);
@@ -1346,7 +1350,7 @@ ${extra}
     if (!gSelecao) { gPagina = Math.min(gPagina, 9999); }
     desenharGLista(false);
   }
-  let gAtr = {}, gFiltradosCache = [];
+  let gAtr = {}, gFiltradosCache = [], gDetTentou = false;
 
   // Atraso por transportadora × UF × cidade × canal (filtro cruzado, como no BI): pedidos em aberto
   const CZ = { transp: (r) => r.transp || "(sem transportadora)", uf: (r) => r.uf || "(sem UF)", cid: (r) => r.cidade || "(sem cidade)", can: (r) => r.canal || "(sem canal)" };
@@ -1547,7 +1551,7 @@ ${extra}
   // cliques
   $("g-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-g]"); if (!b) return; gCard = b.dataset.g; gSelecao = null; gPagina = 1; desenharGLista(true); });
   $("g-atr").addEventListener("click", (e) => { const b = e.target.closest("[data-atr]"); if (!b) return;
-    const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };
+    const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", ocrep: "Atrasados com ocorrência ou reposição (fora da cobrança)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };
     const ids = new Set(gAtr[b.dataset.atr].map((r) => r.pedido)); selecionar(nomes[b.dataset.atr], (L) => L.filter((r) => ids.has(r.pedido))); });
   $("g-prod-resumo").addEventListener("click", (e) => { const b = e.target.closest("[data-prod]"); if (!b) return; const k = b.dataset.prod, hoje = hojeISO();
     sairCheia();
@@ -3664,7 +3668,7 @@ ${extra}
     if (detLinhas.length) {
       try { await enviarLotes("importar_detalhe_nf", detLinhas, 2000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro })); }
       catch (error) { avisoDet = /importar_detalhe_nf|function/i.test(error.message) ? " (ocorrências e reposições não foram: falta rodar a parte 32 do schema.sql)" : " (ocorrências e reposições: " + error.message + ")"; }
-      detNF = null;
+      detNF = null; gDetTentou = false;
     }
     carregando("");
     const avisoHist = wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "";
