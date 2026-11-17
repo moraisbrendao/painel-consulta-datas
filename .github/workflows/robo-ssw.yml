@@ -49,7 +49,7 @@ jobs:
         with:
           node-version: 20
       - name: Navegador (Fila Aguardando entrega e diagnósticos)
-        if: ${{ github.event.inputs.modo == 'diag-transito' || github.event.inputs.modo == 'diag-transiga' || github.event.inputs.modo == 'diag-senior-js' || startsWith(github.event.inputs.modo || '', 'aguardando') }}
+        if: ${{ github.event.inputs.modo == 'diag-transito' || github.event.inputs.modo == 'diag-transiga' || github.event.inputs.modo == 'diag-formato' || github.event.inputs.modo == 'diag-senior-js' || startsWith(github.event.inputs.modo || '', 'aguardando') }}
         run: |
           cd robo
           npm install --no-audit --no-fund
@@ -68,11 +68,19 @@ jobs:
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
           EMAIL_TRANSIGA: ${{ secrets.EMAIL_TRANSIGA }}
           SENHA_TRANSIGA: ${{ secrets.SENHA_TRANSIGA }}
+      - name: Diagnóstico Formato
+        if: ${{ github.event.inputs.modo == 'diag-formato' }}
+        run: node robo/diag-formato.mjs
+        env:
+          ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
+          ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+          FORMATO_USUARIO: ${{ secrets.FORMATO_USUARIO }}
+          FORMATO_SENHA: ${{ secrets.FORMATO_SENHA }}
       - name: Diagnóstico front da Senior
         if: ${{ github.event.inputs.modo == 'diag-senior-js' }}
         run: node robo/diag-senior-js.mjs
       - name: Rodar o robô
-        if: ${{ github.event.inputs.modo != 'diag-transito' && github.event.inputs.modo != 'diag-transiga' && github.event.inputs.modo != 'diag-senior-js' }}
+        if: ${{ github.event.inputs.modo != 'diag-transito' && github.event.inputs.modo != 'diag-transiga' && github.event.inputs.modo != 'diag-formato' && github.event.inputs.modo != 'diag-senior-js' }}
         run: node robo/robo-ssw.mjs
         env:
           MODO: ${{ github.event.inputs.modo || 'lote' }}
