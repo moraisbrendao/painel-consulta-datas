@@ -8,7 +8,7 @@ on:
       modo:
         description: "real = consulta os pedidos em aberto e grava a previsão SSW · diag = só olhar"
         type: choice
-        options: [lote, real, conferencia, conferencia-tudo, aguardando, aguardando-teste, jadlog, transito-cte, transportadora, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-jadobs, diag-serie, diag-serie2, diag-cobranca, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-lote, diag-lote2, diag-lote3, diag-lote4, diag-um, diag-emissor, diag-senior-js]
+        options: [lote, real, conferencia, conferencia-tudo, aguardando, aguardando-teste, jadlog, transito-cte, transportadora, diag, diag-form, diag-nf, diag-nf2, diag-st, diag-link, diag-det, diag-api, diag-ent, diag-senha, diag-ajuda, diag-jadlog, diag-jadobs, diag-serie, diag-serie2, diag-cobranca, parar-tudo, diag-bento, diag-transito, diag-transiga, diag-track3r, diag-form1, diag-lote, diag-lote2, diag-lote3, diag-lote4, diag-um, diag-emissor, diag-senior-js]
         default: lote
       paralelo:
         description: "Consultas ao mesmo tempo (padrão 5)"
@@ -32,7 +32,7 @@ on:
         default: ""
 
 concurrency:
-  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora' || startsWith(github.event.inputs.modo || '', 'aguardando') || github.event.inputs.modo == 'conferencia-tudo') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
+  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora' || startsWith(github.event.inputs.modo || '', 'aguardando') || github.event.inputs.modo == 'conferencia-tudo' || github.event.inputs.modo == 'parar-tudo') && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
   cancel-in-progress: false
 
 permissions:

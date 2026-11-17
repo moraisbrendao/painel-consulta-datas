@@ -329,6 +329,9 @@ if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem n
   log(`hoje ${hoje} · em aberto ${B.length} · regras ${R.length || "fábrica"} · TOTAL atrasados sem nova data ${tot.atr} · vencem hoje/amanhã sem nova data ${tot.vence} · em reposição ${tot.rep} (sem nova data ${tot.repSem})`);
   Object.entries(por).filter(([, x]) => x.atr + x.vence + x.rep).sort((a, b) => (b[1].atr + b[1].vence) - (a[1].atr + a[1].vence)).forEach(([k, x]) => log(`  ${k} · atrasados s/ data ${x.atr} · vencem s/ data ${x.vence} · reposição ${x.rep} (s/ data ${x.repSem})`));
 }
+if (MODO === "parar-tudo") {   // pausa o "Conferir tudo agora" em andamento (pedido da Brenda, 17/11): só marca como terminado
+  await entrarSupabase(); await chamar("rpc/fim_conferencia_tudo", "POST", {}); log("Conferir tudo: pausado.");
+}
 if (MODO === "diag-jadobs") {   // onde estão as "Observações" do rastreio da Jadlog: chaves da API + páginas do site (só estrutura, sem dados)
   await entrarSupabase(); const tok = process.env.JADLOG_TOKEN || "";
   const L = (await chamar("conferencia_ssw?select=nf,detalhe&transportadora=ilike.*jadlog*&situacao=eq.nao%20entregue&limit=200")).filter((x) => x.detalhe && x.detalhe.cte).slice(0, 3);
