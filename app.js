@@ -609,7 +609,7 @@
           <div class="s quem">${quem}</div>
           ${p.comentario_360 ? `<div class="c360" title="Comentário 360">360: ${esc(p.comentario_360)}</div>` : ""}</td>
 ${extra}
-        <td>${/^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Rastreio ↗</a>` : ""}</td>
+        <td>${p.nf ? `<button class="btn mini contorno" data-ssw="${esc(p.nf)}" data-transp="${esc(p.transportadora || "")}" data-pedido="${esc(p.pedido)}" title="Abre o rastreio da transportadora dessa nota agora">${rastreioDe(p.transportadora) ? "Ver na " + esc(rastreioDe(p.transportadora)[1]) : "Ver rastreio"} ↗</button>` : ""}${/^https?:\/\//i.test(p.link_rastreio || "") ? `<div><a class="s" href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Intelipost ↗</a></div>` : ""}</td>
       </tr>`;
   }
   function desenharLista() {
@@ -3396,6 +3396,8 @@ ${extra}
   }
   $("cf-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-cf]"); if (!b) return; cfCard = b.dataset.cf; cfPag = 1; desenharConferencia(); });
   $("cf-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido); });
+  // botão "Ver rastreio" nas listas que usam a linha do Preventivo (Preventivo, Análise de canais, Cobrança do dia)
+  ["linhas", "c-linhas", "rt-linhas"].forEach((id) => $(id).addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) { e.stopPropagation(); abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido); } }));
   $("cf-paginacao").addEventListener("click", (e) => { const b = e.target.closest("[data-cfp]"); if (!b) return; cfPag += Number(b.dataset.cfp); desenharConferencia(); });
   $("cf-busca").addEventListener("input", () => { cfPag = 1; desenharConferencia(); });
   $("cf-transp").addEventListener("change", () => { cfPag = 1; desenharConferencia(); });
