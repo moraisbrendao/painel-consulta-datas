@@ -150,13 +150,43 @@ async function formatoLogin() {   // login pelo navegador (o site só aceita o l
   } catch (e) { formatoFalhou = true; log("Formato: não consegui abrir o navegador para o login:", String(e.message).slice(0, 80)); return null; }
   finally { if (nav) await nav.close().catch(() => {}); }
 }
-async function formato(itens) {
+// Follow-Up das Entregas: 1 consulta traz todas as notas dos últimos 180 dias (nota, CT-e, coleta, previsão, entregue, data, ocorrência, status)
+let formatoRel = null;
+async function formatoRelatorio() {
+  if (formatoRel) return formatoRel;
+  const ck = await formatoLogin(); if (!ck) return null;
+  const hoje = new Date(Date.now() - 3 * 3600000), f = (d) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
+  const r = await pagina("https://www.transformato.com.br/relfollowup.asp", { method: "POST", headers: { Cookie: ck, "Content-Type": "application/x-www-form-urlencoded", Referer: "https://www.transformato.com.br/relfollowup.asp" },
+    body: new URLSearchParams({ dataini: f(new Date(hoje - 180 * 86400000)), datafin: f(hoje), naoent: "", nota: "", tipos: "N", tipodata: "E", agenda: "T", submit: "Listar" }).toString() }).catch(() => null);
+  if (!r || r.status !== 200) { log("Formato: o Follow-Up não respondeu", r ? r.status : ""); return null; }
+  const cel = (h) => sohTexto("<x>" + h + "</x>").join(" ").trim();
+  const m = new Map();
+  for (const tr of r.txt.split(/<tr[\s>]/i).slice(1)) {
+    const c = [...tr.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map((x) => cel(x[1])); if (c.length !== 14) continue;
+    const num = c[0].replace(/\D/g, "").replace(/^0+(?=\d)/, ""); if (!num) continue;
+    const ent = /^SIM/i.test(c[9]), st = c[13], prev = isoFmt(c[8]), coleta = isoFmt(c[7]);
+    const oco = (st.match(/Oco:\s*\d*\s*(.+?)\s+em:\s*(\d{1,2}\/\d{1,2}\/\d{2,4})/i) || []);
+    let res;
+    if (ent) { const de = isoFmt(c[10]) || isoFmt(st); res = { situacao: "entregue", data_entrega: de, data_evento: de, ultimo_evento: "ENTREGUE", previsao: prev }; }
+    else if (/CT-?e Emitido/i.test(st) && !oco[1]) res = { situacao: "nao entregue", data_evento: coleta, ultimo_evento: "CT-E EMITIDO", previsao: prev };
+    else res = { situacao: "nao entregue", data_evento: isoFmt(oco[2]) || coleta, ultimo_evento: (oco[1] || st).toUpperCase().replace(/\s+/g, " ").slice(0, 60) || null, previsao: prev };
+    res.detalhe = { fonte: "Formato", previsao: prev, cte: c[1] || null, eventos: [[coleta, "Coleta"], [res.situacao === "entregue" ? null : res.data_evento, res.ultimo_evento], [res.data_entrega, "Entregue"]].filter(([d, t]) => d && t).map(([d, t]) => ({ data: d.split("-").reverse().join("/"), status: t, unidade: "" })) };
+    const ant = m.get(num); if (!ant || (coleta || "") >= (ant._coleta || "")) m.set(num, { ...res, _coleta: coleta });   // mesma nota 2x: fica a coleta mais nova
+  }
+  log("Formato (Follow-Up):", m.size, "notas no relatório");
+  return (formatoRel = m);
+}
+async function formato(itens, recente) {
   const out = new Map(); if (!itens.length) return out;
-  const ck = await formatoLogin(); if (!ck) return out;
-  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
-  for (const l of itens) {
-    const num = String(l.nf || "").split("-")[0].trim().replace(/^0+(?=\d)/, "");
+  const rel = await formatoRelatorio(); const resto = [];
+  for (const l of itens) { const num = String(l.nf || "").split("-")[0].trim().replace(/^0+(?=\d)/, "");
     if (!num) { out.set(l.pedido, { situacao: "sem nf" }); continue; }
+    const x = rel && rel.get(num); if (x) { const { _coleta, ...r } = x; out.set(l.pedido, r); } else if (!recente || !recente(l)) resto.push(l); }
+  // fora do relatório (sem CT-e ainda ou CT-e antigo): Consulta NF uma a uma, com pausa
+  const ck = resto.length ? await formatoLogin() : null;
+  const dorme = (ms) => new Promise((ok) => setTimeout(ok, ms)); let erros = 0;
+  for (const l of ck ? resto : []) {
+    const num = String(l.nf || "").split("-")[0].trim().replace(/^0+(?=\d)/, "");
     try {
       const r = await pagina("https://www.transformato.com.br/consnota.asp", { method: "POST", headers: { Cookie: formatoCk, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ nota: num, submit: "Listar" }).toString() });
       if (r.status !== 200 || /name=["']?password/i.test(r.txt)) { if (++erros > 3) { log(`Formato respondeu ${r.status}${/password/i.test(r.txt) ? " (saiu do login)" : ""}; paro a Formato nesta rodada.`); break; } await dorme(10000); continue; }
@@ -165,7 +195,7 @@ async function formato(itens) {
     await dorme(1500);
   }
   const cont = {}; out.forEach((v) => (cont[v.situacao] = (cont[v.situacao] || 0) + 1));
-  log("Formato (site):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada");
+  log("Formato (site):", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada", `· ${itens.length - resto.length} pelo Follow-Up, ${resto.length} uma a uma`);
   return out;
 }
 // Jadlog não usa SSW: consulta pela API dela (segredo JADLOG_TOKEN), por NF + série + CNPJ do remetente, 10 por vez
@@ -1043,11 +1073,11 @@ async function conferirLote() {
         detalhe: { ...(l.detalhe || {}), fonte: "Transiga", previsao: x.previsao || null, eventos: x.descricao ? [{ data: String(x.data_entrega || x.data_evento || "").slice(0, 16), status: String(x.descricao).toUpperCase().slice(0, 60), unidade: "" }] : [] } }; });
     for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Transiga:", e.message.slice(0, 120)));
     log(`Transiga (webhook): ${linhas.length} de ${tg.length} com rastreio · ${R.size} NFs recebidas até agora · ${[...R.values()].filter((x) => x.previsao).length} com previsão`); })().catch((e) => log("Transiga parou:", String(e.message).slice(0, 80)));
-  // Formato: site próprio com login; confere de novo quem não foi consultado na Formato nas últimas 4 h
+  // Formato: site próprio com login; Follow-Up das Entregas (lote) + Consulta NF para quem não aparece nele
   const pFormato = (async () => { const F = [];
     for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*formato*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
-    const fm = F.filter((x) => !(x.detalhe && x.detalhe.fonte === "Formato") || !x.consultado_em || Date.now() - Date.parse(x.consultado_em) > 4 * 3600000);
-    if (!fm.length) return; const m = await formato(fm);
+    const fm = F; if (!fm.length) return;   // Follow-Up: todas de uma vez; uma a uma só quem não está no relatório e não foi olhado nas últimas 4 h
+    const m = await formato(fm, (x) => x.detalhe && x.detalhe.fonte === "Formato" && x.consultado_em && Date.now() - Date.parse(x.consultado_em) < 4 * 3600000);
     const linhas = fm.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido); return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : { fonte: "Formato" } }; });
     for (let i = 0; i < linhas.length; i += 100) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 100) }).catch((e) => log("Não gravei um lote Formato:", e.message.slice(0, 120)));
     log(`Formato (site): ${linhas.length} de ${fm.length} conferidos · ${Math.round((Date.now() - t0) / 1000)} s`); })().catch((e) => log("Formato parou:", String(e.message).slice(0, 80)));
