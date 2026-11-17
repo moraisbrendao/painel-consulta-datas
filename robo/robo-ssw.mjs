@@ -396,7 +396,12 @@ if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/con
     const act = new URL((fl.match(/action=["']?([^"'\s>]+)/i) || [])[1] || URL_F, URL_F).href;
     const r = await fetch(act, { method: "POST", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded", ...(ck ? { Cookie: ck } : {}) }, body: b.toString() }).catch((e) => ({ status: e.message, headers: new Headers() }));
     const nc = (r.headers.getSetCookie ? r.headers.getSetCookie() : []).map((c) => c.split(";")[0]);
-    if (nc.length) ck = [ck, ...nc].filter(Boolean).join("; ");
+    const mapa = new Map(ck.split(/;\s*/).filter(Boolean).map((c) => [c.split("=")[0], c]));
+    nc.forEach((c) => mapa.set(c.split("=")[0], c));
+    ck = [...mapa.values()].join("; ");
+    const lt = r.text ? await r.text().catch(() => "") : "";
+    log("login resposta:", lt.length, "bytes · inválid/incorret/erro:", /inv[aá]lid|incorret|erro|negad/i.test(lt) ? "SIM" : "não", "· textos:", sohTexto(lt).map((x) => limpo(x)).filter((x) => x.replace(/[x\s#]/g, "").length > 2).slice(0, 25).join(" | ").slice(0, 800));
+    log("login scripts:", tags(lt, /<script[^>]*>[\s\S]{0,400}?<\/script>|<meta[^>]*refresh[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 300)).join(" || ").slice(0, 1200));
     log("login:", r.status, "· vai para:", (r.headers.get("location") || "").replace(/\d{4,}/g, "#"), "· cookies novos:", nc.length);
   }
   const CK = ck ? { Cookie: ck } : {};
