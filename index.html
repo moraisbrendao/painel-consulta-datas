@@ -2,12 +2,14 @@
 <html lang="pt-BR">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#0d2240">
   <title>E-loggia</title>
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=134">
+  <link rel="stylesheet" href="styles.css?v=135">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -49,10 +51,13 @@
       <button class="menu-item" data-pagina="ajuda"><span class="menu-icone">❔</span>Passo a passo</button>
       <button class="menu-item so-admin" data-pagina="logins"><span class="menu-icone">🔑</span>Logins</button>
     </nav>
+    <div id="menu-fundo" class="menu-fundo" hidden></div>
     <div class="lado">
     <header class="topo">
+      <button id="btn-menu-movel" class="btn-movel" type="button" aria-label="Abrir menu">☰</button>
       <img src="assets/logo.png" alt="Multimóveis" class="topo-logo">
       <div class="topo-titulo">E-loggia · <span id="topo-pagina">Preventivo</span></div>
+      <button id="btn-acoes-movel" class="btn-movel" type="button" aria-label="Mais opções" aria-expanded="false">⋯</button>
       <div class="topo-direita">
         <span id="topo-arquivos" class="topo-arquivos so-log"></span>
         <label class="btn amarelo so-log" title="Planilha exportada (aba Export) com os pedidos">
@@ -1330,13 +1335,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=134"></script>
-  <script src="mapa-brasil.js?v=134"></script>
-  <script src="troca-notas.js?v=134"></script>
-  <script src="app.js?v=134"></script>
-  <script src="ordenar.js?v=134"></script>
-  <script src="menu.js?v=134"></script>
-  <script src="ajuda.js?v=134"></script>
-  <script src="documentos.js?v=134"></script>
+  <script src="config.js?v=135"></script>
+  <script src="mapa-brasil.js?v=135"></script>
+  <script src="troca-notas.js?v=135"></script>
+  <script src="app.js?v=135"></script>
+  <script src="ordenar.js?v=135"></script>
+  <script src="menu.js?v=135"></script>
+  <script src="ajuda.js?v=135"></script>
+  <script src="documentos.js?v=135"></script>
 </body>
 </html>

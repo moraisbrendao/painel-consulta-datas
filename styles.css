@@ -715,3 +715,78 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 @media (max-width: 700px) { .rt-regra { grid-template-columns: 1fr; } }
 .rt-tab tr.zero td { color: var(--texto-2); } .rt-tab tr.total td { border-top: 2px solid var(--borda); }
 .tk-links { margin-top: 2px; } .tk-links a { margin-right: 6px; }
+
+/* ================= Celular (iPhone) ================= */
+.btn-movel, .menu-fundo { display: none; }
+@media (max-width: 760px) {
+  html { -webkit-text-size-adjust: 100%; }
+  body { padding-bottom: env(safe-area-inset-bottom); }
+  /* menu em gaveta */
+  #tela-painel { display: block; }
+  #tela-painel .menu-lateral { position: fixed; top: 0; bottom: 0; left: 0; width: 82vw; max-width: 300px; height: 100%; flex-direction: column; overflow-y: auto;
+    padding: env(safe-area-inset-top) 0 calc(16px + env(safe-area-inset-bottom)); transform: translateX(-105%); transition: transform .22s ease; z-index: 60; box-shadow: 4px 0 24px rgba(0,0,0,.25); }
+  #tela-painel.menu-aberto .menu-lateral { transform: none; }
+  #tela-painel .marca { display: flex; }
+  #tela-painel .menu-item { white-space: normal; font-size: 15px; padding: 13px 18px; }
+  .btn-recolher { display: none !important; }
+  .menu-fundo:not([hidden]) { display: block; position: fixed; inset: 0; background: rgba(13,34,64,.45); z-index: 55; }
+  /* topo compacto */
+  .topo { position: sticky; top: 0; flex-wrap: nowrap; gap: 8px; padding: calc(6px + env(safe-area-inset-top)) 10px 6px; min-height: 52px; }
+  .btn-movel { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border: 1px solid var(--borda); border-radius: 10px; background: #fff; color: var(--marinho); font-size: 20px; flex-shrink: 0; cursor: pointer; }
+  .topo-logo { height: 26px; }
+  .topo-titulo { display: block !important; flex: 1; min-width: 0; font-size: 15px; border-left: 0; padding-left: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #btn-acoes-movel { margin-left: auto; }
+  .topo-direita { display: none; position: absolute; top: 100%; left: 0; right: 0; background: #fff; border-bottom: 1px solid var(--borda); box-shadow: 0 10px 24px rgba(13,34,64,.15);
+    padding: 12px; flex-direction: column; align-items: stretch; gap: 8px; z-index: 30; }
+  #tela-painel.acoes-abertas .topo-direita { display: flex; }
+  .topo-direita .btn, .topo-direita label.btn { justify-content: center; width: 100%; min-height: 44px; }
+  .topo-direita .usuario { text-align: center; font-size: 13px; }
+  .topo-arquivos { display: flex !important; flex-wrap: wrap; justify-content: center; }
+  /* conteúdo */
+  .lado .conteudo { padding: 12px 12px 32px; }
+  .titulo-pagina h1, .titulo-pagina h2 { font-size: 20px; }
+  .titulo-pagina.com-acoes { flex-direction: column; align-items: stretch; gap: 10px; }
+  .acoes-robo, .titulo-pagina .acoes { flex-wrap: wrap; }
+  .cartao { padding: 14px 12px; border-radius: 12px; }
+  .cartao-topo { flex-wrap: wrap; gap: 8px; }
+  /* campos sem zoom no iPhone (fonte >= 16px) */
+  input, select, textarea { font-size: 16px !important; }
+  /* filtros recolhíveis */
+  .filtros-cartao, .filtros-topo, .filtros { grid-template-columns: 1fr 1fr !important; gap: 8px 10px; position: static !important; }
+  .filtros-cartao > *, .filtros-topo > *, .filtros > * { min-width: 0; }
+  .filtros-cartao select, .filtros-cartao input, .filtros-topo select, .filtros-topo input { width: 100%; max-width: 100%; }
+  .filtros-cartao > :not(.filtros-rot), .filtros-topo > :not(.filtros-rot) { display: none !important; }
+  .filtros-cartao.f-aberto > :not(.filtros-rot), .filtros-topo.f-aberto > :not(.filtros-rot) { display: revert !important; }
+  .filtros-cartao.f-aberto > .multi, .filtros-topo.f-aberto > .multi { display: block !important; }
+  .filtros-rot { grid-column: 1 / -1; cursor: pointer; padding: 4px 0; font-size: 15px; display: flex; justify-content: space-between; }
+  .filtros-rot::after { content: "tocar para abrir ▾"; font-weight: 400; color: var(--texto-2); font-size: 12px; margin-left: 8px; }
+  .f-aberto .filtros-rot::after { content: "fechar ▴"; }
+  /* cards */
+  .kpis, .kpis-3, .kpis-4, .kpis-oc, .kpis-cf, .rt-kpis, .c-kpis-acao, #visoes, #dc-cards { grid-template-columns: 1fr 1fr !important; gap: 8px !important; }
+  .kpi { padding: 12px 12px 12px; }
+  .kpi .kpi-num { font-size: 22px; }
+  .kpi .kpi-rot { font-size: 11px; }
+  .kpi small { font-size: 11px; }
+  /* tabelas: rolar para o lado com a 1ª coluna fixa */
+  .tabela-wrap { -webkit-overflow-scrolling: touch; margin: 0 -12px; padding: 0 12px; }
+  .tabela-wrap table { font-size: 13px; }
+  .tabela-wrap th:first-child, .tabela-wrap td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; }
+  .tabela-wrap thead th:first-child { background: inherit; z-index: 2; }
+  /* listas de pedidos (Preventivo, Análise de canais, Cobrança do dia) viram cartões */
+  .tabela-pedidos:has(#linhas, #c-linhas, #rt-linhas) thead { display: none; }
+  .tabela-pedidos:has(#linhas, #c-linhas, #rt-linhas) { display: block; }
+  #linhas, #c-linhas, #rt-linhas { display: block; }
+  #linhas > tr, #c-linhas > tr, #rt-linhas > tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 12px; margin-bottom: 10px; background: #fff; border: 1px solid var(--borda); border-radius: 12px; }
+  #linhas > tr > td, #c-linhas > tr > td, #rt-linhas > tr > td { display: block; padding: 0; border: 0; position: static !important; background: transparent !important; min-width: 0; }
+  #linhas > tr > td:first-child, #c-linhas > tr > td:first-child, #rt-linhas > tr > td:first-child { grid-column: 1 / -1; word-break: break-all; }
+  #linhas > tr > td:nth-child(5)::before, #c-linhas > tr > td:nth-child(5)::before, #rt-linhas > tr > td:nth-child(5)::before { content: "Nova data"; display: block; font-size: 11px; color: var(--texto-2); }
+  #linhas > tr > td:nth-child(6), #c-linhas > tr > td:nth-child(6), #rt-linhas > tr > td:nth-child(6) { grid-column: 1 / -1; }
+  #linhas > tr > td:nth-child(6)::before, #c-linhas > tr > td:nth-child(6)::before, #rt-linhas > tr > td:nth-child(6)::before { content: "Observação"; display: block; font-size: 11px; color: var(--texto-2); }
+  #linhas > tr input, #c-linhas > tr input, #rt-linhas > tr input, #linhas > tr textarea, #c-linhas > tr textarea, #rt-linhas > tr textarea { width: 100%; }
+  #linhas > tr > td:empty, #c-linhas > tr > td:empty, #rt-linhas > tr > td:empty { display: none; }
+  .tabela-pedidos .btn.mini { min-height: 36px; padding: 6px 12px; }
+  /* paginação e modal */
+  .paginacao { flex-wrap: wrap; gap: 8px; }
+  .modal { padding: 0; }
+  .modal-caixa, .modal > div { width: 100%; max-width: 100%; min-height: 100%; border-radius: 0; }
+}
