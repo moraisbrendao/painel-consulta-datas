@@ -3317,9 +3317,14 @@ ${extra}
     if (error) return toast("Não salvei: " + error.message, true);
     toast(sn ? "Senha salva." : "Senha apagada."); await carregarSenhas(); janelaSenhas();
   });
-  function abrirSSW(nf, transp, pedido, dados) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
+  async function abrirSSW(nf, transp, pedido, dados) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
-    const x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));
+    let x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));
+    // fora da Conferência SSW a lista não está carregada: busca só esse pedido (ou a NF) no que o robô já conferiu
+    if (!x && (pedido || nf) && /jadlog/i.test(transp || "")) {
+      const q = (k, v) => sb.from("conferencia_ssw").select("*").eq(k, v).limit(1).then((r) => (r.data && r.data[0]) || null, () => null);
+      x = (pedido && (await q("pedido", pedido))) || (nf && (await q("nf", nf))) || null;
+    }
     // Jadlog: sempre a janela com os dados do robô (pedido da Brenda); o site da Jadlog fica num botão dentro dela
     if (/jadlog/i.test(transp || "") || (x && /jadlog/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
     const prop = rastreioDe(transp);
