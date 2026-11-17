@@ -1404,6 +1404,9 @@ ${extra}
 
   const gProdK = (t) => (/tempo\s*justo|^\s*vm\b|vm transportes/i.test(t || "") ? "VM Transportes / Tempo Justo" : t || "(sem transportadora)");
   let gProdT = "", gProdCheia = false;
+  // celular em pé: na tela cheia o gráfico é girado para ficar deitado (iPhone não deixa travar a tela na horizontal)
+  const gProdGiro = () => gProdCheia && innerWidth <= 760 && innerHeight > innerWidth;
+  const ajustaGiro = () => $("g-prod-cartao").classList.toggle("girado", gProdGiro());
   function desenharProdutividade(L0, hoje) {
     // filtro de transportadora só do gráfico (VM e Tempo Justo juntas)
     const sel = $("g-prod-transp"), ts = new Map();
@@ -1420,7 +1423,7 @@ ${extra}
     });
     const val = dias.map((d) => ({ d, e: d <= hoje ? ent.get(d) || 0 : null, v: d >= hoje ? venc.get(d) || 0 : 0, a: d === hoje ? atrHoje : 0 }));
     const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v + x.a)));
-    const W = 1000, H = gProdCheia ? Math.max(260, Math.round((1000 * Math.max(240, innerHeight - 230)) / Math.max(320, $("g-prod").clientWidth || innerWidth - 40))) : 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (n) => H - pb - (n / max) * (H - pb - pt);
+    const W = 1000, H = gProdCheia ? Math.max(gProdGiro() ? 180 : 260, Math.round((1000 * Math.max(gProdGiro() ? 160 : 240, gProdGiro() ? innerWidth - 92 : innerHeight - 230)) / Math.max(320, $("g-prod").clientWidth || innerWidth - 40))) : 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (n) => H - pb - (n / max) * (H - pb - pt);
     let g = "";
     for (let i = 0; i <= 4; i++) { const n = Math.round((max * i) / 4); g += `<line x1="${pl}" x2="${W - 10}" y1="${y(n)}" y2="${y(n)}" class="grade"/><text x="${pl - 6}" y="${y(n) + 4}" class="eixo" text-anchor="end">${fmt(n)}</text>`; }
     val.forEach((x, i) => {
@@ -1551,7 +1554,7 @@ ${extra}
     if (k === "hoje") return selecionar(`Para entregar hoje (atrasados + vencem hoje)${gProdT ? " · " + gProdT : ""}`, (L) => L.filter((r) => gProdPassa(r) && (r._atraso || (!r._fechado && r._prom === hoje))));
     const ids = new Set(gProd[k].map((r) => r.pedido)); selecionar(k === "ent" ? `Entregues em ${ddmm(gProd.dia)}` : `Entregues atrasados em ${ddmm(gProd.dia)}`, (L) => L.filter((r) => ids.has(r.pedido))); });
   const gProdPassa = (r) => !gProdT || gProdK(r.transp) === gProdT;
-  function sairCheia() { if (!gProdCheia) return; gProdCheia = false; $("g-prod-cartao").classList.remove("tela-cheia"); document.body.classList.remove("sem-rolagem");
+  function sairCheia() { if (!gProdCheia) return; gProdCheia = false; $("g-prod-cartao").classList.remove("tela-cheia", "girado"); document.body.classList.remove("sem-rolagem");
     $("g-prod-cheia").textContent = "⛶ Tela cheia"; desenharProdutividade(gFiltradosCache, hojeISO()); }
   $("g-prod").addEventListener("click", (e) => { const b = e.target.closest("[data-dia]"); if (!b) return; const d = b.dataset.dia, t = b.dataset.tipo, sx = gProdT ? " · " + gProdT : "";
     sairCheia();
@@ -1561,10 +1564,10 @@ ${extra}
   $("g-prod-transp").addEventListener("change", (e) => { gProdT = e.target.value; desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-prod-cheia").addEventListener("click", () => {
     if (gProdCheia) return sairCheia();
-    gProdCheia = true; $("g-prod-cartao").classList.add("tela-cheia"); document.body.classList.add("sem-rolagem");
+    gProdCheia = true; $("g-prod-cartao").classList.add("tela-cheia"); document.body.classList.add("sem-rolagem"); ajustaGiro();
     $("g-prod-cheia").textContent = "✕ Sair da tela cheia"; desenharProdutividade(gFiltradosCache, hojeISO()); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") sairCheia(); });
-  addEventListener("resize", () => { if (gProdCheia) desenharProdutividade(gFiltradosCache, hojeISO()); });
+  addEventListener("resize", () => { if (gProdCheia) { ajustaGiro(); desenharProdutividade(gFiltradosCache, hojeISO()); } });
   $("g-janela").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (!b) return; gJanela = +b.dataset.j;
     $("g-janela").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));

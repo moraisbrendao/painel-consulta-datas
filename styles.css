@@ -388,6 +388,18 @@ body:not([data-admin]) .so-admin { display: none !important; }
   padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left)); }
 #g-prod svg { height: 280px; }
 .tela-cheia #g-prod svg { height: max(240px, calc(100vh - 230px)); }
+.cartao.tela-cheia.girado { inset: auto !important; top: 0 !important; left: 0 !important; width: 100vh !important; height: 100vw !important; max-width: none !important; max-height: none !important;
+  transform: rotate(90deg) translateY(-100%); transform-origin: top left; overflow: hidden;
+  padding: 8px max(14px, env(safe-area-inset-top)) 6px max(14px, env(safe-area-inset-bottom)) !important; }
+.tela-cheia.girado .cartao-topo { display: flex !important; flex-direction: row !important; align-items: center !important; justify-content: space-between; gap: 8px; margin: 0 0 4px !important; }
+.tela-cheia.girado .cartao-topo .sub, .tela-cheia.girado #g-prod-resumo { display: none !important; }
+.tela-cheia.girado .cartao-topo h2 { font-size: 13px !important; margin: 0 !important; white-space: nowrap; }
+.tela-cheia.girado .g-prod-acoes { flex-wrap: nowrap !important; gap: 6px !important; width: auto !important; }
+.tela-cheia.girado .g-prod-acoes select { width: 150px !important; max-width: 150px !important; font-size: 12px !important; padding: 3px 6px !important; min-height: 0 !important; height: 28px !important; }
+.tela-cheia.girado .g-prod-acoes .btn, .tela-cheia.girado .g-prod-acoes .seg button { padding: 3px 8px !important; font-size: 12px !important; min-height: 0 !important; height: 28px !important; white-space: nowrap; }
+.tela-cheia.girado .g-prod-acoes .seg { width: auto !important; flex: none !important; }
+.tela-cheia.girado #g-prod svg { height: max(150px, calc(100vw - 92px)) !important; }
+.tela-cheia.girado .g-legenda { margin-top: 0 !important; font-size: 11px !important; }
 .g-svg .grade { stroke: #e5e7eb; stroke-dasharray: 3 3; }
 .g-svg .eixo { font-size: 10px; fill: #6b7280; }
 .g-svg .eixo.hoje { fill: var(--marinho); font-weight: 700; }
