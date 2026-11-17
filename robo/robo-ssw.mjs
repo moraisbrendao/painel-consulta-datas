@@ -1031,7 +1031,7 @@ async function conferirLote() {
       return { pedido: l.pedido, situacao: sit, ultimo_evento: (x.descricao || "").toUpperCase().slice(0, 60) || null, data_evento: d(x.data_evento), data_entrega: x.entregue ? d(x.data_entrega || x.data_evento) : null,
         detalhe: { ...(l.detalhe || {}), fonte: "Transiga", previsao: x.previsao || null, eventos: x.descricao ? [{ data: String(x.data_entrega || x.data_evento || "").slice(0, 16), status: String(x.descricao).toUpperCase().slice(0, 60), unidade: "" }] : [] } }; });
     for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Transiga:", e.message.slice(0, 120)));
-    log(`Transiga (webhook): ${linhas.length} de ${tg.length} com rastreio · ${R.size} NFs recebidas até agora`); })().catch((e) => log("Transiga parou:", String(e.message).slice(0, 80)));
+    log(`Transiga (webhook): ${linhas.length} de ${tg.length} com rastreio · ${R.size} NFs recebidas até agora · ${[...R.values()].filter((x) => x.previsao).length} com previsão`); })().catch((e) => log("Transiga parou:", String(e.message).slice(0, 80)));
   // Formato: site próprio com login; confere de novo quem não foi consultado na Formato nas últimas 4 h
   const pFormato = (async () => { const F = [];
     for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*formato*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
