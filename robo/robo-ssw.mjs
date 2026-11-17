@@ -139,7 +139,7 @@ async function formatoLogin() {
   if (!US || !SE) { formatoFalhou = true; log("Formato: faltam os segredos FORMATO_USUARIO / FORMATO_SENHA."); return null; }
   const B = "https://www.transformato.com.br/", junta = (a, novos) => { const m = new Map(String(a || "").split(/;\s*/).filter(Boolean).map((c) => [c.split("=")[0], c])); novos.forEach((c) => m.set(c.split("=")[0], c)); return [...m.values()].join("; "); };
   const h = await pagina(B).catch(() => ({ cookie: "" }));
-  const r = await fetch(B + "login.asp", { method: "POST", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded", ...(h.cookie ? { Cookie: h.cookie } : {}) },
+  const r = await fetch(B + "login.asp", { method: "POST", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36", "Content-Type": "application/x-www-form-urlencoded", Origin: "https://www.transformato.com.br", Referer: B, ...(h.cookie ? { Cookie: h.cookie } : {}) },
     body: new URLSearchParams({ sistema: "T", username: US, password: SE }).toString() }).catch(() => null);
   const ck = r ? junta(h.cookie, (r.headers.getSetCookie ? r.headers.getSetCookie() : []).map((c) => c.split(";")[0])) : "";
   // login certo vai para consultaweb.asp; qualquer outra coisa = não tenta de novo nesta rodada (para não travar a senha)
@@ -426,6 +426,13 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   const i0 = r.txt.search(/para a consulta/i);
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
+}
+if (MODO === "teste-formato") {   // testa o login e a consulta da Formato pelo robô (só contagens no log)
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=pedido,nf,transportadora&transportadora=ilike.*formato*&nf=not.is.null&limit=6");
+  const m = await formato(L);
+  log("teste Formato:", L.length, "NFs ·", [...m.values()].map((r) => `${r.situacao}${r.previsao ? " c/ previsão" : ""}`).join(" | "));
+  process.exit(0);
 }
 if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/consultaweb.asp): formulário, captcha e estrutura do resultado (mascarado)
   const URL_F = "https://www.transformato.com.br/consultaweb.asp";
