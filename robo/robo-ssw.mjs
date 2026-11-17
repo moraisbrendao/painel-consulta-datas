@@ -352,8 +352,6 @@ if (MODO === "diag-jadobs") {   // onde estão as "Observações" do rastreio da
 if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrutura do resultado (sem dados de cliente)
   const URL_B = "https://sistema.bentobrasil.com.br/rastreamentoCarga.php";
   const f = await pagina(URL_B);
-  const h = await pagina("https://www.transformato.com.br/").catch((e) => ({ status: e.message, txt: "" }));
-  log("home: forms/inputs:", tags(h.txt, /<form[^>]*>|<input[^>]*>|<a [^>]*href=["'][^"']*(consult|login|client|rastre|track)[^"']*["']/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).slice(0, 25).join(" | "));
   log("form:", f.status, tags(f.txt, /<form[^>]*>|<input[^>]*>|<button[^>]*>|<select[^>]*>/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).join(" | ").slice(0, 1500));
   log("scripts:", tags(f.txt, /<script[^>]*>[\s\S]{0,600}?<\/script>/gi).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 500)).join(" || ").slice(0, 2500));
   await entrarSupabase();
@@ -380,9 +378,28 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
 }
 if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/consultaweb.asp): formulário, captcha e estrutura do resultado (mascarado)
   const URL_F = "https://www.transformato.com.br/consultaweb.asp";
-  const m0 = await pagina(URL_F).catch((e) => ({ status: e.message, txt: "", cookie: "" }));
+  const lim = (x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "");
+  const h = await pagina("https://www.transformato.com.br/").catch((e) => ({ status: e.message, txt: "", cookie: "" }));
+  log("home:", h.status, tags(h.txt, /<form[^>]*>|<input[^>]*>|<a [^>]*href=["'][^"']*(consult|login|client|logar|acesso|entrar|area)[^"']*["']/gi).map(lim).slice(0, 25).join(" | "));
+  const m0 = await pagina(URL_F, { headers: h.cookie ? { Cookie: h.cookie } : {} }).catch((e) => ({ status: e.message, txt: "", cookie: "" }));
   log("menu:", m0.status, m0.url, "· cookie:", m0.cookie ? "sim" : "não");
-  const CK = m0.cookie ? { Cookie: m0.cookie } : {};
+  let ck = [h.cookie, m0.cookie].filter(Boolean).join("; ");
+  // login do cliente (segredos FORMATO_USUARIO / FORMATO_SENHA): procura um formulário com campo de senha na home ou no menu
+  const US = process.env.FORMATO_USUARIO || "", SE = process.env.FORMATO_SENHA || "";
+  log("segredos do login:", US ? "usuário sim" : "usuário NÃO", "·", SE ? "senha sim" : "senha NÃO");
+  const fl = [h, m0].map((x) => (x.txt.match(/<form[\s\S]*?<\/form>/gi) || []).find((q) => /type=["']?password/i.test(q))).find(Boolean);
+  log("form de login:", fl ? tags(fl, /<form[^>]*>|<input[^>]*>/gi).map(lim).join(" | ") : "não achei");
+  if (fl && US && SE) {
+    const ins = tags(fl, /<input[^>]*>/gi).map((x) => ({ n: (x.match(/name=["']?([^"'\s>]+)/i) || [])[1], t: ((x.match(/type=["']?([^"'\s>]+)/i) || [])[1] || "text").toLowerCase(), v: (x.match(/value=["']([^"']*)["']/i) || [])[1] || "" })).filter((c) => c.n);
+    const b = new URLSearchParams();
+    ins.forEach((c) => b.set(c.n, c.t === "password" ? SE : ["text", "email"].includes(c.t) ? US : c.v));
+    const act = new URL((fl.match(/action=["']?([^"'\s>]+)/i) || [])[1] || URL_F, URL_F).href;
+    const r = await fetch(act, { method: "POST", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0", "Content-Type": "application/x-www-form-urlencoded", ...(ck ? { Cookie: ck } : {}) }, body: b.toString() }).catch((e) => ({ status: e.message, headers: new Headers() }));
+    const nc = (r.headers.getSetCookie ? r.headers.getSetCookie() : []).map((c) => c.split(";")[0]);
+    if (nc.length) ck = [ck, ...nc].filter(Boolean).join("; ");
+    log("login:", r.status, "· vai para:", (r.headers.get("location") || "").replace(/\d{4,}/g, "#"), "· cookies novos:", nc.length);
+  }
+  const CK = ck ? { Cookie: ck } : {};
   const f0 = await pagina(new URL("consnota.asp", URL_F).href, { headers: CK }).catch((e) => ({ status: e.message, txt: "", url: "" }));
   const f = { ...f0, url: f0.url || new URL("consnota.asp", URL_F).href };
   log("consnota:", f.status, f.url, "· login?", /senha|password|login/i.test(f.txt) ? "SIM" : "não");
