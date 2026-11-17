@@ -201,7 +201,7 @@
   }
 
   async function buscarTudo(tabela, ordem, colunas = "*") {
-    const PAG = 1000, JUNTAS = 4;
+    const PAG = 1000, JUNTAS = 8;
     const prim = await buscarPagina(tabela, ordem, colunas, 0, PAG - 1, true);
     let lista = prim.data;
     if (lista.length < PAG) return lista;
