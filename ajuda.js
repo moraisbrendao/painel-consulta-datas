@@ -116,6 +116,7 @@
     ["logins", "Logins", "Quem entra no E-loggia (só administradores veem).", "Quando entra ou sai alguém, ou alguém esquece a senha.", [
       "Login novo: no Supabase › Authentication › Users › <b>Add user</b> › Create new user (marque <b>Auto Confirm User</b>) e passe o e-mail e a senha para a pessoa.",
       "Esqueceu a senha: clique em <b>Gerar senha provisória</b> e passe para a pessoa; no primeiro acesso ela cria uma senha dela.",
+      "Para limitar o que a pessoa vê: clique em <b>Escolher abas</b> na linha dela, marque as abas e salve. Tudo marcado = todas as abas. Vale no próximo acesso dela (ou Ctrl+F5). Administradores sempre veem tudo.",
       "Para alguém ver só a Consulta SAC, adicione o e-mail em <b>Logins do SAC</b>.",
     ], ""],
   ];

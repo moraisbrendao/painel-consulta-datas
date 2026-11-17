@@ -2043,3 +2043,49 @@ create policy "logistica cuida" on public.retorno_regras for all to authenticate
 drop trigger if exists carimbo on public.retorno_regras;
 create trigger carimbo before insert or update on public.retorno_regras
   for each row execute function public._carimbo_responsavel();
+
+-- ============ PARTE 44: abas que cada login pode usar ============
+-- Sem linha (ou paginas nulo) = todas as abas. Só os administradores (admins_painel) mudam.
+create table if not exists public.acessos_paginas (
+  email          text primary key,
+  paginas        text[],
+  atualizado_por text,
+  atualizado_em  timestamptz not null default now()
+);
+alter table public.acessos_paginas enable row level security;
+revoke all on public.acessos_paginas from anon, authenticated;
+
+-- cada pessoa lê só as abas dela
+create or replace function public.meu_acesso()
+returns text[] language sql stable security definer set search_path = public
+as $$ select paginas from public.acessos_paginas where email = lower(auth.jwt() ->> 'email') $$;
+revoke all on function public.meu_acesso() from public, anon;
+grant execute on function public.meu_acesso() to authenticated;
+
+-- administrador lê de todos
+create or replace function public.listar_acessos()
+returns table(email text, paginas text[]) language plpgsql stable security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or not public.e_admin() then raise exception 'sem permissão'; end if;
+  return query select a.email, a.paginas from public.acessos_paginas a;
+end $$;
+revoke all on function public.listar_acessos() from public, anon;
+grant execute on function public.listar_acessos() to authenticated;
+
+-- administrador grava (p_paginas nulo = todas as abas)
+create or replace function public.salvar_acesso(p_email text, p_paginas text[])
+returns void language plpgsql volatile security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null or not public.e_admin() then raise exception 'sem permissão'; end if;
+  if p_paginas is null then
+    delete from public.acessos_paginas where email = lower(trim(p_email));
+  else
+    insert into public.acessos_paginas (email, paginas, atualizado_por, atualizado_em)
+    values (lower(trim(p_email)), p_paginas, auth.jwt() ->> 'email', now())
+    on conflict (email) do update set paginas = excluded.paginas, atualizado_por = excluded.atualizado_por, atualizado_em = now();
+  end if;
+end $$;
+revoke all on function public.salvar_acesso(text, text[]) from public, anon;
+grant execute on function public.salvar_acesso(text, text[]) to authenticated;

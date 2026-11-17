@@ -132,6 +132,21 @@
     }
   });
 
+  // abas liberadas para o login (null = todas). Passo a passo é de todos; Logins segue a regra de administrador.
+  let acessoPag = null;
+  const LIVRES = ["ajuda", "logins"];
+  const podePag = (p) => !acessoPag || LIVRES.includes(p) || acessoPag.has(p);
+  const primeiraPag = () => { const b = [...document.querySelectorAll(".menu-lateral .menu-item")].find((x) => !x.classList.contains("sem-acesso") && x.dataset.pagina !== "logins" && getComputedStyle(x).display !== "none"); return b ? b.dataset.pagina : "ajuda"; };
+  function aplicarAcesso() {
+    document.querySelectorAll(".menu-lateral .menu-item").forEach((b) => b.classList.toggle("sem-acesso", !podePag(b.dataset.pagina)));
+  }
+  async function lerAcesso() {
+    acessoPag = null;
+    if (document.body.dataset.admin) return aplicarAcesso();   // administrador sempre vê tudo
+    try { const r = await sb.rpc("meu_acesso"); if (r && !r.error && Array.isArray(r.data)) acessoPag = new Set(r.data); } catch (_) {}
+    aplicarAcesso();
+  }
+
   // descobre o perfil antes de mostrar o painel (SAC só vê a Consulta SAC)
   async function entrar() {
     carregando("Entrando…");
@@ -149,6 +164,7 @@
     let adm = { data: false };
     try { adm = await sb.rpc("e_admin"); } catch (err) { adm = { data: false }; }
     if (adm && adm.data === true) document.body.dataset.admin = "1"; else delete document.body.dataset.admin;
+    if (perfil !== "sac") await lerAcesso(); else { acessoPag = null; aplicarAcesso(); }
     $("tela-painel").hidden = false;
     if (perfil === "sac") {
       irPara("sac");
@@ -160,6 +176,7 @@
       if (volta === "ocorrencias") { volta = "alterar"; voltaAp = "oc"; }   // Ocorrências agora fica dentro de Alterar pedidos
       const botaoMenu = document.querySelector(`.menu-item[data-pagina="${volta}"]`);
       if (!botaoMenu || (volta === "logins" && !document.body.dataset.admin) || volta === "sac") volta = "gerencial";
+      if (!podePag(volta)) volta = primeiraPag();
       irPara(volta);
       carregarGerencial();   // a Visão Gerencial não depende do resto: começa junto
       carregar();
@@ -3489,6 +3506,7 @@ ${extra}
 
   // ---------------- menu lateral ----------------
   function irPara(pag) {
+    if (perfil !== "sac" && !podePag(pag)) { toast("Você não tem acesso a essa aba. Fale com a administradora do painel.", true); pag = primeiraPag(); }
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
     $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Consulta Documento", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
@@ -4190,7 +4208,14 @@ ${extra}
 
   // ---------------- logins do painel ----------------
   const dataHora = (iso) => (iso ? new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }) : "nunca entrou");
+  let lgAcessos = new Map(), lgAbasEmail = "";
+  const lgPaginas = () => [...document.querySelectorAll(".menu-lateral .menu-item")].filter((b) => !LIVRES.includes(b.dataset.pagina))
+    .map((b) => { const c = b.cloneNode(true); c.querySelectorAll(".menu-icone,.menu-cont").forEach((x) => x.remove()); return [b.dataset.pagina, c.textContent.trim()]; });
+  const lgAbasTexto = (email) => { const p = lgAcessos.get(email); if (!p) return "Todas as abas";
+    const nomes = lgPaginas().filter(([k]) => p.includes(k)).map(([, n]) => n); return nomes.length ? nomes.join(", ") : "Nenhuma (só o Passo a passo)"; };
   async function carregarLogins() {
+    lgAcessos = new Map(); let semParte44 = false;
+    try { const r = await sb.rpc("listar_acessos"); if (r.error) semParte44 = /listar_acessos|function/i.test(r.error.message); else (r.data || []).forEach((x) => lgAcessos.set(x.email, x.paginas)); } catch (_) { semParte44 = true; }
     const { data, error } = await sb.rpc("listar_logins");
     const msg = $("lg-msg");
     if (error) { $("lg-linhas").innerHTML = ""; msg.hidden = false; msg.textContent = /listar_logins|function/i.test(error.message) ? "Falta rodar a parte 30 do schema.sql no Supabase." : "Não consegui ler os logins: " + error.message; return; }
@@ -4201,10 +4226,32 @@ ${extra}
     const eu = $("usuario").textContent;
     $("lg-linhas").innerHTML = data.map((x) => `<tr>
       <td>${esc(x.email)}${x.email === eu ? ' <span class="chip verde">você</span>' : ""}${x.trocar_senha ? ' <span class="chip ambar">senha provisória</span>' : ""}</td>
-      <td>${x.sac ? "Só Consulta SAC" : "Logística (tudo)"}</td>
+      <td>${x.sac ? "Só Consulta SAC" : lgAcessos.get(x.email) ? "Logística (abas escolhidas)" : "Logística (tudo)"}</td>
+      <td class="lg-abas-txt">${x.sac ? '<span class="s">só a Consulta SAC</span>' : `${esc(lgAbasTexto(x.email))} ${semParte44 ? "" : `<button class="btn contorno mini" data-abas="${esc(x.email)}">Escolher abas</button>`}`}</td>
       <td>${esc(dataHora(x.criado_em))}</td><td>${esc(dataHora(x.ultimo_acesso))}</td>
       <td>${x.email === eu ? "" : `<button class="btn contorno" data-prov="${esc(x.email)}">Gerar senha provisória</button>`}</td></tr>`).join("");
   }
+  function abrirAbas(email) {
+    lgAbasEmail = email; const p = lgAcessos.get(email);
+    $("lg-abas-email").textContent = email;
+    $("lg-abas-lista").innerHTML = lgPaginas().map(([k, n]) => `<label><input type="checkbox" value="${esc(k)}" ${!p || p.includes(k) ? "checked" : ""}> ${esc(n)}</label>`).join("");
+    $("lg-abas").hidden = false; $("lg-abas").scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+  const lgMarcar = (v) => $("lg-abas-lista").querySelectorAll("input").forEach((i) => (i.checked = v));
+  $("lg-abas-todas").addEventListener("click", () => lgMarcar(true));
+  $("lg-abas-nenhuma").addEventListener("click", () => lgMarcar(false));
+  $("lg-abas-cancelar").addEventListener("click", () => { $("lg-abas").hidden = true; });
+  $("lg-abas-salvar").addEventListener("click", async () => {
+    const caixas = [...$("lg-abas-lista").querySelectorAll("input")], marc = caixas.filter((i) => i.checked).map((i) => i.value);
+    const paginas = marc.length === caixas.length ? null : marc;
+    const b = $("lg-abas-salvar"); b.disabled = true;
+    const { error } = await sb.rpc("salvar_acesso", { p_email: lgAbasEmail, p_paginas: paginas });
+    b.disabled = false;
+    if (error) return toast("Não consegui salvar: " + error.message, true);
+    toast(paginas ? `${lgAbasEmail} agora vê ${marc.length} aba(s). Vale no próximo acesso (ou Ctrl+F5).` : `${lgAbasEmail} vê todas as abas.`);
+    $("lg-abas").hidden = true; carregarLogins();
+  });
+  $("lg-linhas").addEventListener("click", (e) => { const b = e.target.closest("button[data-abas]"); if (b) abrirAbas(b.dataset.abas); });
   $("lg-linhas").addEventListener("click", async (e) => {
     const b = e.target.closest("button[data-prov]"); if (!b) return;
     const email = b.dataset.prov;

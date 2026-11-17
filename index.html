@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=137">
+  <link rel="stylesheet" href="styles.css?v=138">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1302,11 +1302,23 @@
       </section>
       <section class="cartao">
         <h2>Logins do painel</h2>
-        <p class="sub">Esqueceu a senha? Clique em <b>Gerar senha provisória</b> e passe a senha para a pessoa. No primeiro acesso ela cria uma senha dela.</p>
+        <p class="sub">Esqueceu a senha? Clique em <b>Gerar senha provisória</b> e passe a senha para a pessoa. No primeiro acesso ela cria uma senha dela.
+          Em <b>Escolher abas</b> você marca quais abas do menu cada pessoa pode usar (o Passo a passo aparece para todos).</p>
         <div id="lg-nova" class="lg-nova" hidden></div>
+        <div id="lg-abas" class="lg-abas" hidden>
+          <h3>Abas de <span id="lg-abas-email"></span></h3>
+          <p class="sub">Marque o que essa pessoa pode usar. Com tudo marcado ela vê todas as abas, inclusive as que forem criadas depois.</p>
+          <div id="lg-abas-lista" class="lg-abas-lista"></div>
+          <div class="lg-abas-botoes">
+            <button class="btn contorno" id="lg-abas-todas" type="button">Marcar todas</button>
+            <button class="btn contorno" id="lg-abas-nenhuma" type="button">Desmarcar todas</button>
+            <button class="btn primario" id="lg-abas-salvar" type="button">Salvar</button>
+            <button class="btn contorno" id="lg-abas-cancelar" type="button">Cancelar</button>
+          </div>
+        </div>
         <div class="tabela-wrap">
           <table class="tabela-ms">
-            <thead><tr><th>E-mail</th><th>Perfil</th><th>Criado em</th><th>Último acesso</th><th></th></tr></thead>
+            <thead><tr><th>E-mail</th><th>Perfil</th><th>Abas que pode usar</th><th>Criado em</th><th>Último acesso</th><th></th></tr></thead>
             <tbody id="lg-linhas"></tbody>
           </table>
         </div>
@@ -1339,13 +1351,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=137"></script>
-  <script src="mapa-brasil.js?v=137"></script>
-  <script src="troca-notas.js?v=137"></script>
-  <script src="app.js?v=137"></script>
-  <script src="ordenar.js?v=137"></script>
-  <script src="menu.js?v=137"></script>
-  <script src="ajuda.js?v=137"></script>
-  <script src="documentos.js?v=137"></script>
+  <script src="config.js?v=138"></script>
+  <script src="mapa-brasil.js?v=138"></script>
+  <script src="troca-notas.js?v=138"></script>
+  <script src="app.js?v=138"></script>
+  <script src="ordenar.js?v=138"></script>
+  <script src="menu.js?v=138"></script>
+  <script src="ajuda.js?v=138"></script>
+  <script src="documentos.js?v=138"></script>
 </body>
 </html>

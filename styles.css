@@ -801,3 +801,14 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .pt-cel .pt-perf { display: block; font-size: 11px; font-weight: 700; }
 .pt-sub { display: block; font-size: 10px; font-weight: 400; color: var(--texto-2); text-transform: none; }
 .pt-cel .pt-perf.verde-t { color: #15803d; } .pt-cel .pt-perf.laranja-t { color: #c2410c; } .pt-cel .pt-perf.vermelho-t { color: #b91c1c; } .pt-cel .pt-perf.neutro { color: var(--texto-2); }
+
+/* Logins: abas que cada pessoa pode usar */
+.menu-item.sem-acesso { display: none !important; }
+.lg-abas { border: 1px solid var(--borda, #e5e7eb); border-radius: 12px; padding: 14px 16px; margin: 10px 0 14px; background: #fffbea; }
+.lg-abas h3 { margin: 0 0 4px; font-size: 15px; }
+.lg-abas-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 14px; margin: 10px 0; }
+.lg-abas .lg-abas-lista label { display: flex; flex-direction: row; justify-content: flex-start; text-align: left; gap: 8px; align-items: center; font-size: 14px; font-weight: 500; cursor: pointer; margin: 0; }
+.lg-abas .lg-abas-lista input { width: auto; min-height: 0; margin: 0; flex: none; }
+.lg-abas-botoes { display: flex; gap: 8px; flex-wrap: wrap; }
+.lg-abas-txt { max-width: 360px; font-size: 13px; }
+.lg-abas-txt .btn.mini { padding: 3px 8px; font-size: 12px; margin-left: 6px; }
