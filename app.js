@@ -3394,6 +3394,16 @@ ${extra}
       const q = (k, v) => sb.from("conferencia_ssw").select("*").eq(k, v).limit(1).then((r) => (r.data && r.data[0]) || null, () => null);
       x = (pedido && (await q("pedido", pedido))) || (nf && (await q("nf", nf))) || null;
     }
+    // Transiga: lê na hora o último status que ela mandou pelo webhook (não espera a próxima rodada do robô)
+    if (/transiga/i.test(transp || "") && nf) {
+      const k = String(nf).trim().split("-").map((v) => v.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-");
+      const w = await sb.from("rastreio_transiga").select("descricao,data_evento,previsao,entregue,data_entrega,eventos,recebido_em,codigo").eq("nf", k).limit(1).then((r) => (r.data && r.data[0]) || null, () => null);
+      if (w) { const base = x || { pedido: pedido || "", nf, transportadora: "Transiga" }, d0 = base.detalhe || {};
+        x = { ...base, nf: base.nf || nf, situacao: w.entregue ? "entregue" : /arquivo recebido/i.test(w.descricao || "") ? "sem cte" : "nao entregue", ultimo_evento: (w.descricao || "").toUpperCase(),
+          data_entrega: w.entregue ? String(w.data_entrega || w.data_evento || "").slice(0, 10) : null, consultado_em: w.recebido_em,
+          detalhe: { ...d0, fonte: "Transiga", status: (w.descricao || "").toUpperCase(), previsao: w.previsao || null, codigo: d0.codigo || w.codigo || null,
+            eventos: w.descricao ? [{ data: String(w.data_entrega || w.data_evento || "").slice(0, 16), status: (w.descricao || "").toUpperCase() + (w.eventos > 1 ? ` (último de ${w.eventos} eventos recebidos)` : ""), unidade: "" }] : [] } }; }
+    }
     // Jadlog, Formato e Transiga (sites com login): sempre a janela com os dados do robô; o site fica num botão dentro dela
     if (/jadlog|formato|transiga/i.test(transp || "") || (x && /jadlog|formato|transiga/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
     const prop = rastreioDe(transp);
