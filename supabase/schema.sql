@@ -2129,3 +2129,24 @@ begin
 end $$;
 revoke all on function public.receber_scallia(jsonb) from public, anon, authenticated;
 grant execute on function public.receber_scallia(jsonb) to service_role;
+
+-- ============ PARTE 46: cópia compartilhada da base (abre mais rápido para todos) ============
+-- Pasta privada "copias" no Storage: o 1º login que abre o painel depois de um envio guarda um arquivo
+-- compactado com a base; os outros baixam só esse arquivo. Só logins da Logística (SAC não usa).
+insert into storage.buckets (id, name, public)
+values ('copias', 'copias', false)
+on conflict (id) do update set public = false;
+
+drop policy if exists "copias ler" on storage.objects;
+drop policy if exists "copias gravar" on storage.objects;
+drop policy if exists "copias trocar" on storage.objects;
+drop policy if exists "copias apagar" on storage.objects;
+create policy "copias ler" on storage.objects for select to authenticated
+  using (bucket_id = 'copias' and (select not public.e_sac()));
+create policy "copias gravar" on storage.objects for insert to authenticated
+  with check (bucket_id = 'copias' and (select not public.e_sac()));
+create policy "copias trocar" on storage.objects for update to authenticated
+  using (bucket_id = 'copias' and (select not public.e_sac()))
+  with check (bucket_id = 'copias' and (select not public.e_sac()));
+create policy "copias apagar" on storage.objects for delete to authenticated
+  using (bucket_id = 'copias' and (select not public.e_sac()));

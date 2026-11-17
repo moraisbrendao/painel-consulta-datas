@@ -271,11 +271,47 @@
   }
   function cacheLimpar() { try { indexedDB.deleteDatabase(CACHE_DB); } catch (_) {} }
   // versao vazia/nula = não usa cópia
+  // ---------- cópia compartilhada (Supabase Storage, pasta "copias") ----------
+  // O 1º login que abre o painel depois de um envio baixa a base do jeito normal e guarda UM arquivo compactado
+  // com essa versão; todos os outros baixam só esse arquivo (poucos MB) em vez de ~18 pedaços de 1.000 linhas.
+  // SAC não usa (pode ter acesso diferente). Qualquer falha volta para o jeito normal.
+  const COPIA_BUCKET = "copias";
+  let copiaDesligada = false;
+  async function resumo(txt) {
+    const b = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(txt));
+    return [...new Uint8Array(b)].slice(0, 12).map((x) => x.toString(16).padStart(2, "0")).join("");
+  }
+  const podeCopia = () => !copiaDesligada && perfil !== "sac" && typeof CompressionStream === "function" && typeof DecompressionStream === "function" && window.crypto && crypto.subtle;
+  async function copiaLer(chave, versao) {
+    if (!podeCopia()) return null;
+    try {
+      const pasta = await resumo(chave), arq = `${pasta}/${await resumo(versao)}.json.gz`;
+      const { data, error } = await sb.storage.from(COPIA_BUCKET).download(arq);
+      if (error || !data) { if (error && /bucket not found|not found.*bucket/i.test(error.message || "")) copiaDesligada = true; return null; }
+      const dados = await new Response(data.stream().pipeThrough(new DecompressionStream("gzip"))).json();
+      return Array.isArray(dados) ? dados : null;
+    } catch (_) { return null; }
+  }
+  async function copiaGravar(chave, versao, dados) {
+    if (!podeCopia()) return;
+    try {
+      const pasta = await resumo(chave), nome = `${await resumo(versao)}.json.gz`;
+      const gz = await new Response(new Blob([JSON.stringify(dados)]).stream().pipeThrough(new CompressionStream("gzip"))).blob();
+      const { error } = await sb.storage.from(COPIA_BUCKET).upload(`${pasta}/${nome}`, gz, { upsert: true, contentType: "application/gzip" });
+      if (error) { if (/bucket not found/i.test(error.message || "")) copiaDesligada = true; return; }
+      // apaga as versões antigas desta mesma tabela (não precisa mais delas)
+      const { data: L } = await sb.storage.from(COPIA_BUCKET).list(pasta, { limit: 100 });
+      const velhos = (L || []).filter((f) => f.name !== nome).map((f) => `${pasta}/${f.name}`);
+      if (velhos.length) await sb.storage.from(COPIA_BUCKET).remove(velhos);
+    } catch (_) { /* sem cópia compartilhada: segue normal */ }
+  }
+
   async function buscarComCache(tabela, ordem, colunas, versao) {
     const chave = `${tabela}|${colunas || "*"}`;
     if (versao) { const c = await cacheLer(chave); if (c && c.versao === versao && Array.isArray(c.dados)) return c.dados; }
+    if (versao) { const d = await copiaLer(chave, versao); if (d) { cacheGravar(chave, { versao, dados: d }); return d; } }
     const dados = await buscarTudo(tabela, ordem, colunas);
-    if (versao) cacheGravar(chave, { versao, dados });
+    if (versao) { cacheGravar(chave, { versao, dados }); copiaGravar(chave, versao, dados); }
     return dados;
   }
 
