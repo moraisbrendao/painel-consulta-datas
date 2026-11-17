@@ -824,3 +824,14 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .lg-abas-botoes { display: flex; gap: 8px; flex-wrap: wrap; }
 .lg-abas-txt { max-width: 360px; font-size: 13px; }
 .lg-abas-txt .btn.mini { padding: 3px 8px; font-size: 12px; margin-left: 6px; }
+
+/* Responsáveis dentro do Preventivo */
+.prev-resp > summary { cursor: pointer; list-style: none; }
+.prev-resp > summary::-webkit-details-marker { display: none; }
+.prev-resp > summary h2 { display: inline-flex; align-items: center; gap: 8px; margin: 0; }
+.prev-resp > summary h2::after { content: "▾"; font-size: 14px; color: var(--texto-2); }
+.prev-resp[open] > summary h2::after { content: "▴"; }
+.prev-resp > summary .sub { display: block; margin-top: 4px; }
+.prev-resp .menu-cont { background: #dc2626; color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 12px; }
+.prev-resp-sec { border-top: 1px solid var(--borda, #e5e7eb); margin-top: 14px; padding-top: 12px; }
+#btn-prev-resp { vertical-align: middle; margin-left: 10px; font-size: 13px; padding: 4px 10px; }

@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=141">
+  <link rel="stylesheet" href="styles.css?v=142">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -42,7 +42,6 @@
       <button class="menu-item so-log" data-pagina="canais"><span class="menu-icone">◎</span>Análise de canais</button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="retornos"><span class="menu-icone">📣</span>Cobrança do dia <span id="menu-rt" class="menu-cont" hidden></span></button>
-      <button class="menu-item so-log" data-pagina="responsaveis"><span class="menu-icone">👤</span>Responsáveis <span id="menu-resp" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
@@ -517,7 +516,7 @@
       </section>
 
       <div class="titulo-pagina">
-        <h1>Preventivo</h1>
+        <h1>Preventivo <button id="btn-prev-resp" class="btn contorno mini" type="button">👤 Responsáveis</button></h1>
         <p id="info-base" class="sub">Carregando…</p>
         <p id="info-intelipost" class="info-base"></p>
         <p id="info-tickets" class="info-base"></p>
@@ -600,6 +599,37 @@
         </div>
         <nav id="paginacao" class="paginacao"></nav>
       </section>
+      <!-- ============ RESPONSÁVEIS (dentro do Preventivo) ============ -->
+      <details class="cartao prev-resp" id="prev-resp">
+        <summary><h2>👤 Responsáveis por micro status <span id="menu-resp" class="menu-cont" hidden></span></h2>
+          <span class="sub">Quem cuida de cada micro status. Toque para abrir. Os sem dono aparecem como "pendente de responsável" na lista acima.</span></summary>
+      <section class="prev-resp-sec">
+        <h2>Pessoas</h2>
+        <p class="sub">Cadastre as pessoas (ou áreas) que cuidam dos micro status.</p>
+        <form id="form-resp" class="form-sac">
+          <label class="cresce">Nome<input id="resp-nome" required maxlength="80" placeholder="Nome da pessoa"></label>
+          <label class="cresce">Área (opcional)<input id="resp-area" maxlength="80" placeholder="Ex.: Transportes, SAC…"></label>
+          <button class="btn primario" type="submit">+ Adicionar responsável</button>
+        </form>
+        <div id="lista-resp" class="chips-sac"></div>
+      </section>
+      <section class="prev-resp-sec">
+        <div class="cartao-topo">
+          <div>
+            <h2>Dono de cada micro status</h2>
+            <p class="sub">Escolha o responsável de cada micro status. Os <b>pendentes de responsável</b> aparecem primeiro.
+              Micro status novos que vierem na base entram como pendentes. Salva na hora para todos.</p>
+          </div>
+          <p id="resp-resumo" class="info-base"></p>
+        </div>
+        <div class="tabela-wrap">
+          <table class="tabela-pedidos tabela-resp">
+            <thead><tr><th>Micro status</th><th class="num">Pedidos em aberto</th><th>Responsável</th></tr></thead>
+            <tbody id="resp-linhas"></tbody>
+          </table>
+        </div>
+      </section>
+      </details>
     </main>
 
     <!-- ============ OCORRÊNCIAS ============ -->
@@ -645,40 +675,6 @@
         <div id="oc-grupos"></div>
       </section>
     </main>
-    <!-- ============ RESPONSÁVEIS ============ -->
-    <main class="conteudo" id="pagina-responsaveis" hidden>
-      <div class="titulo-pagina">
-        <h1>Responsáveis</h1>
-        <p class="sub">Cada micro status tem um dono. Quem não tem dono aparece como pendente no Preventivo.</p>
-      </div>
-      <section class="cartao">
-        <h2>Pessoas</h2>
-        <p class="sub">Cadastre as pessoas (ou áreas) que cuidam dos micro status.</p>
-        <form id="form-resp" class="form-sac">
-          <label class="cresce">Nome<input id="resp-nome" required maxlength="80" placeholder="Nome da pessoa"></label>
-          <label class="cresce">Área (opcional)<input id="resp-area" maxlength="80" placeholder="Ex.: Transportes, SAC…"></label>
-          <button class="btn primario" type="submit">+ Adicionar responsável</button>
-        </form>
-        <div id="lista-resp" class="chips-sac"></div>
-      </section>
-      <section class="cartao">
-        <div class="cartao-topo">
-          <div>
-            <h2>Dono de cada micro status</h2>
-            <p class="sub">Escolha o responsável de cada micro status. Os <b>pendentes de responsável</b> aparecem primeiro.
-              Micro status novos que vierem na base entram como pendentes. Salva na hora para todos.</p>
-          </div>
-          <p id="resp-resumo" class="info-base"></p>
-        </div>
-        <div class="tabela-wrap">
-          <table class="tabela-pedidos tabela-resp">
-            <thead><tr><th>Micro status</th><th class="num">Pedidos em aberto</th><th>Responsável</th></tr></thead>
-            <tbody id="resp-linhas"></tbody>
-          </table>
-        </div>
-      </section>
-    </main>
-
     <!-- ============ REPOSIÇÃO ============ -->
     <main class="conteudo" id="pagina-reposicao" hidden>
       <section class="filtros-cartao filtros-rep" aria-label="Filtros">
@@ -1351,13 +1347,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=141"></script>
-  <script src="mapa-brasil.js?v=141"></script>
-  <script src="troca-notas.js?v=141"></script>
-  <script src="app.js?v=141"></script>
-  <script src="ordenar.js?v=141"></script>
-  <script src="menu.js?v=141"></script>
-  <script src="ajuda.js?v=141"></script>
-  <script src="documentos.js?v=141"></script>
+  <script src="config.js?v=142"></script>
+  <script src="mapa-brasil.js?v=142"></script>
+  <script src="troca-notas.js?v=142"></script>
+  <script src="app.js?v=142"></script>
+  <script src="ordenar.js?v=142"></script>
+  <script src="menu.js?v=142"></script>
+  <script src="ajuda.js?v=142"></script>
+  <script src="documentos.js?v=142"></script>
 </body>
 </html>

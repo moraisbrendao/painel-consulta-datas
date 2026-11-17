@@ -72,10 +72,11 @@
       "<b>⧉ Copiar resumo do dia</b> copia os números do dia para mandar no grupo.",
     ], "Pedido que já aparece entregue no arquivo da Intelipost sai da cobrança. Um retorno só vale se a nova data for de hoje em diante."],
 
-    ["responsaveis", "Responsáveis", "Define quem cuida de cada micro status.", "Quando entra um micro status novo ou muda alguém da equipe.", [
+    ["responsaveis", "Responsáveis (dentro do Preventivo)", "Define quem cuida de cada micro status.", "Quando entra um micro status novo ou muda alguém da equipe.", [
+      "Fica no fim da aba <b>Preventivo</b>: clique no botão <b>👤 Responsáveis</b> ao lado do título (ou no quadro \"Responsáveis por micro status\" lá embaixo) para abrir.",
       "Clique em <b>+ Adicionar responsável</b> para cadastrar a pessoa ou área.",
       "Na tabela, escolha o responsável de cada micro status (os pendentes aparecem primeiro). Salva na hora.",
-    ], "O número vermelho no menu mostra quantos micro status estão sem dono."],
+    ], "O botão 👤 Responsáveis mostra quantos micro status estão sem dono."],
 
     ["reposicao", "Reposição", "Indicadores de reposição pré e pós-entrega, por mês, transportadora e motivo.", "Para o acompanhamento mensal de reposições.", [
       "Clique em <b>⇪ Subir tabela de acompanhamento</b> e escolha a TABELA DE ACOMPANHAMENTO (BI, aba Export).",

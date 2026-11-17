@@ -3508,7 +3508,10 @@ ${extra}
   setInterval(() => { if (paginaAtual === "conferencia" && !document.hidden && (cfLista.some(CF_CARD.pendente) || tudoAtivo())) carregarConferencia(); }, 60000);
 
   // ---------------- menu lateral ----------------
+  function abrirRespPrev() { const d = $("prev-resp"); d.open = true; setTimeout(() => d.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
+  $("btn-prev-resp").addEventListener("click", abrirRespPrev);
   function irPara(pag) {
+    if (pag === "responsaveis") { pag = "preventivo"; setTimeout(abrirRespPrev, 100); }   // Responsáveis agora fica dentro do Preventivo
     if (perfil !== "sac" && !podePag(pag)) { toast("Você não tem acesso a essa aba. Fale com a administradora do painel.", true); pag = primeiraPag(); }
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
@@ -4031,6 +4034,7 @@ ${extra}
     chaves.sort((a, b) => (respMs.has(a) ? 1 : 0) - (respMs.has(b) ? 1 : 0) || (cont.get(b) || 0) - (cont.get(a) || 0) || a.localeCompare(b));
     const pend = chaves.filter((k) => !respMs.has(k) && cont.get(k)).length;
     $("menu-resp").hidden = !pend; $("menu-resp").textContent = fmt(pend);
+    $("btn-prev-resp").textContent = pend ? `👤 Responsáveis · ${fmt(pend)} pendente${pend === 1 ? "" : "s"}` : "👤 Responsáveis";
     $("resp-resumo").textContent = `${fmt(chaves.length)} micro status · ${fmt(pend)} pendente${pend === 1 ? "" : "s"} de responsável`;
     const opcoes = (id) => `<option value="">${PENDENTE}</option>` + pessoas.map((x) => `<option value="${x.id}" ${x.id === id ? "selected" : ""}>${esc(x.nome)}${x.area ? " · " + esc(x.area) : ""}</option>`).join("");
     $("resp-linhas").innerHTML = chaves.map((k) => `<tr class="${respMs.has(k) ? "" : "linha-pendente"}">
