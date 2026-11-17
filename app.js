@@ -3668,7 +3668,8 @@ ${extra}
     }
     carregando("");
     const avisoHist = wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "";
-    await carregar();
+    carregando("Atualizando o painel…");
+    try { await carregar(); } finally { carregando(""); }   // o histórico deixava a janela "Enviando…" aberta para sempre
     if (avisoHist && /guardados/.test(avisoHist)) carregarReposicoes();
     if (avisoDet) toast("Tickets atualizados" + avisoDet + avisoHist, true); else toast(`Tickets atualizados: ${fmt(base.filter((p) => ticketDe(p)).length)} pedidos do painel têm ticket aberto · ${fmt(detLinhas.filter((x) => x.tem_ocorr).length)} notas com ocorrência e ${fmt(detLinhas.filter((x) => x.repo_nf).length)} com NF de reposição guardadas${avisoHist}.`);
   });
