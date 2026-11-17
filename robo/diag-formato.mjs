@@ -17,12 +17,13 @@ const T = [...await chamar("base_pedidos?select=nf,transportadora,micro_status&t
   ...await chamar("base_pedidos?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.*AUSENTE*&limit=1").catch(() => [])];
 log("Formato na base:", T.length, "· por série:", Object.entries(T.reduce((a, l) => { const s = String(l.nf).split("-")[1] || "?"; a[s] = (a[s] || 0) + 1; return a; }, {})).map(([k, v]) => `${k}:${v}`).join(" "), "· por micro status:", Object.entries(T.reduce((a, l) => { const s = (l.micro_status || "?").slice(0, 25); a[s] = (a[s] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}:${v}`).join(" | "));
 // amostra variada: 2 por série, preferindo quem já saiu (micro status sem "aguard"/"emiss")
-const L = [...new Map(T.map((l) => [l.nf, l])).values()].slice(0, 8);
+const L = [...new Map(T.map((l) => [l.nf, l])).values()].slice(0, 2);
 log("NFs Formato:", L.length);
 const nav = await chromium.launch();
 const pg = await nav.newPage();
 pg.on("response", (r) => { const q = r.request(); if (["xhr", "fetch", "document"].includes(q.resourceType())) log(`${q.method()} ${new URL(r.url()).pathname} → ${r.status()} · ${q.resourceType()} · campos: ${q.postData() ? [...new URLSearchParams(q.postData()).keys()].join(",") : ""}`); });
 await pg.goto("https://www.transformato.com.br/", { waitUntil: "networkidle" }).catch((e) => log("home erro:", e.message));
+log("campos do login:", (await pg.$$eval("#flogin input, #flogin select", (es) => es.map((e) => `${e.tagName}[${e.type}] ${e.name}=${e.name === "sistema" ? e.value : ""}`))).join(" | "));
 await pg.locator("#username").fill(US);
 await pg.locator("#password").fill(SE);
 await Promise.all([pg.waitForLoadState("networkidle").catch(() => {}), pg.locator("#flogin input[type=submit]").click()]);
@@ -45,6 +46,7 @@ for (const l of L) {
   if (!/n[ãa]o (foi )?encontrad/i.test(t)) achou++; else { log("   micro status:", (l.micro_status || "?").slice(0, 30)); await pg.goto("https://www.transformato.com.br/consnota.asp", { waitUntil: "networkidle" }).catch(() => {}); continue; }
   if (achou > 4) { await pg.goto("https://www.transformato.com.br/consnota.asp", { waitUntil: "networkidle" }).catch(() => {}); continue; }
   log("cabeçalhos:", (await pg.$$eval("th, td b, td strong", (es) => es.map((e) => e.textContent.trim().slice(0, 30)))).slice(0, 30).join(" | "));
+  log("linhas ~ (formato):", t.split(/\n+/).map((x) => x.trim()).filter(Boolean).filter((x) => seguro(x)[0] === "~").map((x) => x.replace(/\d/g, "9").replace(/[A-Za-zÀ-ú]{4,}/g, (w) => /^(entreg|recebid|baixa|ocorr|data|hora|situa|status|pend|devol|insuc|ausen|endere|recus|previs|cliente|ol[áa])/i.test(w) ? w : "x")).slice(0, 12).join(" | "));
   log("textos:", seguro(t).slice(0, 60).join(" | ").slice(0, 2000));
   log("links:", (await pg.$$eval("a[href], iframe, form", (es) => es.map((e) => (e.getAttribute("href") || e.getAttribute("src") || e.getAttribute("action") || "").slice(0, 80)))).filter((x) => !/^(consnota|conscte|relpedidosc|relconc|geracopcli|relfollowup|bolcli|logout|#)/.test(x)).slice(0, 15).join(" | "));
   await pg.goto("https://www.transformato.com.br/consnota.asp", { waitUntil: "networkidle" }).catch(() => {});
