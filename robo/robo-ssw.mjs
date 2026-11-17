@@ -376,6 +376,34 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
+if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/consultaweb.asp): formulário, captcha e estrutura do resultado (mascarado)
+  const URL_F = "https://www.transformato.com.br/consultaweb.asp";
+  const f = await pagina(URL_F).catch((e) => ({ status: e.message, txt: "" }));
+  log("form:", f.status, f.txt.length, "bytes · captcha:", /captcha|recaptcha|turnstile|hcaptcha/i.test(f.txt) ? "SIM" : "não");
+  log("tags:", tags(f.txt, /<form[^>]*>|<input[^>]*>|<button[^>]*>|<select[^>]*>|<option[^>]*>[^<]{0,40}/gi).map((x) => x.replace(/value=["'][^"']{14,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).join(" | ").slice(0, 2500));
+  log("scripts:", tags(f.txt, /<script[^>]*>[\s\S]{0,800}?<\/script>/gi).filter((x) => !/_gaq|gtag|jquery/i.test(x)).map((x) => x.replace(/\d{5,}/g, "#").replace(/\s+/g, " ").slice(0, 600)).join(" || ").slice(0, 2500));
+  await entrarSupabase();
+  const L = await chamar("base_aberta?select=nf,transportadora&transportadora=ilike.*formato*&nf=not.is.null&limit=3");
+  log("NFs da Formato para testar:", L.length);
+  if (!L.length) process.exit(0);
+  const acao = (f.txt.match(/<form[^>]*action=["']([^"']*)["']/i) || [])[1] || "";
+  const metodo = ((f.txt.match(/<form[^>]*method=["']([^"']*)["']/i) || [])[1] || "post").toLowerCase();
+  const campos = tags(f.txt, /<input[^>]*>|<select[^>]*>/gi).map((x) => ({ n: (x.match(/name=["']([^"']+)["']/i) || [])[1], t: ((x.match(/type=["']([^"']+)["']/i) || [])[1] || "text").toLowerCase(), v: (x.match(/value=["']([^"']*)["']/i) || [])[1] || "" })).filter((c) => c.n);
+  log("action:", acao, "· method:", metodo, "· campos:", campos.map((c) => `${c.n}(${c.t})`).join(", "));
+  for (const l of L.slice(0, 2)) {
+    const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
+    const corpo = new URLSearchParams();
+    campos.forEach((c) => { if (["submit", "button", "image"].includes(c.t)) return; corpo.set(c.n, /cnpj|cpf|doc|remet/i.test(c.n) ? cnpjDaSerie(ser) || "00349443000192" : /serie/i.test(c.n) ? ser : /nf|nota|num|doc|pesq|busca|valor/i.test(c.n) ? num : c.v); });
+    const destino = new URL(acao || URL_F, URL_F).href;
+    const r = metodo === "get" ? await pagina(destino + "?" + corpo.toString()).catch((e) => ({ status: e.message, txt: "" }))
+      : await pagina(destino, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: corpo.toString() }).catch((e) => ({ status: e.message, txt: "" }));
+    const ls = sohTexto(r.txt);
+    log(`consulta (série ${ser}):`, r.status, "·", r.txt.length, "bytes · linhas:", ls.length, "· datas:", (r.txt.match(/\d{2}\/\d{2}\/\d{2,4}/g) || []).length, "· previsão:", /previs/i.test(r.txt) ? "sim" : "não", "· entreg:", /entreg/i.test(r.txt) ? "sim" : "não", "· captcha:", /captcha/i.test(r.txt) ? "SIM" : "não", "· não encontrad:", /n[ãa]o (foi )?encontrad|nenhum/i.test(r.txt) ? "sim" : "não");
+    log("textos:", ls.map((x) => limpo(x)).filter((x) => x.replace(/[x\s#]/g, "").length > 2).slice(0, 70).join(" | ").slice(0, 2500));
+    log("tabelas/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>|<input[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#").replace(/value=["'][^"']{10,}["']/g, 'value="…"')).slice(0, 30).join(" | "));
+    await new Promise((ok) => setTimeout(ok, 3000));
+  }
+}
 if (MODO === "diag-track3r") {   // documentação pública da API da Track3r (sem token): lista os métodos
   for (const u of ["https://api.track3r.com.br/", "https://api.track3r.com.br/swagger/index.html", "https://api.track3r.com.br/swagger/v2/swagger.json", "https://api.track3r.com.br/swagger/v1/swagger.json", "https://api.track3r.com.br/help", "https://api.track3r.com.br/v2/help", "https://api.track3r.com.br/swagger/docs/v2", "https://api.track3r.com.br/swagger/docs/v1"]) {
     const r = await pagina(u).catch((e) => ({ status: e.message, txt: "" }));
