@@ -191,12 +191,18 @@
   // ---------------- carregar ----------------
   // busca a tabela inteira em páginas de 1.000, várias ao mesmo tempo (bem mais rápido que uma por vez)
   // busca uma página; se o banco demorar (timeout), tenta de novo uma vez
+  // Limite GERAL de páginas baixando ao mesmo tempo (somando todas as tabelas): o banco do Supabase engasga
+  // (erros 500/504 e mais de 1 minuto) quando o painel pede ~80 páginas de uma vez ao abrir.
+  const MAX_SIMULT = 6; let simult = 0; const filaPag = [];
+  async function vez() { if (simult < MAX_SIMULT) { simult++; return; } await new Promise((ok) => filaPag.push(ok)); }
+  function libera() { const prox = filaPag.shift(); if (prox) prox(); else simult--; }
   async function buscarPagina(tabela, ordem, colunas, de, ate, contar) {
     for (let tentativa = 0; ; tentativa++) {
-      const r = await sb.from(tabela).select(colunas, contar ? { count: "exact" } : undefined).order(ordem).range(de, ate);
+      await vez();
+      let r; try { r = await sb.from(tabela).select(colunas, contar ? { count: "exact" } : undefined).order(ordem).range(de, ate); } finally { libera(); }
       if (!r.error) return r;
-      if (tentativa >= 1 || !/timeout/i.test(r.error.message || "")) throw r.error;
-      await new Promise((ok) => setTimeout(ok, 1500));
+      if (tentativa >= 2 || !/timeout|time out|canceling|upstream|50[0234]|fetch/i.test((r.error.message || "") + " " + (r.status || ""))) throw r.error;
+      await new Promise((ok) => setTimeout(ok, 1500 * (tentativa + 1)));
     }
   }
 
