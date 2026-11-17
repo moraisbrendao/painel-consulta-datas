@@ -795,3 +795,9 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
   .modal { padding: 0; }
   .modal-caixa, .modal > div { width: 100%; max-width: 100%; min-height: 100%; border-radius: 0; }
 }
+
+/* Pedidos por transportadora · por mês: volume + performance */
+.pt-cel .pt-vol { display: block; }
+.pt-cel .pt-perf { display: block; font-size: 11px; font-weight: 700; }
+.pt-sub { display: block; font-size: 10px; font-weight: 400; color: var(--texto-2); text-transform: none; }
+.pt-cel .pt-perf.verde-t { color: #15803d; } .pt-cel .pt-perf.laranja-t { color: #c2410c; } .pt-cel .pt-perf.vermelho-t { color: #b91c1c; } .pt-cel .pt-perf.neutro { color: var(--texto-2); }

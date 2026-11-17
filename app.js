@@ -1468,23 +1468,38 @@ ${extra}
     $("g-canais").innerHTML = `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Pedidos por canal">${g}</svg>`;
   }
 
+  // performance de um grupo = (entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto); cancelados ficam fora
+  const ptNovo = () => ({ v: 0, ok: 0, abOk: 0, ent: 0, ab: 0 });
+  const ptSoma = (x, r) => { const st = norm(r.status); x.v++;
+    if (st.startsWith("CANCELADO")) return; if (st.startsWith("ENTREGUE")) { x.ent++; if (r._sit === "ent_prazo") x.ok++; } else { x.ab++; if (!r._atraso) x.abOk++; } };
+  const ptPerf = (x) => (x && x.ent + x.ab ? (x.ok + x.abOk) / (x.ent + x.ab) : null);
+  let ptMes = null;
   function desenharPorTransp(L) {
-    const porT = new Map(), meses = new Set();
+    const porT = new Map(), meses = new Set(), totM = new Map(), totG = ptNovo();
     L.forEach((r) => {
-      const t = r.transp || "(sem transportadora)"; const x = porT.get(t) || { tot: 0, ent: 0, ok: 0, can: 0, ab: 0, m: new Map() };
+      const t = gProdK(r.transp); const x = porT.get(t) || { tot: 0, ent: 0, ok: 0, can: 0, ab: 0, m: new Map(), g: ptNovo() };
       x.tot++; const st = norm(r.status); if (r._sit === "ent_prazo") x.ok++; if (st.startsWith("ENTREGUE")) x.ent++; else if (st.startsWith("CANCELADO")) x.can++; else x.ab++;
-      const m = (r.criado || "").slice(0, 7); if (m) { x.m.set(m, (x.m.get(m) || 0) + 1); meses.add(m); }
+      ptSoma(x.g, r); ptSoma(totG, r);
+      const m = (r.criado || "").slice(0, 7);
+      if (m) { if (!x.m.has(m)) x.m.set(m, ptNovo()); ptSoma(x.m.get(m), r); if (!totM.has(m)) totM.set(m, ptNovo()); ptSoma(totM.get(m), r); meses.add(m); }
       porT.set(t, x);
     });
     const ord = [...porT.entries()].sort((a, b) => b[1].tot - a[1].tot);
     if (gPtModo === "sit") {
+      ptMes = null;
       $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th><th class="num">Total</th><th class="num">Entregues</th><th class="num">SLA entrega</th><th class="num">Cancelados</th><th class="num">Em trânsito</th></tr>`;
       $("g-pt-linhas").innerHTML = ord.map(([t, x]) => `<tr class="clicavel" data-ptt="${esc(t)}"><td>${esc(t)}</td><td class="num neutro tot">${fmt(x.tot)}</td>
         <td class="num verde-t">${fmt(x.ent)} <small>(${Math.round((x.ent / x.tot) * 100)}%)</small></td><td class="num ${corSla(x.ent ? x.ok / x.ent : null)}" title="entregues no prazo ÷ entregues">${pct0(x.ent ? x.ok / x.ent : null)}</td><td class="num neutro">${fmt(x.can)}</td><td class="num azul-t">${fmt(x.ab)}</td></tr>`).join("");
     } else {
-      const ms = [...meses].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
-      $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th>${ms.map((m) => `<th class="num">${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}</th>`).join("")}<th class="num">Total</th></tr>`;
-      $("g-pt-linhas").innerHTML = ord.map(([t, x]) => `<tr class="clicavel" data-ptt="${esc(t)}"><td>${esc(t)}</td>${ms.map((m) => `<td class="num neutro">${fmt(x.m.get(m) || 0)}</td>`).join("")}<td class="num neutro tot">${fmt(x.tot)}</td></tr>`).join("");
+      const ms = [...meses].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"], nomeM = (m) => `${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}`;
+      const p1 = (x) => (x === null ? "—" : (x * 100).toFixed(1).replace(".", ",") + "%");
+      const cel = (x, cls = "") => { const p = ptPerf(x);
+        return `<td class="num neutro pt-cel ${cls}" title="${x ? `${fmt(x.v)} pedidos · ${fmt(x.ok)} entregues no prazo, ${fmt(x.ent - x.ok)} entregues com atraso, ${fmt(x.abOk)} em aberto no prazo, ${fmt(x.ab - x.abOk)} em aberto atrasados` : ""}">
+          <span class="pt-vol">${fmt(x ? x.v : 0)}</span><span class="pt-perf ${corSla(p)}">${p1(p)}</span></td>`; };
+      $("g-pt-cab").innerHTML = `<tr><th>Transportadora</th>${ms.map((m) => `<th class="num">${nomeM(m)}<small class="pt-sub">volume · perf.</small></th>`).join("")}<th class="num">Total<small class="pt-sub">volume · perf.</small></th></tr>`;
+      $("g-pt-linhas").innerHTML = ord.map(([t, x]) => `<tr class="clicavel" data-ptt="${esc(t)}"><td>${esc(t)}</td>${ms.map((m) => cel(x.m.get(m))).join("")}${cel(x.g, "tot")}</tr>`).join("")
+        + `<tr class="tot-linha"><td>Total</td>${ms.map((m) => cel(totM.get(m))).join("")}${cel(totG, "tot")}</tr>`;
+      ptMes = { ms, nomeM, ord, totM, totG };
     }
   }
 
@@ -2066,12 +2081,19 @@ ${extra}
   // a lista de pedidos fica na Visão Gerencial: abre ela já filtrada pela transportadora
   function verPedidosTransp(t) {
     if (paginaAtual !== "gerencial") { irPara("gerencial"); montarGerencial(); }
-    selecionar(`Todos os pedidos · ${t}`, (L) => L.filter((r) => (r.transp || "(sem transportadora)") === t));
+    selecionar(`Todos os pedidos · ${t}`, (L) => L.filter((r) => (r.transp || "(sem transportadora)") === t || gProdK(r.transp) === t));
   }
   $("g-pt-modo").addEventListener("click", (e) => { const b = e.target.closest("button[data-m]"); if (!b) return; gPtModo = b.dataset.m;
     $("g-pt-modo").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharPorTransp(gFiltradosCache); });
   $("g-pt-extrair").addEventListener("click", () => {
-    const linhas = [...document.querySelectorAll(".tabela-pt tr")].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
+    let linhas;
+    if (gPtModo === "mes" && ptMes) {
+      const { ms, nomeM, ord, totM, totG } = ptMes, pc = (x) => { const p = ptPerf(x); return p === null ? "" : +(p * 100).toFixed(1); };
+      const vals = (x) => [x ? x.v : 0, pc(x), x ? x.ok : 0, x ? x.ent - x.ok : 0, x ? x.abOk : 0, x ? x.ab - x.abOk : 0];
+      const cab = ["Transportadora"]; ms.concat(["total"]).forEach((m) => { const n = m === "total" ? "Total" : nomeM(m);
+        cab.push(`${n} · Volume`, `${n} · Performance %`, `${n} · Entregues no prazo`, `${n} · Entregues c/ atraso`, `${n} · Em aberto no prazo`, `${n} · Em aberto atrasados`); });
+      linhas = [cab].concat(ord.map(([t, x]) => [t].concat(...ms.map((m) => vals(x.m.get(m))), vals(x.g))), [["Total"].concat(...ms.map((m) => vals(totM.get(m))), vals(totG))]);
+    } else linhas = [...document.querySelectorAll(".tabela-pt tr")].map((tr) => [...tr.children].map((c) => c.textContent.trim()));
     const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Por transportadora");
     XLSX.writeFile(wb, `pedidos_por_transportadora_${gPtModo === "sit" ? "situacao" : "mes"}_${hojeISO()}.xlsx`);
   });
