@@ -3601,6 +3601,41 @@ ${extra}
     extravio: (p) => ["extravio", "sinistro"].includes(p._dd), coleta: (p) => p._dd === "naocoletado",
     repocorr: (p) => ["repo", "ocorr"].includes(p._dd), abertos: () => true };
   const D_ORDEM = ["sinistro", "extravio", "naocoletado", "falha", "repo", "ocorr", "parado", "semcte", "semexp", "atraso", "aguardando", "entregue", "prazo"];
+  // filtros do topo (mesmo modelo da Visão Gerencial: várias opções em cada um)
+  const D_CAMPOS = { canal: (p) => p.canal || "", uf: (p) => p.uf || "", transp: (p) => gProdK(p.transportadora) || "", serie: (p) => String(p.nf || "").split("-")[1]?.trim() || "",
+    forn: (p) => dForn(p) || "", status: (p) => p.status_intelipost || "", micro: (p) => p.micro_status || "" };
+  const dMS = Object.fromEntries(Object.keys(D_CAMPOS).map((k) => [k, new Set()]));
+  function montarFiltrosD(D) {
+    document.querySelectorAll("#d-filtros .multi").forEach((el) => {
+      const k = el.dataset.dm, cont = new Map();
+      D.forEach((p) => { const v = D_CAMPOS[k](p); if (v) cont.set(v, (cont.get(v) || 0) + 1); });
+      [...dMS[k]].forEach((v) => { if (!cont.has(v)) dMS[k].delete(v); });
+      const ops = [...cont.entries()].sort((a, b) => String(a[0]).localeCompare(String(b[0]), "pt-BR", { numeric: true }));
+      const pn0 = el.querySelector(".multi-painel"), aberto = pn0 && !pn0.hidden, q = el.querySelector(".multi-busca") ? el.querySelector(".multi-busca").value : "";
+      el.innerHTML = `<span class="multi-rotulo">${esc(el.dataset.rotulo)}</span>
+        <button type="button" class="multi-botao"><span class="multi-valor"></span><span class="seta">▾</span></button>
+        <div class="multi-painel" ${aberto ? "" : "hidden"}><input class="multi-busca" type="search" placeholder="Procurar…" value="${esc(q)}">
+          <div class="multi-lista">${ops.map(([v, n]) => `<label class="multi-op"><input type="checkbox" value="${esc(v)}" ${dMS[k].has(v) ? "checked" : ""}><span>${esc(v)}</span><em>${fmt(n)}</em></label>`).join("")}</div>
+          <div class="multi-acoes"><button type="button" class="link" data-acao="limpar">Limpar</button><span class="s">${fmt(ops.length)} opções</span></div></div>`;
+      valorMultiD(el);
+    });
+  }
+  function valorMultiD(el) { const s = dMS[el.dataset.dm]; el.querySelector(".multi-valor").textContent = !s.size ? "Todos" : s.size === 1 ? [...s][0] : `${s.size} selecionados`; el.classList.toggle("ativo", s.size > 0); }
+  $("d-filtros").addEventListener("click", (e) => {
+    const bt = e.target.closest(".multi-botao");
+    if (bt) { const pn = bt.parentElement.querySelector(".multi-painel"), ab = pn.hidden; document.querySelectorAll("#d-filtros .multi-painel").forEach((x) => (x.hidden = true)); pn.hidden = !ab; if (ab) pn.querySelector(".multi-busca").focus(); return; }
+    const lp = e.target.closest("[data-acao=limpar]");
+    if (lp) { const el = lp.closest(".multi"); dMS[el.dataset.dm].clear(); dMudou(); }
+  });
+  $("d-filtros").addEventListener("change", (e) => {
+    if (e.target.type === "checkbox") { const el = e.target.closest(".multi"); e.target.checked ? dMS[el.dataset.dm].add(e.target.value) : dMS[el.dataset.dm].delete(e.target.value); dMudou(); }
+    else if (e.target.type === "date") dMudou();
+  });
+  $("d-filtros").addEventListener("input", (e) => {
+    if (!e.target.classList.contains("multi-busca")) return; const q = norm(e.target.value);
+    e.target.closest(".multi").querySelectorAll(".multi-op").forEach((op) => (op.hidden = q && !norm(op.textContent).includes(q)));
+  });
+  document.addEventListener("click", (e) => { if (!e.target.closest("#d-filtros .multi")) document.querySelectorAll("#d-filtros .multi-painel").forEach((x) => (x.hidden = true)); });
   function desenharDrop(soSeAberta) {
     const D = base.filter(ehDrop);
     D.forEach((p) => { p._dd = dDiag(p); });
@@ -3612,13 +3647,14 @@ ${extra}
     // opções dos filtros
     const opc = (id, f, todos) => { const el = $(id), v = el.value, c = new Map(); D.forEach((p) => { const k = f(p); if (k) c.set(k, (c.get(k) || 0) + 1); });
       el.innerHTML = `<option value="">${todos}</option>` + [...c].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([k, n]) => `<option value="${esc(k)}">${esc(k)} (${fmt(n)})</option>`).join(""); el.value = c.has(v) ? v : ""; };
-    opc("d-transp", (p) => gProdK(p.transportadora), "Todas"); opc("d-forn", dForn, "Todos"); $("d-forn-rot").hidden = !D.some(dForn);
-    if ($("d-transp").value !== (dSel.transp || "")) $("d-transp").value = dSel.transp || "";
-    const busca = norm($("d-busca").value).split(/[\s,;]+/).filter(Boolean), forn = $("d-forn").value;
+    void opc; montarFiltrosD(D);
+    const busca = norm($("d-busca").value).split(/[\s,;]+/).filter(Boolean), forn = [...dMS.forn].join(", ");
+    const dDe = $("d-de").value, dAte = $("d-ate").value;
     const passa = (p, menos) => {
       if (busca.length && !busca.some((b) => norm(p.pedido).includes(b) || norm(p.nf).includes(b))) return false;
       if (menos !== "transp" && dSel.transp && (gProdK(p.transportadora)) !== dSel.transp) return false;
-      if (forn && dForn(p) !== forn) return false;
+      for (const k in dMS) if (dMS[k].size && !dMS[k].has(D_CAMPOS[k](p))) return false;
+      const dc = String(p.data_criacao || "").slice(0, 10); if (dDe && (!dc || dc < dDe)) return false; if (dAte && (!dc || dc > dAte)) return false;
       if (menos !== "diag" && dSel.diag && p._dd !== dSel.diag) return false;
       if (menos !== "card" && !D_CARD[dSel.card](p)) return false;
       return true; };
@@ -3670,10 +3706,8 @@ ${extra}
     const dt = e.target.closest("tr[data-dt]"); if (dt) { dSel.transp = dSel.transp === dt.dataset.dt ? "" : dt.dataset.dt; dMudou(); return $("d-lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" }); }
     const pb = e.target.closest("#d-paginacao button[data-p]"); if (pb) { dPagina += Number(pb.dataset.p); desenharDLista(); $("d-lista-titulo").scrollIntoView({ block: "start" }); }
   });
-  $("d-transp").addEventListener("change", () => { dSel.transp = $("d-transp").value; dMudou(); });
-  $("d-forn").addEventListener("change", dMudou);
   let dEspera; $("d-busca").addEventListener("input", () => { clearTimeout(dEspera); dEspera = setTimeout(dMudou, 250); });
-  $("d-limpar").addEventListener("click", () => { dSel.card = "agir"; dSel.diag = ""; dSel.transp = ""; $("d-busca").value = ""; $("d-forn").value = ""; dMudou(); });
+  $("d-limpar").addEventListener("click", () => { dSel.card = "agir"; dSel.diag = ""; dSel.transp = ""; $("d-busca").value = ""; $("d-de").value = ""; $("d-ate").value = ""; Object.values(dMS).forEach((x) => x.clear()); dMudou(); });
   $("d-linhas").addEventListener("click", (e) => { if (e.target.closest("input, select, textarea, a, button")) return; const tr = e.target.closest("tr[data-pedido]"); if (tr) abrirDetalhe(tr.dataset.pedido); });
   $("d-linhas").addEventListener("change", async (e) => {
     const inp = e.target.closest("[data-d-campo]"); if (!inp) return; const tr = inp.closest("tr[data-pedido]");

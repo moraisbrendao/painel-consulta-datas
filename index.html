@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=153">
+  <link rel="stylesheet" href="styles.css?v=154">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -437,12 +437,19 @@
 
     <!-- ============ DROPSHIPPING ============ -->
     <main class="conteudo" id="pagina-drop" hidden>
-      <section class="filtros-cartao filtros-drop" aria-label="Filtros">
+      <section class="filtros-cartao filtros-ger filtros-dm" id="d-filtros" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
-        <label class="cresce">Pedido ou NF<input id="d-busca" type="search" placeholder="# um ou vários"></label>
-        <label>Transportadora<select id="d-transp"><option value="">Todas</option></select></label>
-        <label id="d-forn-rot">Fornecedor<select id="d-forn"><option value="">Todos</option></select></label>
-        <button id="d-limpar" class="link limpar" type="button">Limpar filtros</button>
+        <div class="multi" data-dm="canal" data-rotulo="Canal"></div>
+        <div class="multi" data-dm="uf" data-rotulo="UF"></div>
+        <div class="multi" data-dm="transp" data-rotulo="Transportadora"></div>
+        <div class="multi" data-dm="serie" data-rotulo="Série"></div>
+        <div class="multi" data-dm="forn" data-rotulo="Fornecedor"></div>
+        <div class="multi" data-dm="status" data-rotulo="Status Intelipost"></div>
+        <div class="multi" data-dm="micro" data-rotulo="Micro status"></div>
+        <label class="g-nf">Pedido ou NF<input id="d-busca" type="search" placeholder="# um ou vários"></label>
+        <label>Criação de<input id="d-de" type="date"></label>
+        <label>até<input id="d-ate" type="date"></label>
+        <span class="g-dica">dá para escolher mais de um em cada filtro · <button id="d-limpar" class="link limpar" type="button">Limpar filtros</button></span>
       </section>
       <div class="titulo-pagina com-acoes">
         <div>
@@ -1399,14 +1406,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=153"></script>
-  <script src="mapa-brasil.js?v=153"></script>
-  <script src="troca-notas.js?v=153"></script>
-  <script src="app.js?v=153"></script>
-  <script src="ordenar.js?v=153"></script>
-  <script src="menu.js?v=153"></script>
-  <script src="ajuda.js?v=153"></script>
-  <script src="documentos.js?v=153"></script>
-  <script src="filtros.js?v=153"></script>
+  <script src="config.js?v=154"></script>
+  <script src="mapa-brasil.js?v=154"></script>
+  <script src="troca-notas.js?v=154"></script>
+  <script src="app.js?v=154"></script>
+  <script src="ordenar.js?v=154"></script>
+  <script src="menu.js?v=154"></script>
+  <script src="ajuda.js?v=154"></script>
+  <script src="documentos.js?v=154"></script>
+  <script src="filtros.js?v=154"></script>
 </body>
 </html>
