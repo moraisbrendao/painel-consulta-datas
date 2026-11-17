@@ -352,6 +352,8 @@ if (MODO === "diag-jadobs") {   // onde estão as "Observações" do rastreio da
 if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrutura do resultado (sem dados de cliente)
   const URL_B = "https://sistema.bentobrasil.com.br/rastreamentoCarga.php";
   const f = await pagina(URL_B);
+  const h = await pagina("https://www.transformato.com.br/").catch((e) => ({ status: e.message, txt: "" }));
+  log("home: forms/inputs:", tags(h.txt, /<form[^>]*>|<input[^>]*>|<a [^>]*href=["'][^"']*(consult|login|client|rastre|track)[^"']*["']/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).slice(0, 25).join(" | "));
   log("form:", f.status, tags(f.txt, /<form[^>]*>|<input[^>]*>|<button[^>]*>|<select[^>]*>/gi).map((x) => x.replace(/value=["'][^"']{10,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).join(" | ").slice(0, 1500));
   log("scripts:", tags(f.txt, /<script[^>]*>[\s\S]{0,600}?<\/script>/gi).map((x) => x.replace(/\d{5,}/g, "#").slice(0, 500)).join(" || ").slice(0, 2500));
   await entrarSupabase();
@@ -399,7 +401,7 @@ if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/con
   for (const l of L.slice(0, 2)) {
     const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
     const corpo = new URLSearchParams();
-    campos.forEach((c) => { if (["submit", "button", "image"].includes(c.t)) return; corpo.set(c.n, /cnpj|cpf|doc|remet/i.test(c.n) ? cnpjDaSerie(ser) || "00349443000192" : /serie/i.test(c.n) ? ser : /nf|nota|num|doc|pesq|busca|valor/i.test(c.n) ? num : c.v); });
+    campos.forEach((c) => { if (["button", "image"].includes(c.t)) return; if (c.t === "submit") { corpo.set(c.n, c.v); return; } corpo.set(c.n, /cnpj|cpf|doc|remet/i.test(c.n) ? cnpjDaSerie(ser) || "00349443000192" : /serie/i.test(c.n) ? ser : /nf|nota|num|doc|pesq|busca|valor/i.test(c.n) ? num : c.v); });
     const destino = new URL(acao || f.url, f.url).href;
     const r = metodo === "get" ? await pagina(destino + "?" + corpo.toString(), { headers: CK }).catch((e) => ({ status: e.message, txt: "" }))
       : await pagina(destino, { method: "POST", headers: { ...CK, "Content-Type": "application/x-www-form-urlencoded" }, body: corpo.toString() }).catch((e) => ({ status: e.message, txt: "" }));
