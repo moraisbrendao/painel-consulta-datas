@@ -7,7 +7,7 @@ const letras = (t) => t.split(/\n+/).map((x) => x.trim()).filter(Boolean).map((x
 const { FORMATO_USUARIO: US, FORMATO_SENHA: SE } = process.env;
 if (!US || !SE) { log("faltam os segredos FORMATO_USUARIO / FORMATO_SENHA"); process.exit(0); }
 await entrarSupabase();
-const T = await chamar("base_aberta?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&limit=2000");
+const T = await chamar("base_aberta?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&limit=300");
 log("Formato na base:", T.length, "· por série:", Object.entries(T.reduce((a, l) => { const s = String(l.nf).split("-")[1] || "?"; a[s] = (a[s] || 0) + 1; return a; }, {})).map(([k, v]) => `${k}:${v}`).join(" "), "· por micro status:", Object.entries(T.reduce((a, l) => { const s = (l.micro_status || "?").slice(0, 25); a[s] = (a[s] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}:${v}`).join(" | "));
 // amostra variada: 2 por série, preferindo quem já saiu (micro status sem "aguard"/"emiss")
 const L = []; const vistos = {};
