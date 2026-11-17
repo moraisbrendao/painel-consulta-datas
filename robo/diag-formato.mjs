@@ -17,10 +17,12 @@ const T = [...await chamar("base_pedidos?select=nf,transportadora,micro_status&t
   ...await chamar("base_pedidos?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.*AUSENTE*&limit=1").catch(() => [])];
 log("Formato na base:", T.length, "· por série:", Object.entries(T.reduce((a, l) => { const s = String(l.nf).split("-")[1] || "?"; a[s] = (a[s] || 0) + 1; return a; }, {})).map(([k, v]) => `${k}:${v}`).join(" "), "· por micro status:", Object.entries(T.reduce((a, l) => { const s = (l.micro_status || "?").slice(0, 25); a[s] = (a[s] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}:${v}`).join(" | "));
 // amostra variada: 2 por série, preferindo quem já saiu (micro status sem "aguard"/"emiss")
-const L = [...new Map(T.map((l) => [l.nf, l])).values()].slice(0, 2);
+const L = [];
 log("NFs Formato:", L.length);
 const nav = await chromium.launch();
 const pg = await nav.newPage();
+pg.on("request", (q) => { if (/login\.asp/i.test(q.url())) { const h = q.headers(); log("login req headers:", Object.keys(h).map((k) => /cookie/i.test(k) ? `${k}=<${(h[k].match(/[^=;\s]+(?==)/g) || []).join(",")}>` : /referer|origin|content-type|user-agent/i.test(k) ? `${k}=${h[k].slice(0, 80)}` : k).join(" | "), "· corpo campos:", [...new URLSearchParams(q.postData() || "").keys()].join(",")); } });
+pg.on("response", async (r) => { if (/login\.asp/i.test(r.url())) { const h = r.headers(); log("login resp:", r.status(), "· location:", h.location || "", "· set-cookie nomes:", (h["set-cookie"] || "").split("\n").map((c) => c.split("=")[0]).join(",")); } });
 pg.on("response", (r) => { const q = r.request(); if (["xhr", "fetch", "document"].includes(q.resourceType())) log(`${q.method()} ${new URL(r.url()).pathname} → ${r.status()} · ${q.resourceType()} · campos: ${q.postData() ? [...new URLSearchParams(q.postData()).keys()].join(",") : ""}`); });
 await pg.goto("https://www.transformato.com.br/", { waitUntil: "networkidle" }).catch((e) => log("home erro:", e.message));
 log("campos do login:", (await pg.$$eval("#flogin input, #flogin select", (es) => es.map((e) => `${e.tagName}[${e.type}] ${e.name}=${e.name === "sistema" ? e.value : ""}`))).join(" | "));
