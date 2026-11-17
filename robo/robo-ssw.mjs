@@ -461,6 +461,22 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
+if (MODO === "teste-velocidade") {   // mede quanto demora baixar a base como o painel faz (só tempos e contagens)
+  await entrarSupabase();
+  const COLS = "pedido,nf,canal,uf,cidade,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao,data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao,trocas:extra->>trocas";
+  const t0 = Date.now(); const x5 = await chamar(`base_pedidos?select=${COLS}&order=pedido&limit=5000&offset=0`);
+  log("página pedindo 5000 linhas: veio", x5.length, "em", Date.now() - t0, "ms · tamanho", Math.round(JSON.stringify(x5).length / 1024), "KB");
+  for (const [tab, cols, PAG, JUNTAS] of [["base_pedidos", COLS, 1000, 4], ["base_pedidos", COLS, 1000, 8], ["base_aberta_bi", "*", 1000, 4]]) {
+    const t1 = Date.now(); let n = 0, kb = 0, rodadas = 0;
+    for (let de = 0; ; de += PAG * JUNTAS) {
+      const partes = await Promise.all(Array.from({ length: JUNTAS }, (_, j) => chamar(`${tab}?select=${cols}&order=pedido&limit=${PAG}&offset=${de + j * PAG}`).catch(() => [])));
+      rodadas++; partes.forEach((p) => { n += p.length; kb += JSON.stringify(p).length / 1024; });
+      if (partes.some((p) => p.length < PAG)) break;
+    }
+    log(`${tab} (${PAG} por página, ${JUNTAS} juntas): ${n} linhas · ${Math.round(kb)} KB · ${rodadas} rodadas · ${((Date.now() - t1) / 1000).toFixed(1)} s`);
+  }
+  process.exit(0);
+}
 if (MODO === "teste-scallia") {   // conta os eventos do Scallia que já chegaram (só contagens) e testa se a função responde
   await entrarSupabase();
   const E = await chamar("scallia_eventos?select=marco,recebido_em&order=recebido_em.desc&limit=1000").catch((e) => { log("scallia_eventos erro:", e.message.slice(0, 120)); return []; });
