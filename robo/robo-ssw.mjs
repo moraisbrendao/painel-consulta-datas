@@ -378,7 +378,13 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
 }
 if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/consultaweb.asp): formulário, captcha e estrutura do resultado (mascarado)
   const URL_F = "https://www.transformato.com.br/consultaweb.asp";
-  const f = await pagina(URL_F).catch((e) => ({ status: e.message, txt: "" }));
+  const m0 = await pagina(URL_F).catch((e) => ({ status: e.message, txt: "", cookie: "" }));
+  log("menu:", m0.status, m0.url, "· cookie:", m0.cookie ? "sim" : "não");
+  const CK = m0.cookie ? { Cookie: m0.cookie } : {};
+  const f0 = await pagina(new URL("consnota.asp", URL_F).href, { headers: CK }).catch((e) => ({ status: e.message, txt: "", url: "" }));
+  const f = { ...f0, url: f0.url || new URL("consnota.asp", URL_F).href };
+  log("consnota:", f.status, f.url, "· login?", /senha|password|login/i.test(f.txt) ? "SIM" : "não");
+  log("textos consnota:", sohTexto(f.txt).map((x) => limpo(x)).filter((x) => x.replace(/[x\s#]/g, "").length > 2).slice(0, 40).join(" | ").slice(0, 1500));
   log("form:", f.status, f.txt.length, "bytes · captcha:", /captcha|recaptcha|turnstile|hcaptcha/i.test(f.txt) ? "SIM" : "não");
   log("tags:", tags(f.txt, /<form[^>]*>|<input[^>]*>|<button[^>]*>|<select[^>]*>|<option[^>]*>[^<]{0,40}/gi).map((x) => x.replace(/value=["'][^"']{14,}["']/g, 'value="…"').replace(/class="[^"]*"|style="[^"]*"/g, "")).join(" | ").slice(0, 2500));
   log("scripts:", tags(f.txt, /<script[^>]*>[\s\S]{0,800}?<\/script>/gi).filter((x) => !/_gaq|gtag|jquery/i.test(x)).map((x) => x.replace(/\d{5,}/g, "#").replace(/\s+/g, " ").slice(0, 600)).join(" || ").slice(0, 2500));
@@ -394,9 +400,9 @@ if (MODO === "diag-formato") {   // rastreio da Formato (transformato.com.br/con
     const [num, ser] = String(l.nf).split("-").map((x) => (x || "").trim());
     const corpo = new URLSearchParams();
     campos.forEach((c) => { if (["submit", "button", "image"].includes(c.t)) return; corpo.set(c.n, /cnpj|cpf|doc|remet/i.test(c.n) ? cnpjDaSerie(ser) || "00349443000192" : /serie/i.test(c.n) ? ser : /nf|nota|num|doc|pesq|busca|valor/i.test(c.n) ? num : c.v); });
-    const destino = new URL(acao || URL_F, URL_F).href;
-    const r = metodo === "get" ? await pagina(destino + "?" + corpo.toString()).catch((e) => ({ status: e.message, txt: "" }))
-      : await pagina(destino, { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: corpo.toString() }).catch((e) => ({ status: e.message, txt: "" }));
+    const destino = new URL(acao || f.url, f.url).href;
+    const r = metodo === "get" ? await pagina(destino + "?" + corpo.toString(), { headers: CK }).catch((e) => ({ status: e.message, txt: "" }))
+      : await pagina(destino, { method: "POST", headers: { ...CK, "Content-Type": "application/x-www-form-urlencoded" }, body: corpo.toString() }).catch((e) => ({ status: e.message, txt: "" }));
     const ls = sohTexto(r.txt);
     log(`consulta (série ${ser}):`, r.status, "·", r.txt.length, "bytes · linhas:", ls.length, "· datas:", (r.txt.match(/\d{2}\/\d{2}\/\d{2,4}/g) || []).length, "· previsão:", /previs/i.test(r.txt) ? "sim" : "não", "· entreg:", /entreg/i.test(r.txt) ? "sim" : "não", "· captcha:", /captcha/i.test(r.txt) ? "SIM" : "não", "· não encontrad:", /n[ãa]o (foi )?encontrad|nenhum/i.test(r.txt) ? "sim" : "não");
     log("textos:", ls.map((x) => limpo(x)).filter((x) => x.replace(/[x\s#]/g, "").length > 2).slice(0, 70).join(" | ").slice(0, 2500));
