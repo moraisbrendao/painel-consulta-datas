@@ -699,7 +699,7 @@ ${extra}
       </div>
       <h3>Rastreio</h3>
       <div class="det-grade">
-        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${ticketsInfo ? item("Ticket", (() => { const t = ticketDe(p); return t ? `${esc(t.fila || "")}<div class="s">${esc([t.tipo, t.motivo, t.id_ticket ? "nº " + t.id_ticket : "", t.qtd > 1 ? t.qtd + " tickets" : ""].filter(Boolean).join(" · "))}</div>` : "Sem ticket"; })()) : ""}${item("Status Intelipost", esc(p.status_intelipost))}
+        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${ticketsInfo ? item("Ticket", (() => { const t = ticketDe(p); return t ? `${esc(t.fila || "")}<div class="s">${esc([t.tipo, t.motivo, t.qtd > 1 ? t.qtd + " tickets" : ""].filter(Boolean).join(" · "))}</div>${String(t.id_ticket || "").split(",").map((x) => x.trim()).filter(Boolean).map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer">#${esc(id)} ↗</a>`).join(" ")}` : "Sem ticket"; })()) : ""}${item("Status Intelipost", esc(p.status_intelipost))}
         ${item("Última atualização", `${dh(p.ultima_atualizacao)}${p._parado !== null ? ` <span class="s">(${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento)</span>` : ""}`)}
         ${item("Ocorrência", esc(p.ocorrencia))}
       </div>
@@ -3534,7 +3534,8 @@ ${extra}
   function marcaTicket(p) {
     if (!ticketsInfo) return p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : "";
     const t = ticketDe(p);
-    return t ? `<div class="s tk" title="${esc([t.tipo, t.motivo].filter(Boolean).join(" · "))}">🎫 Fila: ${esc(t.fila || "—")}${t.qtd > 1 ? ` (${t.qtd} tickets)` : ""}</div>`
+    const ids = String((t && t.id_ticket) || "").split(",").map((x) => x.trim()).filter(Boolean);
+    return t ? `<div class="s tk" title="${esc([t.tipo, t.motivo].filter(Boolean).join(" · "))}">🎫 Fila: ${esc(t.fila || "—")}${t.qtd > 1 ? ` (${t.qtd} tickets)` : ""}${ids.length ? `<div class="tk-links">${ids.map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)}</a>`).join(" ")}</div>` : ""}</div>`
       : `<div class="s sem-tk">Sem ticket</div>`;
   }
   async function carregarTickets() {
@@ -3573,7 +3574,9 @@ ${extra}
           motivo: cMot >= 0 && r[cMot] != null ? String(r[cMot]).trim() : null, id_ticket: cId >= 0 && r[cId] != null ? String(r[cId]).trim() : null, criado_em: d, qtd: 1 };
         const ant = porNF.get(nf);
         if (!ant) porNF.set(nf, novo);
-        else { novo.qtd = ant.qtd + 1; porNF.set(nf, String(novo.criado_em || "") >= String(ant.criado_em || "") ? novo : { ...ant, qtd: novo.qtd }); }
+        else { novo.qtd = ant.qtd + 1; const mais = String(novo.criado_em || "") >= String(ant.criado_em || "");
+          const ids = [...new Set((mais ? [novo.id_ticket, ant.id_ticket] : [ant.id_ticket, novo.id_ticket]).flatMap((x) => String(x || "").split(",")).map((x) => x.trim()).filter(Boolean))].join(",");   // guarda todos os números (o mais novo primeiro)
+          porNF.set(nf, { ...(mais ? novo : ant), qtd: novo.qtd, id_ticket: ids || null }); }
       });
       linhas = [...porNF.values()];
       if (!linhas.length) throw new Error("A aba Tickets não tem notas.");
