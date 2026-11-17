@@ -118,10 +118,10 @@ const EH_FORMATO = /formato/i;
 const isoFmt = (d) => { const m = String(d || "").match(/(\d{1,2})\/(\d{1,2})\/(\d{2,4})/); if (!m) return null; const a = m[3].length === 2 ? "20" + m[3] : m[3]; return `${a}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; };
 function lerFormato(txt) {
   const L = sohTexto(String(txt || ""));
-  if (L.some((x) => /nota fiscal n[ãa]o encontrada/i.test(x))) return { situacao: "sem cte" };
+  if (L.some((x) => /nota fiscal n.{1,2}o encontrada/i.test(x))) return { situacao: "sem cte" };
   const rot = (re) => { const x = L.find((y) => re.test(y)); return x ? isoFmt(x.replace(re, "")) : null; };
-  const emitido = rot(/^.*CT-?E emitido em:?/i), embarque = rot(/^.*Embarcado em:?/i), deposito = rot(/^.*Em dep[óo]sito na unid[^:]*:/i), rota = rot(/^.*Em entrega na unid[^:]*:/i);
-  const prevL = L.find((y) => /Previs[ãa]o[^:]*de Entrega:/i.test(y)), previsao = prevL ? isoFmt(prevL.split(/:/).slice(1).join(":")) : null;
+  const emitido = rot(/^.*CT-?E emitido em:?/i), embarque = rot(/^.*Embarcado em:?/i), deposito = rot(/^.*Em dep.{1,2}sito na unid[^:]*:/i), rota = rot(/^.*Em entrega na unid[^:]*:/i);
+  const prevL = L.find((y) => /Previs.{1,2}o[^:]*de Entrega:/i.test(y)), previsao = prevL ? isoFmt(prevL.split(/:/).slice(1).join(":")) : null;
   if (!emitido && !embarque) return { situacao: "sem cte" };
   const iE = L.findIndex((y) => /^Entregue\.?$/i.test(y) || /^Entregue em\b/i.test(y));
   const dEnt = iE >= 0 ? isoFmt(L.slice(iE, iE + 3).join(" ")) : null;
