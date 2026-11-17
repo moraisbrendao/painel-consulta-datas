@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=146">
+  <link rel="stylesheet" href="styles.css?v=147">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -456,11 +456,11 @@
       <section class="kpis" id="d-cards">
         <button class="kpi" data-d="abertos"><span class="kpi-rot">Em aberto</span><b class="kpi-num"></b><small>dropshipping não entregue</small><i>↗</i></button>
         <button class="kpi vermelho" data-d="atrasados"><span class="kpi-rot">Atrasados</span><b class="kpi-num"></b><small>data prometida já passou</small><i>↗</i></button>
-        <button class="kpi roxo" data-d="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>mais de 7 dias sem movimento</small><i>↗</i></button>
-        <button class="kpi vermelho" data-d="extravio"><span class="kpi-rot">Provável extravio</span><b class="kpi-num"></b><small>15+ dias sem movimento, sem ocorrência</small><i>↗</i></button>
+        <button class="kpi roxo" data-d="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>já coletado e há mais de 7 dias sem movimento</small><i>↗</i></button>
+        <button class="kpi vermelho" data-d="extravio"><span class="kpi-rot">Provável extravio</span><b class="kpi-num"></b><small>atrasado, já coletado e 15+ dias sem movimento</small><i>↗</i></button>
         <button class="kpi laranja" data-d="repo"><span class="kpi-rot">Com reposição</span><b class="kpi-num"></b><small>ticket de reposição aberto</small><i>↗</i></button>
         <button class="kpi laranja" data-d="ocorr"><span class="kpi-rot">Com ocorrência</span><b class="kpi-num"></b><small>ocorrência no detalhamento</small><i>↗</i></button>
-        <button class="kpi azul" data-d="problema"><span class="kpi-rot">Outro problema</span><b class="kpi-num"></b><small>falha, avaria, devolução, sem expedição, sem CT-e…</small><i>↗</i></button>
+        <button class="kpi azul" data-d="problema"><span class="kpi-rot">Outro problema</span><b class="kpi-num"></b><small>atrasado sem coleta, falha, devolução, sem CT-e…</small><i>↗</i></button>
         <button class="kpi" data-d="semnova"><span class="kpi-rot">Atrasados sem nova data</span><b class="kpi-num"></b><small>cobrar e informar a nova data</small><i>↗</i></button>
       </section>
       <div class="c-duas">
@@ -481,7 +481,7 @@
         <div id="d-paginacao" class="paginacao"></div>
       </section>
       <details class="c-regras cartao"><summary>Como o diagnóstico é calculado</summary>
-        <p>Na ordem: <b>Reposição aberta</b> (aba Reposições do detalhamento de tickets) · <b>Ocorrência</b> (aba Ocorrências) · <b>Já entregue</b> (Intelipost, rastreio ou aviso do Scallia) · <b>Extravio / sinistro</b> (micro status fala em extravio, roubo ou sinistro) · <b>Problema na entrega</b> (micro status de falha, avaria, devolução, recusa, endereço, ausente) · <b>Sem expedição</b> · <b>Provável extravio</b> (15 dias ou mais sem nenhum movimento no rastreio) · <b>Sem CT-e</b> (a transportadora ainda não emitiu no SSW) · <b>Parado no rastreio</b> (8 a 14 dias sem movimento) · <b>Atrasado em trânsito</b> · <b>No prazo</b>.</p>
+        <p>Na ordem: <b>Reposição aberta</b> (aba Reposições do detalhamento de tickets) · <b>Ocorrência</b> (aba Ocorrências) · <b>Já entregue</b> (Intelipost, rastreio ou aviso do Scallia) · <b>Extravio / sinistro</b> (micro status fala em extravio, roubo ou sinistro) · <b>Problema na entrega</b> (micro status de falha, avaria, devolução, recusa, endereço, ausente) · <b>Sem expedição</b> · se o micro status ainda é <b>Despachado</b> ou <b>Emissão do CT-e</b> (a transportadora não deu nenhum movimento): <b>Atrasado sem coleta</b> quando a data prometida já passou, <b>Sem CT-e</b> pelo SSW, senão <b>Aguardando 1º movimento</b> · já coletado: <b>Provável extravio</b> (atrasado e 15 dias ou mais sem movimento), <b>Parado no rastreio</b> (mais de 7 dias sem movimento), <b>Atrasado em trânsito</b>, <b>No prazo</b>. Os cards e as tabelas seguem os filtros do topo, inclusive o de Diagnóstico.</p>
       </details>
     </main>
 
@@ -1398,13 +1398,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=146"></script>
-  <script src="mapa-brasil.js?v=146"></script>
-  <script src="troca-notas.js?v=146"></script>
-  <script src="app.js?v=146"></script>
-  <script src="ordenar.js?v=146"></script>
-  <script src="menu.js?v=146"></script>
-  <script src="ajuda.js?v=146"></script>
-  <script src="documentos.js?v=146"></script>
+  <script src="config.js?v=147"></script>
+  <script src="mapa-brasil.js?v=147"></script>
+  <script src="troca-notas.js?v=147"></script>
+  <script src="app.js?v=147"></script>
+  <script src="ordenar.js?v=147"></script>
+  <script src="menu.js?v=147"></script>
+  <script src="ajuda.js?v=147"></script>
+  <script src="documentos.js?v=147"></script>
 </body>
 </html>

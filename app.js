@@ -3546,7 +3546,8 @@ ${extra}
   const D_DIAG = [
     ["repo", "Reposição aberta", "laranja"], ["ocorr", "Ocorrência", "laranja"], ["entregue", "Já entregue (falta baixar)", "verde"],
     ["sinistro", "Extravio / sinistro", "vermelho"], ["falha", "Problema na entrega", "vermelho"], ["semexp", "Sem expedição", "cinza"],
-    ["extravio", "Provável extravio", "vermelho"], ["semcte", "Sem CT-e", "cinza"], ["parado", "Parado no rastreio", "roxo"],
+    ["naocoletado", "Atrasado sem coleta", "vermelho"], ["extravio", "Provável extravio", "vermelho"], ["semcte", "Sem CT-e", "cinza"], ["parado", "Parado no rastreio", "roxo"],
+    ["aguardando", "Aguardando 1º movimento", "cinza"],
     ["atraso", "Atrasado em trânsito", "ambar"], ["prazo", "No prazo", "verde"]];
   const D_NOME = Object.fromEntries(D_DIAG.map(([k, n]) => [k, n])), D_COR = Object.fromEntries(D_DIAG.map(([k, , c]) => [k, c]));
   const dSel = { card: "abertos", diag: "", transp: "" };
@@ -3576,17 +3577,19 @@ ${extra}
     if (/EXTRAVI|ROUB|SINISTR|FURT/.test(ms)) return "sinistro";
     if (/FALHA|AVARI|DEVOLU|RECUS|ENDERECO|AUSENTE|MUDOU|INSUCESSO|NAO ENTREGUE/.test(ms)) return "falha";
     if (!p.data_expedicao || norm(p.sem_expedicao).startsWith("S")) return "semexp";
-    if (p._parado !== null && p._parado >= D_EXTRAVIO) return "extravio";
-    if (/sem cte|fora do ssw/.test(x.situacao || "")) return "semcte";
+    if (dSemMov(p)) return p._atrasoG ? "naocoletado" : /sem cte/.test(x.situacao || "") ? "semcte" : "aguardando";
+    if (p._parado !== null && p._parado >= D_EXTRAVIO && p._atrasoG) return "extravio";
     if (p._parado !== null && p._parado > D_PARADO) return "parado";
     if (p._atrasoG) return "atraso";
     return "prazo";
   }
+  // "Despachado" / "Emissão do CT-e" = a transportadora ainda não deu nenhum movimento: tempo parado aqui não é extravio
+  const dSemMov = (p) => /^(DESPACHADO|EMISSAO DO CT-?E)/.test(norm(p.micro_status));
   const dSemNova = (p) => { const n = p._t && p._t.nova_data; return !n || n < hojeISO(); };
-  const D_CARD = { abertos: () => true, atrasados: (p) => p._atrasoG, parados: (p) => p._parado !== null && p._parado > D_PARADO,
+  const D_CARD = { abertos: () => true, atrasados: (p) => p._atrasoG, parados: (p) => !dSemMov(p) && p._parado !== null && p._parado > D_PARADO,
     extravio: (p) => ["extravio", "sinistro"].includes(p._dd), repo: (p) => p._dd === "repo", ocorr: (p) => p._dd === "ocorr",
-    problema: (p) => ["falha", "semexp", "semcte"].includes(p._dd), semnova: (p) => p._atrasoG && dSemNova(p) };
-  const D_ORDEM = ["sinistro", "extravio", "falha", "repo", "ocorr", "parado", "semcte", "semexp", "atraso", "entregue", "prazo"];
+    problema: (p) => ["falha", "semexp", "semcte", "naocoletado"].includes(p._dd), semnova: (p) => p._atrasoG && dSemNova(p) };
+  const D_ORDEM = ["sinistro", "extravio", "naocoletado", "falha", "repo", "ocorr", "parado", "semcte", "semexp", "atraso", "aguardando", "entregue", "prazo"];
   function desenharDrop(soSeAberta) {
     const D = base.filter(ehDrop);
     D.forEach((p) => { p._dd = dDiag(p); });

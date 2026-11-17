@@ -52,7 +52,7 @@
 
     ["drop", "Dropshipping", "Controle só dos pedidos com origem Dropshipping na base: em aberto, atrasados, parados no rastreio, provável extravio, reposição, ocorrência e outros problemas.", "Todo dia, para cobrar a transportadora e o fornecedor do dropshipping.", [
       "Clique num card (ou numa linha das tabelas Diagnóstico e Por transportadora) para filtrar a lista.",
-      "A coluna <b>Diagnóstico</b> diz o que provavelmente aconteceu: 15 dias ou mais sem movimento no rastreio = provável extravio; 8 a 14 dias = parado.",
+      "A coluna <b>Diagnóstico</b> diz o que provavelmente aconteceu: já coletado, atrasado e 15 dias ou mais sem movimento = provável extravio; mais de 7 dias = parado. Ainda \"Despachado\" (sem movimento da transportadora) e atrasado = atrasado sem coleta.",
       "Use <b>Ver rastreio</b> para conferir na transportadora; grave a nova data e a observação na própria linha (valem em todas as abas).",
       "Baixar Excel leva a lista filtrada com diagnóstico, ocorrência, reposição e a nova data.",
     ], "Reposição e ocorrência vêm do último detalhamento de tickets enviado. O fornecedor aparece depois do próximo envio da base."],
