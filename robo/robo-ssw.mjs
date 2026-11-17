@@ -461,6 +461,15 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
+if (MODO === "teste-scallia") {   // conta os eventos do Scallia que já chegaram (só contagens) e testa se a função responde
+  await entrarSupabase();
+  const E = await chamar("scallia_eventos?select=marco,recebido_em&order=recebido_em.desc&limit=1000").catch((e) => { log("scallia_eventos erro:", e.message.slice(0, 120)); return []; });
+  const c = {}; E.forEach((x) => (c[x.marco] = (c[x.marco] || 0) + 1));
+  log("Scallia: eventos gravados:", E.length, "·", JSON.stringify(c), "· último recebido:", E[0] ? E[0].recebido_em : "nenhum");
+  const r = await fetch("https://qncselfuymeximgmetjp.supabase.co/functions/v1/scallia-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch((e) => ({ status: e.message, text: async () => "" }));
+  log("Scallia: função respondeu (sem assinatura, esperado 401):", r.status, String(await r.text()).slice(0, 120));
+  process.exit(0);
+}
 if (MODO === "teste-formato") {   // testa o login e a consulta da Formato pelo robô (só contagens no log)
   await entrarSupabase();
   const L = await chamar("base_aberta?select=pedido,nf,transportadora&transportadora=ilike.*formato*&nf=not.is.null&limit=6");
