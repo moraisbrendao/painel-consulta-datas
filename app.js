@@ -4356,6 +4356,7 @@ ${extra}
     filtrarSac();
   });
   ["sac-canal", "sac-transp", "sac-nova"].forEach((id) => $(id).addEventListener("change", () => filtrarSac()));
+  $("sac-limpar").addEventListener("click", () => { ["sac-busca", "sac-canal", "sac-transp", "sac-nova"].forEach((id) => ($(id).value = "")); filtrarSac(); });
   $("sac-linhas").addEventListener("click", (e) => { const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido); });
   $("sac-paginacao").addEventListener("click", (e) => {
     const b = e.target.closest("button[data-p]"); if (!b) return;

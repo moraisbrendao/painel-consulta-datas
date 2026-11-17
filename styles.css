@@ -840,3 +840,25 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .filtros-cartao.filtros-drop { grid-template-columns: auto minmax(0,1.6fr) repeat(2, minmax(0,1fr)) auto; align-items: end; }
 @media (max-width: 1000px) { .filtros-cartao.filtros-drop { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 520px) { .filtros-cartao.filtros-drop { grid-template-columns: 1fr; } }
+
+/* ===== filtros do topo no padrão da Visão Gerencial em todas as abas (2026-11-17) ===== */
+.sel-bonito[hidden] { display: none !important; }
+.sel-op.escolhido { background: #fff8dc; font-weight: 600; }
+.sel-op em { color: var(--marinho) !important; font-size: 13px !important; }
+@media (min-width: 761px) {
+  .filtros-cartao:not(.filtros-ger), #pagina-preventivo .filtros-topo { display: grid; grid-template-columns: repeat(7, minmax(0,1fr)) !important; align-items: end; gap: 10px 12px; position: relative; padding-left: 92px; }
+  #pagina-preventivo .filtros-topo { position: sticky; }
+  .filtros-cartao:not(.filtros-ger) > .filtros-rot, #pagina-preventivo .filtros-topo > .filtros-rot { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); padding: 0; }
+  .filtros-cartao:not(.filtros-ger) > label, #pagina-preventivo .filtros-topo > label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; font-weight: 600; color: var(--texto-2); min-width: 0; }
+  .filtros-cartao:not(.filtros-ger) > label.cresce, #pagina-preventivo .filtros-topo > label.cresce,
+  .filtros-cartao:not(.filtros-ger) > label:has(input[type=search]) { grid-column: span 2; }
+  .filtros-cartao:not(.filtros-ger) > .limpar, #pagina-preventivo .filtros-topo > .limpar { grid-column: -2 / -1; justify-self: end; align-self: end; padding-bottom: 9px; font-size: 12px; }
+  .filtros-cartao:not(.filtros-ger) input[type=search], .filtros-cartao:not(.filtros-ger) input[type=date] { width: 100%; }
+}
+@media (min-width: 761px) and (max-width: 1200px) {
+  .filtros-cartao:not(.filtros-ger), #pagina-preventivo .filtros-topo { grid-template-columns: repeat(4, minmax(0,1fr)) !important; }
+  .filtros-cartao:not(.filtros-ger), #pagina-preventivo .filtros-topo { padding-left: 16px; }
+  .filtros-cartao:not(.filtros-ger) > .filtros-rot, #pagina-preventivo .filtros-topo > .filtros-rot { position: static; transform: none; grid-column: 1 / -1; }
+}
+.filtros-cartao.f-aberto > .sel-bonito[hidden], .filtros-topo.f-aberto > .sel-bonito[hidden] { display: none !important; }
+.sel-bonito .multi-botao { width: 100%; }
