@@ -468,6 +468,7 @@ if (MODO === "teste-scallia") {   // conta os eventos do Scallia que já chegara
   log("Scallia: eventos gravados:", E.length, "·", JSON.stringify(c), "· último recebido:", E[0] ? E[0].recebido_em : "nenhum");
   const r = await fetch("https://qncselfuymeximgmetjp.supabase.co/functions/v1/scallia-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch((e) => ({ status: e.message, text: async () => "" }));
   log("Scallia: função respondeu (sem assinatura, esperado 401):", r.status, String(await r.text()).slice(0, 120));
+  for (const nome of ["transiga-webhook", "scallia_webhook", "scallia", "Scallia-webhook", "scallia-webhook-"]) { const q = await fetch(`https://qncselfuymeximgmetjp.supabase.co/functions/v1/${nome}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => ({ status: "erro" })); log(`  função ${nome}:`, q.status); }
   process.exit(0);
 }
 if (MODO === "teste-formato") {   // testa o login e a consulta da Formato pelo robô (só contagens no log)
