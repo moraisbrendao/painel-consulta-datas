@@ -133,18 +133,22 @@ function lerFormato(txt) {
   return { situacao: "nao entregue", data_evento: ult[0], ultimo_evento: ult[1], previsao, detalhe };
 }
 let formatoCk = null, formatoFalhou = false;
-async function formatoLogin() {
+async function formatoLogin() {   // login pelo navegador (o site só aceita o login vindo do formulário); depois as consultas usam o cookie da sessão
   if (formatoCk || formatoFalhou) return formatoCk;
   const US = process.env.FORMATO_USUARIO || "", SE = process.env.FORMATO_SENHA || "";
   if (!US || !SE) { formatoFalhou = true; log("Formato: faltam os segredos FORMATO_USUARIO / FORMATO_SENHA."); return null; }
-  const B = "https://www.transformato.com.br/", junta = (a, novos) => { const m = new Map(String(a || "").split(/;\s*/).filter(Boolean).map((c) => [c.split("=")[0], c])); novos.forEach((c) => m.set(c.split("=")[0], c)); return [...m.values()].join("; "); };
-  const h = await pagina(B).catch(() => ({ cookie: "" }));
-  const r = await fetch(B + "login.asp", { method: "POST", redirect: "manual", headers: { "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36", "Content-Type": "application/x-www-form-urlencoded", Origin: "https://www.transformato.com.br", Referer: B, ...(h.cookie ? { Cookie: h.cookie } : {}) },
-    body: new URLSearchParams({ sistema: "T", username: US, password: SE }).toString() }).catch(() => null);
-  const ck = r ? junta(h.cookie, (r.headers.getSetCookie ? r.headers.getSetCookie() : []).map((c) => c.split(";")[0])) : "";
-  // login certo vai para consultaweb.asp; qualquer outra coisa = não tenta de novo nesta rodada (para não travar a senha)
-  if (!r || r.status !== 302 || !/consultaweb/i.test(r.headers.get("location") || "")) { formatoFalhou = true; log(`Formato: o login não entrou (${r ? r.status : "sem resposta"}); não tento de novo nesta rodada.`); return null; }
-  return (formatoCk = ck);
+  let nav = null;
+  try {
+    const { chromium } = await import("playwright");
+    nav = await chromium.launch(); const ctx = await nav.newContext(); const pg = await ctx.newPage();
+    await pg.goto("https://www.transformato.com.br/", { waitUntil: "domcontentloaded", timeout: 60000 });
+    await pg.locator("#username").fill(US); await pg.locator("#password").fill(SE);
+    await Promise.all([pg.waitForURL(/consultaweb/i, { timeout: 30000 }).catch(() => {}), pg.locator("#flogin input[type=submit]").click()]);
+    if (!/consultaweb/i.test(pg.url())) { formatoFalhou = true; log("Formato: o login não entrou; não tento de novo nesta rodada."); return null; }
+    formatoCk = (await ctx.cookies()).map((c) => `${c.name}=${c.value}`).join("; ");
+    return formatoCk;
+  } catch (e) { formatoFalhou = true; log("Formato: não consegui abrir o navegador para o login:", String(e.message).slice(0, 80)); return null; }
+  finally { if (nav) await nav.close().catch(() => {}); }
 }
 async function formato(itens) {
   const out = new Map(); if (!itens.length) return out;
