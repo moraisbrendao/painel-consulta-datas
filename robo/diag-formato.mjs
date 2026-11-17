@@ -58,7 +58,7 @@ for (const l of L) {
   log("followup form:", (await pg.$$eval("form, input, select, option, label", (es) => es.map((e) => e.tagName === "FORM" ? `FORM ${e.method} ${e.getAttribute("action")}` : e.tagName === "LABEL" || e.tagName === "OPTION" ? `${e.tagName} ${e.getAttribute("value") || ""}=${e.textContent.trim().slice(0, 30)}` : `${e.tagName}[${e.type}] ${e.name} val=${(e.value || "").slice(0, 12)} ph=${e.placeholder || ""}`))).join(" | ").slice(0, 2500));
   log("followup textos:", seguro(await pg.locator("body").innerText()).filter((x) => x !== "~").slice(0, 30).join(" | ").slice(0, 800));
   log("followup rótulos:", (await pg.locator("body").innerText()).split(/\n+/).map((x) => x.trim()).filter((x) => x && x.length < 60 && !/\d{3,}/.test(x)).slice(0, 40).join(" | ").replace(/[A-ZÀ-Ú][a-zà-ú]+ [A-ZÀ-Ú][a-zà-ú]+ [A-ZÀ-Ú]/g, "x").slice(0, 1200));
-  const hoje = new Date(Date.now() - 3 * 3600000), ini = new Date(hoje - 20 * 86400000), f = (d) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
+  const hoje = new Date(Date.now() - 3 * 3600000), ini = new Date(hoje - 180 * 86400000), f = (d) => d.toISOString().slice(0, 10).split("-").reverse().join("/");
   const di = pg.locator("input[name=dataini]"); if (await di.count()) { await di.first().fill(f(ini)); await pg.locator("input[name=datafin]").first().fill(f(hoje)); }
   const dl = pg.waitForEvent("download", { timeout: 60000 }).catch(() => null);
   await Promise.all([pg.waitForLoadState("networkidle").catch(() => {}), pg.locator("input[type=submit]").first().click().catch(() => {})]);
@@ -66,8 +66,13 @@ for (const l of L) {
   if (d) log("followup: baixou arquivo", d.suggestedFilename().replace(/\d{4,}/g, "#"));
   const t = await pg.locator("body").innerText().catch(() => "");
   log("followup resultado: linhas tr:", await pg.locator("tr").count(), "· datas:", (t.match(/\d{1,2}\/\d{1,2}\/\d{2,4}/g) || []).length, "· url:", new URL(pg.url()).pathname);
-  log("followup cabeçalhos:", (await pg.$$eval("th, tr:first-child td", (es) => es.map((e) => e.textContent.trim().slice(0, 25)))).filter((x) => !/\d{3,}/.test(x)).slice(0, 40).join(" | "));
-  log("followup linhas:", seguro(t).filter((x) => x !== "~").slice(0, 25).join(" | ").slice(0, 1500));
+  log("followup th:", (await pg.$$eval("th", (es) => es.map((e) => e.textContent.trim().slice(0, 25)))).join(" | "));
+  const rows = await pg.$$eval("tr", (trs) => trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => td.textContent.trim())).filter((c) => c.length === 14));
+  log("followup linhas de 14 col:", rows.length);
+  const forma = (v) => v.replace(/\d/g, "9");
+  for (const c of rows.slice(0, 6)) log("  nota", forma(c[0]), "· cte", forma(c[1]), "· coleta", forma(c[7]), "· prev", forma(c[8]), "· ent", c[9].slice(0, 5), "· dataent", forma(c[10]), "· ocorr", c[12].replace(/\d/g, "9").slice(0, 40), "· status", c[13].replace(/\d/g, "9").slice(0, 30));
+  const st = {}; rows.forEach((c) => { const k = c[9].slice(0, 5) + " / " + c[13].replace(/\d/g, "9").slice(0, 30); st[k] = (st[k] || 0) + 1; }); log("  ent/status:", Object.entries(st).map(([k, v]) => `${k}: ${v}`).join(" | "));
+  const oc = {}; rows.forEach((c) => { const k = c[12].replace(/\d/g, "9").slice(0, 30); oc[k] = (oc[k] || 0) + 1; }); log("  ocorrências:", Object.entries(oc).map(([k, v]) => `${k}: ${v}`).join(" | "));
 }
 for (const pag of []) {
   await pg.goto("https://www.transformato.com.br/" + pag, { waitUntil: "networkidle" }).catch(() => {});
