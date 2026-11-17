@@ -2089,3 +2089,43 @@ begin
 end $$;
 revoke all on function public.salvar_acesso(text, text[]) from public, anon;
 grant execute on function public.salvar_acesso(text, text[]) to authenticated;
+
+-- ============ PARTE 45: Scallia — retorno dos pedidos (webhook: faturado, coletado, entregue, cancelado) ============
+-- Uma linha por pedido × marco (o Scallia manda cada marco uma vez). Só número/série/chave da NF, transportadora e data.
+create table if not exists public.scallia_eventos (
+  pedido         text not null default '',
+  marco          text not null,
+  nf             text,
+  serie          text,
+  chave          text,
+  transportadora text,
+  data_evento    timestamptz,
+  recebido_em    timestamptz not null default now(),
+  primary key (pedido, marco, nf)
+);
+alter table public.scallia_eventos alter column nf set default '';
+create index if not exists scallia_eventos_nf on public.scallia_eventos (nf, serie);
+alter table public.scallia_eventos enable row level security;
+revoke all on public.scallia_eventos from anon;
+grant select on public.scallia_eventos to authenticated;
+drop policy if exists "logados leem" on public.scallia_eventos;
+create policy "logados leem" on public.scallia_eventos for select to authenticated using ((select not public.e_sac()));
+
+-- só a função do webhook (service_role) grava
+create or replace function public.receber_scallia(linhas jsonb)
+returns integer language plpgsql volatile security definer set search_path = public
+as $$
+declare n integer;
+begin
+  insert into public.scallia_eventos (pedido, marco, nf, serie, chave, transportadora, data_evento)
+  select distinct on (1, 2, 3) * from (
+    select coalesce(nullif(x->>'pedido',''), '') p, coalesce(nullif(x->>'marco',''), 'desconhecido') m, coalesce(nullif(x->>'nf',''), '') n,
+           nullif(x->>'serie','') s, nullif(x->>'chave','') c, nullif(x->>'transportadora','') t, nullif(x->>'data_evento','')::timestamptz d
+    from jsonb_array_elements(linhas) x) z
+  on conflict (pedido, marco, nf) do update set serie = coalesce(excluded.serie, scallia_eventos.serie), chave = coalesce(excluded.chave, scallia_eventos.chave),
+    transportadora = coalesce(excluded.transportadora, scallia_eventos.transportadora), data_evento = coalesce(excluded.data_evento, scallia_eventos.data_evento), recebido_em = now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.receber_scallia(jsonb) from public, anon, authenticated;
+grant execute on function public.receber_scallia(jsonb) to service_role;

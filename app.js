@@ -3552,13 +3552,27 @@ ${extra}
   const dSel = { card: "abertos", diag: "", transp: "" };
   let dLista = [], dPagina = 1, dDetTentou = false;
   const ehDrop = (p) => norm(p.origem).includes("DROP");
+  // Scallia (webhook "retorno dos pedidos", parte 45): último marco por NF e por número de pedido
+  let scMapa = null, scTentou = false, scInfo = "";
+  const SC_ORDEM = { faturado: 1, coletado: 2, entregue: 3, cancelado: 4 };
+  async function carregarScallia() {
+    try {
+      const L = await buscarTudo("scallia_eventos", "pedido"), m = new Map();
+      const poe = (k, e) => { if (!k) return; const a = m.get(k); if (!a || (SC_ORDEM[e.marco] || 0) > (SC_ORDEM[a.marco] || 0) || ((SC_ORDEM[e.marco] || 0) === (SC_ORDEM[a.marco] || 0) && String(e.data_evento || "") > String(a.data_evento || ""))) m.set(k, e); };
+      L.forEach((e) => { poe(e.pedido ? "P:" + norm(e.pedido) : "", e); if (e.nf) poe("N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf), e); });
+      scMapa = m; scInfo = L.length ? `Scallia: ${fmt(L.length)} avisos recebidos` : "Scallia: nenhum aviso recebido ainda";
+    } catch (_) { scMapa = new Map(); scInfo = ""; }
+  }
+  const dScallia = (p) => { if (!scMapa || !scMapa.size) return null; const x = p.extra || {};
+    for (const k of ["N:" + chaveNF(p.nf), "P:" + norm(p.pedido), x.promob && "P:" + norm(x.promob), x.pedido_any && "P:" + norm(x.pedido_any), x.id_any && "P:" + norm(x.id_any)]) if (k && scMapa.has(k)) return scMapa.get(k);
+    return null; };
   const dDet = (p) => (detNF ? detNF.get(chaveNF(p.nf)) || null : null);
   const dForn = (p) => (p.extra && p.extra.fornecedor) || "";
   function dDiag(p) {
     const d = dDet(p) || {}, ms = norm(`${p.micro_status || ""} ${p.status_intelipost || ""}`), x = ssw.get(p.pedido) || {};
     if (d.tem_repo) return "repo";
     if (d.tem_ocorr) return "ocorr";
-    if (p.entregue_ip || x.situacao === "entregue") return "entregue";
+    if (p.entregue_ip || x.situacao === "entregue" || (dScallia(p) || {}).marco === "entregue") return "entregue";
     if (/EXTRAVI|ROUB|SINISTR|FURT/.test(ms)) return "sinistro";
     if (/FALHA|AVARI|DEVOLU|RECUS|ENDERECO|AUSENTE|MUDOU|INSUCESSO|NAO ENTREGUE/.test(ms)) return "falha";
     if (!p.data_expedicao || norm(p.sem_expedicao).startsWith("S")) return "semexp";
@@ -3580,6 +3594,7 @@ ${extra}
     $("menu-drop").hidden = !atrasados; $("menu-drop").textContent = fmt(atrasados);
     if (soSeAberta && paginaAtual !== "drop") return;
     if (!detNF && !dDetTentou) { dDetTentou = true; carregarDetNF().then((m) => { if (m.size) desenharDrop(true); }); }
+    if (!scTentou) { scTentou = true; carregarScallia().then(() => desenharDrop(true)); }
     // opções dos filtros
     const opc = (id, f, todos) => { const el = $(id), v = el.value, c = new Map(); D.forEach((p) => { const k = f(p); if (k) c.set(k, (c.get(k) || 0) + 1); });
       el.innerHTML = `<option value="">${todos}</option>` + [...c].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([k, n]) => `<option value="${esc(k)}">${esc(k)} (${fmt(n)})</option>`).join(""); el.value = c.has(v) ? v : ""; };
@@ -3611,7 +3626,7 @@ ${extra}
     dLista = D.filter((p) => passa(p)).sort((a, b) => ord(a) - ord(b) || (b._parado || 0) - (a._parado || 0) || String(a._venc || "9").localeCompare(String(b._venc || "9")));
     const card = { abertos: "Em aberto", atrasados: "Atrasados", parados: "Parados no rastreio", extravio: "Provável extravio", repo: "Com reposição", ocorr: "Com ocorrência", problema: "Outro problema", semnova: "Atrasados sem nova data" }[dSel.card];
     $("d-lista-titulo").textContent = `${[card, dSel.diag && D_NOME[dSel.diag], dSel.transp, forn].filter(Boolean).join(" · ")} (${fmt(dLista.length)})`;
-    $("d-info").textContent = D.length ? `${fmt(D.length)} pedidos de dropshipping em aberto · ${fmt(D.filter((p) => p._atrasoG).length)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}${detNF ? "" : " · carregando ocorrências e reposições…"}`
+    $("d-info").textContent = D.length ? `${fmt(D.length)} pedidos de dropshipping em aberto · ${fmt(D.filter((p) => p._atrasoG).length)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}${scInfo ? " · " + scInfo : ""}${detNF ? "" : " · carregando ocorrências e reposições…"}`
       : base.length ? "Nenhum pedido com origem Dropshipping na base em aberto." : "Carregando…";
     desenharDLista();
   }
@@ -3621,7 +3636,8 @@ ${extra}
       + (p._parado !== null ? `<div class="s">${fmt(p._parado)} dia${p._parado === 1 ? "" : "s"} sem movimento</div>` : "")
       + (d.ocorr_status ? `<div class="s" title="${esc(d.ocorr_msg || "")}">Ocorrência: ${esc(d.ocorr_status)}</div>` : "")
       + (ids.length ? `<div class="s tk-links">Reposição ${ids.map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer">#${esc(id)}</a>`).join(" ")}${d.repo_fila ? " · " + esc(d.repo_fila) : ""}</div>` : "")
-      + (dForn(p) ? `<div class="s">Fornecedor: ${esc(dForn(p))}</div>` : "");
+      + (dForn(p) ? `<div class="s">Fornecedor: ${esc(dForn(p))}</div>` : "")
+      + ((s) => (s ? `<div class="s sc">Scallia: <b>${esc(s.marco)}</b>${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + esc(s.transportadora) : ""}</div>` : ""))(dScallia(p));
   }
   function desenharDLista() {
     const total = dLista.length, pags = Math.max(1, Math.ceil(total / POR_PAGINA)); dPagina = Math.min(Math.max(1, dPagina), pags);
@@ -3649,10 +3665,10 @@ ${extra}
   $("d-exportar").addEventListener("click", () => {
     if (!dLista.length) return toast("Nada para exportar.", true);
     const linhas = [["Pedido Intelipost", "NF", "Canal", "Fornecedor", "Transportadora", "UF", "Cidade", "Micro status", "Expedição", "Prometido ao cliente", "Atrasado", "Dias sem movimento", "Diagnóstico",
-      "Ocorrência", "Reposição (tickets)", "Fila da reposição", "Previsão SSW", "Nova data", "Observação", "Atualizado por", "Link de rastreio"]]
+      "Ocorrência", "Reposição (tickets)", "Fila da reposição", "Previsão SSW", "Scallia (último aviso)", "Nova data", "Observação", "Atualizado por", "Link de rastreio"]]
       .concat(dLista.map((p) => { const d = dDet(p) || {}, t = p._t || {};
         return [p.pedido, p.nf, p.canal, dForn(p), p.transportadora, p.uf, p.cidade, p.micro_status, br(p.data_expedicao), br(p._venc), p._atrasoG ? "Sim" : "Não", p._parado ?? "", D_NOME[p._dd],
-          d.ocorr_status || "", d.repo_ticket || "", d.repo_fila || "", br((ssw.get(p.pedido) || {}).previsao), br(t.nova_data), t.observacao || "", t.atualizado_por || "", p.link_rastreio || ""]; }));
+          d.ocorr_status || "", d.repo_ticket || "", d.repo_fila || "", br((ssw.get(p.pedido) || {}).previsao), ((s) => (s ? `${s.marco}${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + s.transportadora : ""}` : ""))(dScallia(p)), br(t.nova_data), t.observacao || "", t.atualizado_por || "", p.link_rastreio || ""]; }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Dropshipping");
     XLSX.writeFile(wb, `dropshipping_${hojeISO()}.xlsx`);
   });
