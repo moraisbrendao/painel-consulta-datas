@@ -1385,7 +1385,16 @@ ${extra}
     XLSX.writeFile(wb, `atraso_por_transportadora_uf_cidade_canal_${hojeISO()}.xlsx`);
   });
 
-  function desenharProdutividade(L, hoje) {
+  const gProdK = (t) => (/tempo\s*justo|^\s*vm\b|vm transportes/i.test(t || "") ? "VM Transportes / Tempo Justo" : t || "(sem transportadora)");
+  let gProdT = "", gProdCheia = false;
+  function desenharProdutividade(L0, hoje) {
+    // filtro de transportadora só do gráfico (VM e Tempo Justo juntas)
+    const sel = $("g-prod-transp"), ts = new Map();
+    L0.forEach((r) => { const k = gProdK(r.transp); ts.set(k, (ts.get(k) || 0) + 1); });
+    if (gProdT && !ts.has(gProdT)) gProdT = "";
+    sel.innerHTML = `<option value="">Todas as transportadoras</option>` + [...ts.entries()].sort((a, b) => a[0].localeCompare(b[0], "pt-BR"))
+      .map(([k, n]) => `<option value="${esc(k)}" ${k === gProdT ? "selected" : ""}>${esc(k)} (${fmt(n)})</option>`).join("");
+    const L = gProdT ? L0.filter((r) => gProdK(r.transp) === gProdT) : L0;
     const J = gJanela, dias = []; for (let i = -J; i <= J; i++) dias.push(somaDias(hoje, i));
     const ent = new Map(), venc = new Map(); let atrHoje = 0;
     L.forEach((r) => {
@@ -1394,13 +1403,13 @@ ${extra}
     });
     const val = dias.map((d) => ({ d, e: d <= hoje ? ent.get(d) || 0 : null, v: d >= hoje ? venc.get(d) || 0 : 0, a: d === hoje ? atrHoje : 0 }));
     const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v + x.a)));
-    const W = 1000, H = 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (n) => H - pb - (n / max) * (H - pb - pt);
+    const W = 1000, H = gProdCheia ? Math.max(260, Math.round((1000 * Math.max(240, innerHeight - 230)) / Math.max(320, $("g-prod").clientWidth || innerWidth - 40))) : 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (n) => H - pb - (n / max) * (H - pb - pt);
     let g = "";
     for (let i = 0; i <= 4; i++) { const n = Math.round((max * i) / 4); g += `<line x1="${pl}" x2="${W - 10}" y1="${y(n)}" y2="${y(n)}" class="grade"/><text x="${pl - 6}" y="${y(n) + 4}" class="eixo" text-anchor="end">${fmt(n)}</text>`; }
     val.forEach((x, i) => {
       const cx = pl + i * cw + cw / 2, bw = Math.min(34, cw * 0.7);
       if (x.v) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="vence" x="${cx - bw / 2}" y="${y(x.v)}" width="${bw}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${ddmm(x.d)}: ${fmt(x.v)} vencem</title></rect>`;
-      if (x.a) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="atraso" x="${cx - bw / 2}" y="${y(x.v + x.a)}" width="${bw}" height="${y(x.v) - y(x.v + x.a)}" fill="#f5b400" rx="2"><title>${fmt(x.a)} atrasados</title></rect>`;
+      if (x.a) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="atraso" x="${cx - bw / 2}" y="${y(x.v + x.a)}" width="${bw}" height="${y(x.v) - y(x.v + x.a)}" fill="#f5b400" rx="2"><title>${fmt(x.a)} atrasados · clique para ver a lista e baixar o Excel</title></rect>`;
       if (x.v + x.a) g += `<text x="${cx}" y="${y(x.v + x.a) - 5}" class="rot" text-anchor="middle">${fmt(x.v + x.a)}</text>`;
       g += `<text x="${cx}" y="${H - pb + 16}" class="eixo ${x.d === hoje ? "hoje" : ""}" text-anchor="end" transform="rotate(-45 ${cx} ${H - pb + 16})">${ddmm(x.d)}</text>`;
     });
@@ -1417,7 +1426,7 @@ ${extra}
       const doDia = L.filter((r) => r.entrega === ultDia && norm(r.status).startsWith("ENTREGUE")), atrasadas = doDia.filter((r) => r._sit === "ent_atraso").length;
       const porT = new Map(); doDia.forEach((r) => porT.set(r.transp, (porT.get(r.transp) || 0) + 1));
       const [tMax, nMax] = [...porT.entries()].sort((a, b) => b[1] - a[1])[0] || ["—", 0];
-      txt += `<p>No último dia com movimento (<b>${ddmm(ultDia)}</b>) as transportadoras entregaram <button class="link verde" data-prod="ent">${fmt(doDia.length)} pedidos</button>, dos quais <button class="link laranja" data-prod="entatr">${fmt(atrasadas)} estavam atrasados</button>; o maior volume foi da <b>${esc(tMax)}</b>, com ${fmt(nMax)}.</p>`;
+      txt += `<p>No último dia com movimento (<b>${ddmm(ultDia)}</b>) ${gProdT ? `a <b>${esc(gProdT)}</b> entregou` : "as transportadoras entregaram"} <button class="link verde" data-prod="ent">${fmt(doDia.length)} pedidos</button>, dos quais <button class="link laranja" data-prod="entatr">${fmt(atrasadas)} estavam atrasados</button>${gProdT ? "" : `; o maior volume foi da <b>${esc(tMax)}</b>, com ${fmt(nMax)}`}.</p>`;
       gProd = { ent: doDia, entatr: doDia.filter((r) => r._sit === "ent_atraso"), dia: ultDia };
     }
     const vHoje = venc.get(hoje) || 0;
@@ -1506,12 +1515,24 @@ ${extra}
     const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };
     const ids = new Set(gAtr[b.dataset.atr].map((r) => r.pedido)); selecionar(nomes[b.dataset.atr], (L) => L.filter((r) => ids.has(r.pedido))); });
   $("g-prod-resumo").addEventListener("click", (e) => { const b = e.target.closest("[data-prod]"); if (!b) return; const k = b.dataset.prod, hoje = hojeISO();
-    if (k === "hoje") return selecionar("Para entregar hoje (atrasados + vencem hoje)", (L) => L.filter((r) => r._atraso || (!r._fechado && r._prom === hoje)));
+    sairCheia();
+    if (k === "hoje") return selecionar(`Para entregar hoje (atrasados + vencem hoje)${gProdT ? " · " + gProdT : ""}`, (L) => L.filter((r) => gProdPassa(r) && (r._atraso || (!r._fechado && r._prom === hoje))));
     const ids = new Set(gProd[k].map((r) => r.pedido)); selecionar(k === "ent" ? `Entregues em ${ddmm(gProd.dia)}` : `Entregues atrasados em ${ddmm(gProd.dia)}`, (L) => L.filter((r) => ids.has(r.pedido))); });
-  $("g-prod").addEventListener("click", (e) => { const b = e.target.closest("[data-dia]"); if (!b) return; const d = b.dataset.dia, t = b.dataset.tipo;
-    if (t === "entregue") selecionar(`Entregues em ${ddmm(d)}`, (L) => L.filter((r) => r.entrega === d && norm(r.status).startsWith("ENTREGUE")));
-    else if (t === "atraso") selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados));
-    else selecionar(`Vencem em ${ddmm(d)}`, (L) => L.filter((r) => !r._fechado && !r._atraso && r._prom === d)); });
+  const gProdPassa = (r) => !gProdT || gProdK(r.transp) === gProdT;
+  function sairCheia() { if (!gProdCheia) return; gProdCheia = false; $("g-prod-cartao").classList.remove("tela-cheia"); document.body.classList.remove("sem-rolagem");
+    $("g-prod-cheia").textContent = "⛶ Tela cheia"; desenharProdutividade(gFiltradosCache, hojeISO()); }
+  $("g-prod").addEventListener("click", (e) => { const b = e.target.closest("[data-dia]"); if (!b) return; const d = b.dataset.dia, t = b.dataset.tipo, sx = gProdT ? " · " + gProdT : "";
+    sairCheia();
+    if (t === "entregue") selecionar(`Entregues em ${ddmm(d)}${sx}`, (L) => L.filter((r) => gProdPassa(r) && r.entrega === d && norm(r.status).startsWith("ENTREGUE")));
+    else if (t === "atraso") { selecionar(`Atrasados (em aberto)${sx}`, (L) => L.filter((r) => gProdPassa(r) && G_CARD.atrasados(r))); baixarGLista(); }
+    else selecionar(`Vencem em ${ddmm(d)}${sx}`, (L) => L.filter((r) => gProdPassa(r) && !r._fechado && !r._atraso && r._prom === d)); });
+  $("g-prod-transp").addEventListener("change", (e) => { gProdT = e.target.value; desenharProdutividade(gFiltradosCache, hojeISO()); });
+  $("g-prod-cheia").addEventListener("click", () => {
+    if (gProdCheia) return sairCheia();
+    gProdCheia = true; $("g-prod-cartao").classList.add("tela-cheia"); document.body.classList.add("sem-rolagem");
+    $("g-prod-cheia").textContent = "✕ Sair da tela cheia"; desenharProdutividade(gFiltradosCache, hojeISO()); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") sairCheia(); });
+  addEventListener("resize", () => { if (gProdCheia) desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-janela").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (!b) return; gJanela = +b.dataset.j;
     $("g-janela").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));
