@@ -790,16 +790,16 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
   .tabela-wrap th:first-child, .tabela-wrap td:first-child { position: sticky; left: 0; background: #fff; z-index: 1; }
   .tabela-wrap thead th:first-child { background: inherit; z-index: 2; }
   /* listas de pedidos (Preventivo, Análise de canais, Cobrança do dia) viram cartões */
-  .tabela-pedidos:has(#linhas, #c-linhas, #rt-linhas) thead { display: none; }
-  .tabela-pedidos:has(#linhas, #c-linhas, #rt-linhas) { display: block; }
-  #linhas, #c-linhas, #rt-linhas { display: block; }
-  #linhas > tr, #c-linhas > tr, #rt-linhas > tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 12px; margin-bottom: 10px; background: #fff; border: 1px solid var(--borda); border-radius: 12px; }
-  #linhas > tr > td, #c-linhas > tr > td, #rt-linhas > tr > td { display: block; padding: 0; border: 0; position: static !important; background: transparent !important; min-width: 0; }
-  #linhas > tr > td:first-child, #c-linhas > tr > td:first-child, #rt-linhas > tr > td:first-child { grid-column: 1 / -1; word-break: break-all; }
-  #linhas > tr > td:nth-child(5)::before, #c-linhas > tr > td:nth-child(5)::before, #rt-linhas > tr > td:nth-child(5)::before { content: "Nova data"; display: block; font-size: 11px; color: var(--texto-2); }
-  #linhas > tr > td:nth-child(6), #c-linhas > tr > td:nth-child(6), #rt-linhas > tr > td:nth-child(6) { grid-column: 1 / -1; }
-  #linhas > tr > td:nth-child(6)::before, #c-linhas > tr > td:nth-child(6)::before, #rt-linhas > tr > td:nth-child(6)::before { content: "Observação"; display: block; font-size: 11px; color: var(--texto-2); }
-  #linhas > tr input, #c-linhas > tr input, #rt-linhas > tr input, #linhas > tr textarea, #c-linhas > tr textarea, #rt-linhas > tr textarea { width: 100%; }
+  .tabela-pedidos:has(#linhas, #c-linhas, #rt-linhas, #d-linhas) thead { display: none; }
+  .tabela-pedidos:has(#linhas, #c-linhas, #rt-linhas, #d-linhas) { display: block; }
+  #linhas, #c-linhas, #rt-linhas, #d-linhas { display: block; }
+  #linhas > tr, #c-linhas > tr, #rt-linhas > tr, #d-linhas > tr { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 12px; padding: 12px; margin-bottom: 10px; background: #fff; border: 1px solid var(--borda); border-radius: 12px; }
+  #linhas > tr > td, #c-linhas > tr > td, #rt-linhas > tr > td, #d-linhas > tr > td { display: block; padding: 0; border: 0; position: static !important; background: transparent !important; min-width: 0; }
+  #linhas > tr > td:first-child, #c-linhas > tr > td:first-child, #rt-linhas > tr > td:first-child, #d-linhas > tr > td:first-child { grid-column: 1 / -1; word-break: break-all; }
+  #linhas > tr > td:nth-child(5)::before, #c-linhas > tr > td:nth-child(5)::before, #rt-linhas > tr > td:nth-child(5)::before, #d-linhas > tr > td:nth-child(5)::before { content: "Nova data"; display: block; font-size: 11px; color: var(--texto-2); }
+  #linhas > tr > td:nth-child(6), #c-linhas > tr > td:nth-child(6), #rt-linhas > tr > td:nth-child(6), #d-linhas > tr > td:nth-child(6) { grid-column: 1 / -1; }
+  #linhas > tr > td:nth-child(6)::before, #c-linhas > tr > td:nth-child(6)::before, #rt-linhas > tr > td:nth-child(6)::before, #d-linhas > tr > td:nth-child(6)::before { content: "Observação"; display: block; font-size: 11px; color: var(--texto-2); }
+  #linhas > tr input, #c-linhas > tr input, #rt-linhas > tr input, #d-linhas > tr input, #linhas > tr textarea, #c-linhas > tr textarea, #rt-linhas > tr textarea, #d-linhas > tr textarea { width: 100%; }
   #linhas > tr > td:empty, #c-linhas > tr > td:empty, #rt-linhas > tr > td:empty { display: none; }
   .tabela-pedidos .btn.mini { min-height: 36px; padding: 6px 12px; }
   /* paginação e modal */
@@ -835,3 +835,8 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .prev-resp .menu-cont { background: #dc2626; color: #fff; border-radius: 999px; padding: 1px 8px; font-size: 12px; }
 .prev-resp-sec { border-top: 1px solid var(--borda, #e5e7eb); margin-top: 14px; padding-top: 12px; }
 #btn-prev-resp { vertical-align: middle; margin-left: 10px; font-size: 13px; padding: 4px 10px; }
+
+/* Dropshipping */
+.filtros-cartao.filtros-drop { grid-template-columns: auto minmax(0,1.4fr) repeat(3, minmax(0,1fr)) auto; align-items: end; }
+@media (max-width: 1000px) { .filtros-cartao.filtros-drop { grid-template-columns: 1fr 1fr; } }
+@media (max-width: 520px) { .filtros-cartao.filtros-drop { grid-template-columns: 1fr; } }
