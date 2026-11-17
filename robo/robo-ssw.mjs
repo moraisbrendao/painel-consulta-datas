@@ -1013,7 +1013,7 @@ if (MODO === "lote") {
   else await conferirLote();
 }
 // conferência ao importar a lista e "Conferir tudo agora": agora pelo lote de 100 (Brenda, 16/11)
-if (MODO === "conferencia" || MODO === "conferencia-tudo") { await entrarSupabase(); await conferirLote(); if (MODO === "conferencia-tudo") await chamar("rpc/fim_conferencia_tudo", "POST", {}).catch(() => {}); }
+if (MODO === "conferencia" || MODO === "conferencia-tudo") { await entrarSupabase(); try { await conferirLote(); } finally { if (MODO === "conferencia-tudo") await chamar("rpc/fim_conferencia_tudo", "POST", {}).catch(() => {}); } }   // sempre marca o fim, mesmo se der erro
 if (MODO === "transito-cte") {   // AJUSTE ÚNICO (13/11): Trânsito Brasil sem registro na Senior → transportadora que emitiu o CT-e no SSW
   await entrarSupabase();
   const L = await chamar("conferencia_ssw?select=pedido,nf,transportadora,detalhe&transportadora=ilike.*sito*brasil*&situacao=eq.sem%20cte&limit=1000");

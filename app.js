@@ -3351,14 +3351,14 @@ ${extra}
   }
   // botão "Conferir tudo agora" (parte 25): o robô confere de novo todos os não entregues; vários podem clicar sem recomeçar
   let cfTudo = null;
-  const tudoAtivo = () => cfTudo && cfTudo.pedido_em && (!cfTudo.feito_em || cfTudo.feito_em < cfTudo.pedido_em) && Date.parse(cfTudo.pedido_em) > Date.now() - 24 * 3600000;
+  const tudoAtivo = () => cfTudo && cfTudo.pedido_em && (!cfTudo.feito_em || cfTudo.feito_em < cfTudo.pedido_em) && Date.parse(cfTudo.pedido_em) > Date.now() - 2 * 3600000;   // em lotes não passa de ~30 min; depois de 2 h não fica "conferindo" para sempre
   function desenharTudo() {
     const el = $("cf-tudo-info"); if (!cfTudo || !cfTudo.pedido_em) { el.hidden = true; return; }
     const quando = (d) => new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
     const desde = cfTudo.pedido_em, alvo = cfLista.filter((x) => x.situacao !== "entregue" || (x.consultado_em && x.consultado_em >= desde));
     const feitos = alvo.filter((x) => x.consultado_em && x.consultado_em >= desde).length;
     el.hidden = false;
-    el.innerHTML = tudoAtivo() ? `🔄 <b>Conferindo tudo de novo</b> desde ${quando(desde)} (pedido por ${esc((cfTudo.pedido_por || "").split("@")[0])}): ${fmt(feitos)} de ${fmt(alvo.length)} conferidos. Jadlog, Bento e Trânsito vão rápido; o SSW confere uns 800 por hora.`
+    el.innerHTML = tudoAtivo() ? `🔄 <b>Conferindo tudo de novo</b> desde ${quando(desde)} (pedido por ${esc((cfTudo.pedido_por || "").split("@")[0])}): ${fmt(feitos)} de ${fmt(alvo.length)} conferidos. A conferência em lotes leva uns 10 a 15 minutos; notas sem NF ou fora do SSW não entram na conta.`
       : `Última conferência de tudo: pedida em ${quando(desde)} por ${esc((cfTudo.pedido_por || "").split("@")[0])}${cfTudo.feito_em ? `, terminada em ${quando(cfTudo.feito_em)}` : ""}.`;
     $("cf-tudo").textContent = tudoAtivo() ? "🔄 Conferindo tudo…" : "🔄 Conferir tudo agora";
   }
@@ -3378,7 +3378,7 @@ ${extra}
     const pend = cfLista.filter(CF_CARD.pendente).length, ult = cfLista.reduce((m, x) => (x.consultado_em && x.consultado_em > m ? x.consultado_em : m), "");
     $("cf-info").textContent = cfLista.length
       ? `${fmt(cfLista.length)} pedidos importados em ${new Date(imp).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${cfLista[0].importado_por ? " por " + cfLista[0].importado_por.split("@")[0] : ""}`
-        + (pend ? ` · o robô está conferindo sozinho, os mais atrasados primeiro (faltam ${fmt(pend)}; ~800 por hora)` : " · todos conferidos") + (ult ? ` · última conferência ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
+        + (pend ? ` · o robô está conferindo sozinho, em lotes de 100 (faltam ${fmt(pend)}; rodada de uns 10 a 15 min)` : " · todos conferidos") + (ult ? ` · última conferência ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "")
       : 'Clique em "Importar pedidos (Intelipost)" e escolha o arquivo de transações exportado da Intelipost.';
     const tSel = $("cf-transp").value, ts = [...new Set(cfLista.map((x) => x.transportadora || "—"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     $("cf-transp").innerHTML = `<option value="">Todas</option>` + ts.map((t) => `<option ${t === tSel ? "selected" : ""}>${esc(t)}</option>`).join("");
@@ -3426,8 +3426,8 @@ ${extra}
       if (!itens.length) throw new Error("O arquivo não tem pedidos em aberto (todos estão Entregue ou Cancelado).");
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
-    const horas = Math.max(1, Math.round(itens.length / 800));
-    if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(res.fechados)} já Entregue/Cancelado (ficam de fora) e ${fmt(itens.length)} em aberto${semNf ? ` (${fmt(semNf)} sem NF)` : ""}.\n\nO robô confere todos no SSW sozinho, os mais atrasados primeiro (~800 por hora, uns ${horas} h no total). Os entregues no SSW vão direto para "Falta atualizar a Intelipost". A lista anterior será substituída. Continuar?`)) return;
+    const minutos = Math.max(5, Math.round((itens.length / 9000) * 10) + 3);   // em lotes de 100: ~9 mil notas em ~10 min (16/11)
+    if (!confirm(`${arq.name}\n\n${fmt(res.total)} pedidos no arquivo: ${fmt(res.fechados)} já Entregue/Cancelado (ficam de fora) e ${fmt(itens.length)} em aberto${semNf ? ` (${fmt(semNf)} sem NF)` : ""}.\n\nO robô confere todos no SSW sozinho, em lotes de 100 (uns ${minutos} minutos no total). Os entregues no SSW vão direto para "Falta atualizar a Intelipost". A lista anterior será substituída. Continuar?`)) return;
     carregando("Gravando…");
     const { error } = await sb.rpc("importar_conferencia", { linhas: itens });
     carregando("");
