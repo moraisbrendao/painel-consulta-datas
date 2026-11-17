@@ -1029,7 +1029,7 @@ async function conferirLote() {
     const linhas = tg.filter((l) => R.has(ch(l.nf))).map((l) => { const x = R.get(ch(l.nf)), d = (v) => (v ? String(v).slice(0, 10) : null);
       const sit = x.entregue ? "entregue" : /arquivo recebido/i.test(x.descricao || "") ? "sem cte" : "nao entregue";
       return { pedido: l.pedido, situacao: sit, ultimo_evento: (x.descricao || "").toUpperCase().slice(0, 60) || null, data_evento: d(x.data_evento), data_entrega: x.entregue ? d(x.data_entrega || x.data_evento) : null,
-        detalhe: { ...(l.detalhe || {}), fonte: "Transiga", previsao: x.previsao || null } }; });
+        detalhe: { ...(l.detalhe || {}), fonte: "Transiga", previsao: x.previsao || null, eventos: x.descricao ? [{ data: String(x.data_entrega || x.data_evento || "").slice(0, 16), status: String(x.descricao).toUpperCase().slice(0, 60), unidade: "" }] : [] } }; });
     for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote Transiga:", e.message.slice(0, 120)));
     log(`Transiga (webhook): ${linhas.length} de ${tg.length} com rastreio · ${R.size} NFs recebidas até agora`); })().catch((e) => log("Transiga parou:", String(e.message).slice(0, 80)));
   // Formato: site próprio com login; confere de novo quem não foi consultado na Formato nas últimas 4 h

@@ -3252,7 +3252,7 @@ ${extra}
     const b = e.target.closest("[data-ag-rastreio]"); if (!b) return;
     const t = agLista.find((x) => x.ticket === b.dataset.agRastreio); if (!t) return;
     const tr = t.fonte && t.fonte !== "SSW" ? t.fonte : agTransp(t);
-    abrirSSW(t.nf_nova, tr, null, /jadlog/i.test(tr) ? { titulo: `Ticket ${t.ticket}`, pedido: t.pedido, nf: t.nf_nova, transportadora: "Jadlog", situacao: t.situacao, ultimo_evento: t.ultimo_evento,
+    abrirSSW(t.nf_nova, tr, null, /jadlog|formato|transiga/i.test(tr) ? { titulo: `Ticket ${t.ticket}`, pedido: t.pedido, nf: t.nf_nova, transportadora: /formato/i.test(tr) ? "Formato" : /transiga/i.test(tr) ? "Transiga" : "Jadlog", situacao: t.situacao, ultimo_evento: t.ultimo_evento,
       data_entrega: t.data_entrega, consultado_em: t.consultado_em, detalhe: t.detalhe } : null);
   });
   $("ag-linhas").addEventListener("keydown", (e) => { if (e.key === "Enter" && e.target.dataset.agObs) e.target.blur(); });
@@ -3355,11 +3355,11 @@ ${extra}
       <h3 class="cf-h3">Histórico</h3>
       ${(d.eventos || []).length ? `<div class="tabela-wrap"><table class="tabela-range cf-hist"><thead><tr><th>Data/hora</th><th>Evento</th><th>Unidade</th></tr></thead><tbody>
         ${[...d.eventos].reverse().map((e) => `<tr><td>${dh(e.data)}</td><td>${esc(e.status)}</td><td>${esc(e.unidade || "")}</td></tr>`).join("")}</tbody></table></div>`
-        : `<p class="s">${x.detalhe ? "A transportadora ainda não mostra eventos para essa nota." : `O robô ainda não consultou essa nota na ${/formato/i.test(x.transportadora || "") ? "Formato" : "Jadlog"}.`}</p>`}
+        : `<p class="s">${x.detalhe ? "A transportadora ainda não mostra eventos para essa nota." : `O robô ainda não ${/transiga/i.test(x.transportadora || "") ? "recebeu o rastreio dessa nota da Transiga" : "consultou essa nota na " + (/formato/i.test(x.transportadora || "") ? "Formato" : "Jadlog")}.`}</p>`}
       <div class="cartao-topo" style="margin-top:10px"><p class="s" style="margin:0">Dados trazidos pelo robô do sistema da transportadora na última conferência.</p>
-        ${/jadlog|formato/i.test(d.fonte || x.transportadora || "") && x.nf ? `<button class="btn mini contorno" id="cf-site-jadlog">Abrir no site da ${/formato/i.test(d.fonte || x.transportadora || "") ? "Formato" : "Jadlog"} ↗</button>` : ""}</div>`;
+        ${/jadlog|formato|transiga/i.test(d.fonte || x.transportadora || "") && x.nf ? `<button class="btn mini contorno" id="cf-site-jadlog">Abrir no site da ${/formato/i.test(d.fonte || x.transportadora || "") ? "Formato" : /transiga/i.test(d.fonte || x.transportadora || "") ? "Transiga" : "Jadlog"} ↗</button>` : ""}</div>`;
     const bs = $("cf-site-jadlog");
-    if (bs) bs.addEventListener("click", () => { const msg = rastreioDe(/formato/i.test(d.fonte || x.transportadora || "") ? "Formato" : "Jadlog")[2](String(x.nf).split("-")[0].trim()); if (msg) toast(msg); });
+    if (bs) bs.addEventListener("click", () => { const msg = rastreioDe(/formato/i.test(d.fonte || x.transportadora || "") ? "Formato" : /transiga/i.test(d.fonte || x.transportadora || "") ? "Transiga" : "Jadlog")[2](String(x.nf).split("-")[0].trim()); if (msg) toast(msg); });
     $("modal").hidden = false; document.body.classList.add("sem-rolagem");
   }
   // senhas de rastreio do SSW cadastradas no painel (parte 23)
@@ -3390,12 +3390,12 @@ ${extra}
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
     let x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));
     // fora da Conferência SSW a lista não está carregada: busca só esse pedido (ou a NF) no que o robô já conferiu
-    if (!x && (pedido || nf) && /jadlog|formato/i.test(transp || "")) {
+    if (!x && (pedido || nf) && /jadlog|formato|transiga/i.test(transp || "")) {
       const q = (k, v) => sb.from("conferencia_ssw").select("*").eq(k, v).limit(1).then((r) => (r.data && r.data[0]) || null, () => null);
       x = (pedido && (await q("pedido", pedido))) || (nf && (await q("nf", nf))) || null;
     }
-    // Jadlog e Formato (site com login): sempre a janela com os dados do robô; o site fica num botão dentro dela
-    if (/jadlog|formato/i.test(transp || "") || (x && /jadlog|formato/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
+    // Jadlog, Formato e Transiga (sites com login): sempre a janela com os dados do robô; o site fica num botão dentro dela
+    if (/jadlog|formato|transiga/i.test(transp || "") || (x && /jadlog|formato|transiga/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
     const prop = rastreioDe(transp);
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
     const c = cnpjDaSerie(ser);
