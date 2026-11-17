@@ -12,9 +12,9 @@ const seguro = (t) => t.split(/\n+/).map((x) => x.trim()).filter(Boolean).map((x
 const { FORMATO_USUARIO: US, FORMATO_SENHA: SE } = process.env;
 if (!US || !SE) { log("faltam os segredos FORMATO_USUARIO / FORMATO_SENHA"); process.exit(0); }
 await entrarSupabase();
-const T = [...await chamar("base_aberta?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&data_entrega=not.is.null&limit=6").catch((e) => { log("entregues: erro", e.message.slice(0, 80)); return []; }),
-  ...await chamar("base_aberta?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.*ENTREG*&limit=6").catch(() => []),
-  ...await chamar("base_aberta?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.*ROTA*&limit=3").catch(() => [])];
+const T = [...await chamar("base_pedidos?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.ENTREG*&limit=5").catch((e) => { log("entregues: erro", e.message.slice(0, 80)); return []; }),
+  ...await chamar("base_pedidos?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.*INSUCESSO*&limit=2").catch(() => []),
+  ...await chamar("base_pedidos?select=nf,transportadora,micro_status&transportadora=ilike.*formato*&nf=not.is.null&micro_status=ilike.*AUSENTE*&limit=1").catch(() => [])];
 log("Formato na base:", T.length, "· por série:", Object.entries(T.reduce((a, l) => { const s = String(l.nf).split("-")[1] || "?"; a[s] = (a[s] || 0) + 1; return a; }, {})).map(([k, v]) => `${k}:${v}`).join(" "), "· por micro status:", Object.entries(T.reduce((a, l) => { const s = (l.micro_status || "?").slice(0, 25); a[s] = (a[s] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k, v]) => `${k}:${v}`).join(" | "));
 // amostra variada: 2 por série, preferindo quem já saiu (micro status sem "aguard"/"emiss")
 const L = [...new Map(T.map((l) => [l.nf, l])).values()].slice(0, 8);
