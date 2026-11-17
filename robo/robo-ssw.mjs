@@ -466,7 +466,14 @@ if (MODO === "teste-velocidade") {   // mede quanto demora baixar a base como o 
   const COLS = "pedido,nf,canal,uf,cidade,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao,data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao,trocas:extra->>trocas";
   const t0 = Date.now(); const x5 = await chamar(`base_pedidos?select=${COLS}&order=pedido&limit=5000&offset=0`);
   log("página pedindo 5000 linhas: veio", x5.length, "em", Date.now() - t0, "ms · tamanho", Math.round(JSON.stringify(x5).length / 1024), "KB");
-  for (const [tab, cols, PAG, JUNTAS] of [["base_pedidos", COLS, 1000, 4], ["base_pedidos", COLS, 1000, 8], ["base_aberta_bi", "*", 1000, 4]]) {
+  const TABS = [["base_pedidos", COLS], ["base_aberta_bi", "*"], ["tratativas", "*"], ["ocorrencias_cadastradas", "*"], ["previsao_ssw", "*"], ["tickets_abertos", "*"], ["detalhe_nf", "*"], ["reposicoes_tk", "*"], ["repo_atual", "*"], ["conferencia_ssw", "*"]];
+  const tv = Date.now();
+  await Promise.all(TABS.map(async ([tab, cols]) => { const t1 = Date.now(); let n = 0, kb = 0;
+    for (let de = 0; ; de += 8000) { const partes = await Promise.all(Array.from({ length: 8 }, (_, j) => chamar(`${tab}?select=${cols}&order=${tab === "tickets_abertos" || tab === "detalhe_nf" || tab === "ocorrencias_cadastradas" ? "nf" : /repo/.test(tab) ? "ticket" : "pedido"}&limit=1000&offset=${de + j * 1000}`).catch((e) => { log(tab, "erro", String(e.message).slice(0, 80)); return []; })));
+      partes.forEach((p) => { n += p.length; kb += JSON.stringify(p).length / 1024; }); if (partes.some((p) => p.length < 1000)) break; }
+    log(`  [tudo junto] ${tab}: ${n} linhas · ${Math.round(kb)} KB · ${((Date.now() - t1) / 1000).toFixed(1)} s`); }));
+  log(`TUDO JUNTO (como o painel abre): ${((Date.now() - tv) / 1000).toFixed(1)} s`);
+  for (const [tab, cols, PAG, JUNTAS] of [["base_aberta_bi", "*", 1000, 8], ["base_aberta", "*", 1000, 8]]) {
     const t1 = Date.now(); let n = 0, kb = 0, rodadas = 0;
     for (let de = 0; ; de += PAG * JUNTAS) {
       const partes = await Promise.all(Array.from({ length: JUNTAS }, (_, j) => chamar(`${tab}?select=${cols}&order=pedido&limit=${PAG}&offset=${de + j * PAG}`).catch(() => [])));
