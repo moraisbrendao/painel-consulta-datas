@@ -3550,7 +3550,7 @@ ${extra}
     ["aguardando", "Aguardando 1º movimento", "cinza"],
     ["atraso", "Atrasado em trânsito", "ambar"], ["prazo", "No prazo", "verde"]];
   const D_NOME = Object.fromEntries(D_DIAG.map(([k, n]) => [k, n])), D_COR = Object.fromEntries(D_DIAG.map(([k, , c]) => [k, c]));
-  const dSel = { card: "abertos", diag: "", transp: "" };
+  const dSel = { card: "agir", diag: "", transp: "" };
   let dLista = [], dPagina = 1, dDetTentou = false;
   const ehDrop = (p) => norm(p.origem).includes("DROP");
   // Scallia (webhook "retorno dos pedidos", parte 45): último marco por NF e por número de pedido
@@ -3586,14 +3586,14 @@ ${extra}
   // "Despachado" / "Emissão do CT-e" = a transportadora ainda não deu nenhum movimento: tempo parado aqui não é extravio
   const dSemMov = (p) => /^(DESPACHADO|EMISSAO DO CT-?E)/.test(norm(p.micro_status));
   const dSemNova = (p) => { const n = p._t && p._t.nova_data; return !n || n < hojeISO(); };
-  const D_CARD = { abertos: () => true, atrasados: (p) => p._atrasoG, parados: (p) => !dSemMov(p) && p._parado !== null && p._parado > D_PARADO,
-    extravio: (p) => ["extravio", "sinistro"].includes(p._dd), repo: (p) => p._dd === "repo", ocorr: (p) => p._dd === "ocorr",
-    problema: (p) => ["falha", "semexp", "semcte", "naocoletado"].includes(p._dd), semnova: (p) => p._atrasoG && dSemNova(p) };
+  const D_CARD = { agir: (p) => p._atrasoG && dSemNova(p) && !["entregue", "repo", "ocorr"].includes(p._dd),
+    extravio: (p) => ["extravio", "sinistro"].includes(p._dd), coleta: (p) => p._dd === "naocoletado",
+    repocorr: (p) => ["repo", "ocorr"].includes(p._dd), abertos: () => true };
   const D_ORDEM = ["sinistro", "extravio", "naocoletado", "falha", "repo", "ocorr", "parado", "semcte", "semexp", "atraso", "aguardando", "entregue", "prazo"];
   function desenharDrop(soSeAberta) {
     const D = base.filter(ehDrop);
     D.forEach((p) => { p._dd = dDiag(p); });
-    const atrasados = D.filter((p) => p._atrasoG && dSemNova(p)).length;
+    const atrasados = D.filter(D_CARD.agir).length;
     $("menu-drop").hidden = !atrasados; $("menu-drop").textContent = fmt(atrasados);
     if (soSeAberta && paginaAtual !== "drop") return;
     if (!detNF && !dDetTentou) { dDetTentou = true; carregarDetNF().then((m) => { if (m.size) desenharDrop(true); }); }
@@ -3601,8 +3601,7 @@ ${extra}
     // opções dos filtros
     const opc = (id, f, todos) => { const el = $(id), v = el.value, c = new Map(); D.forEach((p) => { const k = f(p); if (k) c.set(k, (c.get(k) || 0) + 1); });
       el.innerHTML = `<option value="">${todos}</option>` + [...c].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([k, n]) => `<option value="${esc(k)}">${esc(k)} (${fmt(n)})</option>`).join(""); el.value = c.has(v) ? v : ""; };
-    opc("d-transp", (p) => gProdK(p.transportadora), "Todas"); opc("d-forn", dForn, D.some(dForn) ? "Todos" : "Todos (vem na próxima base)");
-    const dg = $("d-diag"), dgv = dSel.diag; dg.innerHTML = `<option value="">Todos</option>` + D_DIAG.map(([k, n]) => `<option value="${k}">${n}</option>`).join(""); dg.value = dgv;
+    opc("d-transp", (p) => gProdK(p.transportadora), "Todas"); opc("d-forn", dForn, "Todos"); $("d-forn-rot").hidden = !D.some(dForn);
     if ($("d-transp").value !== (dSel.transp || "")) $("d-transp").value = dSel.transp || "";
     const busca = norm($("d-busca").value).split(/[\s,;]+/).filter(Boolean), forn = $("d-forn").value;
     const passa = (p, menos) => {
@@ -3621,13 +3620,17 @@ ${extra}
       + `<tr class="tot-linha"><td>Total</td><td class="num">${fmt(BD.length)}</td><td class="num">${fmt(BD.filter((p) => p._atrasoG).length)}</td><td class="num">${fmt(BD.filter((p) => p._atrasoG && dSemNova(p)).length)}</td></tr>`;
     // transportadoras
     const BT = D.filter((p) => passa(p, "transp")), mt = new Map();
-    BT.forEach((p) => { const t = gProdK(p.transportadora), x = mt.get(t) || { t, ab: 0, at: 0, pa: 0, ex: 0 }; x.ab++; if (p._atrasoG) x.at++; if (D_CARD.parados(p)) x.pa++; if (D_CARD.extravio(p)) x.ex++; mt.set(t, x); });
+    BT.forEach((p) => { const t = gProdK(p.transportadora), x = mt.get(t) || { t, ab: 0, at: 0, pa: 0, ex: 0 }; x.ab++; if (p._atrasoG) x.at++; if (!dSemMov(p) && p._parado !== null && p._parado > D_PARADO) x.pa++; if (D_CARD.extravio(p)) x.ex++; mt.set(t, x); });
     $("d-transp-linhas").innerHTML = [...mt.values()].sort((a, b) => b.at - a.at || b.ab - a.ab).map((x) => `<tr class="clicavel ${dSel.transp === x.t ? "sel" : ""}" data-dt="${esc(x.t)}"><td>${esc(x.t)}</td><td class="num neutro">${fmt(x.ab)}</td><td class="num">${fmt(x.at)}</td><td class="num">${fmt(x.pa)}</td><td class="num">${fmt(x.ex)}</td></tr>`).join("")
       || `<tr><td colspan="5" class="vazio">Nenhum pedido.</td></tr>`;
     // lista
     const ord = (p) => D_ORDEM.indexOf(p._dd);
     dLista = D.filter((p) => passa(p)).sort((a, b) => ord(a) - ord(b) || (b._parado || 0) - (a._parado || 0) || String(a._venc || "9").localeCompare(String(b._venc || "9")));
-    const card = { abertos: "Em aberto", atrasados: "Atrasados", parados: "Parados no rastreio", extravio: "Provável extravio", repo: "Com reposição", ocorr: "Com ocorrência", problema: "Outro problema", semnova: "Atrasados sem nova data" }[dSel.card];
+    const card = { agir: "Atrasados sem nova data", extravio: "Possível extravio", coleta: "Atrasado sem coleta", repocorr: "Com reposição ou ocorrência", abertos: "Todos em aberto" }[dSel.card];
+    $("d-sel").hidden = !(dSel.diag || dSel.transp);
+    $("d-sel").innerHTML = [dSel.diag && `<span class="chip-sel">${esc(D_NOME[dSel.diag])} <button class="link" data-dx="diag" title="Tirar">✕</button></span>`, dSel.transp && `<span class="chip-sel">${esc(dSel.transp)} <button class="link" data-dx="transp" title="Tirar">✕</button></span>`].filter(Boolean).join("");
+    const cont = (k) => D.filter((p) => passa(p, "card") && p._dd === k).length;
+    $("d-abertos-sub").textContent = `${fmt(cont("aguardando"))} aguardando coleta no prazo · ${fmt(cont("prazo"))} em trânsito no prazo`;
     $("d-lista-titulo").textContent = `${[card, dSel.diag && D_NOME[dSel.diag], dSel.transp, forn].filter(Boolean).join(" · ")} (${fmt(dLista.length)})`;
     $("d-info").textContent = D.length ? `${fmt(D.length)} pedidos de dropshipping em aberto · ${fmt(D.filter((p) => p._atrasoG).length)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}${scInfo ? " · " + scInfo : ""}${detNF ? "" : " · carregando ocorrências e reposições…"}`
       : base.length ? "Nenhum pedido com origem Dropshipping na base em aberto." : "Carregando…";
@@ -3649,17 +3652,17 @@ ${extra}
     $("d-paginacao").innerHTML = total > POR_PAGINA ? `<button class="btn" data-p="-1" ${dPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${dPagina} de ${pags}</span><button class="btn" data-p="1" ${dPagina === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
   const dMudou = () => { dPagina = 1; desenharDrop(); };
-  $("d-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-d]"); if (!b) return; dSel.card = dSel.card === b.dataset.d ? "abertos" : b.dataset.d; dMudou(); });
+  $("d-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-d]"); if (!b) return; dSel.card = b.dataset.d; dMudou(); });
   $("pagina-drop").addEventListener("click", (e) => {
-    const dd = e.target.closest("tr[data-dd]"); if (dd) { dSel.diag = dSel.diag === dd.dataset.dd ? "" : dd.dataset.dd; return dMudou(); }
-    const dt = e.target.closest("tr[data-dt]"); if (dt) { dSel.transp = dSel.transp === dt.dataset.dt ? "" : dt.dataset.dt; return dMudou(); }
+    const dx = e.target.closest("[data-dx]"); if (dx) { dSel[dx.dataset.dx] = ""; return dMudou(); }
+    const dd = e.target.closest("tr[data-dd]"); if (dd) { dSel.diag = dSel.diag === dd.dataset.dd ? "" : dd.dataset.dd; if (dSel.diag) dSel.card = "abertos"; dMudou(); return $("d-lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" }); }
+    const dt = e.target.closest("tr[data-dt]"); if (dt) { dSel.transp = dSel.transp === dt.dataset.dt ? "" : dt.dataset.dt; dMudou(); return $("d-lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" }); }
     const pb = e.target.closest("#d-paginacao button[data-p]"); if (pb) { dPagina += Number(pb.dataset.p); desenharDLista(); $("d-lista-titulo").scrollIntoView({ block: "start" }); }
   });
   $("d-transp").addEventListener("change", () => { dSel.transp = $("d-transp").value; dMudou(); });
-  $("d-diag").addEventListener("change", () => { dSel.diag = $("d-diag").value; dMudou(); });
   $("d-forn").addEventListener("change", dMudou);
   let dEspera; $("d-busca").addEventListener("input", () => { clearTimeout(dEspera); dEspera = setTimeout(dMudou, 250); });
-  $("d-limpar").addEventListener("click", () => { dSel.card = "abertos"; dSel.diag = ""; dSel.transp = ""; $("d-busca").value = ""; $("d-forn").value = ""; dMudou(); });
+  $("d-limpar").addEventListener("click", () => { dSel.card = "agir"; dSel.diag = ""; dSel.transp = ""; $("d-busca").value = ""; $("d-forn").value = ""; dMudou(); });
   $("d-linhas").addEventListener("click", (e) => { if (e.target.closest("input, select, textarea, a, button")) return; const tr = e.target.closest("tr[data-pedido]"); if (tr) abrirDetalhe(tr.dataset.pedido); });
   $("d-linhas").addEventListener("change", async (e) => {
     const inp = e.target.closest("[data-d-campo]"); if (!inp) return; const tr = inp.closest("tr[data-pedido]");

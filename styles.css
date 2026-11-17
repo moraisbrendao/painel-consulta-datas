@@ -837,6 +837,6 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 #btn-prev-resp { vertical-align: middle; margin-left: 10px; font-size: 13px; padding: 4px 10px; }
 
 /* Dropshipping */
-.filtros-cartao.filtros-drop { grid-template-columns: auto minmax(0,1.4fr) repeat(3, minmax(0,1fr)) auto; align-items: end; }
+.filtros-cartao.filtros-drop { grid-template-columns: auto minmax(0,1.6fr) repeat(2, minmax(0,1fr)) auto; align-items: end; }
 @media (max-width: 1000px) { .filtros-cartao.filtros-drop { grid-template-columns: 1fr 1fr; } }
 @media (max-width: 520px) { .filtros-cartao.filtros-drop { grid-template-columns: 1fr; } }

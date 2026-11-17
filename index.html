@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=147">
+  <link rel="stylesheet" href="styles.css?v=148">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -441,47 +441,47 @@
         <span class="filtros-rot">⛉ Filtros</span>
         <label class="cresce">Pedido ou NF<input id="d-busca" type="search" placeholder="# um ou vários"></label>
         <label>Transportadora<select id="d-transp"><option value="">Todas</option></select></label>
-        <label>Fornecedor<select id="d-forn"><option value="">Todos</option></select></label>
-        <label>Diagnóstico<select id="d-diag"><option value="">Todos</option></select></label>
+        <label id="d-forn-rot">Fornecedor<select id="d-forn"><option value="">Todos</option></select></label>
         <button id="d-limpar" class="link limpar" type="button">Limpar filtros</button>
       </section>
       <div class="titulo-pagina com-acoes">
         <div>
           <h1>Dropshipping</h1>
-          <p class="sub">Pedidos com origem <b>Dropshipping</b> na base. A nova data e a observação gravadas aqui valem em todas as abas (Preventivo, Cobrança do dia, Análise de canais, SAC).</p>
+          <p class="sub">Trate primeiro o card 1, depois o 2 e o 3. A nova data e a observação são salvas aqui mesmo e valem em todas as abas.</p>
           <p id="d-info" class="info-base">Carregando…</p>
         </div>
         <div class="acoes-robo"><button id="d-exportar" class="btn contorno">Baixar Excel</button></div>
       </div>
-      <section class="kpis" id="d-cards">
-        <button class="kpi" data-d="abertos"><span class="kpi-rot">Em aberto</span><b class="kpi-num"></b><small>dropshipping não entregue</small><i>↗</i></button>
-        <button class="kpi vermelho" data-d="atrasados"><span class="kpi-rot">Atrasados</span><b class="kpi-num"></b><small>data prometida já passou</small><i>↗</i></button>
-        <button class="kpi roxo" data-d="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>já coletado e há mais de 7 dias sem movimento</small><i>↗</i></button>
-        <button class="kpi vermelho" data-d="extravio"><span class="kpi-rot">Provável extravio</span><b class="kpi-num"></b><small>atrasado, já coletado e 15+ dias sem movimento</small><i>↗</i></button>
-        <button class="kpi laranja" data-d="repo"><span class="kpi-rot">Com reposição</span><b class="kpi-num"></b><small>ticket de reposição aberto</small><i>↗</i></button>
-        <button class="kpi laranja" data-d="ocorr"><span class="kpi-rot">Com ocorrência</span><b class="kpi-num"></b><small>ocorrência no detalhamento</small><i>↗</i></button>
-        <button class="kpi azul" data-d="problema"><span class="kpi-rot">Outro problema</span><b class="kpi-num"></b><small>atrasado sem coleta, falha, devolução, sem CT-e…</small><i>↗</i></button>
-        <button class="kpi" data-d="semnova"><span class="kpi-rot">Atrasados sem nova data</span><b class="kpi-num"></b><small>cobrar e informar a nova data</small><i>↗</i></button>
+      <section class="kpis c-kpis-acao" id="d-cards">
+        <button class="kpi vermelho" data-d="agir"><span class="kpi-rot">1 · Atrasados sem nova data</span><b class="kpi-num"></b><small>cobrar a transportadora e informar a nova data</small><i>↗</i></button>
+        <button class="kpi vermelho" data-d="extravio"><span class="kpi-rot">2 · Possível extravio</span><b class="kpi-num"></b><small>atrasado e parado há 15+ dias no rastreio</small><i>↗</i></button>
+        <button class="kpi laranja" data-d="coleta"><span class="kpi-rot">3 · Atrasado sem coleta</span><b class="kpi-num"></b><small>a transportadora ainda não pegou o pedido</small><i>↗</i></button>
+        <button class="kpi roxo" data-d="repocorr"><span class="kpi-rot">Com reposição ou ocorrência</span><b class="kpi-num"></b><small>já tem ticket aberto</small><i>↗</i></button>
+        <button class="kpi" data-d="abertos"><span class="kpi-rot">Todos em aberto</span><b class="kpi-num"></b><small id="d-abertos-sub">dropshipping não entregue</small><i>↗</i></button>
       </section>
-      <div class="c-duas">
-        <section class="cartao"><h2 class="c-tit">🔎 Diagnóstico</h2><p class="sub">O que provavelmente está acontecendo com cada pedido. Clique para filtrar.</p>
-          <div class="tabela-wrap"><table class="tabela-range tabela-cruz"><thead><tr><th>Diagnóstico</th><th class="num">Pedidos</th><th class="num">Atrasados</th><th class="num">Sem nova data</th></tr></thead><tbody id="d-diag-linhas"></tbody></table></div></section>
-        <section class="cartao"><h2 class="c-tit">🚚 Por transportadora</h2><p class="sub">Clique para filtrar.</p>
-          <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Transportadora</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">Parados</th><th class="num">Prov. extravio</th></tr></thead><tbody id="d-transp-linhas"></tbody></table></div></section>
-      </div>
+      <div id="d-sel" class="g-cruz-sel" hidden></div>
       <section class="cartao" id="d-lista-cartao">
-        <div class="cartao-topo"><div><h2 id="d-lista-titulo">Pedidos</h2><p class="sub">Os mais graves aparecem primeiro. Ver rastreio abre a transportadora da nota, igual à Conferência SSW.</p></div></div>
+        <div class="cartao-topo"><div><h2 id="d-lista-titulo">Pedidos</h2><p class="sub">Os mais graves aparecem primeiro. Ver rastreio abre a transportadora da nota. Ao informar a nova data, o pedido sai do card 1.</p></div></div>
         <div class="tabela-wrap">
           <table class="tabela-pedidos c-tabela-acao">
-            <thead><tr><th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Prometido ao cliente</th><th>Nova data</th><th>Observação</th><th>Diagnóstico</th><th></th></tr></thead>
+            <thead><tr><th>Pedido</th><th>Transportadora</th><th>Micro status</th><th>Prometido ao cliente</th><th>Nova data</th><th>Observação</th><th>Situação</th><th></th></tr></thead>
             <tbody id="d-linhas"></tbody>
           </table>
           <p id="d-vazio" class="vazio" hidden>Nenhum pedido aqui. 🎉</p>
         </div>
         <div id="d-paginacao" class="paginacao"></div>
       </section>
-      <details class="c-regras cartao"><summary>Como o diagnóstico é calculado</summary>
-        <p>Na ordem: <b>Reposição aberta</b> (aba Reposições do detalhamento de tickets) · <b>Ocorrência</b> (aba Ocorrências) · <b>Já entregue</b> (Intelipost, rastreio ou aviso do Scallia) · <b>Extravio / sinistro</b> (micro status fala em extravio, roubo ou sinistro) · <b>Problema na entrega</b> (micro status de falha, avaria, devolução, recusa, endereço, ausente) · <b>Sem expedição</b> · se o micro status ainda é <b>Despachado</b> ou <b>Emissão do CT-e</b> (a transportadora não deu nenhum movimento): <b>Atrasado sem coleta</b> quando a data prometida já passou, <b>Sem CT-e</b> pelo SSW, senão <b>Aguardando 1º movimento</b> · já coletado: <b>Provável extravio</b> (atrasado e 15 dias ou mais sem movimento), <b>Parado no rastreio</b> (mais de 7 dias sem movimento), <b>Atrasado em trânsito</b>, <b>No prazo</b>. Os cards e as tabelas seguem os filtros do topo, inclusive o de Diagnóstico.</p>
+      <details class="cartao c-mais" id="d-mais">
+        <summary><b>Ver análise completa</b> <span class="sub">situação de todos os pedidos e ranking por transportadora</span></summary>
+      <div class="c-duas">
+        <section class="cartao"><h2 class="c-tit">🔎 Situação dos pedidos</h2><p class="sub">O que provavelmente está acontecendo com cada pedido. Clique para filtrar.</p>
+          <div class="tabela-wrap"><table class="tabela-range tabela-cruz"><thead><tr><th>Situação</th><th class="num">Pedidos</th><th class="num">Atrasados</th><th class="num">Sem nova data</th></tr></thead><tbody id="d-diag-linhas"></tbody></table></div></section>
+        <section class="cartao"><h2 class="c-tit">🚚 Por transportadora</h2><p class="sub">Clique para filtrar.</p>
+          <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-cruz"><thead><tr><th>Transportadora</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">Parados</th><th class="num">Prov. extravio</th></tr></thead><tbody id="d-transp-linhas"></tbody></table></div></section>
+      </div>
+      <details class="c-regras"><summary>Como a situação é calculada</summary>
+        <p>Na ordem: <b>Reposição aberta</b> (aba Reposições do detalhamento de tickets) · <b>Ocorrência</b> (aba Ocorrências) · <b>Já entregue</b> (Intelipost, rastreio ou aviso do Scallia) · <b>Extravio / sinistro</b> (micro status fala em extravio, roubo ou sinistro) · <b>Problema na entrega</b> (micro status de falha, avaria, devolução, recusa, endereço, ausente) · <b>Sem expedição</b> · se o micro status ainda é <b>Despachado</b> ou <b>Emissão do CT-e</b> (a transportadora não deu nenhum movimento): <b>Atrasado sem coleta</b> quando a data prometida já passou, <b>Sem CT-e</b> pelo SSW, senão <b>Aguardando 1º movimento</b> · já coletado: <b>Provável extravio</b> (atrasado e 15 dias ou mais sem movimento), <b>Parado no rastreio</b> (mais de 7 dias sem movimento), <b>Atrasado em trânsito</b>, <b>No prazo</b>. Os cards e as tabelas seguem os filtros do topo.</p>
+      </details>
       </details>
     </main>
 
@@ -1398,13 +1398,13 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=147"></script>
-  <script src="mapa-brasil.js?v=147"></script>
-  <script src="troca-notas.js?v=147"></script>
-  <script src="app.js?v=147"></script>
-  <script src="ordenar.js?v=147"></script>
-  <script src="menu.js?v=147"></script>
-  <script src="ajuda.js?v=147"></script>
-  <script src="documentos.js?v=147"></script>
+  <script src="config.js?v=148"></script>
+  <script src="mapa-brasil.js?v=148"></script>
+  <script src="troca-notas.js?v=148"></script>
+  <script src="app.js?v=148"></script>
+  <script src="ordenar.js?v=148"></script>
+  <script src="menu.js?v=148"></script>
+  <script src="ajuda.js?v=148"></script>
+  <script src="documentos.js?v=148"></script>
 </body>
 </html>
