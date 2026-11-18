@@ -1117,6 +1117,16 @@ async function conferirLote() {
     const linhas = fm.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido); return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : { fonte: "Formato" } }; });
     for (let i = 0; i < linhas.length; i += 100) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 100) }).catch((e) => log("Não gravei um lote Formato:", e.message.slice(0, 120)));
     log(`Formato (site): ${linhas.length} de ${fm.length} conferidos · ${Math.round((Date.now() - t0) / 1000)} s`); })().catch((e) => log("Formato parou:", String(e.message).slice(0, 80)));
+  // Bento Brasil e Trânsito Brasil: site próprio, uma nota por vez (com pausa). Antes só rodavam no "Conferir tudo agora";
+  // agora entram em toda rodada em lote, só as não entregues que não foram olhadas nas últimas 2 h.
+  const pSites = (async () => { for (const [EH, fn, nome] of [[EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) {
+    const F = []; for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*${nome}*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    const fila = F.filter((x) => !(x.detalhe && x.detalhe.emissor) && !(x.consultado_em && Date.now() - Date.parse(x.consultado_em) < 2 * 3600000)).slice(0, 300);
+    if (!fila.length) continue;
+    const m = await fn(fila), linhas = fila.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
+      return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : r.previsao ? { fonte: nome, previsao: r.previsao } : null }; });
+    for (let i = 0; i < linhas.length; i += 100) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 100) }).catch((e) => log(`Não gravei um lote ${nome}:`, e.message.slice(0, 120)));
+    log(`${nome === "bento" ? "Bento Brasil" : "Trânsito Brasil"} (lote): ${linhas.length} de ${fila.length} conferidos (${F.length} não entregues) · ${Math.round((Date.now() - t0) / 1000)} s`); } })().catch((e) => log("Bento/Trânsito parou:", String(e.message).slice(0, 80)));
   // SSW: tudo que não é Jadlog, Bento, Trânsito Brasil (sistemas próprios) nem fora do SSW
   const ssw = lista.filter((l) => !EH_JADLOG.test(l.transportadora || "") && !EH_BENTO.test(l.transportadora || "") && !EH_FORMATO.test(l.transportadora || "") && !(EH_TRANSITO.test(l.transportadora || "") && !(l.detalhe && l.detalhe.emissor)) && !FORA_SSW.test(l.transportadora || ""));
   // CNPJ: o da série, ou o outro CNPJ em que essa NF já foi achada antes (detalhe.cnpj_outro)
@@ -1192,11 +1202,11 @@ async function conferirLote() {
     }
     log(`Outros CNPJ: ${achou} NFs achadas em ${consultas - c0} consultas · ${Math.round((Date.now() - t0) / 1000)} s · achadas só sem senha (CT-e de outra transportadora): ${JSON.stringify(semSenhaAchou)}`);
   } catch (e) { log("Parei:", e.message, `· outros CNPJ: ${achou} achadas até aqui · gravo o que já conferi.`); }
-  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; await pTransiga; await pFormato; log("Nada gravado do SSW nesta rodada."); return; }
+  if (!gravados && res.size > 200 && ![...res.values()].some((r) => r.situacao !== "sem cte")) { await pJad; await pTransiga; await pFormato; await pSites; log("Nada gravado do SSW nesta rodada."); return; }
   const final = gravados ? montar(ssw.filter((l) => mexidos.has(l.pedido))) : montar(ssw);
   await gravar(final.concat(semNf.map((l) => ({ pedido: l.pedido, situacao: "sem nf", ultimo_evento: null, data_evento: null, data_entrega: null, detalhe: l.detalhe || null }))));
   res.forEach((r) => (cont[r.situacao] = (cont[r.situacao] || 0) + 1));
-  await pJad; await pTransiga; await pFormato;
+  await pJad; await pTransiga; await pFormato; await pSites;
   log("Conferência em lote:", Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "), `· sem NF/série ${semNf.length} · ${Math.round((Date.now() - t0) / 1000)} s no total`);
 }
 if (MODO === "lote") {
