@@ -283,7 +283,7 @@ async function simularPrazo(cep, metodo, olhar) {
     const caixa = p.locator("input[type=checkbox]:visible").nth(i);
     const querSim = process.env.IGNORAR_REGRAS !== "nao";
     // a chave às vezes não responde ao clique no input: tenta o input, depois a "bolinha" ao lado (pai/avô visível), esperando a tela assentar
-    const tentativas = [() => caixa.click({ force: true }), () => caixa.locator("xpath=..").click({ force: true }), () => caixa.locator("xpath=../..").click({ force: true }), () => caixa.check({ force: true })];
+    const tentativas = [() => caixa.locator("xpath=ancestor::label[1]").click({ timeout: 5000 }), () => caixa.click({ force: true, timeout: 5000 }), () => caixa.locator("xpath=..").click({ force: true }), () => caixa.locator("xpath=../..").click({ force: true }), () => caixa.check({ force: true })];
     for (const t of tentativas) {
       if ((await caixa.isChecked()) === querSim) break;
       await t().catch(() => {}); await p.waitForTimeout(1200);

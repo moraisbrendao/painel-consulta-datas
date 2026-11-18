@@ -263,8 +263,7 @@ export async function diagBarrar3({ chamar, ctx, log }) {
   const [x] = await chamar("barrar_entrega?select=ticket&na_planilha=eq.true&ticket=not.is.null&order=ticket_criado.asc&limit=1");
   if (!x) { log("diag-barrar 3: nenhuma nota com ticket (envie a planilha no painel)"); return; }
   const M = await import("./multi360.mjs");
-  if (!process.env.BARRAR_360_USUARIO || !process.env.BARRAR_360_SENHA) { log("diag-barrar 3: falta BARRAR_360_USUARIO/BARRAR_360_SENHA no GitHub (login do appv2)"); return; }
-  const cred = { email: process.env.BARRAR_360_USUARIO, senha: process.env.BARRAR_360_SENHA, nome: "BARRAR_360_USUARIO" };
+  const cred = null;   // Multi360: o mesmo login já cadastrado (MULTI360_EMAIL/MULTI360_SENHA), a pedido da Brenda
   const p = await M.entrarMulti360(ctx, log, cred);
   await M.diagTicketBarrar(p, x.ticket, log);
 }
