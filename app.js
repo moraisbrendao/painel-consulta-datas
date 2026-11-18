@@ -4043,21 +4043,18 @@ ${extra}
     opcoesRep("rep-filial", [...new Set(reps.map(filRep))].sort(pt), "Todas");
     opcoesRep("rep-status", [...new Set(reps.map((r) => r.status || "(sem status)"))].sort(pt), "Todos");
     opcoesRep("rep-resp", [...new Set(reps.map(respRep))].sort(pt), "Todos");
-    opcoesRep("rep-serie", [...new Set(reps.map(serieRep))].sort((x, y) => (Number(x) || 1e9) - (Number(y) || 1e9) || pt(x, y)), "Todas", (s) => (s === SEM_SERIE ? s : "Série " + s));
-    opcoesRep("rep-fila", [...new Set(reps.map((r) => filaRep(r) || SEM_FILA))].sort(pt), "Todas");
     filtrarRep();
   }
   // filtros do topo; "sem" = filtros que essa análise ignora
   function filtroRep(sem = []) {
     const v = (id) => (sem.includes(id) ? "" : $(id).value);
     const ano = v("rep-ano"), mes = v("rep-mes"), de = v("rep-de"), ate = v("rep-ate"), tipo = v("rep-tipo"), tr = v("rep-transp"), mot = v("rep-motivo"),
-      fil = v("rep-filial"), st = v("rep-status"), resp = v("rep-resp"), se = v("rep-serie"), fi = v("rep-fila");
+      fil = v("rep-filial"), st = v("rep-status"), resp = v("rep-resp");
     return reps.filter((r) => {
       const d = String(r.criado_em || "").slice(0, 10);
       return (!ano || d.slice(0, 4) === ano) && (!mes || d.slice(0, 7) === mes) && (!de || (d && d >= de)) && (!ate || (d && d <= ate)) &&
         (!tipo || r._t === tipo) && (!tr || trRep(r) === tr) && (!mot || motRep(r) === mot) && (!fil || filRep(r) === fil) &&
-        (!st || (r.status || "(sem status)") === st) && (!resp || respRep(r) === resp) &&
-        (!se || serieRep(r) === se) && (!fi || (filaRep(r) || SEM_FILA) === fi);
+        (!st || (r.status || "(sem status)") === st) && (!resp || respRep(r) === resp);
     });
   }
   const contaPor = (lista, chave) => { const m = new Map(); lista.forEach((r) => { const k = chave(r); m.set(k, (m.get(k) || []).concat(r)); }); return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR")); };
@@ -4067,6 +4064,9 @@ ${extra}
   const kpiC = (card, rot, n, sub, cor = "") => `<button type="button" class="kpi kpi-info kpi-clic ${cor}" data-card="${card}" title="Clique para ver os tickets e exportar"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small><i>↗</i></button>`;
   const ROT_CARD = { todos: "Todas as reposições", pre: "Pré-entrega", pos: "Pós-entrega", ab: "Em aberto", fin: "Finalizados (Resolvido/Encerrado)", rec: "Pendente Recuperação de crédito", total: "Reposição total", parcial: "Reposição parcial", comdet: "Com detalhamento", nfs: "Com nova NF emitida", saida: "Nova NF com saída", tempo: "Finalizados (com tempo de resolução)" };
   let repCard = "", repFaixa = -1;
+  // quadro "em aberto por fila": só aparece ao clicar no card Em aberto; filtros próprios (série, fila, responsável)
+  let pvAberto = false; const pv = { serie: "", fila: "", resp: "" }; let pvDet = null;
+  const casaPv = (r, f) => (!f.serie || serieRep(r) === f.serie) && (!f.fila || (filaRep(r) || SEM_FILA) === f.fila) && (!f.resp || respRep(r) === f.resp);
   function casaCard(r) {
     const d = r._d || {};
     switch (repCard) {
@@ -4089,6 +4089,7 @@ ${extra}
     const fl = repAba === "pre" || repAba === "pos";
     repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
+    if (repAba === "det" && pvDet) repFiltradas = repFiltradas.filter((r) => casaPv(r, pvDet));
     if (repAba === "det" && repFaixa >= 0) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && faixaFila(diasFila(r)) === repFaixa);
     $("rep-vazio").hidden = repFiltradas.length > 0 || repAba === "det";
     if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
@@ -4103,7 +4104,14 @@ ${extra}
 
   // quadro "Em aberto por fila × dias parados na fila", agrupado por responsável (como a dinâmica da Brenda)
   function desenharParados(caixa, L) {
-    const ab = L.filter(abertoRep), box = $(caixa);
+    const box = $(caixa); box.hidden = !pvAberto;
+    document.querySelectorAll('#rpg-cards [data-card="ab"], #rpf-cards [data-card="ab"]').forEach((k) => k.classList.toggle("ativa", pvAberto));
+    if (!pvAberto) return;
+    const ab0 = L.filter(abertoRep), pt = (x, y) => x.localeCompare(y, "pt-BR");
+    const ops = { serie: [...new Set(ab0.map(serieRep))].sort((x, y) => (Number(x) || 1e9) - (Number(y) || 1e9) || pt(x, y)), fila: [...new Set(ab0.map((r) => filaRep(r) || SEM_FILA))].sort(pt), resp: [...new Set(ab0.map(respRep))].sort(pt) };
+    box.querySelectorAll(".pv-sel").forEach((s) => { const k = s.dataset.pv; if (pv[k] && !ops[k].includes(pv[k])) ops[k].unshift(pv[k]);
+      s.innerHTML = `<option value="">${k === "fila" ? "Todas" : "Todos"}</option>` + ops[k].map((v) => `<option value="${esc(v)}">${esc(k === "serie" && v !== SEM_SERIE ? "Série " + v : v)}</option>`).join(""); s.value = pv[k]; });
+    const ab = ab0.filter((r) => casaPv(r, pv));
     const cel = (n, resp, fila, fx, cls = "") => n ? `<td class="num ${cls}"><a href="#" data-pfila="${esc(fila)}"${resp != null ? ` data-presp="${esc(resp)}"` : ""}${fx >= 0 ? ` data-pfx="${fx}"` : ""}>${fmt(n)}</a></td>` : `<td class="num vazio-c ${cls}">·</td>`;
     const conta = (rs) => { const v = FAIXAS_FILA.map(() => 0); rs.forEach((r) => { const i = faixaFila(diasFila(r)); if (i >= 0) v[i]++; }); return v; };
     box.querySelector(".rp-pivo-cab").innerHTML = `<tr><th>Responsável / Fila</th>${FAIXAS_FILA.map(([t]) => `<th class="num">${t}</th>`).join("")}<th class="num">Total</th></tr>`;
@@ -4211,7 +4219,8 @@ ${extra}
     const L = detFiltradas().slice().sort((a, b) => String(b.criado_em || "").localeCompare(String(a.criado_em || ""))), POR = 100, pags = Math.max(1, Math.ceil(L.length / POR));
     rpdPag = Math.min(rpdPag, pags);
     $("rpd-titulo").innerHTML = `${fmt(L.length)} tickets` + (repCard ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro do card">${esc(ROT_CARD[repCard] || repCard)} ✕</button>` : "")
-      + (repFaixa >= 0 ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro de dias">Parados na fila: ${esc(FAIXAS_FILA[repFaixa][0])} ✕</button>` : "");
+      + (repFaixa >= 0 ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro de dias">Parados na fila: ${esc(FAIXAS_FILA[repFaixa][0])} ✕</button>` : "")
+      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.fila, pvDet.resp].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
     $("rpd-linhas").innerHTML = L.slice((rpdPag - 1) * POR, rpdPag * POR).map(linhaDet).join("") || `<tr><td colspan="20" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
     $("rpd-pag").innerHTML = L.length > POR ? `<button class="btn" data-p="-1" ${rpdPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rpdPag} de ${pags}</span><button class="btn" data-p="1" ${rpdPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
@@ -4225,22 +4234,25 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("click", (e) => {
     const k = e.target.closest("button[data-card]");
+    if (k && k.dataset.card === "ab" && repAba !== "det") { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
+      if (pvAberto) { const q = $(repAba === "geral" ? "rpg-parados" : "rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
+    if (e.target.closest(".pv-limpar")) { pv.serie = pv.fila = pv.resp = ""; filtrarRep(); return; }
     if (k) { e.preventDefault(); e.stopPropagation(); const c = k.dataset.card;
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
       repCard = c === "todos" ? "" : c; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
-    if (e.target.closest(".rp-card-x")) { repCard = ""; repFaixa = -1; rpdPag = 1; filtrarRep(); return; }
+    if (e.target.closest(".rp-card-x")) { repCard = ""; repFaixa = -1; pvDet = null; rpdPag = 1; filtrarRep(); return; }
     const c = e.target.closest("[data-pfila]");
     if (c) { e.preventDefault(); e.stopPropagation();
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
-      if (c.dataset.presp) $("rep-resp").value = c.dataset.presp;
-      if (c.dataset.pfila !== "*") $("rep-fila").value = c.dataset.pfila;
+      pvDet = { ...pv }; if (c.dataset.presp) pvDet.resp = c.dataset.presp; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
       repCard = "ab"; repFaixa = c.dataset.pfx === undefined ? -1 : +c.dataset.pfx; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); }
   }, true);
-  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
+  $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
+  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
   try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
-  const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie", "rep-fila"];
+  const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
-  $("rep-limpar").addEventListener("click", () => { repCard = ""; repFaixa = -1; FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });
+  $("rep-limpar").addEventListener("click", () => { repCard = ""; repFaixa = -1; pvDet = null; FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });
   let esperaRpd; $("rpd-busca").addEventListener("input", () => { clearTimeout(esperaRpd); esperaRpd = setTimeout(() => { rpdPag = 1; desenharRepDet(); }, 250); });
   $("rpd-pag").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; rpdPag += Number(b.dataset.p); desenharRepDet(); });
   $("rep-exportar").addEventListener("click", () => {

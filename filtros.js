@@ -4,7 +4,7 @@
 (function () {
   const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
   const norm = (s) => String(s ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
-  const ALVO = ".filtros-cartao:not(#g-filtros) select, #filtros select";
+  const ALVO = ".filtros-cartao:not(#g-filtros) select, #filtros select, .rp-pv-filtros select";
   const todos = [];
 
   function montar(sel) {
