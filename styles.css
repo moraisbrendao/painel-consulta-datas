@@ -956,3 +956,11 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .br-envio { border: 1px solid #e3e7ee; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
 .br-envio summary { cursor: pointer; }
 .br-envio-h { font-size: 13px; margin: 10px 0 4px; }
+
+/* Reposição: fundo azul-escuro (só nessa aba) */
+body.fundo-escuro { background: #0b1730; }
+body.fundo-escuro #pagina-reposicao > .titulo-pagina h1,
+body.fundo-escuro #pagina-reposicao > .titulo-pagina .sub,
+body.fundo-escuro #pagina-reposicao > .titulo-pagina .info-base,
+body.fundo-escuro #pagina-reposicao > .titulo-pagina p { color: #e8edf7; }
+body.fundo-escuro #pagina-reposicao > .titulo-pagina .sub b { color: #fff; }
