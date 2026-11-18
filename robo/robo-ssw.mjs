@@ -1249,6 +1249,12 @@ if (MODO === "transportadora") {   // confere de novo agora todos os não entreg
 if (MODO === "jadlog") {   // só a Jadlog pela API (conferência), sem tocar no SSW
   await entrarSupabase(); process.env.SSW_MINUTOS = "0"; await conferir(0);
 }
+if (MODO === "diag-repo") {   // Reposição: lê 1 ticket pós (Eventos) e 1 pré (PDF da nota) em Aguardando entrega — só contagens no log
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ acceptDownloads: true });
+  try { await (await import("./repo-itens.mjs")).diagRepo({ chamar, log, ctx }); } finally { await nav.close(); }
+}
 if (MODO === "aguardando" || MODO === "aguardando-teste") {   // aba Alterar pedidos → Fila Aguardando entrega (robo/aguardando.mjs)
   await entrarSupabase();
   await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
