@@ -874,3 +874,10 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .ip-codigo-fixo > div { display: grid; gap: 2px; }
 .ip-codigo-fixo form { display: flex; gap: 8px; }
 .ip-codigo-fixo input { width: 130px; font-size: 18px; letter-spacing: 4px; text-align: center; padding: 6px 8px; border: 1px solid #c9d2e0; border-radius: 8px; }
+
+/* Reposição: cards clicáveis (abrem os tickets no Detalhamento) */
+.kpi.kpi-info.kpi-clic { cursor: pointer; }
+.kpi.kpi-info.kpi-clic:hover { border-color: var(--amarelo); box-shadow: 0 4px 14px rgba(13,34,64,.10); }
+.kpi.kpi-info.roxo .kpi-num { color: var(--roxo); }
+.txt-roxo { color: var(--roxo); }
+.rp-card-x { margin-left: 8px; font-size: 12px; vertical-align: middle; cursor: pointer; border: 0; }

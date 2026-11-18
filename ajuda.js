@@ -89,8 +89,9 @@
       "Clique em <b>⇪ Subir tabela de acompanhamento</b> e escolha a TABELA DE ACOMPANHAMENTO (BI, aba Export).",
       "Para os dados da nova NF e transportadora da reposição, suba também o detalhamento de tickets (Alterar pedidos › Ajuste Intelipost).",
       "Use as abas <b>Visão geral</b>, <b>Pré-entrega</b>, <b>Pós-entrega</b> e <b>Detalhamento operacional</b>, e os filtros de mês, transportadora, tipo e motivo.",
+      "Clique em qualquer card (Em aberto, Finalizados, Recuperação de crédito, Totais...) para ver os tickets dele no Detalhamento; <b>Baixar Excel</b> leva essa lista.",
       "<b>Baixar Excel</b> leva os tickets filtrados.",
-    ], "Tipo \"Reposição\" = pré-entrega; \"Reposição Pós Entrega\" = pós-entrega. Transportadora = redespacho (coluna R) se tiver, senão a coluna Q."],
+    ], "Tipo \"Reposição\" = pré-entrega; \"Reposição Pós Entrega\" = pós-entrega. Transportadora = redespacho (coluna R) se tiver, senão a coluna Q. Status Resolvido ou Encerrado = finalizado. Ticket na fila Recuperação de crédito = pendente de solução da Recuperação de crédito (não conta como em aberto)."],
 
     ["alterar", "Alterar pedidos", "Onde a Logística manda os robôs alterarem a Intelipost e o Multi360. Tem 6 botões no alto; cada um abre uma tela.", "Todo dia.", [
       "<b>📅 Nova previsão de entrega</b>: escreva uma linha por pedido (<i>PEDIDO dd/mm/aaaa</i>) ou suba a planilha, ou clique em <b>↓ Trazer do Preventivo e SSW</b>. Confira a lista e clique em <b>➤ Alterar na Intelipost</b>. Em \"O que o robô fez\" aparece o resultado (Alterado / Não alterou e o motivo). Datas vencidas, iguais à prometida ou antes dela ficam de fora.",
