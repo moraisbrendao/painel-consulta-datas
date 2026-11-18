@@ -804,13 +804,45 @@ async function fazerTroca(job) {
   } finally { if (aba) await aba.close().catch(() => {}); }
 }
 
+// diagnóstico da tela de Simulação de cotação e da Busca por Lote (só olha; mascarado)
+async function diagSim() {
+  const p = pagina; const m = (t) => String(t || "").replace(/\d{5,}/g, "#");
+  await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
+  await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  log("URL cotação:", new URL(p.url()).pathname);
+  await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(3000);
+  const info = await p.evaluate(() => {
+    const t = [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && /ignorar regras/i.test(e.textContent || ""));
+    if (!t) return { achou: false };
+    let a = t; for (let k = 0; k < 4 && a.parentElement; k++) a = a.parentElement;
+    const cb = a.querySelector("input[type=checkbox]");
+    const r = cb ? cb.getBoundingClientRect() : null;
+    return { achou: true, html: a.outerHTML.replace(/\s+/g, " ").slice(0, 1800), marcado: cb ? cb.checked : null, caixa: r ? [r.x, r.y, r.width, r.height].map(Math.round) : null };
+  });
+  log("Bloco ignorar regras:", m(JSON.stringify(info)));
+  // tenta clicar no texto "Sim" e na bolinha pela posição
+  const bloco = p.locator("xpath=//*[contains(normalize-space(.),'ignorar regras') and .//input[@type='checkbox']][last()]").first();
+  const cb = bloco.locator("input[type=checkbox]").first();
+  log("antes:", await cb.isChecked().catch(() => "?"));
+  for (const [nome, f] of [["label/slider", () => bloco.locator("label, .slider, .switch, [class*=switch], [class*=toggle], span").filter({ hasNot: p.locator("input") }).first().click()],
+                           ["texto Sim", () => bloco.getByText(/^\s*Sim\s*$/).first().click()],
+                           ["mouse no input", async () => { const b = await cb.boundingBox(); if (b) await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2); }]]) {
+    await f().catch((e) => log("  ", nome, "erro", e.message.split("\n")[0].slice(0, 80)));
+    await p.waitForTimeout(1200); log("  depois de", nome + ":", await cb.isChecked().catch(() => "?"));
+  }
+  await p.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(6000);
+  log("URL lote:", new URL(p.url()).pathname, "· campos:", m(JSON.stringify(await p.evaluate(() => [...document.querySelectorAll("input, textarea")].map((e) => `${e.tagName}:${e.type}:${e.placeholder || ""}`).slice(0, 15)))));
+}
+
 let ok = 0, erro = 0;
 const andaIni = new Date().toISOString(), anda = MODO === "real";
 if (anda) await gravarEstado("andamento:intelipost", { robo: "Nova data na Intelipost", rodando: true, inicio: andaIni }).catch(() => {});
 let andaResumo = "";
 try {
   await entrar();
-  if (MODO === "diag-troca") await diagTroca();
+  if (MODO === "diag-sim") await diagSim();
+  else if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();
   else if (MODO === "diag-data") await diagData();
