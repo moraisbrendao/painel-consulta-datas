@@ -3293,6 +3293,12 @@ ${extra}
   function agRobo(t) {
     const q = t.baixa_em ? `<div class="s">${new Date(t.baixa_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>` : "";
     if (t.baixa_status === "feita") return `<span class="chip verde">✓ Baixa feita</span>${q}`;
+    if (t.insucesso && t.situacao !== "entregue" && t.nf_nova) {   // onde está a ocorrência desse insucesso
+      const n = nfSerie({ nf: t.nf_nova });
+      if (ocCadastrada({ nf: t.nf_nova })) return `<span class="chip verde">✓ Ocorrência cadastrada</span>`;
+      if (notasNaFila().has(n.nf + "-" + n.serie)) return `<span class="chip azul">No robô do portal</span>`;
+      return `<span class="chip ambar">Pronta em Ocorrências</span><div class="s">falta mandar para o robô</div>`;
+    }
     if (t.baixa_status === "teste") return `<span class="chip cinza">Testado (Cancelar)</span>${q}`;
     if (t.baixa_status === "conferir") return `<span class="chip ambar">Conferir</span><div class="s">${esc(t.baixa_msg || "")}</div>`;
     if (t.baixa_status === "erro") return `<span class="txt-vermelho">⚠ ${esc(t.baixa_msg || "O robô não conseguiu.")}</span>`;
