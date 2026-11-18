@@ -2297,7 +2297,7 @@ ${extra}
     L.forEach((r) => {
       const t = tNome(r);
       const x = m.get(t) || { t, vol: 0, ab: 0, atr: 0, risco: 0, ent: 0, entOk: 0, entAtr: 0, somaAtr: 0, nAtr: 0, can: 0, meses: new Map(), ufs: new Map() };
-      if (r._sit === "cancelado") { x.can++; m.set(t, x); return; }
+      if (r._sit === "cancelado") { x.can++; [[x.ufs, r.uf || "(sem UF)"], [x.meses, (r.criado || "").slice(0, 7)]].forEach(([mp, k]) => { if (!k) return; const u = mp.get(k) || { vol: 0, ab: 0, atr: 0, ent: 0, ok: 0, can: 0 }; u.can++; mp.set(k, u); }); m.set(t, x); return; }
       x.vol++;
       if (!r._fechado) x.ab++;
       if (r._atraso > 0) x.atr++;
@@ -2305,11 +2305,11 @@ ${extra}
       if (r._sit === "ent_prazo" || r._sit === "ent_atraso") x.ent++;
       if (r._sit === "ent_prazo") x.entOk++;
       if (r._sit === "ent_atraso") { x.entAtr++; if (r.entrega && r._prom) { const d = diasEntre(r._prom, r.entrega); if (d > 0) { x.somaAtr += d; x.nAtr++; } } }
-      const mes = (r.criado || "").slice(0, 7); if (mes) x.meses.set(mes, (x.meses.get(mes) || 0) + 1);
-      const uf = r.uf || "(sem UF)", u = x.ufs.get(uf) || { vol: 0, ab: 0, atr: 0, ent: 0, ok: 0 };
-      u.vol++; if (!r._fechado) u.ab++; if (r._atraso > 0) u.atr++;
-      if (r._sit === "ent_prazo" || r._sit === "ent_atraso") u.ent++; if (r._sit === "ent_prazo") u.ok++;
-      x.ufs.set(uf, u);
+      const soma = (mp, k) => { const u = mp.get(k) || { vol: 0, ab: 0, atr: 0, ent: 0, ok: 0, can: 0 };
+        u.vol++; if (!r._fechado) u.ab++; if (r._atraso > 0) u.atr++;
+        if (r._sit === "ent_prazo" || r._sit === "ent_atraso") u.ent++; if (r._sit === "ent_prazo") u.ok++; mp.set(k, u); };
+      const mes = (r.criado || "").slice(0, 7); if (mes) soma(x.meses, mes);
+      soma(x.ufs, r.uf || "(sem UF)");
       m.set(t, x);
     });
     return [...m.values()].map((x) => ({ ...x, med: x.nAtr ? x.somaAtr / x.nAtr : null, sla: x.ent ? x.entOk / x.ent : null }));
@@ -2345,7 +2345,11 @@ ${extra}
         <td class="num vermelho-t">${fmt(x.atr)}</td><td class="num laranja-t">${fmt(x.risco)}</td><td class="num neutro">${fmt(x.entAtr)}</td>
         <td class="num neutro">${diasTxt(x.med)}</td><td class="num ${corSla(x.sla)}">${pct0(x.sla)}</td></tr>`; }).join("");
   }
+  // performance igual à da Visão Gerencial: 1 − atrasados ÷ em aberto (ou ÷ todos os pedidos, se lá estiver "todos")
+  const perfT = (u) => { if (!u) return null; const d = gTodos ? u.vol + (u.can || 0) : u.ab; return d ? 1 - u.atr / d : null; };
+  const pct1 = (v) => (v === null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%");
   const T_METRICAS = [
+    ["Performance", (x) => perfT(x), pct1, "max"],
     ["Volume", (x) => x.vol, fmt, "max"], ["Em aberto", (x) => x.ab, fmt, null], ["Atrasados (em aberto)", (x) => x.atr, fmt, "min"],
     ["% atrasados do em aberto", (x) => (x.ab ? x.atr / x.ab : null), (v) => (v === null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%"), "min"],
     ["Em risco (vencem hoje/amanhã)", (x) => x.risco, fmt, null], ["Entregues", (x) => x.ent, fmt, "max"], ["Entregues com atraso", (x) => x.entAtr, fmt, "min"],
@@ -2380,6 +2384,7 @@ ${extra}
     atr: ["Atrasados", (u) => (u ? u.atr : null), fmt, "min"],
     patr: ["% atrasados", (u) => (u && u.ab ? u.atr / u.ab : null), (v) => (v === null ? "—" : (v * 100).toFixed(1).replace(".", ",") + "%"), "min"],
     sla: ["SLA entrega", (u) => (u && u.ent ? u.ok / u.ent : null), pct0, "max"],
+    perf: ["Performance", perfT, pct1, "max"],
   };
   function tabelaUF(sel) {
     const [, f, fm, melhor] = T_UF_MET[tUfMet];
@@ -2393,37 +2398,44 @@ ${extra}
 
   // linhas: volume por mês (últimos 6 meses com pedidos), uma linha por transportadora
   function grafMeses(sel) {
+    const [nomeMet, fMet, fmMet] = T_UF_MET[tUfMet], pctMet = ["patr", "sla", "perf"].includes(tUfMet);
+    const val = (x, m) => { const v = fMet(x.meses.get(m)); return v === null || v === undefined ? (pctMet ? null : 0) : v; };
+    $("t-graf-tit").textContent = `${nomeMet} por mês (criação do pedido)`;
     const todos = new Set(); sel.forEach((x) => x.meses.forEach((_, m) => todos.add(m)));
     const ms = [...todos].sort().slice(-6), NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
     const box = $("t-cmp-graf");
     if (ms.length < 2) { box.innerHTML = `<p class="vazio">Sem meses suficientes para o gráfico (precisa da Data de Criação na base).</p>`; return; }
     const W = 760, H = 260, E = 44, D = sel.length <= 4 ? 150 : 20, T = 16, B = 30, pw = W - E - D, ph = H - T - B;
-    const max = Math.max(1, ...sel.flatMap((x) => ms.map((m) => x.meses.get(m) || 0)));
-    const bruto = max / 4, p10 = Math.pow(10, Math.floor(Math.log10(bruto)));
-    const passo = Math.max(1, [1, 2, 2.5, 5, 10].map((k) => k * p10).find((k) => k >= bruto)), topo = passo * 4;
+    const max = Math.max(pctMet ? 0.01 : 1, ...sel.flatMap((x) => ms.map((m) => val(x, m) || 0)));
+    let topo;
+    if (pctMet) topo = Math.min(1, Math.ceil(max / 0.2) * 0.2) || 1;
+    else { const bruto = max / 4, p10 = Math.pow(10, Math.floor(Math.log10(bruto))); topo = Math.max(1, [1, 2, 2.5, 5, 10].map((k) => k * p10).find((k) => k >= bruto)) * 4; }
+    const eixo = (v) => (pctMet ? Math.round(v * 100) + "%" : fmt(Math.round(v)));
     const X = (i) => E + (pw * i) / (ms.length - 1), Y = (v) => T + ph - (ph * v) / topo;
     const rot = (m) => `${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}`;
     let g = "";
-    for (let k = 0; k <= 4; k++) { const v = (topo * k) / 4, y = Y(v); g += `<line x1="${E}" x2="${E + pw}" y1="${y}" y2="${y}" class="gr-grade"/><text x="${E - 6}" y="${y + 4}" class="gr-eixo" text-anchor="end">${fmt(Math.round(v))}</text>`; }
+    for (let k = 0; k <= 4; k++) { const v = (topo * k) / 4, y = Y(v); g += `<line x1="${E}" x2="${E + pw}" y1="${y}" y2="${y}" class="gr-grade"/><text x="${E - 6}" y="${y + 4}" class="gr-eixo" text-anchor="end">${eixo(v)}</text>`; }
     ms.forEach((m, i) => { g += `<text x="${X(i)}" y="${H - 8}" class="gr-eixo" text-anchor="middle">${rot(m)}</text>`; });
     // rótulos diretos no fim da linha, sem encavalar
-    const fins = sel.map((x) => ({ x, y: Y(x.meses.get(ms[ms.length - 1]) || 0) })).sort((a, b) => a.y - b.y);
+    const fins = sel.map((x) => ({ x, y: Y(val(x, ms[ms.length - 1]) || 0) })).sort((a, b) => a.y - b.y);
     for (let k = 1; k < fins.length; k++) if (fins[k].y - fins[k - 1].y < 14) fins[k].y = fins[k - 1].y + 14;
     sel.forEach((x) => {
-      const cor = T_CORES[tCmp.get(x.t)], pts = ms.map((m, i) => `${X(i)},${Y(x.meses.get(m) || 0)}`);
-      g += `<polyline points="${pts.join(" ")}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round"/>`;
-      ms.forEach((m, i) => { g += `<circle cx="${X(i)}" cy="${Y(x.meses.get(m) || 0)}" r="4" fill="${cor}" stroke="#fff" stroke-width="2"/>`; });
+      const cor = T_CORES[tCmp.get(x.t)];
+      // sem valor no mês (ex.: % sem pedidos em aberto) = quebra a linha
+      let seg = []; const fecha = () => { if (seg.length > 1) g += `<polyline points="${seg.join(" ")}" fill="none" stroke="${cor}" stroke-width="2" stroke-linejoin="round"/>`; seg = []; };
+      ms.forEach((m, i) => { const v = val(x, m); if (v === null) { fecha(); return; } seg.push(`${X(i)},${Y(v)}`); g += `<circle cx="${X(i)}" cy="${Y(v)}" r="4" fill="${cor}" stroke="#fff" stroke-width="2"/>`; });
+      fecha();
     });
     if (sel.length <= 4) fins.forEach(({ x, y }) => { const nome = x.t.length > 20 ? x.t.slice(0, 19) + "…" : x.t; g += `<text x="${E + pw + 10}" y="${y + 4}" class="gr-rot">${esc(nome)}</text>`; });
     ms.forEach((m, i) => { const w = pw / (ms.length - 1); g += `<rect class="gr-alvo" data-mes="${m}" x="${X(i) - w / 2}" y="${T}" width="${w}" height="${ph}" fill="transparent"/>`; });
     const legenda = sel.map((x) => `<span><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}</span>`).join("");
-    box.innerHTML = `<div class="gr-legenda">${legenda}</div><div class="gr-area"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Volume por mês das transportadoras comparadas">${g}<line class="gr-mira" x1="0" x2="0" y1="${T}" y2="${T + ph}" visibility="hidden"/></svg><div class="gr-dica" hidden></div></div>`;
+    box.innerHTML = `<div class="gr-legenda">${legenda}</div><div class="gr-area"><svg viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(nomeMet)} por mês das transportadoras comparadas">${g}<line class="gr-mira" x1="0" x2="0" y1="${T}" y2="${T + ph}" visibility="hidden"/></svg><div class="gr-dica" hidden></div></div>`;
     const svg = box.querySelector("svg"), dica = box.querySelector(".gr-dica"), mira = box.querySelector(".gr-mira");
     svg.addEventListener("mousemove", (e) => {
       const a = e.target.closest(".gr-alvo"); if (!a) { dica.hidden = true; mira.setAttribute("visibility", "hidden"); return; }
       const m = a.dataset.mes, i = ms.indexOf(m);
       mira.setAttribute("x1", X(i)); mira.setAttribute("x2", X(i)); mira.setAttribute("visibility", "visible");
-      dica.innerHTML = `<b>${rot(m)}</b>` + sel.map((x) => `<div><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}: <b>${fmt(x.meses.get(m) || 0)}</b></div>`).join("");
+      dica.innerHTML = `<b>${rot(m)}</b>` + sel.map((x) => `<div><i class="t-bola" style="background:${T_CORES[tCmp.get(x.t)]}"></i>${esc(x.t)}: <b>${fmMet(val(x, m))}</b></div>`).join("");
       dica.hidden = false;
       const r = box.querySelector(".gr-area").getBoundingClientRect(), px = (X(i) / W) * r.width;
       dica.style.left = Math.min(px + 12, r.width - dica.offsetWidth - 4) + "px"; dica.style.top = "8px";
