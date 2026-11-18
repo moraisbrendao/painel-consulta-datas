@@ -94,6 +94,7 @@ export async function diagBarrar2({ ctx, log }) {
 // ---------------------------------------------------------------------------------------------
 // Conferência: rastreio de cada nota + linha da nota no portal (transportadora, anotações, print) → sugestão
 const PAL_BARRAR = /SEGREGAD|DEVOLU|DEVOLVID|EM RETORNO|RETORNO AO REMETENTE/;
+const PAL_DEVOLUCAO = /DEVOLU|DEVOLVID|RETORNO AO REMETENTE|EM RETORNO/;
 const PAL_NAO_RECEBEU = /N[AÃ]O\s+(FOI\s+)?(LOCALIZAD|ENCONTRAD|CONSTA|RECEB|IDENTIFICAD)|SEM\s+(REGISTRO|EMISS)|N[AÃ]O\s+TEMOS|DESCONHEC/;
 const OP_NAO_RECEBEU = "Sem Emissão em Sistema / Material Não Recebido";
 const sa = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
@@ -168,14 +169,15 @@ async function lerPortal(p, nf, R) {
 function sugerir(x) {
   const r = x.rastreio || {}, pt = x.portal || {}, an = sa(pt.anotacao);
   if (r.sem_transp) return { sugestao: "manual", opcao: null, motivo: "Erro: o ticket do 360 não tem transportadora nem redespacho." };
-  const ultimoBarra = PAL_BARRAR.test(sa(r.evento));
-  if (r.situacao === "entregue" && !ultimoBarra) return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
-  if (r.achou_palavra) return { sugestao: "barrar", opcao: null, motivo: `Rastreio (${r.fonte}) mostra ${r.achou_palavra.toLowerCase()}.` };
+  // regra (Brenda, 18/11): barrado SÓ quando o status atual (último evento) do rastreio é devolução; segregado ou devolução no histórico não contam
+  const devolucao = PAL_DEVOLUCAO.test(sa(r.evento));
+  if (devolucao) return { sugestao: "barrar", opcao: null, motivo: `Status atual no rastreio (${r.fonte}): ${String(r.evento).toLowerCase().slice(0, 80)}.` };
+  if (r.situacao === "entregue") return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
   if (r.situacao === "entregue") return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
   const naoAchou = !r.situacao || /^(sem cte|sem nf|sem permissao|sem rastreio)$/.test(r.situacao);
   if (naoAchou && PAL_NAO_RECEBEU.test(an)) return { sugestao: "nao_barrar", opcao: OP_NAO_RECEBEU, motivo: (pt.anotacao || "").replace(/^.*?\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}\s*/, "").slice(0, 300) };
   const quem = r.alvo ? ` da ${r.alvo}${r.alvo_e_redesp ? " (redespacho)" : ""}` : "";
-  return { sugestao: "manual", opcao: null, motivo: naoAchou ? `Erro: nada no rastreio${quem}${pt.anotacao ? "; a anotação não diz que não recebeu" : ""}.` : `Em rastreio${quem}, sem segregação/devolução nem entrega.` };
+  return { sugestao: "manual", opcao: null, motivo: naoAchou ? `Erro: nada no rastreio${quem}${pt.anotacao ? "; a anotação não diz que não recebeu" : ""}.` : `Em rastreio${quem}, status atual não é devolução nem entregue${r.achou_palavra ? " (" + r.achou_palavra.toLowerCase() + " aparece no histórico)" : ""}.` };
 }
 
 // print do rastreio: a página do SSW (detalhe) como ela é; nas outras fontes, um quadro com o que o rastreio respondeu
