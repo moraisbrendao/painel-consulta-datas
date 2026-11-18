@@ -105,16 +105,27 @@ async function entrar() {
         msg: "O robô esperou 10 minutos e parou. Ele pede de novo quando você mandar um pedido para alterar (ou na próxima rodada, em até 3 h)." });
       throw new Error("Ninguém digitou o código de verificação a tempo.");
     }
-    if (n >= codigo.length) { for (let i = 0; i < codigo.length; i++) await caixas.nth(i).fill(codigo[i]); }
-    else { await caixas.first().click(); await pagina.keyboard.type(codigo, { delay: 80 }); }
-    await pagina.waitForTimeout(1000);
+    log(`Código recebido do painel (${codigo.length} dígitos); a tela tem ${n} caixas.`);
+    // digita como uma pessoa: clica na 1ª caixa e vai teclando (a tela pula sozinha para a próxima caixa)
+    await caixas.first().click(); await pagina.keyboard.type(codigo, { delay: 150 });
+    await pagina.waitForTimeout(800);
+    let cheias = await caixas.evaluateAll((L) => L.map((e) => e.value).join("").length).catch(() => 0);
+    if (cheias < codigo.length && n >= codigo.length) {   // não pulou sozinha: preenche caixa por caixa
+      for (let i = 0; i < codigo.length; i++) { await caixas.nth(i).click(); await caixas.nth(i).press("Backspace").catch(() => {}); await pagina.keyboard.type(codigo[i], { delay: 100 }); }
+      cheias = await caixas.evaluateAll((L) => L.map((e) => e.value).join("").length).catch(() => 0);
+    }
+    log(`Dígitos nas caixas: ${cheias} de ${codigo.length}.`);
+    await pagina.waitForTimeout(1500);
     if (/\/login/i.test(new URL(pagina.url()).pathname)) {
       const b = pagina.locator("button[type=submit]:visible, input[type=submit]:visible").first();
       if (await b.count()) await b.click().catch(() => {}); else await pagina.keyboard.press("Enter");
     }
     await pagina.waitForURL((u) => !/\/login/i.test(u.pathname), { timeout: 45000 }).catch(() => {});
     if (/\/login/i.test(new URL(pagina.url()).pathname)) {
-      await gravarEstado("intelipost", { tipo: "erro", titulo: "A Intelipost não aceitou o código.", msg: "Confira se digitou o código mais recente do e-mail. Mande o pedido de novo para o robô pedir outro código." });
+      const aviso = await pagina.evaluate(() => [...document.querySelectorAll("[class*=error i], [class*=alert i], [class*=invalid i], [role=alert], small, p, span")].map((e) => (e.innerText || "").trim()).filter((t) => t && t.length < 120 && /c[oó]digo|inv[aá]lid|expir|incorret|tente/i.test(t)).slice(0, 4).join(" | ")).catch(() => "");
+      log("Mensagem da Intelipost:", aviso || "(nenhuma)");
+      await esqueleto("Depois de digitar o código");
+      await gravarEstado("intelipost", { tipo: "erro", titulo: "A Intelipost não aceitou o código.", msg: "Use sempre o código do e-mail mais recente e digite logo que a caixa aparecer (o código vence rápido). Mande o pedido de novo para o robô pedir outro código." });
       throw new Error("A Intelipost não aceitou o código de verificação.");
     }
     log("Código aceito.");
