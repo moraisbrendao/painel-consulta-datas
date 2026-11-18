@@ -59,6 +59,16 @@ async function entrar() {
       msg: "O robô parou para não bloquear a conta. Confira o e-mail e a senha e troque o segredo INTELIPOST_SENHA no GitHub; ele volta sozinho." });
     throw new Error("Login recusado pela Intelipost (o robô não vai tentar de novo com esta senha).");
   }
+  await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  await pagina.waitForTimeout(3000);
+  if (MODO.startsWith("diag")) await esqueleto("Logo depois do login");
+  // a Intelipost às vezes não guarda a sessão (volta para a tela de login ou pede mais uma etapa): para aqui com aviso claro
+  if (/\/login/i.test(new URL(pagina.url()).pathname)) {
+    await esqueleto("Depois do login continuou na tela de login");
+    await gravarEstado("intelipost", { tipo: "erro", titulo: "A Intelipost não deixou o robô entrar.",
+      msg: "Depois de digitar a senha, a Intelipost voltou para a tela de login (pode estar pedindo código de verificação ou troca de senha). Entre no site com o login do robô para ver o que ela pede." });
+    throw new Error("A Intelipost voltou para a tela de login depois da senha.");
+  }
   await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok", modo: MODO });
   log("Entrei na Intelipost.");
 }
