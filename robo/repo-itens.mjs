@@ -119,6 +119,10 @@ export async function diagRepo({ chamar, log, ctx }) {
       log(`${rot}: anexos=${an.anexos} · PDFs lidos=${an.pdfs.length}`);
       an.pdfs.forEach((t, i) => { const d = lerDanfe(t);
         log(`  PDF ${i + 1}: ${t.length} letras · DANFE=${/DANFE|DOCUMENTO AUXILIAR/i.test(t) ? "sim" : "não"} · volumes com código=${d.vols.length} · qtd volumes=${d.qtd ?? "?"} · doc destinatário=${d.doc || "?"} · razão social achada=${d.razao ? "sim" : "não"} · parece empresa=${/LTDA|EIRELI|S\.?A\.?\b|TRANSP|LOG[IÍ]ST/i.test(d.razao) ? "sim" : "não"}`); });
+      if (an.pdfs[0]) {   // forma das linhas: números viram #, palavras que não são rótulos da DANFE viram "w" (nenhum dado de cliente)
+        const ROT = /^(DANFE|DOCUMENTO|AUXILIAR|NOTA|FISCAL|ELETR[OÔ]NICA|DESTINAT[AÁ]RIO|REMETENTE|NOME|RAZ[AÃ]O|SOCIAL|CNPJ|CPF|ENDERE[CÇ]O|BAIRRO|CEP|MUNIC[IÍ]PIO|UF|FONE|FAX|INSCRI[CÇ][AÃ]O|ESTADUAL|DATA|EMISS[AÃ]O|SA[IÍ]DA|ENTRADA|HORA|TRANSPORTADOR|VOLUMES?|TRANSPORTADOS|QUANTIDADE|ESP[EÉ]CIE|MARCA|NUMERA[CÇ][AÃ]O|PESO|BRUTO|L[IÍ]QUIDO|DADOS|PRODUTOS?|SERVI[CÇ]OS?|C[OÓ]DIGO|DESCRI[CÇ][AÃ]O|NCM|SH|CST|CFOP|UNID|QUANT|VALOR|UNIT|TOTAL|DESC|BC|ICMS|IPI|AL[IÍ]Q|ADICIONAIS|INFORMA[CÇ][OÕ]ES|COMPLEMENTARES|FRETE|CONTA|S[EÉ]RIE|FOLHA|CHAVE|ACESSO|PROTOCOLO|AUTORIZA[CÇ][AÃ]O|NATUREZA|OPERA[CÇ][AÃ]O|DE|DA|DO|POR|E|VOL|ANTT|PLACA|VE[IÍ]CULO|C[AÁ]LCULO|IMPOSTO|BASE|FATURA|DUPLICATA|RECEBEMOS|IDENTIFICA[CÇ][AÃ]O|ASSINATURA|RECEBEDOR)$/i;
+        an.pdfs[0].split("\n").slice(0, 90).forEach((l, k) => { const f = l.replace(/\d/g, "#").replace(/[A-Za-zÀ-ÿ]+/g, (w) => ROT.test(w) ? w : "w").replace(/\s+/g, " ").trim(); if (f) log(`  L${k}: ${f.slice(0, 140)}`); });
+      }
     } catch (e) { log(`${rot}: erro ${String(e.message).split("\n")[0].slice(0, 120)}`); }
   }
 }
