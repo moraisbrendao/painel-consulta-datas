@@ -94,7 +94,8 @@ export async function diagBarrar2({ ctx, log }) {
 // ---------------------------------------------------------------------------------------------
 // Conferência: rastreio de cada nota + linha da nota no portal (transportadora, anotações, print) → sugestão
 const PAL_BARRAR = /SEGREGAD|DEVOLU|DEVOLVID|EM RETORNO|RETORNO AO REMETENTE/;
-const ENTREGUE_ATUA = true;   // entregue = não barrado (Entregue) + print do rastreio (Brenda, 18/11)
+const ENTREGUE_ATUA = true;
+const ENTREGUE_AUTO = true;   // entregue: o robô aprova e aplica sozinho (Brenda, 18/11)   // entregue = não barrado (Entregue) + print do rastreio (Brenda, 18/11)
 const PAL_DEVOLUCAO = /DEVOLU|DEVOLVID|RETORNO AO REMETENTE|EM RETORNO/;
 const PAL_NAO_RECEBEU = /N[AÃ]O\s+(FOI\s+)?(LOCALIZAD|ENCONTRAD|CONSTA|RECEB|IDENTIFICAD)|SEM\s+(REGISTRO|EMISS)|N[AÃ]O\s+TEMOS|DESCONHEC/;
 const OP_NAO_RECEBEU = "Sem Emissão em Sistema / Material Não Recebido";
@@ -220,7 +221,7 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
   const M = await import("./multi360.mjs");
   let m360 = null; try { m360 = await M.entrarMulti360(ctx, log); } catch (e) { log("barrar: não entrei no 360:", String(e.message).slice(0, 100)); }
   const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
-  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
+  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1); let autoN = 0;
   for (const x of falta) {
     try {
       let tk = { transp: null, redesp: null };
@@ -235,15 +236,20 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
       if (pt.print) { try { print_path = await subirArquivo("barrar", `${encodeURIComponent(x.nf)}.png`, pt.print); } catch (e) { soma("print não subiu"); } delete pt.print; }
       const mesma = mesmaTransp(rastreio.alvo || "", pt.transp || x.transp_pedido);   // transportadora do ticket (redespacho, se tiver) × a do portal
       const s = sugerir({ rastreio, portal: pt });
-      await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio });
+      // regra (Brenda, 18/11): entregue no rastreio o robô aprova sozinho (não barrado · Entregue) e aplica no fim da rodada
+      const auto = ENTREGUE_AUTO && s.sugestao === "nao_barrar" && s.opcao === "Entregue" && !x.decisao && print_rastreio;
+      await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio,
+        ...(auto ? { decisao: "nao_barrar", decisao_opcao: "Entregue", decisao_motivo: s.motivo, decisao_por: "robô (entregue automático)", decisao_em: new Date().toISOString() } : {}) });
+      if (auto) { soma("entregue aprovado pelo robô"); autoN++; }
       soma(`sugestão ${s.sugestao}`); if (!pt.achou) soma("não está no portal"); if (mesma === false) soma("transportadora diferente");
     } catch (e) { soma("erro"); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
   }
   log("barrar: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+  if (autoN) { log(`barrar: aplicando no portal os ${autoN} entregue(s) aprovados pelo robô`); await aplicarBarrar({ chamar, log, ctx, soAuto: true }); }
 }
 
 // Aplica no portal só o que alguém da Logística aprovou no painel (decisao preenchida)
-export async function aplicarBarrar({ chamar, log, ctx, soTicket = false }) {
+export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto = false }) {
   if (soTicket) {
     // notas que já foram clicadas no portal (feito, ou "continua na lista" que a Brenda confirmou que deu certo) e sem prints no ticket
     const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,print_path,print_rastreio,rastreio,portal_status,portal_msg&na_planilha=eq.true&decisao=in.(barrar,nao_barrar)&portal_status=not.is.null&or=(ticket_status.is.null,ticket_status.eq.erro)&limit=100");
@@ -259,7 +265,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false }) {
     }
     log(`barrar-ticket: prints no ticket ${ok} · erro ${er}`); return;
   }
-  const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500");
+  const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500" + (soAuto ? "&decisao_por=like.rob*" : ""));
   // regra (Brenda, 18/11): o robô só atua em devolução (✓) ou "não recebeu" na anotação (✗ Sem Emissão...); o resto ela verifica
   const pode = (x) => x.decisao === "barrar" ? PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
   const fora = L.filter((x) => !pode(x)); if (fora.length) log(`barrar-portal: ${fora.length} aprovada(s) fora da regra do robô (ficam para a Brenda)`);

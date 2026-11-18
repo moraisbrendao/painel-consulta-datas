@@ -12,7 +12,7 @@
   const sb = () => { const c = window.__sb; if (!c) throw new Error("Entre no painel de novo (sessão expirada)."); return c; };
   const OP = ["Entregue", "Avaria", "Extravio", "Falta Parcial", "Sem Emissão em Sistema / Material Não Recebido"];
 
-  let L = [], info = null, ok = true, card = "todos", marcadas = new Set(), urls = new Map(), carregou = false;
+  let L = [], H = [], info = null, ok = true, card = "todos", marcadas = new Set(), urls = new Map(), carregou = false;
   const SUG = { barrar: "Barrar ✓", nao_barrar: "Não barrar ✗", manual: "Erro: verificar" };
   const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao === "nao_barrar" ? (x.sugestao_opcao === "Entregue" ? "nb_entregue" : "nb_naorec") : x.sugestao || "manual");
   const CARDS = [["barrar", "Barrar ✓", "status atual: devolução", "verde"], ["nb_entregue", "Não barrar ✗ · Entregue", "entregue no rastreio", "vermelho"], ["nb_naorec", "Não barrar ✗ · Não recebido", "anotação: transportadora não recebeu", "vermelho"],
@@ -25,9 +25,32 @@
     return !q.length || q.some((b) => norm(x.nf).includes(b) || norm(x.ticket).includes(b));
   };
 
+  // histórico: notas já aplicadas no portal agrupadas por rodada (intervalo > 15 min = outro envio)
+  const ehAuto = (x) => /^rob/i.test(x.decisao_por || "");
+  function desenharEnvios() {
+    const F = (H.length ? H : L).filter((x) => x.portal_status && x.portal_em).sort((a, b) => String(b.portal_em).localeCompare(String(a.portal_em)));
+    const G = []; for (const x of F) { const g = G[G.length - 1]; if (g && Date.parse(g.ini) - Date.parse(x.portal_em) < 15 * 60e3) { g.L.push(x); g.ini = x.portal_em; } else G.push({ fim: x.portal_em, ini: x.portal_em, L: [x] }); }
+    const qd = (d) => new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+    const tab = (rs) => `<div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Decisão</th><th>Quem aprovou</th><th>Portal</th><th>Ticket 360</th><th>Horário</th></tr></thead><tbody>${rs.map((x) => `<tr>
+      <td><b>${esc(x.nf)}</b>${x.ticket ? `<div class="s">#${esc(x.ticket)}</div>` : ""}</td>
+      <td><span class="chip ${x.decisao === "barrar" ? "verde" : "vermelho"}">${SUG[x.decisao] || ""}</span>${x.decisao_opcao ? `<div class="s">${esc(x.decisao_opcao)}</div>` : ""}</td>
+      <td>${ehAuto(x) ? `<span class="chip azul">robô · entregue automático</span>` : esc((x.decisao_por || "").split("@")[0])}</td>
+      <td>${x.portal_status === "feito" ? "✓ feito" : `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>`}</td>
+      <td>${x.ticket_status === "feito" ? "✓ prints" : x.ticket_status === "erro" ? `<span class="txt-vermelho">⚠ ${esc(x.ticket_msg || "")}</span>` : "—"}</td>
+      <td class="s">${qd(x.portal_em)}</td></tr>`).join("")}</tbody></table></div>`;
+    $("br-envios").innerHTML = G.length ? G.map((g) => { const a = g.L.filter(ehAuto), h = g.L.filter((x) => !ehAuto(x)), er = g.L.filter((x) => x.portal_status !== "feito");
+      const quem = [...new Set(h.map((x) => (x.decisao_por || "").split("@")[0]).filter(Boolean))].join(", ");
+      return `<details class="br-envio"><summary><b>${qd(g.ini)}${g.ini !== g.fim ? " – " + new Date(g.fim).toLocaleTimeString("pt-BR", { timeStyle: "short" }) : ""}</b> · ${fmt(g.L.length)} nota(s)
+        ${h.length ? ` · <span class="chip cinza">${fmt(h.length)} aprovada(s)${quem ? " por " + esc(quem) : ""}</span>` : ""}${a.length ? ` · <span class="chip azul">${fmt(a.length)} entregue(s) pelo robô sozinho</span>` : ""}${er.length ? ` · <span class="chip vermelho">${fmt(er.length)} com erro</span>` : ""}</summary>
+        ${h.length && a.length ? `<h3 class="br-envio-h">Aprovadas por você</h3>${tab(h)}<h3 class="br-envio-h">Feitas pelo robô sozinho (entregue)</h3>${tab(a)}` : tab(g.L)}</details>`; }).join("")
+      : `<p class="s">Nenhuma nota enviada ao portal ainda.</p>`;
+  }
+
   async function carregar() {
     try {
       const out = []; for (let de = 0; ; de += 1000) { const { data, error } = await sb().from("barrar_entrega").select("*").eq("na_planilha", true).order("ticket_criado", { ascending: true }).range(de, de + 999); if (error) throw error; out.push(...data); if (data.length < 1000) break; }
+      const hs = await (async () => { try { return await sb().from("barrar_entrega").select("nf,ticket,decisao,decisao_opcao,decisao_por,portal_status,portal_msg,portal_em,ticket_status,ticket_msg").not("portal_status", "is", null).order("portal_em", { ascending: false }).limit(2000); } catch (_) { return { error: true }; } })();
+      H = hs.error ? [] : hs.data || [];
       const inf = await sb().from("barrar_info").select("*").limit(1);
       L = out; info = (inf.data || [])[0] || null; ok = true;
     } catch (e) { ok = false; L = []; $("br-info").textContent = /barrar_entrega|does not exist|schema cache/i.test(e.message || "") ? "Para usar esta aba, rode a parte 49 no Supabase." : "Não consegui carregar: " + (e.message || e); }
@@ -46,6 +69,7 @@
     const nm = [...marcadas].filter((nf) => L.some((x) => x.nf === nf)).length;
     $("br-aprovar").textContent = `Aprovar sugestão (${nm})`; $("br-aprovar").disabled = !nm; $("br-desfazer").disabled = !nm;
     $("br-todos").checked = V.length > 0 && V.every((x) => marcadas.has(x.nf));
+    desenharEnvios();
     const aprov = L.filter((x) => x.decisao && !x.portal_status).length;
     $("br-portal").textContent = `Mandar para o portal (${aprov})`; $("br-portal").disabled = !aprov;
   }

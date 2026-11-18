@@ -953,3 +953,6 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .sc-jornada li.atual { color: #1d2433; }
 .sc-jornada li.atual::before { background: #f5c518; }
 .chip.lilas{background:#efe7ff;color:#6d28d9}
+.br-envio { border: 1px solid #e3e7ee; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: #fff; }
+.br-envio summary { cursor: pointer; }
+.br-envio-h { font-size: 13px; margin: 10px 0 4px; }
