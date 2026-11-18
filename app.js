@@ -4033,7 +4033,12 @@ ${extra}
     montarReposicao();
   }
   function opcoesRep(id, valores, todos, rot = (v) => v) {
-    const sel = $(id), atual = sel.value;
+    const sel = $(id);
+    if (sel.multiple) {   // várias escolhas (filtros do topo da Reposição): mantém as marcadas que ainda existem
+      const atuais = new Set([...sel.selectedOptions].map((o) => o.value));
+      sel.innerHTML = valores.map((v) => `<option value="${esc(v)}"${atuais.has(v) ? " selected" : ""}>${esc(rot(v))}</option>`).join(""); return;
+    }
+    const atual = sel.value;
     sel.innerHTML = `<option value="">${todos}</option>` + valores.map((v) => `<option value="${esc(v)}">${esc(rot(v))}</option>`).join("");
     sel.value = valores.includes(atual) ? atual : "";
   }
@@ -4059,13 +4064,15 @@ ${extra}
   // filtros do topo; "sem" = filtros que essa análise ignora
   function filtroRep(sem = []) {
     const v = (id) => (sem.includes(id) ? "" : $(id).value);
-    const ano = v("rep-ano"), mes = v("rep-mes"), de = v("rep-de"), ate = v("rep-ate"), tipo = v("rep-tipo"), tr = v("rep-transp"), mot = v("rep-motivo"),
-      fil = v("rep-filial"), st = v("rep-status"), resp = v("rep-resp"), se = v("rep-serie");
+    const m = (id) => (sem.includes(id) ? null : (($(id).selectedOptions.length && new Set([...$(id).selectedOptions].map((o) => o.value).filter(Boolean))) || null));   // várias escolhas
+    const ok = (s, x) => !s || !s.size || s.has(x);
+    const ano = m("rep-ano"), mes = m("rep-mes"), de = v("rep-de"), ate = v("rep-ate"), tipo = v("rep-tipo"), tr = m("rep-transp"), mot = m("rep-motivo"),
+      fil = m("rep-filial"), st = m("rep-status"), resp = m("rep-resp"), se = m("rep-serie");
     return reps.filter((r) => {
       const d = String(r.criado_em || "").slice(0, 10);
-      return (!ano || d.slice(0, 4) === ano) && (!mes || d.slice(0, 7) === mes) && (!de || (d && d >= de)) && (!ate || (d && d <= ate)) &&
-        (!tipo || r._t === tipo) && (!tr || trRep(r) === tr) && (!mot || motRep(r) === mot) && (!fil || filRep(r) === fil) &&
-        (!st || (r.status || "(sem status)") === st) && (!resp || respRep(r) === resp) && (!se || serieRep(r) === se);
+      return ok(ano, d.slice(0, 4)) && ok(mes, d.slice(0, 7)) && (!de || (d && d >= de)) && (!ate || (d && d <= ate)) &&
+        (!tipo || r._t === tipo) && ok(tr, trRep(r)) && ok(mot, motRep(r)) && ok(fil, filRep(r)) &&
+        ok(st, r.status || "(sem status)") && ok(resp, respRep(r)) && ok(se, serieRep(r));
     });
   }
   const contaPor = (lista, chave) => { const m = new Map(); lista.forEach((r) => { const k = chave(r); m.set(k, (m.get(k) || []).concat(r)); }); return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR")); };
@@ -4185,9 +4192,9 @@ ${extra}
       + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(rec), "pendente, fora de reposição", "roxo")
       + kpiC("comdet", "Totais × parciais", comDet.length ? `${fmt(tot)} × ${fmt(comDet.length - tot)}` : "–", comDet.length ? `só os ${fmt(comDet.length)} tickets com detalhamento` : "sem detalhamento no filtro");
-    const ev = evolucaoMeses(filtroRep(["rep-mes"]), $("rep-tipo").value), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = $("rep-mes").value, tipo = $("rep-tipo").value;
+    const ev = evolucaoMeses(filtroRep(["rep-mes"]), $("rep-tipo").value), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = new Set([...$("rep-mes").selectedOptions].map((o) => o.value)), tipo = $("rep-tipo").value;
     $("rep-ev-titulo").textContent = `Evolução mensal · ${tipo ? ROT_FLUXO[tipo].toLowerCase() : "pré-entrega × pós-entrega"}`;
-    $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
+    $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${mesSel.has(x.mes) ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
       + `<td class="rp-col-barra"><div class="rp-barra"><span class="pre" style="width:${tipo === "pos" ? 0 : (x.pre / maior) * 100}%"></span><span class="pos" style="width:${tipo === "pre" ? 0 : (x.pos / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
     const linhaPP = (f, [k, rs]) => { const p = rs.filter((r) => r._t === "pre").length; return `<tr data-f="${f}" data-v="${esc(k)}"><td>${esc(k)}</td>${num(p)}${num(rs.length - p)}<td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td></tr>`; };
     desenharParados("rpg-parados", L); desenharGargalos("rpg-garg", L); desenharVolumes("rpg-vol", L);
@@ -4215,8 +4222,8 @@ ${extra}
     $("rpf-nota").textContent = comDet.length < L.length
       ? `Nova NF, total/parcial, tempos e transportadora Promob só existem para os ${fmt(comDet.length)} de ${fmt(L.length)} tickets que já apareceram no detalhamento Tickets360 (o detalhamento traz só os abertos; o histórico cresce a cada envio).` : "";
     // evolução (sem o filtro de mês)
-    const ev = evolucaoMeses(filtroRep(["rep-tipo", "rep-mes"]).filter((r) => r._t === tipo), tipo), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = $("rep-mes").value;
-    $("rpf-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td><td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}${num(x.ab)}`
+    const ev = evolucaoMeses(filtroRep(["rep-tipo", "rep-mes"]).filter((r) => r._t === tipo), tipo), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = new Set([...$("rep-mes").selectedOptions].map((o) => o.value));
+    $("rpf-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${mesSel.has(x.mes) ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td><td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}${num(x.ab)}`
       + `<td class="rp-col-barra"><div class="rp-barra"><span class="${tipo}" style="width:${(x.tot / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
     // aging
     const FX = [["0 a 5 dias", 0, 5], ["6 a 10 dias", 6, 10], ["11 a 20 dias", 11, 20], ["21 a 30 dias", 21, 30], ["Acima de 30 dias", 31, 1e9]];

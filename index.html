@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=175">
+  <link rel="stylesheet" href="styles.css?v=176">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -737,17 +737,17 @@
     <main class="conteudo" id="pagina-reposicao" hidden>
       <section class="filtros-cartao filtros-rep" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
-        <label>Ano<select id="rep-ano"></select></label>
-        <label>Mês<select id="rep-mes"></select></label>
+        <label>Ano<select id="rep-ano" multiple data-todos="Todos"></select></label>
+        <label>Mês<select id="rep-mes" multiple data-todos="Todos"></select></label>
         <label>De<input id="rep-de" type="date"></label>
         <label>Até<input id="rep-ate" type="date"></label>
         <label>Pré ou pós<select id="rep-tipo"><option value="">Pré e pós entrega</option><option value="pre">Pré-entrega</option><option value="pos">Pós-entrega</option></select></label>
-        <label>Transportadora<select id="rep-transp"></select></label>
-        <label>Motivo<select id="rep-motivo"></select></label>
-        <label>Filial<select id="rep-filial"></select></label>
-        <label>Status<select id="rep-status"></select></label>
-        <label>Responsável<select id="rep-resp"></select></label>
-        <label>Série da NF<select id="rep-serie"></select></label>
+        <label>Transportadora<select id="rep-transp" multiple data-todos="Todas"></select></label>
+        <label>Motivo<select id="rep-motivo" multiple data-todos="Todos"></select></label>
+        <label>Filial<select id="rep-filial" multiple data-todos="Todas"></select></label>
+        <label>Status<select id="rep-status" multiple data-todos="Todos"></select></label>
+        <label>Responsável<select id="rep-resp" multiple data-todos="Todos"></select></label>
+        <label>Série da NF<select id="rep-serie" multiple data-todos="Todas"></select></label>
         <button id="rep-limpar" class="link limpar" type="button">Limpar filtros</button>
       </section>
 
@@ -1424,14 +1424,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=175"></script>
-  <script src="mapa-brasil.js?v=175"></script>
-  <script src="troca-notas.js?v=175"></script>
-  <script src="app.js?v=175"></script>
-  <script src="ordenar.js?v=175"></script>
-  <script src="menu.js?v=175"></script>
-  <script src="ajuda.js?v=175"></script>
-  <script src="documentos.js?v=175"></script>
-  <script src="filtros.js?v=175"></script>
+  <script src="config.js?v=176"></script>
+  <script src="mapa-brasil.js?v=176"></script>
+  <script src="troca-notas.js?v=176"></script>
+  <script src="app.js?v=176"></script>
+  <script src="ordenar.js?v=176"></script>
+  <script src="menu.js?v=176"></script>
+  <script src="ajuda.js?v=176"></script>
+  <script src="documentos.js?v=176"></script>
+  <script src="filtros.js?v=176"></script>
 </body>
 </html>
