@@ -2184,3 +2184,66 @@ begin
 end $$;
 revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
+
+-- ============================================================
+-- PARTE 48) Reposição: itens/volumes de cada ticket (robô lê o Multi360) + cadastro de volumes (planilha "VOLUMES JADLOG")
+create table if not exists public.volumes_cad (
+  codigo        text primary key,          -- ex.: 76157.0001
+  descricao     text,
+  atualizado_em timestamptz default now()
+);
+create table if not exists public.repo_itens_tk (     -- um registro por ticket lido
+  ticket        text primary key,
+  lido_em       timestamptz not null default now(),
+  fila          text,                      -- fila na hora da leitura
+  eventos_ok    boolean,                   -- achou o quadro Reposição em Eventos
+  volumes       integer,                   -- "N Volumes" do quadro
+  parcial       text,                      -- Parcial / Total
+  quando        text,                      -- Antes / Depois da entrega
+  pdf_ok        boolean,                   -- leu o PDF da nota (pré-entrega)
+  dest_doc      text,                      -- cpf / cnpj (nunca o número nem o nome)
+  cobrado_transp text,                     -- transportadora cobrada (CNPJ de transportadora no destinatário)
+  erro          text
+);
+create table if not exists public.repo_itens (        -- um registro por volume do ticket
+  ticket  text not null,
+  codigo  text not null,
+  fonte   text not null default 'eventos',  -- eventos / pdf
+  primary key (ticket, codigo)
+);
+alter table public.volumes_cad enable row level security;
+alter table public.repo_itens_tk enable row level security;
+alter table public.repo_itens enable row level security;
+revoke all on public.volumes_cad, public.repo_itens_tk, public.repo_itens from anon;
+grant select, insert, update, delete on public.volumes_cad, public.repo_itens_tk, public.repo_itens to authenticated;
+drop policy if exists "logistica le" on public.volumes_cad;
+drop policy if exists "logistica grava" on public.volumes_cad;
+drop policy if exists "logistica le" on public.repo_itens_tk;
+drop policy if exists "logistica grava" on public.repo_itens_tk;
+drop policy if exists "logistica le" on public.repo_itens;
+drop policy if exists "logistica grava" on public.repo_itens;
+create policy "logistica le" on public.volumes_cad for select to authenticated using ((select not public.e_sac()));
+create policy "logistica grava" on public.volumes_cad for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create policy "logistica le" on public.repo_itens_tk for select to authenticated using ((select not public.e_sac()));
+create policy "logistica grava" on public.repo_itens_tk for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create policy "logistica le" on public.repo_itens for select to authenticated using ((select not public.e_sac()));
+create policy "logistica grava" on public.repo_itens for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- robô lê os tickets em Aguardando entrega 2x por dia (08:00 e 14:00 de Brasília)
+create or replace function public._robo_repo_itens()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"repo-itens","auto":"1"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_repo_itens() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-repo-itens';
+select cron.schedule('robo-repo-itens', '0 11,17 * * *', 'select public._robo_repo_itens()');

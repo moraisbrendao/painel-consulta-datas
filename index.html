@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=174">
+  <link rel="stylesheet" href="styles.css?v=175">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -775,6 +775,7 @@
       <div id="rp-geral">
         <section class="kpis" id="rpg-cards"></section>
         <div id="rpg-garg" class="rp-garg-box" hidden><section class="cartao rp-garg-q"><div class="cartao-topo"><div><h2>Onde estão os gargalos · tickets em aberto parados por fila</h2><p class="sub">Ordenado pelo total de dias parados (casos × dias na fila): quanto maior a barra, maior o gargalo. Clique numa fila para ver os tickets.</p></div><button type="button" class="btn contorno garg-excel">↓ Baixar Excel</button></div><div class="rp-pv-filtros"><label>Grupo<select class="garg-sel" data-gf="grupo" multiple data-todos="Todos"></select></label><label>Fila atual<select class="garg-sel" data-gf="fila" multiple data-todos="Todas"></select></label><button type="button" class="link limpar garg-limpar">Limpar</button></div><div class="tabela-rolagem"><table class="tabela rp-garg"><thead><tr><th>Fila</th><th>Grupo</th><th class="num">Casos</th><th class="num">Média de dias na fila</th><th class="num">Mais antigo (dias)</th><th class="num">Parados +10 dias</th><th class="rp-col-barra">Dias parados (total)</th></tr></thead><tbody class="rp-garg-corpo"></tbody></table></div></section></div>
+        <div id="rpg-vol" class="rp-garg-box rp-vol-box" hidden></div>
         <div id="rpg-parados" hidden><section class="cartao rp-parados-q"><div class="cartao-topo"><div><h2>Em aberto por fila · dias parados na fila</h2><p class="sub rp-parados-sub"></p></div></div><div class="rp-pv-filtros"><label>Grupo<select class="pv-sel" data-pv="grupo"></select></label><label>Fila atual<select class="pv-sel" data-pv="fila"></select></label><button type="button" class="link limpar pv-limpar">Limpar</button></div><div class="tabela-rolagem"><table class="tabela rp-pivo"><thead class="rp-pivo-cab"></thead><tbody class="rp-pivo-corpo"></tbody></table></div></section></div>
         <section class="cartao">
           <div class="cartao-topo"><div><h2 id="rep-ev-titulo">Evolução mensal · pré-entrega × pós-entrega</h2><p class="sub">Tickets criados em cada mês (segue os filtros, menos o mês). Clique num mês para ver os tickets.</p></div>
@@ -807,6 +808,7 @@
         <section class="kpis" id="rpf-cards"></section>
         <p class="sub rp-nota" id="rpf-nota"></p>
         <div id="rpf-garg" class="rp-garg-box" hidden><section class="cartao rp-garg-q"><div class="cartao-topo"><div><h2>Onde estão os gargalos · tickets em aberto parados por fila</h2><p class="sub">Ordenado pelo total de dias parados (casos × dias na fila): quanto maior a barra, maior o gargalo. Clique numa fila para ver os tickets.</p></div><button type="button" class="btn contorno garg-excel">↓ Baixar Excel</button></div><div class="rp-pv-filtros"><label>Grupo<select class="garg-sel" data-gf="grupo" multiple data-todos="Todos"></select></label><label>Fila atual<select class="garg-sel" data-gf="fila" multiple data-todos="Todas"></select></label><button type="button" class="link limpar garg-limpar">Limpar</button></div><div class="tabela-rolagem"><table class="tabela rp-garg"><thead><tr><th>Fila</th><th>Grupo</th><th class="num">Casos</th><th class="num">Média de dias na fila</th><th class="num">Mais antigo (dias)</th><th class="num">Parados +10 dias</th><th class="rp-col-barra">Dias parados (total)</th></tr></thead><tbody class="rp-garg-corpo"></tbody></table></div></section></div>
+        <div id="rpf-vol" class="rp-garg-box rp-vol-box" hidden></div>
         <div id="rpf-parados-q" hidden><section class="cartao rp-parados-q"><div class="cartao-topo"><div><h2>Em aberto por fila · dias parados na fila</h2><p class="sub rp-parados-sub"></p></div></div><div class="rp-pv-filtros"><label>Grupo<select class="pv-sel" data-pv="grupo"></select></label><label>Fila atual<select class="pv-sel" data-pv="fila"></select></label><button type="button" class="link limpar pv-limpar">Limpar</button></div><div class="tabela-rolagem"><table class="tabela rp-pivo"><thead class="rp-pivo-cab"></thead><tbody class="rp-pivo-corpo"></tbody></table></div></section></div>
         <div class="rp-duas">
           <section class="cartao">
@@ -1422,14 +1424,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=174"></script>
-  <script src="mapa-brasil.js?v=174"></script>
-  <script src="troca-notas.js?v=174"></script>
-  <script src="app.js?v=174"></script>
-  <script src="ordenar.js?v=174"></script>
-  <script src="menu.js?v=174"></script>
-  <script src="ajuda.js?v=174"></script>
-  <script src="documentos.js?v=174"></script>
-  <script src="filtros.js?v=174"></script>
+  <script src="config.js?v=175"></script>
+  <script src="mapa-brasil.js?v=175"></script>
+  <script src="troca-notas.js?v=175"></script>
+  <script src="app.js?v=175"></script>
+  <script src="ordenar.js?v=175"></script>
+  <script src="menu.js?v=175"></script>
+  <script src="ajuda.js?v=175"></script>
+  <script src="documentos.js?v=175"></script>
+  <script src="filtros.js?v=175"></script>
 </body>
 </html>

@@ -906,3 +906,18 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .rp-garg th:nth-child(-n+2) { text-align: left; }
 #rpg-cards { grid-template-columns: repeat(auto-fit, minmax(122px, 1fr)); gap: 10px; } #rpg-cards .kpi { padding: 18px 14px 16px; }
 .kpi.kpi-garg .kpi-num { font-size: 15px; overflow-wrap: anywhere; }
+
+/* Reposição · volumes enviados (card Totais × parciais) */
+.rp-vol-bts { display: flex; gap: 8px; flex-wrap: wrap; }
+.rp-vol-bts .vol-cad { cursor: pointer; }
+.rp-vol-resumo { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin: 12px 0 16px; }
+.rp-vol-resumo > div { background: #f5f7fb; border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+.rp-vol-resumo b { font-size: 22px; color: #0f1b3d; }
+.rp-vol-resumo span { font-size: 12px; color: #5b6475; }
+.rp-vol-grade { display: grid; grid-template-columns: minmax(0, 1fr); gap: 6px; }
+.rp-vol-lado { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 16px; align-items: start; }
+.rp-vol-grade h3 { font-size: 14px; margin: 4px 0 8px; color: #0f1b3d; }
+.rp-vol-grade > div > .tabela-rolagem { margin-bottom: 14px; }
+.rp-vol-rol { max-height: 560px; overflow: auto; }
+.rp-vol-t th.num, .rp-vol-t td.num { text-align: right; }
+.rp-vol-t .rp-col-barra { min-width: 120px; }

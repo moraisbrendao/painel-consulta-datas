@@ -4022,8 +4022,14 @@ ${extra}
       if (env.error) throw env.error;
       repAtual = new Map(at.map((x) => [String(x.ticket), x])); repEnvio = (env.data && env.data[0]) || null; repHistOk = true;
     } catch (_) { repHistOk = false; repAtual = new Map(); repEnvio = null; }
+    try {   // itens/volumes lidos pelo robô no Multi360 (parte 48)
+      const [tk, it, cad] = await Promise.all([buscarTudo("repo_itens_tk", "ticket"), buscarTudo("repo_itens", "ticket,codigo"), buscarTudo("volumes_cad", "codigo", "codigo,descricao")]);
+      repItTk = new Map(tk.map((x) => [String(x.ticket), x])); repItens = new Map(); it.forEach((x) => { const k = String(x.ticket); (repItens.get(k) || repItens.set(k, []).get(k)).push(x.codigo); });
+      volCad = new Map(cad.map((x) => [x.codigo, x.descricao])); repItOk = true;
+    } catch (_) { repItOk = false; repItTk = new Map(); repItens = new Map(); volCad = new Map(); }
     if (!ajCarregado) await carregarApelidos().catch(() => {});
-    reps.forEach((r) => { r._d = repAtual.get(String(r.ticket)) || null; r._promob = r._d ? promobNome(r._d.transp_promob) : null; });
+    reps.forEach((r) => { r._d = repAtual.get(String(r.ticket)) || null; r._promob = r._d ? promobNome(r._d.transp_promob) : null;
+      r._it = repItTk.get(String(r.ticket)) || null; r._cods = repItens.get(String(r.ticket)) || []; });
     montarReposicao();
   }
   function opcoesRep(id, valores, todos, rot = (v) => v) {
@@ -4121,8 +4127,8 @@ ${extra}
   function desenharGargalos(caixa, L) {
     const gbox = $(caixa); gbox.hidden = !gargAberto;
     // com Gargalos ou Em aberto abertos, a página mostra só os cards e esses quadros (os outros somem até fechar o card)
-    [...gbox.parentElement.children].forEach((el) => { if (el === gbox || el.classList.contains("kpis") || el.id === "rpf-parados-q" || el.id === "rpg-parados") return;
-      if (gargAberto || pvAberto) { if (!el.hidden) { el.hidden = true; el.dataset.gargEsc = "1"; } } else if (el.dataset.gargEsc) { el.hidden = false; delete el.dataset.gargEsc; } });
+    [...gbox.parentElement.children].forEach((el) => { if (el === gbox || el.classList.contains("kpis") || el.id === "rpf-parados-q" || el.id === "rpg-parados" || el.classList.contains("rp-vol-box")) return;
+      if (gargAberto || pvAberto || volAberto) { if (!el.hidden) { el.hidden = true; el.dataset.gargEsc = "1"; } } else if (el.dataset.gargEsc) { el.hidden = false; delete el.dataset.gargEsc; } });
     document.querySelectorAll('#rpg-cards [data-card="garg"], #rpf-cards [data-card="garg"]').forEach((k) => k.classList.toggle("ativa", gargAberto));
     if (!gargAberto) return;
     const ab0 = L.filter(abertoRep), pt = (x, y) => x.localeCompare(y, "pt-BR");
@@ -4184,7 +4190,7 @@ ${extra}
     $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
       + `<td class="rp-col-barra"><div class="rp-barra"><span class="pre" style="width:${tipo === "pos" ? 0 : (x.pre / maior) * 100}%"></span><span class="pos" style="width:${tipo === "pre" ? 0 : (x.pos / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
     const linhaPP = (f, [k, rs]) => { const p = rs.filter((r) => r._t === "pre").length; return `<tr data-f="${f}" data-v="${esc(k)}"><td>${esc(k)}</td>${num(p)}${num(rs.length - p)}<td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td></tr>`; };
-    desenharParados("rpg-parados", L); desenharGargalos("rpg-garg", L);
+    desenharParados("rpg-parados", L); desenharGargalos("rpg-garg", L); desenharVolumes("rpg-vol", L);
     $("rpg-transps").innerHTML = contaPor(L, trRep).map((e) => linhaPP("rep-transp", e)).join("");
     $("rpg-motivos").innerHTML = contaPor(L, motRep).map((e) => linhaPP("rep-motivo", e)).join("");
   }
@@ -4205,7 +4211,7 @@ ${extra}
       + kpiC("parcial", "Parciais", tr.length ? fmt(tr.length - tot) : "–", tr.length ? `de ${fmt(tr.length)} tickets com detalhamento` : "sem detalhamento")
       + kpiC("nfs", "Novas NFs emitidas", fmt(nfs), `de ${fmt(comDet.length)} tickets com detalhamento`)
       + kpiC("saida", "Novas NFs com saída", fmt(sai), `de ${fmt(comDet.length)} tickets com detalhamento`);
-    desenharParados("rpf-parados-q", L); desenharGargalos("rpf-garg", L);
+    desenharParados("rpf-parados-q", L); desenharGargalos("rpf-garg", L); desenharVolumes("rpf-vol", L);
     $("rpf-nota").textContent = comDet.length < L.length
       ? `Nova NF, total/parcial, tempos e transportadora Promob só existem para os ${fmt(comDet.length)} de ${fmt(L.length)} tickets que já apareceram no detalhamento Tickets360 (o detalhamento traz só os abertos; o histórico cresce a cada envio).` : "";
     // evolução (sem o filtro de mês)
@@ -4263,6 +4269,88 @@ ${extra}
     $("rpd-pag").innerHTML = L.length > POR ? `<button class="btn" data-p="-1" ${rpdPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rpdPag} de ${pags}</span><button class="btn" data-p="1" ${rpdPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
 
+  // ---------- volumes enviados na reposição (card Totais × parciais): robô lê o Multi360 em Aguardando entrega (parte 48) ----------
+  let repItTk = new Map(), repItens = new Map(), volCad = new Map(), repItOk = false, volAberto = false, volTipo = "", volCasos = [];
+  const ehAgEnt = (r) => /AGUARDANDO ENTREGA/.test(norm(filaRep(r)));
+  const tpRep = (r) => { const t = norm((r._it && r._it.parcial) || (r._d && r._d.tipo_reposicao) || ""); return /PARCIAL/.test(t) ? "PARCIAL" : /TOTAL/.test(t) ? "TOTAL" : ""; };
+  const descVol = (c) => volCad.get(c) || "(sem cadastro)";
+  const cobRep = (r) => !r._it || r._t !== "pre" ? "" : r._it.cobrado_transp ? "Cobrado: " + r._it.cobrado_transp : r._it.dest_doc === "cpf" ? "Sem cobrança (CPF do cliente)" : r._it.pdf_ok ? "Sem cobrança (outro CNPJ)" : "Nota não lida";
+  function desenharVolumes(caixa, L) {
+    const box = $(caixa); if (!box) return; box.hidden = !volAberto;
+    document.querySelectorAll('#rpg-cards [data-card="comdet"], #rpf-cards [data-card="total"], #rpf-cards [data-card="parcial"]').forEach((k) => k.classList.toggle("ativa", volAberto && (k.dataset.card === "comdet" ? !volTipo : k.dataset.card.toUpperCase() === volTipo)));
+    if (!volAberto) return;
+    const base = L.filter((r) => !volTipo || tpRep(r) === volTipo);
+    const ag = base.filter((r) => ehAgEnt(r) && r._d && r._d.nfs_novas), lidos = ag.filter((r) => r._it && r._it.eventos_ok), naoLidos = ag.length - lidos.length;
+    const proc = base.filter((r) => abertoRep(r) && !ehAgEnt(r));
+    volCasos = lidos;
+    // volumes mais enviados
+    const m = new Map();
+    lidos.forEach((r) => r._cods.forEach((c) => { const x = m.get(c) || { c, n: 0, tot: 0, par: 0, pre: 0, pos: 0, mot: new Map() }; x.n++; tpRep(r) === "TOTAL" ? x.tot++ : x.par++; x[r._t]++; x.mot.set(motRep(r), (x.mot.get(motRep(r)) || 0) + 1); m.set(c, x); }));
+    const vs = [...m.values()].sort((a, b) => b.n - a.n || a.c.localeCompare(b.c));
+    const topMot = (mp) => [...mp.entries()].sort((a, b) => b[1] - a[1])[0] || ["", 0];
+    // por motivo
+    const pm = contaPor(lidos, motRep).map(([mot, rs]) => { const cc = new Map(); rs.forEach((r) => r._cods.forEach((c) => cc.set(c, (cc.get(c) || 0) + 1)));
+      const tv = topMot(cc); return { mot, n: rs.length, vols: rs.reduce((a, r) => a + (Number(r._it.volumes) || r._cods.length), 0), top: tv[0], topN: tv[1] }; });
+    // cobrança (pré)
+    const pre = lidos.filter((r) => r._t === "pre"), cob = contaPor(pre, cobRep);
+    const tit = volTipo === "TOTAL" ? "totais" : volTipo === "PARCIAL" ? "parciais" : "totais e parciais";
+    box.innerHTML = `<section class="cartao rp-garg-q"><div class="cartao-topo"><div><h2>Volumes enviados nas reposições · ${tit}</h2>
+      <p class="sub">O robô lê cada ticket quando ele chega em <b>Aguardando entrega</b> com nova NF: o quadro Reposição em Eventos (volume, parcial/total) e, no pré-entrega, o PDF da nota (destinatário com CNPJ de transportadora = saiu com cobrança; CPF = sem cobrança). Segue os filtros do topo.</p></div>
+      <div class="rp-vol-bts"><button type="button" class="btn contorno vol-excel">↓ Baixar Excel</button><label class="btn contorno vol-cad" title="Planilha com a aba VOLUMES JADLOG (código do volume e descrição)">Atualizar cadastro de volumes<input type="file" accept=".xlsx,.xlsm,.xls" hidden class="vol-cad-arq"></label></div></div>
+      ${!repItOk ? `<p class="aviso">Para ver os volumes, rode a <b>parte 48</b> no Supabase.</p>` : ""}
+      <div class="rp-vol-resumo">
+        <div><b>${fmt(lidos.length)}</b><span>tickets lidos (Aguardando entrega)</span></div>
+        <div><b>${fmt(naoLidos)}</b><span>em Aguardando entrega ainda não lidos pelo robô</span></div>
+        <div><b>${fmt(proc.length)}</b><span>em processo (outras filas)</span></div>
+        <div><b>${fmt(vs.length)}</b><span>volumes diferentes enviados</span></div>
+        <div><b>${volCad.size ? fmt(volCad.size) : "–"}</b><span>${volCad.size ? "volumes no cadastro" : "cadastro de volumes não enviado"}</span></div>
+      </div>
+      <div class="rp-vol-grade">
+        <div><h3>Volumes mais enviados</h3><div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Volume</th><th>Descrição</th><th class="num">Tickets</th><th class="num">Total</th><th class="num">Parcial</th><th class="num">Pré</th><th class="num">Pós</th><th>Motivo que mais aparece</th></tr></thead>
+          <tbody>${vs.slice(0, 50).map((v) => { const tm = topMot(v.mot); return `<tr><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td>${num(v.tot)}${num(v.par)}${num(v.pre)}${num(v.pos)}<td class="s">${esc(tm[0])}${tm[1] ? ` (${fmt(tm[1])})` : ""}</td></tr>`; }).join("")
+            || `<tr><td colspan="8" class="vazio">Nenhum ticket lido ainda nesse filtro.</td></tr>`}</tbody></table></div>${vs.length > 50 ? `<p class="s">Mostrando os 50 mais enviados de ${fmt(vs.length)}. O Excel traz todos.</p>` : ""}</div>
+        <div class="rp-vol-lado"><div><h3>Por motivo</h3><div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
+          <tbody>${pm.map((x) => `<tr><td>${esc(x.mot)}</td><td class="num tot">${fmt(x.n)}</td>${num(x.vols)}<td class="s">${x.top ? esc(x.top + " · " + descVol(x.top)) + ` (${fmt(x.topN)})` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="vazio">—</td></tr>`}</tbody></table></div>
+</div>
+          ${repAba !== "pos" ? `<div><h3>Pré-entrega · cobrança à transportadora</h3><div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Nota da reposição</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
+          <tbody>${cob.map(([k, rs]) => `<tr><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, pre.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody></table></div></div>` : ""}
+          <div><h3>Em processo · ainda não chegaram em Aguardando entrega</h3><div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Fila atual</th><th class="num">Tickets</th></tr></thead>
+          <tbody>${contaPor(proc, (r) => filaRep(r) || SEM_FILA).map(([f, rs]) => `<tr><td>${esc(f)}</td><td class="num tot">${fmt(rs.length)}</td></tr>`).join("") || `<tr><td colspan="2" class="vazio">Nenhum.</td></tr>`}</tbody></table></div></div>
+        </div>
+      </div></section>`;
+  }
+  $("pagina-reposicao").addEventListener("click", (e) => {
+    if (!e.target.closest(".vol-excel")) return;
+    if (!volCasos.length) return toast("Nenhum ticket lido nesse filtro.", true);
+    const cab = ["Ticket", "NF original", "Série da NF", "Pré/pós", "Total/Parcial", "Antes/depois da entrega", "Qtd volumes", "Volumes (código)", "Descrição dos volumes", "Motivo", "Transportadora", "Nota da reposição (pré)", "Fila atual", "Nova NF", "Lido pelo robô em"];
+    const linhas = [cab].concat(volCasos.map((r) => [r.ticket, r.nf || "", serieRep(r), ROT_FLUXO[r._t], tpRep(r), r._it.quando || "", r._it.volumes ?? "", r._cods.join(", "), r._cods.map(descVol).join(" | "), motRep(r), trRep(r), cobRep(r), filaRep(r), (r._d && r._d.nfs_novas) || "", br(r._it.lido_em)]));
+    const vol = new Map(); volCasos.forEach((r) => r._cods.forEach((c) => { const x = vol.get(c) || [c, descVol(c), 0, 0, 0]; x[2]++; tpRep(r) === "TOTAL" ? x[3]++ : x[4]++; vol.set(c, x); }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Volume", "Descrição", "Tickets", "Total", "Parcial"]].concat([...vol.values()].sort((a, b) => b[2] - a[2]))), "Volumes mais enviados");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Tickets");
+    XLSX.writeFile(wb, `reposicao_volumes_${hojeISO()}.xlsx`);
+  });
+  $("pagina-reposicao").addEventListener("change", async (e) => {
+    const inp = e.target.closest(".vol-cad-arq"); if (!inp || !inp.files[0]) return;
+    const arq = inp.files[0]; inp.value = "";
+    try {
+      carregando("Lendo o cadastro de volumes…");
+      const buf = await arq.arrayBuffer();
+      const nomes = XLSX.read(buf, { bookSheets: true }).SheetNames;
+      const aba = nomes.find((n) => norm(n) === "VOLUMES JADLOG") || nomes.find((n) => /VOLUMES/.test(norm(n)) && /JADLOG/.test(norm(n)));
+      if (!aba) throw new Error('Não achei a aba "VOLUMES JADLOG" nessa planilha.');
+      const ws = XLSX.read(buf, { sheets: [aba] }).Sheets[aba];
+      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+      const cab = (rows[0] || []).map(norm), iC = cab.findIndex((c) => c === "VOLUME"), iD = cab.findIndex((c) => /^DESCRI/.test(c));
+      if (iC < 0 || iD < 0) throw new Error('A aba precisa das colunas "Volume" e "Descrição".');
+      const mp = new Map(); rows.slice(1).forEach((l) => { const c = String(l[iC] || "").trim(); if (/^\d{5}\.\d{4}$/.test(c)) mp.set(c, String(l[iD] || "").trim()); });
+      if (!mp.size) throw new Error("Nenhum código de volume (ex.: 76157.0001) na aba.");
+      const L = [...mp].map(([codigo, descricao]) => ({ codigo, descricao, atualizado_em: new Date().toISOString() }));
+      for (let i = 0; i < L.length; i += 1000) { carregando(`Gravando volumes… ${fmt(Math.min(i + 1000, L.length))} de ${fmt(L.length)}`); const { error } = await sb.from("volumes_cad").upsert(L.slice(i, i + 1000)); if (error) throw error; }
+      L.forEach((x) => volCad.set(x.codigo, x.descricao)); carregando(""); toast(`Cadastro de volumes atualizado: ${fmt(L.length)} volumes.`); filtrarRep();
+    } catch (err) { carregando(""); toast(/volumes_cad|relation|schema cache/i.test(err.message) ? "Rode a parte 48 no Supabase antes de enviar o cadastro." : err.message, true); }
+  });
+
   // clique num mês, transportadora, motivo, filial ou responsável: filtra e abre os tickets
   $("pagina-reposicao").addEventListener("click", (e) => {
     const a = e.target.closest("[data-f]"); if (!a || !a.closest("#rp-geral, #rp-fluxo")) return;
@@ -4274,6 +4362,9 @@ ${extra}
     const k = e.target.closest("button[data-card]");
     if (k && k.dataset.card === "garg") { e.preventDefault(); e.stopPropagation(); gargAberto = !gargAberto; filtrarRep();
       if (gargAberto) { const q = $(repAba === "geral" ? "rpg-garg" : "rpf-garg"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
+    if (k && ["comdet", "total", "parcial"].includes(k.dataset.card) && repAba !== "det") { e.preventDefault(); e.stopPropagation();
+      const t = k.dataset.card === "comdet" ? "" : k.dataset.card.toUpperCase(); volAberto = !(volAberto && volTipo === t); volTipo = t; filtrarRep();
+      if (volAberto) { const q = $(repAba === "geral" ? "rpg-vol" : "rpf-vol"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
     if (k && k.dataset.card === "ab" && repAba !== "det") { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
       if (pvAberto) { const q = $(repAba === "geral" ? "rpg-parados" : "rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
     if (e.target.closest(".pv-limpar")) { pv.serie = pv.fila = pv.resp = pv.grupo = ""; filtrarRep(); return; }
@@ -4304,7 +4395,7 @@ ${extra}
     XLSX.writeFile(wb, `reposicao_gargalos_${hojeISO()}.xlsx`);
   });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
-  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
+  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; volAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
   try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
