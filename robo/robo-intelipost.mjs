@@ -115,11 +115,19 @@ async function entrar() {
       cheias = await caixas.evaluateAll((L) => L.map((e) => e.value).join("").length).catch(() => 0);
     }
     log(`Dígitos nas caixas: ${cheias} de ${codigo.length}.`);
-    await pagina.waitForTimeout(1500);
+    // registra só o caminho e o status das chamadas de login (nada do conteúdo)
+    const vistas = [];
+    const ouvir = (r) => { const u = new URL(r.url()); if (r.request().method() !== "GET" && /login|auth|token|mfa|otp|code|codigo|verif|session/i.test(u.pathname)) vistas.push(`${r.request().method()} ${u.host}${u.pathname.replace(/\d{4,}/g, "#")} → ${r.status()}`); };
+    pagina.on("response", ouvir);
+    await pagina.waitForTimeout(2500);
     if (/\/login/i.test(new URL(pagina.url()).pathname)) {
-      const b = pagina.locator("button[type=submit]:visible, input[type=submit]:visible").first();
-      if (await b.count()) await b.click().catch(() => {}); else await pagina.keyboard.press("Enter");
+      const bs = pagina.getByRole("button", { name: /fazer login|confirmar|verificar|validar|entrar|continuar/i });
+      const nb = await bs.count(); let clicou = false;
+      for (let i = 0; i < nb && !clicou; i++) { const b = bs.nth(i); if (await b.isVisible().catch(() => false)) { log("Botão:", (await b.innerText().catch(() => "")).trim().slice(0, 30), "· habilitado:", await b.isEnabled().catch(() => "?")); await b.click().catch((e) => log("clique falhou:", e.message.slice(0, 80))); clicou = true; } }
+      if (!clicou) await pagina.keyboard.press("Enter");
     }
+    await pagina.waitForTimeout(4000);
+    log("Chamadas depois do código:", vistas.join(" | ") || "(nenhuma)");
     await pagina.waitForURL((u) => !/\/login/i.test(u.pathname), { timeout: 45000 }).catch(() => {});
     if (/\/login/i.test(new URL(pagina.url()).pathname)) {
       const aviso = await pagina.evaluate(() => [...document.querySelectorAll("[class*=error i], [class*=alert i], [class*=invalid i], [role=alert], small, p, span")].map((e) => (e.innerText || "").trim()).filter((t) => t && t.length < 120 && /c[oó]digo|inv[aá]lid|expir|incorret|tente/i.test(t)).slice(0, 4).join(" | ")).catch(() => "");
