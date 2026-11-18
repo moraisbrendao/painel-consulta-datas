@@ -117,6 +117,13 @@
       "Em <b>Por transportadora</b>, clique em <b>Baixar .zip</b> (XML + PDF de cada nota) e mande para a transportadora.",
     ], "Os XMLs ficam só no seu computador; nada vai para o banco."],
 
+    ["barrar", "Barrar entrega", "Confere as notas que o Multi pediu para barrar: rastreio (segregado/em devolução) e anotações da transportadora no portal.", "Quando chega a planilha de tickets Barrar entrega.", [
+      "Clique em <b>Enviar planilha</b> e escolha a planilha de tickets <b>Barrar entrega</b>.",
+      "Clique em <b>Conferir agora</b>: o robô olha o rastreio e as anotações do portal e tira print da anotação.",
+      "Confira a <b>Sugestão do robô</b>, marque as notas e clique em <b>Aprovar sugestão</b> (ou escolha a decisão na linha).",
+      "Clique em <b>Mandar para o portal</b>: o robô aperta o ✓ (barrado) ou o ✗ (não barrado, com opção e motivo) só nas aprovadas.",
+    ], "Transportadora diferente entre o pedido e o portal aparece no card <b>Transportadora diferente</b>. Nada é feito no portal sem aprovação."],
+
     ["sac", "Consulta SAC", "Consulta para o SAC: pedidos vencidos ou que vencem hoje/amanhã, com a nova data e a observação da Logística.", "Quando o cliente pergunta do pedido.", [
       "Busque pelo pedido ou NF, ou use os cards <b>Já vencidos</b>, <b>Vencem hoje</b>, <b>Vencem amanhã</b>.",
       "Leia a <b>Nova data</b> e a <b>Observação</b> que a Logística informou.",
@@ -130,7 +137,7 @@
       "Para alguém ver só a Consulta SAC, adicione o e-mail em <b>Logins do SAC</b>.",
     ], ""],
   ];
-  const ICONE = { rotina: "★", gerencial: "▦", entregas: "✓", transp: "🚚", uf: "⌖", canais: "◎", preventivo: "◷", responsaveis: "👤", reposicao: "↻", alterar: "✎", conferencia: "☑", documentos: "🗎", sac: "☎", logins: "🔑" };
+  const ICONE = { rotina: "★", gerencial: "▦", entregas: "✓", transp: "🚚", uf: "⌖", canais: "◎", preventivo: "◷", responsaveis: "👤", reposicao: "↻", alterar: "✎", conferencia: "☑", documentos: "🗎", barrar: "⛔", sac: "☎", logins: "🔑" };
   const sec = ([id, tit, serve, quando, passos, atencao]) => `
     <details class="cartao aj-sec" data-aj="${id}"${id === "rotina" ? " open" : ""}>
       <summary><span class="aj-ic">${ICONE[id] || "•"}</span><b>${tit}</b><span class="sub"> · ${serve}</span></summary>

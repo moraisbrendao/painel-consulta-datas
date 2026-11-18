@@ -2247,3 +2247,89 @@ end $$;
 revoke all on function public._robo_repo_itens() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-repo-itens';
 select cron.schedule('robo-repo-itens', '0 11,17 * * *', 'select public._robo_repo_itens()');
+
+-- ============================================================
+-- PARTE 49) Barrar entrega: planilha de tickets "Barrar entrega" + conferência do robô (rastreio e portal) + decisão da Logística
+create table if not exists public.barrar_entrega (
+  nf              text primary key,      -- "1070-35"
+  ticket          text,
+  transp_pedido   text,                  -- redespacho Promob, senão transportador Promob
+  status_intelipost text,
+  ticket_criado   timestamp,
+  na_planilha     boolean not null default true,
+  rastreio        jsonb,                 -- {situacao, fonte, evento, data_evento, transp, achou_palavra}
+  portal          jsonb,                 -- {achou, transp, prazo, anotacao, anotacao_por, anotacao_em}
+  mesma_transp    boolean,
+  sugestao        text,                  -- barrar / nao_barrar / manual
+  sugestao_opcao  text,
+  sugestao_motivo text,
+  conferido_em    timestamptz,
+  decisao         text,                  -- barrar / nao_barrar (aprovado por alguém da Logística)
+  decisao_opcao   text,
+  decisao_motivo  text,
+  decisao_por     text,
+  decisao_em      timestamptz,
+  portal_status   text,                  -- feito / erro
+  portal_msg      text,
+  portal_em       timestamptz,
+  print_path      text                   -- print da anotação (bucket "barrar")
+);
+create table if not exists public.barrar_info (
+  id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.barrar_entrega enable row level security;
+alter table public.barrar_info enable row level security;
+revoke all on public.barrar_entrega, public.barrar_info from anon;
+grant select, insert, update, delete on public.barrar_entrega, public.barrar_info to authenticated;
+drop policy if exists "logistica cuida" on public.barrar_entrega;
+drop policy if exists "logistica cuida" on public.barrar_info;
+create policy "logistica cuida" on public.barrar_entrega for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create policy "logistica cuida" on public.barrar_info for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- planilha nova: quem saiu da planilha fica fora (na_planilha=false); o que o robô e as pessoas já fizeram fica guardado
+create or replace function public.importar_barrar(linhas jsonb, arquivo text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.barrar_entrega set na_planilha = false;
+  insert into public.barrar_entrega (nf, ticket, transp_pedido, status_intelipost, ticket_criado, na_planilha)
+  select x->>'nf', x->>'ticket', x->>'transp_pedido', x->>'status_intelipost', nullif(x->>'ticket_criado','')::timestamp, true
+  from jsonb_array_elements(linhas) x where coalesce(x->>'nf','') <> ''
+  on conflict (nf) do update set ticket = excluded.ticket, transp_pedido = excluded.transp_pedido,
+    status_intelipost = excluded.status_intelipost, ticket_criado = excluded.ticket_criado, na_planilha = true;
+  get diagnostics n = row_count;
+  insert into public.barrar_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, n, auth.jwt() ->> 'email', now())
+  on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  return n;
+end $$;
+revoke all on function public.importar_barrar(jsonb, text) from public, anon;
+grant execute on function public.importar_barrar(jsonb, text) to authenticated;
+
+-- botões do painel: "Conferir agora" (modo barrar) e "Mandar para o portal" (modo barrar-portal)
+create or replace function public.rodar_robo_barrar(modo text)
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if modo not in ('barrar', 'barrar-portal') then raise exception 'Modo inválido.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', modo)));
+end $$;
+revoke all on function public.rodar_robo_barrar(text) from public, anon;
+grant execute on function public.rodar_robo_barrar(text) to authenticated;
+
+-- prints das anotações (privado; só a Logística)
+insert into storage.buckets (id, name, public) values ('barrar', 'barrar', false) on conflict (id) do nothing;
+drop policy if exists "barrar ler" on storage.objects;
+drop policy if exists "barrar gravar" on storage.objects;
+drop policy if exists "barrar trocar" on storage.objects;
+create policy "barrar ler" on storage.objects for select to authenticated using (bucket_id = 'barrar' and (select not public.e_sac()));
+create policy "barrar gravar" on storage.objects for insert to authenticated with check (bucket_id = 'barrar' and (select not public.e_sac()));
+create policy "barrar trocar" on storage.objects for update to authenticated using (bucket_id = 'barrar' and (select not public.e_sac()));

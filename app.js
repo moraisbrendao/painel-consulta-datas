@@ -3642,7 +3642,7 @@ ${extra}
     if (perfil !== "sac" && !podePag(pag)) { toast("Você não tem acesso a essa aba. Fale com a administradora do painel.", true); pag = primeiraPag(); }
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", drop: "Dropshipping", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Gerar XML", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", drop: "Dropshipping", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Gerar XML", barrar: "Barrar entrega", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }

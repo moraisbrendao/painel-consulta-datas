@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=184">
+  <link rel="stylesheet" href="styles.css?v=185">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -47,6 +47,7 @@
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
       <button class="menu-item so-log" data-pagina="documentos"><span class="menu-icone">🗎</span>Gerar XML</button>
+      <button class="menu-item so-log" data-pagina="barrar"><span class="menu-icone">⛔</span>Barrar entrega</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
       <button class="menu-item so-log" data-pagina="ajuda"><span class="menu-icone">❔</span>Passo a passo</button>
       <button class="menu-item so-admin" data-pagina="logins"><span class="menu-icone">🔑</span>Logins</button>
@@ -1102,6 +1103,36 @@
       </section>
     </main>
 
+    <main class="conteudo" id="pagina-barrar" hidden>
+      <section class="filtros-cartao" aria-label="Filtros">
+        <span class="filtros-rot">⛉ Filtros</span>
+        <label>Nota ou ticket<input id="br-busca" type="search" placeholder="# nota ou ticket"></label>
+        <label>Transportadora<select id="br-transp"></select></label>
+        <button id="br-limpar" class="link limpar" type="button">Limpar filtros</button>
+      </section>
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Barrar entrega</h1>
+          <p class="sub">1) Envie a planilha de tickets <b>Barrar entrega</b>. 2) <b>Conferir agora</b>: o robô olha cada nota no rastreio (segregado ou em devolução = barrar ✓) e no portal (anotação de "não localizado" e nota fora do rastreio = não barrar ✗), tira print da anotação e sugere. 3) Confira, marque e clique <b>Aprovar</b>. 4) <b>Mandar para o portal</b>: o robô só clica nas aprovadas.</p>
+          <p id="br-info" class="info-base">Nenhuma planilha enviada ainda.</p>
+        </div>
+        <div class="acoes-robo">
+          <label class="btn amarelo" title="Planilha de tickets Barrar entrega (Multi360)">Enviar planilha<input id="br-arq" type="file" accept=".xlsx,.xls" hidden></label>
+          <button id="br-conferir" class="btn contorno" type="button">Conferir agora</button>
+          <button id="br-portal" class="btn lilas" type="button">Mandar para o portal</button>
+          <button id="br-excel" class="btn contorno" type="button">Baixar Excel</button>
+        </div>
+      </div>
+      <section class="kpis" id="br-cards"></section>
+      <section class="cartao">
+        <div class="cartao-topo"><div><h2 id="br-titulo">Notas</h2><p class="sub">Marque as notas e clique em Aprovar a sugestão (ou escolha a decisão na linha). O robô só mexe no portal nas aprovadas.</p></div>
+          <div class="br-acoes-sel"><button id="br-aprovar" class="btn amarelo" type="button" disabled>Aprovar sugestão (0)</button><button id="br-desfazer" class="btn contorno" type="button" disabled>Tirar aprovação</button></div></div>
+        <div class="tabela-wrap"><table class="tabela-pedidos br-tab">
+          <thead><tr><th><input type="checkbox" id="br-todos" aria-label="Marcar todas"></th><th>Nota / ticket</th><th>Transportadora (pedido · portal)</th><th>Rastreio</th><th>Anotação no portal</th><th>Sugestão do robô</th><th>Decisão</th><th>Portal</th></tr></thead>
+          <tbody id="br-linhas"></tbody></table></div>
+      </section>
+    </main>
+
     <!-- ============ CONSULTA SAC ============ -->
     <main class="conteudo" id="pagina-alterar" hidden>
       <div class="titulo-pagina com-acoes">
@@ -1425,14 +1456,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=184"></script>
-  <script src="mapa-brasil.js?v=184"></script>
-  <script src="troca-notas.js?v=184"></script>
-  <script src="app.js?v=184"></script>
-  <script src="ordenar.js?v=184"></script>
-  <script src="menu.js?v=184"></script>
-  <script src="ajuda.js?v=184"></script>
-  <script src="documentos.js?v=184"></script>
-  <script src="filtros.js?v=184"></script>
+  <script src="config.js?v=185"></script>
+  <script src="mapa-brasil.js?v=185"></script>
+  <script src="troca-notas.js?v=185"></script>
+  <script src="app.js?v=185"></script>
+  <script src="ordenar.js?v=185"></script>
+  <script src="menu.js?v=185"></script>
+  <script src="ajuda.js?v=185"></script>
+  <script src="documentos.js?v=185"></script>
+  <script src="barrar.js?v=185"></script>
+  <script src="filtros.js?v=185"></script>
 </body>
 </html>

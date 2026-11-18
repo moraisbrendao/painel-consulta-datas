@@ -6,7 +6,7 @@ const MODO = process.env.MODO || "diag";
 let ultimaLinha = "";
 const log = (...a) => { const t = a.map((x) => String(x).replace(/\d{5,}/g, "#####")).join(" "); ultimaLinha = t; console.log(t); };
 // aviso verde no painel: robô começou / terminou (só nome do robô, horário e a última linha do registro, que já é mascarada)
-const ANDAMENTO = { aguardando: "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", transportadora: "Conferência de uma transportadora" }[MODO];
+const ANDAMENTO = { aguardando: "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", barrar: "Barrar entrega: conferir", "barrar-portal": "Barrar entrega: portal", transportadora: "Conferência de uma transportadora" }[MODO];
 if (ANDAMENTO) {
   const inicio = new Date().toISOString(); let fechou = false;
   try { await entrarSupabase(); await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: true, inicio }); } catch (_) {}
@@ -1270,6 +1270,18 @@ if (MODO === "diag-barrar") {   // Barrar entrega: só olha a tela do portal (es
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", acceptDownloads: true });
   try { const B = await import("./barrar.mjs"); await (process.env.TRANSP === "2" ? B.diagBarrar2 : B.diagBarrar)({ ctx, log }); } catch (e) { log("diag-barrar: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
+}
+if (MODO === "barrar" || MODO === "barrar-portal") {   // Barrar entrega: confere (rastreio + portal) ou aplica no portal o que foi aprovado
+  await entrarSupabase();
+  const { subirArquivo } = await import("./supa.mjs");
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  const B = await import("./barrar.mjs");
+  try {
+    if (MODO === "barrar") await B.conferirBarrar({ chamar, log, ctx, subirArquivo, limite: Number(process.env.SSW_LIMITE) || 200,
+      R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } });
+    else await B.aplicarBarrar({ chamar, log, ctx });
+  } finally { await nav.close(); }
 }
 if (MODO === "repo-itens") {   // Reposição: itens/volumes e cobrança à transportadora dos tickets em Aguardando entrega (robo/repo-itens.mjs)
   await entrarSupabase();

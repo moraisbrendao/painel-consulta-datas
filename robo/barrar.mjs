@@ -90,3 +90,151 @@ export async function diagBarrar2({ ctx, log }) {
     await dl.delete().catch(() => {});
   } catch (e) { log("Exportar: " + String(e.message).split("\n")[0].slice(0, 120)); }
 }
+
+// ---------------------------------------------------------------------------------------------
+// Conferência: rastreio de cada nota + linha da nota no portal (transportadora, anotações, print) → sugestão
+const PAL_BARRAR = /SEGREGAD|DEVOLU|DEVOLVID|EM RETORNO|RETORNO AO REMETENTE/;
+const PAL_NAO_RECEBEU = /N[AÃ]O\s+(FOI\s+)?(LOCALIZAD|ENCONTRAD|CONSTA|RECEB|IDENTIFICAD)|SEM\s+(REGISTRO|EMISS)|N[AÃ]O\s+TEMOS|DESCONHEC/;
+const OP_NAO_RECEBEU = "Sem Emissão em Sistema / Material Não Recebido";
+const sa = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
+const GEN = new Set(["LTDA", "ME", "SA", "S", "A", "E", "DE", "DA", "DO", "EIRELI", "TRANSPORTE", "TRANSPORTES", "TRANSPORTADORA", "LOGISTICA", "LOG", "CARGAS", "CARGA", "EXPRESS", "EXPRESSO", "STANDARD", "FILIAL", "MATRIZ", "SERVICOS", "SP", "RJ", "MG", "PE", "PR", "SC", "RS", "BA", "CE", "GO", "ES"]);
+const pals = (t) => sa(t).replace(/[^A-Z0-9]+/g, " ").split(" ").filter((w) => w.length > 1 && !GEN.has(w));
+const VM = (w) => (w === "VM" || w === "TEMPO" || w === "JUSTO" ? "VM" : w);   // VM Transportes e Tempo Justo são a mesma
+export function mesmaTransp(a, b) {
+  const x = new Set(pals(a).map(VM)), y = pals(b).map(VM); if (!x.size || !y.length) return null;
+  return y.some((w) => x.has(w) || [...x].some((v) => v.length >= 4 && w.length >= 4 && (v.startsWith(w) || w.startsWith(v))));
+}
+
+async function rastrear(it, R) {
+  const { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } = R;
+  const tp = it.transp_pedido || "";
+  const ordem = [EH_JADLOG.test(tp) ? "jadlog" : EH_BENTO.test(tp) ? "bento" : EH_TRANSITO.test(tp) ? "transito" : EH_FORMATO.test(tp) ? "formato" : /transiga/i.test(tp) ? "transiga" : "ssw"];
+  ["ssw", "jadlog"].forEach((k) => { if (!ordem.includes(k) && !/transiga|formato/i.test(tp)) ordem.push(k); });
+  const um = [{ pedido: it.nf, nf: it.nf, transportadora: tp, chave: "" }];
+  let primeiro = null;
+  for (const k of ordem) {
+    let r = null, txt = "", transp = null;
+    try {
+      if (k === "ssw") {
+        const [num, ser] = it.nf.split("-"), c = cnpjDaSerie(ser); if (!c) continue;
+        const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: chaveDe(tp) || "" }).toString() });
+        await new Promise((ok) => setTimeout(ok, 2500));
+        if (pg.status !== 200) continue;
+        r = lerEntrega(pg.txt); txt = sohTexto(pg.txt).join("\n");
+        const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
+        if (det) { const d = await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&")).catch(() => null); await new Promise((ok) => setTimeout(ok, 2500));
+          if (d && d.status === 200) { const t = sohTexto(d.txt).join("\n"); txt += "\n" + t; transp = ((t.match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; } }
+      } else if (k === "transiga") {
+        const x = (await chamar(`rastreio_transiga?select=descricao,data_evento,entregue&nf=eq.${encodeURIComponent(it.nf)}&limit=1`).catch(() => []))[0];
+        r = x ? { situacao: x.entregue ? "entregue" : "nao entregue", ultimo_evento: (x.descricao || "").toUpperCase().slice(0, 60), data_evento: x.data_evento ? String(x.data_evento).slice(0, 10) : null } : { situacao: "sem cte" };
+        txt = JSON.stringify(x || {}); transp = x ? "Transiga" : null;
+      } else {
+        const fn = { jadlog: process.env.JADLOG_TOKEN ? jadlog : null, bento, transito, formato }[k]; if (!fn) continue;
+        r = (await fn(um)).get(it.nf); txt = JSON.stringify(r || {});
+        transp = r && !/^(sem cte|sem nf)$/.test(r.situacao) ? { jadlog: "Jadlog", bento: "Bento Brasil", transito: "Trânsito Brasil", formato: "Formato" }[k] : null;
+      }
+    } catch (_) { continue; }
+    if (!r) continue;
+    const res = { situacao: r.situacao, fonte: { ssw: "SSW", jadlog: "Jadlog", bento: "Bento Brasil", transito: "Trânsito Brasil", formato: "Formato", transiga: "Transiga" }[k],
+      evento: r.ultimo_evento || null, data_evento: r.data_evento || null, transp, achou_palavra: (sa(txt).match(PAL_BARRAR) || [])[0] || null };
+    if (!/^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return res;
+    if (!primeiro) primeiro = res;
+  }
+  return primeiro || { situacao: "sem cte", fonte: null };
+}
+
+// linha da nota no portal: filtra pela nota, lê transportadora/prazo e as anotações (texto vai só para o banco) + print
+async function lerPortal(p, nf, R) {
+  const filtro = p.locator("input[placeholder^='Filtrar por nota']").first();
+  await filtro.fill(""); await filtro.fill(nf); await p.waitForTimeout(2200);
+  const linhas = p.locator("table tbody tr");
+  const n = await linhas.count();
+  let alvo = null;
+  for (let i = 0; i < n; i++) { const t = (await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || ""; if (t.trim() === nf) { alvo = linhas.nth(i); break; } }
+  if (!alvo) return { achou: false };
+  const tds = await alvo.locator("td").allTextContents();
+  const out = { achou: true, transp: (tds[1] || "").trim(), solicitado: (tds[2] || "").trim(), prazo: (tds[3] || "").trim() };
+  const bt = alvo.locator("button[title='Ver Anotações']");
+  if (await bt.count()) {
+    await bt.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(800);
+    out.anotacao = ((await d.innerText()).replace(/^\s*Anota[cç][oõ]es\s*/i, "").replace(/Aqui voc[eê] pode ver suas anota[cç][oõ]es da nota selecionada\.?/i, "").replace(/\s+/g, " ").trim()).slice(0, 600);
+    try { out.print = await d.screenshot(); } catch (_) {}
+    await p.keyboard.press("Escape"); await p.waitForTimeout(600);
+  }
+  return out;
+}
+
+function sugerir(x) {
+  const r = x.rastreio || {}, pt = x.portal || {}, an = sa(pt.anotacao);
+  if (r.achou_palavra) return { sugestao: "barrar", opcao: null, motivo: `Rastreio (${r.fonte}) mostra ${r.achou_palavra.toLowerCase()}.` };
+  if (r.situacao === "entregue") return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
+  const naoAchou = !r.situacao || /^(sem cte|sem nf|sem permissao|sem rastreio)$/.test(r.situacao);
+  if (naoAchou && PAL_NAO_RECEBEU.test(an)) return { sugestao: "nao_barrar", opcao: OP_NAO_RECEBEU, motivo: (pt.anotacao || "").replace(/^.*?\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}\s*/, "").slice(0, 300) };
+  return { sugestao: "manual", opcao: null, motivo: naoAchou ? (pt.anotacao ? "Não achei no rastreio; a anotação não diz que não recebeu." : "Não achei no rastreio e não há anotação no portal.") : "Em rastreio, sem segregação/devolução." };
+}
+
+export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirArquivo }) {
+  const L = [];
+  for (let de = 0; ; de += 1000) { const P = await chamar(`barrar_entrega?select=*&na_planilha=eq.true&portal_status=is.null&order=ticket_criado.asc.nullslast&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
+  const falta = L.filter((x) => !x.conferido_em || Date.now() - new Date(x.conferido_em).getTime() > 3 * 3600e3).slice(0, limite);
+  log(`barrar: ${L.length} notas na planilha sem ação no portal · ${falta.length} para conferir`);
+  if (!falta.length) return;
+  await R.carregarSenhasDB();
+  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
+  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
+  for (const x of falta) {
+    try {
+      const rastreio = await rastrear(x, R);
+      const pt = await lerPortal(p, x.nf, R);
+      let print_path = x.print_path;
+      if (pt.print) { try { print_path = await subirArquivo("barrar", `${encodeURIComponent(x.nf)}.png`, pt.print); } catch (e) { soma("print não subiu"); } delete pt.print; }
+      const mesma = mesmaTransp(rastreio.transp || (rastreio.fonte !== "SSW" ? rastreio.fonte : ""), pt.transp || x.transp_pedido);
+      const s = sugerir({ rastreio, portal: pt });
+      await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path });
+      soma(`sugestão ${s.sugestao}`); if (!pt.achou) soma("não está no portal"); if (mesma === false) soma("transportadora diferente");
+    } catch (e) { soma("erro"); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
+  }
+  log("barrar: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+}
+
+// Aplica no portal só o que alguém da Logística aprovou no painel (decisao preenchida)
+export async function aplicarBarrar({ chamar, log, ctx }) {
+  const L = await chamar("barrar_entrega?select=nf,decisao,decisao_opcao,decisao_motivo&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500");
+  log(`barrar-portal: ${L.length} nota(s) aprovadas para o portal`);
+  if (!L.length) return;
+  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
+  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
+  const grava = (nf, st, msg) => chamar(`barrar_entrega?nf=eq.${encodeURIComponent(nf)}`, "PATCH", { portal_status: st, portal_msg: msg, portal_em: new Date().toISOString() });
+  for (const x of L) {
+    try {
+      const filtro = p.locator("input[placeholder^='Filtrar por nota']").first();
+      await filtro.fill(""); await filtro.fill(x.nf); await p.waitForTimeout(2200);
+      const linhas = p.locator("table tbody tr"); let alvo = null;
+      for (let i = 0; i < await linhas.count(); i++) if (((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim() === x.nf) { alvo = linhas.nth(i); break; }
+      if (!alvo) { await grava(x.nf, "erro", "Nota não está mais na lista Barrar Entrega do portal."); soma("não está na lista"); continue; }
+      const bts = alvo.locator("td").last().locator("button");
+      if (x.decisao === "barrar") {
+        await bts.nth(1).click(); await p.waitForTimeout(1500);   // ✓ verde
+        const d = p.locator("[role=dialog]").last();
+        if (await d.count() && await d.isVisible().catch(() => false)) {   // se o portal pedir confirmação
+          const forma = (await d.innerText()).replace(/\d/g, "#").replace(/\s+/g, " ").slice(0, 160); log("  ✓ abriu janela:", forma);
+          const ok = d.getByRole("button", { name: /confirmar|salvar|sim|barrar/i }).first();
+          if (await ok.count()) { await ok.click(); await p.waitForTimeout(1500); } else { await p.keyboard.press("Escape"); throw new Error("O ✓ abriu uma janela sem botão de confirmar."); }
+        }
+      } else {
+        await bts.nth(0).click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 });   // ✗ vermelho
+        await d.locator("[role=combobox]").first().click(); await p.waitForTimeout(600);
+        await p.getByRole("option", { name: x.decisao_opcao || OP_NAO_RECEBEU, exact: true }).click(); await p.waitForTimeout(400);
+        await d.locator("textarea").first().fill(String(x.decisao_motivo || "").slice(0, 500));
+        await d.getByRole("button", { name: /salvar/i }).click(); await p.waitForTimeout(2000);
+      }
+      // conferência: a nota sai da lista Barrar Entrega
+      await filtro.fill(""); await filtro.fill(x.nf); await p.waitForTimeout(2200);
+      let ainda = false; const l2 = p.locator("table tbody tr");
+      for (let i = 0; i < await l2.count(); i++) if (((await l2.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim() === x.nf) ainda = true;
+      if (ainda) { await grava(x.nf, "erro", "Cliquei, mas a nota continua na lista Barrar Entrega."); soma("continua na lista"); }
+      else { await grava(x.nf, "feito", x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.`); soma(`feito ${x.decisao}`); }
+    } catch (e) { soma("erro"); await grava(x.nf, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); await p.keyboard.press("Escape").catch(() => {}); }
+  }
+  log("barrar-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+}

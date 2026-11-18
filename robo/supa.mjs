@@ -93,3 +93,9 @@ export const resultadoTroca = (tk, st, msg, passos, prazo = null, nova = null) =
 export async function ultimaTrocaComErro() { const r = await chamar("troca_notas?select=ticket,pedido,robo_metodo,tipo,robo_passos,robo_msg,robo_iniciado_em&robo_status=eq.erro&order=robo_feito_em.desc&limit=1"); return r && r[0] ? r[0] : null; }
 export async function trocaDoTicket(tk) { const r = await chamar(`troca_notas?select=ticket,pedido,tipo,robo_metodo,robo_passos,robo_status&ticket=eq.${encodeURIComponent(tk)}&limit=1`); return r && r[0] ? r[0] : null; }
 export { chamar };
+// envia um arquivo para o Storage do Supabase (bucket privado); devolve o caminho
+export async function subirArquivo(bucket, caminho, buf, tipo = "image/png") {
+  const r = await pedir(`${URL_SB}/storage/v1/object/${bucket}/${caminho}`, { method: "POST", headers: { "Content-Type": tipo, "x-upsert": "true" }, body: buf });
+  if (!r.ok) throw new Error("Storage: " + r.status + " " + (await r.text()).slice(0, 120));
+  return caminho;
+}
