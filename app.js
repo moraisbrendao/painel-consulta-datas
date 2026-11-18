@@ -3790,10 +3790,10 @@ ${extra}
   $("d-exportar").addEventListener("click", () => {
     if (!dLista.length) return toast("Nada para exportar.", true);
     const linhas = [["Pedido Intelipost", "NF", "Canal", "Fornecedor", "Transportadora", "UF", "Cidade", "Micro status", "Expedição", "Prometido ao cliente", "Atrasado", "Dias sem movimento", "Diagnóstico",
-      "Ocorrência", "Reposição (tickets)", "Fila da reposição", "Previsão SSW", "Scallia (último aviso)", "Nova data", "Observação", "Atualizado por", "Link de rastreio"]]
-      .concat(dLista.map((p) => { const d = dDet(p) || {}, t = p._t || {};
+      "Tem ticket", "Fila do ticket", "Ticket(s)", "Tipo / motivo do ticket", "Tem ocorrência", "Ocorrência", "Reposição (tickets)", "Fila da reposição", "Previsão SSW", "Scallia (último aviso)", "Nova data", "Observação", "Atualizado por", "Link de rastreio"]]
+      .concat(dLista.map((p) => { const d = dDet(p) || {}, t = p._t || {}, tk = ticketDe(p) || {};
         return [p.pedido, p.nf, p.canal, dForn(p), p.transportadora, p.uf, p.cidade, p.micro_status, br(p.data_expedicao), br(p._venc), p._atrasoG ? "Sim" : "Não", p._parado ?? "", D_NOME[p._dd],
-          d.ocorr_status || "", d.repo_ticket || "", d.repo_fila || "", br((ssw.get(p.pedido) || {}).previsao), ((s) => (s ? `${s.marco}${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + s.transportadora : ""}` : ""))(dScallia(p)), br(t.nova_data), t.observacao || "", t.atualizado_por || "", p.link_rastreio || ""]; }));
+          tk.fila || tk.id_ticket ? "Sim" : "Não", tk.fila || "", tk.id_ticket || "", [tk.tipo, tk.motivo].filter(Boolean).join(" · "), d.ocorr_status ? "Sim" : "Não", d.ocorr_status || "", d.repo_ticket || "", d.repo_fila || "", br((ssw.get(p.pedido) || {}).previsao), ((s) => (s ? `${s.marco}${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + s.transportadora : ""}` : ""))(dScallia(p)), br(t.nova_data), t.observacao || "", t.atualizado_por || "", p.link_rastreio || ""]; }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Dropshipping");
     XLSX.writeFile(wb, `dropshipping_${hojeISO()}.xlsx`);
   });
