@@ -1280,7 +1280,7 @@ if (MODO === "barrar" || MODO === "barrar-portal") {   // Barrar entrega: confer
   try {
     if (MODO === "barrar") await B.conferirBarrar({ chamar, log, ctx, subirArquivo, limite: Number(process.env.SSW_LIMITE) || 200,
       R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } });
-    else await B.aplicarBarrar({ chamar, log, ctx });
+    else await B.aplicarBarrar({ chamar, log, ctx, soTicket: process.env.TRANSP === "ticket" });
   } finally { await nav.close(); }
 }
 if (MODO === "repo-itens") {   // Reposição: itens/volumes e cobrança à transportadora dos tickets em Aguardando entrega (robo/repo-itens.mjs)

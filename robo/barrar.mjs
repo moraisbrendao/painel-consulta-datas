@@ -231,7 +231,22 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
 }
 
 // Aplica no portal só o que alguém da Logística aprovou no painel (decisao preenchida)
-export async function aplicarBarrar({ chamar, log, ctx }) {
+export async function aplicarBarrar({ chamar, log, ctx, soTicket = false }) {
+  if (soTicket) {
+    // notas que já foram clicadas no portal (feito, ou "continua na lista" que a Brenda confirmou que deu certo) e sem prints no ticket
+    const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,print_path,print_rastreio,rastreio,portal_status,portal_msg&na_planilha=eq.true&decisao=in.(barrar,nao_barrar)&portal_status=not.is.null&or=(ticket_status.is.null,ticket_status.eq.erro)&limit=100");
+    const alvo = L.filter((x) => x.portal_status === "feito" || /continua na lista/i.test(x.portal_msg || ""));
+    log(`barrar-ticket: ${alvo.length} nota(s) para pôr os prints no ticket`);
+    const { baixarArquivo } = await import("./supa.mjs"); const M = await import("./multi360.mjs"); const m = alvo.length ? await M.entrarMulti360(ctx, log) : null;
+    let ok = 0, er = 0;
+    for (const x of alvo) {
+      try {
+        if (x.portal_status !== "feito") await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { portal_status: "feito", portal_msg: x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.` });
+        await comentarTicket(x, m, baixarArquivo, M, chamar); ok++;
+      } catch (e) { er++; await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "erro", ticket_msg: String(e.message).split("\n")[0].slice(0, 200), ticket_em: new Date().toISOString() }).catch(() => {}); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
+    }
+    log(`barrar-ticket: prints no ticket ${ok} · erro ${er}`); return;
+  }
   const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500");
   // regra (Brenda, 18/11): o robô só atua em devolução (✓) ou "não recebeu" na anotação (✗ Sem Emissão...); o resto ela verifica
   const pode = (x) => x.decisao === "barrar" ? PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
@@ -244,20 +259,7 @@ export async function aplicarBarrar({ chamar, log, ctx }) {
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const { baixarArquivo } = await import("./supa.mjs");
   const M = await import("./multi360.mjs"); let m360 = null;
-  const comentar = async (x) => {
-    if (!x.ticket) throw new Error("sem ticket");
-    const arquivos = [];
-    if (x.print_rastreio) arquivos.push({ name: `rastreio-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_rastreio) });
-    if (x.print_path) arquivos.push({ name: `anotacao-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_path) });
-    if (!arquivos.length) throw new Error("sem print para anexar");
-    if (!m360) m360 = await M.entrarMulti360(ctx2, log);
-    const r = x.rastreio || {};
-    const texto = x.decisao === "barrar"
-      ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Rastreio${r.alvo ? " " + r.alvo : ""}: ${r.achou_palavra ? r.achou_palavra.toLowerCase() : "segregado/devolução"}. Print${arquivos.length > 1 ? "s" : ""} em anexo.`
-      : `Barrar entrega: NF ${x.nf} marcada como NÃO BARRADA no portal (${x.decisao_opcao || OP_NAO_RECEBEU}). ${x.decisao_motivo ? "Motivo: " + String(x.decisao_motivo).slice(0, 200) + ". " : ""}Print${arquivos.length > 1 ? "s" : ""} em anexo.`;
-    await M.comentarioInterno(m360, x.ticket, texto, arquivos);
-    await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "feito", ticket_msg: `Comentário interno com ${arquivos.length} print(s).`, ticket_em: new Date().toISOString() });
-  };
+  const comentar = async (x) => { if (!m360) m360 = await M.entrarMulti360(ctx2, log); return comentarTicket(x, m360, baixarArquivo, M, chamar); };
   const ctx2 = ctx;
   const grava = (nf, st, msg) => chamar(`barrar_entrega?nf=eq.${encodeURIComponent(nf)}`, "PATCH", { portal_status: st, portal_msg: msg, portal_em: new Date().toISOString() });
   for (const x of L) {
@@ -292,7 +294,7 @@ export async function aplicarBarrar({ chamar, log, ctx }) {
         const nb = await ult.locator("button").count(), tx = ((await ult.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim().slice(0, 40);
         const desab = await ult.locator("button:disabled").count();
         log("  depois do clique: coluna Barrado? =", JSON.stringify(tx.replace(/\d/g, "#")), "· botões", nb, "· desabilitados", desab);
-        if (nb > 0 && desab < nb) ainda = true;
+        // a Brenda confirmou (18/11) que o portal registra mesmo com a nota ainda na lista: não conta como erro
       }
       if (ainda) { await grava(x.nf, "erro", "Cliquei, mas a nota continua na lista Barrar Entrega."); soma("continua na lista"); }
       else {
@@ -312,4 +314,18 @@ export async function diagBarrar3({ chamar, ctx, log }) {
   const cred = null;   // Multi360: o mesmo login já cadastrado (MULTI360_EMAIL/MULTI360_SENHA), a pedido da Brenda
   const p = await M.entrarMulti360(ctx, log, cred);
   await M.diagComentario(p, x.ticket, log);
+}
+
+async function comentarTicket(x, m360, baixarArquivo, M, chamar) {
+  if (!x.ticket) throw new Error("sem ticket");
+  const arquivos = [];
+  if (x.print_rastreio) arquivos.push({ name: `rastreio-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_rastreio) });
+  if (x.print_path) arquivos.push({ name: `anotacao-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_path) });
+  if (!arquivos.length) throw new Error("sem print para anexar");
+  const r = x.rastreio || {};
+  const texto = x.decisao === "barrar"
+    ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Rastreio${r.alvo ? " " + r.alvo : ""}: ${r.evento ? String(r.evento).toLowerCase().slice(0, 80) : "devolução"}. Print${arquivos.length > 1 ? "s" : ""} em anexo.`
+    : `Barrar entrega: NF ${x.nf} marcada como NÃO BARRADA no portal (${x.decisao_opcao || OP_NAO_RECEBEU}). ${x.decisao_motivo ? "Motivo: " + String(x.decisao_motivo).slice(0, 200) + ". " : ""}Print${arquivos.length > 1 ? "s" : ""} em anexo.`;
+  await M.comentarioInterno(m360, x.ticket, texto, arquivos);
+  await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "feito", ticket_msg: `Comentário interno com ${arquivos.length} print(s).`, ticket_em: new Date().toISOString() });
 }
