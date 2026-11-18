@@ -30,11 +30,12 @@ concurrency:
 
 permissions:
   contents: read
+  actions: write   # para a rodada chamar a próxima quando a fila for grande
 
 jobs:
   robo:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 75
     if: github.event_name == 'workflow_dispatch' || vars.INTELIPOST_ATIVO == 'sim'
     env:
       MODO: ${{ github.event.inputs.modo || 'real' }}
@@ -52,6 +53,7 @@ jobs:
         env:
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+          GH_TOKEN: ${{ github.token }}
 
       - name: Preparar o navegador
         if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag')
@@ -73,3 +75,4 @@ jobs:
           PORTAL_SENHA: ${{ secrets.PORTAL_SENHA }}
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
+          GH_TOKEN: ${{ github.token }}

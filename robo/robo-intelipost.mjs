@@ -830,19 +830,31 @@ try {
     for (const item of fila) await resultadoIntelipost(item.pedido, "pendente");   // diagnóstico não mexe nos pedidos
     if (!fila.length) log("Fila vazia: não abri nenhum pedido.");
   } else {
-    const fila = await pegarIntelipost(LIMITE);
-    log(`${fila.length} pedido(s) na passagem (${MODO}).`);
-    for (const item of fila) {
-      try {
-        const r = await alterar(item.pedido, item.nova_data);
-        if (r === "ok") { await resultadoIntelipost(item.pedido, "alterado"); ok++; }
-        else { await resultadoIntelipost(item.pedido, "pendente"); ok++; }
-      } catch (e) {
-        erro++; log("Problema:", e.message);
-        await resultadoIntelipost(item.pedido, "erro", e.message.slice(0, 300));
+    // vai pegando lotes até a fila acabar (máx. ~45 min); se sobrar, a rodada chama a próxima sozinha
+    const ini = Date.now(); let sobrou = false;
+    for (let lote = 1; ; lote++) {
+      if (Date.now() - ini > 45 * 60e3) { sobrou = true; break; }
+      const fila = await pegarIntelipost(LIMITE);
+      if (!fila.length) break;
+      log(`Lote ${lote}: ${fila.length} pedido(s) na passagem (${MODO}).`);
+      for (const item of fila) {
+        try {
+          const r = await alterar(item.pedido, item.nova_data);
+          if (r === "ok") { await resultadoIntelipost(item.pedido, "alterado"); ok++; }
+          else { await resultadoIntelipost(item.pedido, "pendente"); ok++; }
+        } catch (e) {
+          erro++; log("Problema:", e.message);
+          await resultadoIntelipost(item.pedido, "erro", e.message.slice(0, 300));
+        }
       }
+      if (MODO !== "real") break;   // dryrun devolve para pendente: um lote só
     }
     log(`Fim: ${ok} ${MODO === "real" ? "alterados" : "preenchidos sem salvar"}, ${erro} com problema.`);
+    if (sobrou && MODO === "real" && process.env.GH_TOKEN && process.env.GITHUB_REPOSITORY) {
+      const r = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/workflows/robo-intelipost.yml/dispatches`, { method: "POST",
+        headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { modo: "real" } }) }).catch(() => null);
+      log(`Ainda tem pedido na fila: ${r && r.ok ? "chamei a próxima rodada" : "não consegui chamar a próxima rodada"}.`);
+    }
     // troca de notas: cada ticket já diz se é teste ou real (quem pediu no painel escolheu)
     const trocas = await pegarTroca(20).catch((e) => { log("Troca de notas:", e.message.split("\n")[0]); return []; });
     if (trocas.length) log(`${trocas.length} troca(s) de nota na passagem.`);
