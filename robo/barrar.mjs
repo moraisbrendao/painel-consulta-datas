@@ -5,8 +5,10 @@ const PORTAL = "https://ccp.360multi.com";
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim();
 
 export async function entrarPortal(ctx, log) {
-  const { PORTAL_EMAIL, PORTAL_SENHA } = process.env;
-  if (!PORTAL_EMAIL || !PORTAL_SENHA) throw new Error("Faltam os segredos PORTAL_EMAIL e PORTAL_SENHA no GitHub.");
+  // login próprio do Barrar (segredos BARRAR_EMAIL/BARRAR_SENHA, ex.: o usuário da Brenda); senão o do robô de ocorrências
+  const PORTAL_EMAIL = process.env.BARRAR_EMAIL || process.env.PORTAL_EMAIL, PORTAL_SENHA = process.env.BARRAR_EMAIL ? process.env.BARRAR_SENHA : process.env.PORTAL_SENHA;
+  if (!PORTAL_EMAIL || !PORTAL_SENHA) throw new Error("Faltam os segredos do portal no GitHub.");
+  log(`Login do portal: ${process.env.BARRAR_EMAIL ? "BARRAR_EMAIL" : "PORTAL_EMAIL"}`);
   const p = await ctx.newPage(); p.setDefaultTimeout(30000);
   await p.goto(`${PORTAL}/login`);
   await p.locator("input[name=email]").fill(PORTAL_EMAIL);
@@ -22,7 +24,8 @@ export async function abrirBarrar(p, log) {
   const link = p.getByRole("link", { name: /barrar entrega/i }).first();
   if (await link.count()) { await link.click(); }
   else { const t = p.getByText(/^\s*Barrar Entregas?\s*/i).first(); await t.click(); }
-  await p.waitForTimeout(3000);
+  await p.locator("table tbody tr").first().waitFor({ timeout: 45000 }).catch(() => {});
+  await p.waitForTimeout(1500);
   log(`Tela Barrar: caminho ${mascara(new URL(p.url()).pathname)}`);
 }
 

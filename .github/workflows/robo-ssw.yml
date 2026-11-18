@@ -104,6 +104,8 @@ jobs:
           MULTI360_SENHA: ${{ secrets.MULTI360_SENHA }}
           PORTAL_EMAIL: ${{ secrets.PORTAL_EMAIL }}
           PORTAL_SENHA: ${{ secrets.PORTAL_SENHA }}
+          BARRAR_EMAIL: ${{ secrets.BARRAR_EMAIL }}
+          BARRAR_SENHA: ${{ secrets.BARRAR_SENHA }}
           FORMATO_USUARIO: ${{ secrets.FORMATO_USUARIO }}
           FORMATO_SENHA: ${{ secrets.FORMATO_SENHA }}
           JADLOG_TOKEN: ${{ secrets.JADLOG_TOKEN || secrets.TOKEN }}
