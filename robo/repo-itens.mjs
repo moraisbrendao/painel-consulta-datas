@@ -51,19 +51,22 @@ export async function sondar(p) {
 
 // PDFs anexados no chat: baixa cada um (só na memória) e devolve o texto
 export async function lerPdfs(p, max = 3) {
-  const bts = p.getByRole("button", { name: /baixar anexo/i });
-  const n = await bts.count(), out = [];
-  for (let i = n - 1; i >= 0 && out.length < max; i--) {   // do mais novo para o mais velho
+  // os anexos do chat são links <a href="...pdf">Baixar anexo</a>: baixa pelo próprio navegador logado (só na memória)
+  const hrefs = await p.evaluate(() => [...document.querySelectorAll("a[href]")]
+    .filter((a) => /\.pdf(\?|#|$)/i.test(a.getAttribute("href") || "") || /baixar anexo/i.test(a.textContent || ""))
+    .map((a) => a.href));
+  const out = [];
+  for (const h of [...new Set(hrefs)].reverse()) {   // do mais novo para o mais velho
+    if (out.length >= max) break;
     try {
-      const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 20000 }), bts.nth(i).click()]);
-      const nome = dl.suggestedFilename() || "";
-      if (!/\.pdf$/i.test(nome)) { await dl.delete().catch(() => {}); continue; }
-      const caminho = await dl.path(); const fs = await import("node:fs");
-      const buf = fs.readFileSync(caminho); await dl.delete().catch(() => {});
+      const r = await p.context().request.get(h, { timeout: 30000 });
+      if (!r.ok()) continue;
+      const buf = await r.body();
+      if (buf.slice(0, 4).toString() !== "%PDF") continue;
       out.push(await textoPdf(buf));
     } catch (_) { /* anexo que não baixou: segue */ }
   }
-  return { anexos: n, pdfs: out };
+  return { anexos: hrefs.length, pdfs: out };
 }
 
 export async function textoPdf(buf) {
