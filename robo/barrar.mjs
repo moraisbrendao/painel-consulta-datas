@@ -53,3 +53,40 @@ export async function diagBarrar({ ctx, log }) {
   log(`Botões/abas: ${est.abas.join(" / ")}`);
   est.cel.forEach((c) => log("  " + c));
 }
+
+// segunda parte do diagnóstico: modais (Anotações e ✗) e o Exportar — abre e fecha/cancela, não salva nada
+export async function diagBarrar2({ ctx, log }) {
+  const p = await entrarPortal(ctx, log);
+  await abrirBarrar(p, log);
+  const linha = p.locator("table tbody tr").first();
+  const modal = async (rot) => {
+    const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 });
+    const e = await d.evaluate((el) => { const m = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 60);
+      return { tit: m((el.querySelector("h2,h3,[class*=title]") || {}).textContent), labels: [...el.querySelectorAll("label")].map((l) => m(l.textContent)),
+        inputs: [...el.querySelectorAll("input,textarea,select,[role=combobox]")].map((i) => `${i.tagName}${i.type ? "|" + i.type : ""}${i.placeholder ? "|ph=" + m(i.placeholder) : ""}${i.getAttribute("role") ? "|role=" + i.getAttribute("role") : ""}`),
+        botoes: [...el.querySelectorAll("button")].map((b) => m(b.textContent) || (b.getAttribute("aria-label") || "")).filter(Boolean),
+        blocos: el.querySelectorAll("[class*=rounded]").length, img: el.querySelectorAll("img").length }; });
+    log(`${rot}: título="${e.tit}" labels=[${e.labels.join(" | ")}] campos=[${e.inputs.join(" ; ")}] botões=[${e.botoes.join(" | ")}] img=${e.img}`);
+    return d;
+  };
+  try {
+    await linha.locator("button[title='Ver Anotações']").click(); await p.waitForTimeout(1200);
+    await modal("Anotações"); await p.keyboard.press("Escape"); await p.waitForTimeout(800);
+  } catch (e) { log("Anotações: " + String(e.message).split("\n")[0].slice(0, 120)); }
+  try {
+    await linha.locator("td").last().locator("button").first().click(); await p.waitForTimeout(1200);   // ✗ (vermelho)
+    const d = await modal("Não barrado (✗)");
+    const comb = d.locator("[role=combobox],button:has-text('Selecione')").first();
+    if (await comb.count()) { await comb.click(); await p.waitForTimeout(800);
+      const ops = await p.locator("[role=option]").allTextContents(); log("Opções: " + ops.map((o) => o.trim()).join(" | ")); await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
+    const canc = d.getByRole("button", { name: /cancelar/i }); if (await canc.count()) await canc.click(); else await p.keyboard.press("Escape");
+    await p.waitForTimeout(800); log("✗: cancelado sem salvar.");
+  } catch (e) { log("✗: " + String(e.message).split("\n")[0].slice(0, 120)); await p.keyboard.press("Escape").catch(() => {}); }
+  try {
+    const [dl] = await Promise.all([p.waitForEvent("download", { timeout: 30000 }), p.getByRole("button", { name: /exportar/i }).first().click()]);
+    const nome = dl.suggestedFilename(); const XLSX = (await import("xlsx")).default; const fs = await import("node:fs");
+    const wb = XLSX.read(fs.readFileSync(await dl.path())); const ws = wb.Sheets[wb.SheetNames[0]]; const rows = XLSX.utils.sheet_to_json(ws, { header: 1 });
+    log(`Exportar: arquivo .${nome.split(".").pop()} · ${rows.length - 1} linhas · colunas: ${(rows[0] || []).map(mascara).join(" | ")}`);
+    await dl.delete().catch(() => {});
+  } catch (e) { log("Exportar: " + String(e.message).split("\n")[0].slice(0, 120)); }
+}
