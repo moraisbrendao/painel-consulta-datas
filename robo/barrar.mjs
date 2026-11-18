@@ -160,8 +160,14 @@ async function lerPortal(p, nf, R) {
   const bt = alvo.locator("button[title='Ver Anotações']");
   if (await bt.count()) {
     await bt.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(800);
-    out.anotacao = ((await d.innerText()).replace(/^\s*Anota[cç][oõ]es\s*/i, "").replace(/Aqui voc[eê] pode ver suas anota[cç][oõ]es da nota selecionada\.?/i, "").replace(/\s+/g, " ").trim()).slice(0, 600);
-    try { out.print = await d.screenshot(); } catch (_) {}
+    // cada anotação: inicial, nome, "dd/mm/aaaa, hh:mm", texto. "Close" é o texto escondido do botão X (não faz parte da anotação)
+    const ls = (await d.innerText()).split("\n").map((l) => l.trim()).filter((l) => l && !/^(close|fechar|×|x)$/i.test(l) && !/^Anota[cç][oõ]es$/i.test(l) && !/^Aqui voc[eê] pode ver/i.test(l) && !/^Adicione aqui/i.test(l));
+    const ehData = (l) => /^\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}$/.test(l);
+    const idx = ls.map((l, i) => (ehData(l) ? i : -1)).filter((i) => i >= 0);
+    out.anotacoes = idx.map((i, k) => { const fim = k + 1 < idx.length ? idx[k + 1] - 2 : ls.length; return { quando: ls[i], texto: ls.slice(i + 1, Math.max(i + 1, fim)).join(" ").slice(0, 300) }; }).filter((a) => a.texto);
+    out.anotacao = out.anotacoes.map((a) => `${a.quando}: ${a.texto}`).join(" | ").slice(0, 600);
+    // print da tela inteira: nota filtrada na lista + janela de anotações aberta
+    try { out.print = await p.screenshot(); } catch (_) {}
     await p.keyboard.press("Escape"); await p.waitForTimeout(600);
   }
   return out;
@@ -176,7 +182,13 @@ function sugerir(x) {
   if (r.situacao === "entregue") return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
   if (r.situacao === "entregue") return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
   const naoAchou = !r.situacao || /^(sem cte|sem nf|sem permissao|sem rastreio)$/.test(r.situacao);
-  if (naoAchou && PAL_NAO_RECEBEU.test(an)) return { sugestao: "nao_barrar", opcao: OP_NAO_RECEBEU, motivo: (pt.anotacao || "").replace(/^.*?\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}\s*/, "").slice(0, 300) };
+  if (naoAchou && PAL_NAO_RECEBEU.test(an)) {
+    // motivo = o texto da anotação da transportadora que diz que não recebeu (a mais recente), sem nome e data
+    const dt = (q) => { const m = String(q || "").match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2})/); return m ? `${m[3]}${m[2]}${m[1]}${m[4]}${m[5]}` : ""; };
+    const cand = (pt.anotacoes || []).filter((a) => PAL_NAO_RECEBEU.test(sa(a.texto))).sort((a, b) => dt(b.quando).localeCompare(dt(a.quando)));
+    const motivo = cand.length ? cand[0].texto : (pt.anotacao || "").replace(/^.*?\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}:?\s*/, "").replace(/\s*Close\s*$/i, "");
+    return { sugestao: "nao_barrar", opcao: OP_NAO_RECEBEU, motivo: motivo.slice(0, 300) };
+  }
   const quem = r.alvo ? ` da ${r.alvo}${r.alvo_e_redesp ? " (redespacho)" : ""}` : "";
   return { sugestao: "manual", opcao: null, motivo: naoAchou ? `Erro: nada no rastreio${quem}${pt.anotacao ? "; a anotação não diz que não recebeu" : ""}.` : `Em rastreio${quem}, status atual não é devolução nem entregue${r.achou_palavra ? " (" + r.achou_palavra.toLowerCase() + " aparece no histórico)" : ""}.` };
 }
@@ -282,7 +294,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false }) {
         await bts.nth(0).click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 });   // ✗ vermelho
         await d.locator("[role=combobox]").first().click(); await p.waitForTimeout(600);
         await p.getByRole("option", { name: x.decisao_opcao || OP_NAO_RECEBEU, exact: true }).click(); await p.waitForTimeout(400);
-        await d.locator("textarea").first().fill(String(x.decisao_motivo || "").slice(0, 500));
+        await d.locator("textarea").first().fill(String(x.decisao_motivo || "").replace(/\s*\bClose\s*$/i, "").slice(0, 500));
         await d.getByRole("button", { name: /salvar/i }).click(); await p.waitForTimeout(2000);
       }
       // conferência: a nota sai da lista Barrar Entrega
