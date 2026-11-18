@@ -807,6 +807,12 @@ async function fazerTroca(job) {
 // diagnóstico da tela de Simulação de cotação e da Busca por Lote (só olha; mascarado)
 async function diagSim() {
   const p = pagina; const m = (t) => String(t || "").replace(/\d{5,}/g, "#");
+  const ruins = []; p.on("response", (r) => { if (r.status() >= 400 && !/log|track|analytics|hotjar|segment|sentry/i.test(r.url())) ruins.push(r.status() + " " + new URL(r.url()).host + new URL(r.url()).pathname.replace(/\d+/g, "#").slice(0, 60)); });
+  log("URL logo depois de entrar:", new URL(p.url()).pathname);
+  await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
+  await p.waitForTimeout(5000); log("respostas com erro ao abrir a cotação:", ruins.splice(0).slice(0, 8).join(" | ") || "nenhuma");
+  await p.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }); await p.waitForTimeout(5000);
+  log("URL lote (antes de mexer na chave):", new URL(p.url()).pathname);
   await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   log("URL cotação:", new URL(p.url()).pathname);
@@ -821,15 +827,16 @@ async function diagSim() {
   });
   log("Bloco ignorar regras:", m(JSON.stringify(info)));
   // tenta clicar no texto "Sim" e na bolinha pela posição
-  const bloco = p.locator("xpath=//*[contains(normalize-space(.),'ignorar regras') and .//input[@type='checkbox']][last()]").first();
+  const bloco = p.locator("xpath=(//*[contains(normalize-space(.),'ignorar regras') and .//input[@type='checkbox'] and not(.//*[contains(normalize-space(.),'modo de valida')])])[last()]").first();
   const cb = bloco.locator("input[type=checkbox]").first();
   log("antes:", await cb.isChecked().catch(() => "?"));
-  for (const [nome, f] of [["label/slider", () => bloco.locator("label, .slider, .switch, [class*=switch], [class*=toggle], span").filter({ hasNot: p.locator("input") }).first().click()],
+  for (const [nome, f] of [["label.switch", () => bloco.locator("label.switch").first().click()], ["span.check", () => bloco.locator("span.check").first().click()],
                            ["texto Sim", () => bloco.getByText(/^\s*Sim\s*$/).first().click()],
                            ["mouse no input", async () => { const b = await cb.boundingBox(); if (b) await p.mouse.click(b.x + b.width / 2, b.y + b.height / 2); }]]) {
     await f().catch((e) => log("  ", nome, "erro", e.message.split("\n")[0].slice(0, 80)));
     await p.waitForTimeout(1200); log("  depois de", nome + ":", await cb.isChecked().catch(() => "?"));
   }
+  log("respostas com erro ao mexer na chave:", ruins.splice(0).slice(0, 8).join(" | ") || "nenhuma");
   await p.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
   await p.waitForTimeout(6000);
   log("URL lote:", new URL(p.url()).pathname, "· campos:", m(JSON.stringify(await p.evaluate(() => [...document.querySelectorAll("input, textarea")].map((e) => `${e.tagName}:${e.type}:${e.placeholder || ""}`).slice(0, 15)))));
