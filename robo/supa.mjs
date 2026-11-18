@@ -99,3 +99,9 @@ export async function subirArquivo(bucket, caminho, buf, tipo = "image/png") {
   if (!r.ok) throw new Error("Storage: " + r.status + " " + (await r.text()).slice(0, 120));
   return caminho;
 }
+
+export async function baixarArquivo(bucket, caminho) {
+  const r = await pedir(`${URL_SB}/storage/v1/object/${bucket}/${caminho}`, { method: "GET", headers: {} });
+  if (!r.ok) throw new Error("Storage: " + r.status);
+  return Buffer.from(await r.arrayBuffer());
+}

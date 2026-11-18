@@ -228,3 +228,20 @@ export async function diagComentario(p, ticket, log) {
   log("  depois de clicar Comentário Interno:", JSON.stringify(r).replace(/\d{4,}/g, "#"));
   await abrirTicket(p, ticket);   // sai sem enviar
 }
+
+// Barrar: anexa os prints num Comentário Interno do ticket e envia. arquivos = [{ name, mimeType, buffer }]
+export async function comentarioInterno(p, ticket, texto, arquivos) {
+  await abrirTicket(p, ticket);
+  await p.getByRole("button", { name: /coment[aá]rio interno/i }).first().click(); await p.waitForTimeout(1500);
+  const caixa = p.getByPlaceholder(/digite sua mensagem/i).last();
+  await caixa.waitFor({ timeout: 15000 });
+  if (arquivos.length) { await p.locator("input[type=file]").last().setInputFiles(arquivos); await p.waitForTimeout(3000); }
+  await caixa.fill(texto);
+  const enviar = p.locator("button:has(svg.lucide-send)").last();
+  await enviar.waitFor({ timeout: 10000 });
+  const antes = await p.evaluate(() => document.body.innerText.length);
+  await enviar.click();
+  // confere: a caixa esvazia
+  for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); if (!(await caixa.inputValue().catch(() => ""))) return { ok: true, cresceu: (await p.evaluate(() => document.body.innerText.length)) > antes }; }
+  throw new Error("Cliquei em enviar, mas o comentário continuou na caixa.");
+}

@@ -229,11 +229,28 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
 
 // Aplica no portal só o que alguém da Logística aprovou no painel (decisao preenchida)
 export async function aplicarBarrar({ chamar, log, ctx }) {
-  const L = await chamar("barrar_entrega?select=nf,decisao,decisao_opcao,decisao_motivo&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500");
+  const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500");
   log(`barrar-portal: ${L.length} nota(s) aprovadas para o portal`);
   if (!L.length) return;
   const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
+  const { baixarArquivo } = await import("./supa.mjs");
+  const M = await import("./multi360.mjs"); let m360 = null;
+  const comentar = async (x) => {
+    if (!x.ticket) throw new Error("sem ticket");
+    const arquivos = [];
+    if (x.print_rastreio) arquivos.push({ name: `rastreio-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_rastreio) });
+    if (x.print_path) arquivos.push({ name: `anotacao-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_path) });
+    if (!arquivos.length) throw new Error("sem print para anexar");
+    if (!m360) m360 = await M.entrarMulti360(ctx2, log);
+    const r = x.rastreio || {};
+    const texto = x.decisao === "barrar"
+      ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Rastreio${r.alvo ? " " + r.alvo : ""}: ${r.achou_palavra ? r.achou_palavra.toLowerCase() : "segregado/devolução"}. Print${arquivos.length > 1 ? "s" : ""} em anexo.`
+      : `Barrar entrega: NF ${x.nf} marcada como NÃO BARRADA no portal (${x.decisao_opcao || OP_NAO_RECEBEU}). ${x.decisao_motivo ? "Motivo: " + String(x.decisao_motivo).slice(0, 200) + ". " : ""}Print${arquivos.length > 1 ? "s" : ""} em anexo.`;
+    await M.comentarioInterno(m360, x.ticket, texto, arquivos);
+    await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "feito", ticket_msg: `Comentário interno com ${arquivos.length} print(s).`, ticket_em: new Date().toISOString() });
+  };
+  const ctx2 = ctx;
   const grava = (nf, st, msg) => chamar(`barrar_entrega?nf=eq.${encodeURIComponent(nf)}`, "PATCH", { portal_status: st, portal_msg: msg, portal_em: new Date().toISOString() });
   for (const x of L) {
     try {
@@ -263,7 +280,10 @@ export async function aplicarBarrar({ chamar, log, ctx }) {
       let ainda = false; const l2 = p.locator("table tbody tr");
       for (let i = 0; i < await l2.count(); i++) if (((await l2.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim() === x.nf) ainda = true;
       if (ainda) { await grava(x.nf, "erro", "Cliquei, mas a nota continua na lista Barrar Entrega."); soma("continua na lista"); }
-      else { await grava(x.nf, "feito", x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.`); soma(`feito ${x.decisao}`); }
+      else {
+        await grava(x.nf, "feito", x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.`); soma(`feito ${x.decisao}`);
+        await comentar(x).then(() => soma("prints no ticket")).catch(async (e) => { soma("prints no ticket: erro"); await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "erro", ticket_msg: String(e.message).split("\n")[0].slice(0, 200), ticket_em: new Date().toISOString() }).catch(() => {}); });
+      }
     } catch (e) { soma("erro"); await grava(x.nf, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); await p.keyboard.press("Escape").catch(() => {}); }
   }
   log("barrar-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));

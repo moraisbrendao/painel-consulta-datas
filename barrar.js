@@ -63,7 +63,7 @@
     const port = x.portal_status === "feito" ? `<span class="chip verde">✓ Feito</span><div class="s">${esc(x.portal_msg || "")} ${hora(x.portal_em)}</div>` : x.portal_status === "erro" ? `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>` : x.decisao ? `<span class="s">na próxima ida ao portal</span>` : "";
     return `<tr><td><input type="checkbox" class="br-sel" data-nf="${esc(x.nf)}"${marcadas.has(x.nf) ? " checked" : ""}${travado ? " disabled" : ""}></td>
       <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}${x.status_intelipost ? `<div class="s">${esc(x.status_intelipost)}</div>` : ""}</td>
-      <td>${tp}</td><td>${rast}${x.print_rastreio ? `<div><a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a></div>` : ""}</td><td>${an}</td><td>${sug}</td><td>${dec}</td><td>${port}</td></tr>`;
+      <td>${tp}</td><td>${rast}${x.print_rastreio ? `<div><a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a></div>` : ""}</td><td>${an}</td><td>${sug}</td><td>${dec}</td><td>${port}${x.ticket_status === "feito" ? `<div class="s">✓ prints no ticket (comentário interno)</div>` : x.ticket_status === "erro" ? `<div class="s txt-vermelho">⚠ ticket: ${esc(x.ticket_msg || "erro")}</div>` : ""}</td></tr>`;
   }
 
   async function salvarDecisao(nfs, dec, opcao, motivo) {
