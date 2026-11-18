@@ -3678,11 +3678,11 @@ ${extra}
   const ehDrop = (p) => norm(p.origem).includes("DROP");
   // Scallia (webhook "retorno dos pedidos", parte 45): último marco por NF e por número de pedido
   let scMapa = null, scTentou = false, scInfo = "", scTodos = new Map();
-  const SC_ORDEM = { faturado: 1, coletado: 2, entregue: 3, cancelado: 4 };
+  const SC_ORDEM = { faturado: 1, coletado: 2, transferencia: 2.3, cd: 2.5, lastmile: 2.8, entregue: 3, cancelado: 4 };
   async function carregarScallia() {
     try {
       const L = await buscarTudo("scallia_eventos", "pedido"), m = new Map();
-      const poe = (k, e) => { if (!k) return; const a = m.get(k); if (!a || (SC_ORDEM[e.marco] || 0) > (SC_ORDEM[a.marco] || 0) || ((SC_ORDEM[e.marco] || 0) === (SC_ORDEM[a.marco] || 0) && String(e.data_evento || "") > String(a.data_evento || ""))) m.set(k, e); };
+      const poe = (k, e) => { if (!k) return; const a = m.get(k); if (!a || (SC_ORDEM[scTipo(e.marco)] || 0) > (SC_ORDEM[scTipo(a.marco)] || 0) || ((SC_ORDEM[scTipo(e.marco)] || 0) === (SC_ORDEM[scTipo(a.marco)] || 0) && String(e.data_evento || "") > String(a.data_evento || ""))) m.set(k, e); };
       const todos = new Map(); const junta = (k, e) => { if (!k) return; const a = todos.get(k) || []; a.push(e); todos.set(k, a); };
       L.forEach((e) => { poe(e.pedido ? "P:" + norm(e.pedido) : "", e); if (e.nf) poe("N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf), e);
         junta(e.pedido ? "P:" + norm(e.pedido) : "", e); if (e.nf) junta("N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf), e); });
@@ -3697,9 +3697,12 @@ ${extra}
     return null; };
   const scEventos = (p) => { for (const k of scChaves(p)) if (scTodos.has(k)) return scTodos.get(k); return []; };
   // etapa no jeito do Scallia. O aviso só traz faturado/coletado/entregue/cancelado: depois da coleta não dá para separar Transferência, CD e Last Mile
-  const SC_ETAPA = { faturado: ["Aguardando Coleta", "azul"], coletado: ["Transferência", "lilas"], entregue: ["Entregue", "verde"], cancelado: ["Devolução/Cancelado", "cinza"] };
+  const SC_ETAPA_BASE = { faturado: ["Aguardando Coleta", "azul"], coletado: ["Transferência", "lilas"], transferencia: ["Transferência", "lilas"], cd: ["CD", "lilas"], lastmile: ["Last Mile", "azul"], entregue: ["Entregue", "verde"], cancelado: ["Devolução/Cancelado", "cinza"] };
+  // se o Scallia passar a mandar outras etapas (CD, Last Mile…), o nome cru do marco é reconhecido aqui
+  const scTipo = (m) => { const t = norm(m); return SC_ETAPA_BASE[m] ? m : /CANCEL|DEVOLU/.test(t) ? "cancelado" : /ENTREG/.test(t) && !/SAIU|ROTA/.test(t) ? "entregue" : /LAST|ULTIMA|ROTA|SAIU PARA/.test(t) ? "lastmile" : /\bCD\b|CENTRO DE DIST|CROSS/.test(t) ? "cd" : /TRANSFER/.test(t) ? "transferencia" : /COLET/.test(t) ? "coletado" : /FATUR/.test(t) ? "faturado" : m; };
+  const SC_ETAPA = new Proxy({}, { get: (_, m) => SC_ETAPA_BASE[scTipo(String(m))] });
   function scJanela(p) {
-    const ev = [...scEventos(p)].sort((a, b) => (SC_ORDEM[a.marco] || 0) - (SC_ORDEM[b.marco] || 0) || String(a.data_evento || "").localeCompare(String(b.data_evento || "")));
+    const ev = [...scEventos(p)].sort((a, b) => (SC_ORDEM[scTipo(a.marco)] || 0) - (SC_ORDEM[scTipo(b.marco)] || 0) || String(a.data_evento || "").localeCompare(String(b.data_evento || "")));
     const ult = dScallia(p) || {}, et = SC_ETAPA[ult.marco] || [ult.marco || "—"];
     const dh = (v) => v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
     const passos = [["faturado", "Aguardando Faturamento → faturado"], ["coletado", "Aguardando Coleta → coletado"], ["", "Transferência / CD / Last Mile"], ["entregue", "Entregue"]];
@@ -3716,7 +3719,7 @@ ${extra}
       <h3 class="cf-h3">Jornada</h3>
       <ol class="sc-jornada">${tem("cancelado") ? `<li class="feito"><b>Devolução/Cancelado</b> <span class="s">${dh(tem("cancelado").data_evento)}</span></li>` : ""}
         ${passos.map(([m, rot]) => { const e = m && tem(m); const depois = !m && (tem("entregue") || tem("coletado"));
-          const passou = m && SC_ORDEM[m] < 4 && ev.some((x) => (SC_ORDEM[x.marco] || 0) > SC_ORDEM[m] && x.marco !== "cancelado");
+          const passou = m && SC_ORDEM[m] < 4 && ev.some((x) => (SC_ORDEM[scTipo(x.marco)] || 0) > SC_ORDEM[m] && x.marco !== "cancelado");
           return `<li class="${e || passou ? "feito" : !m && tem("coletado") && !tem("entregue") ? "atual" : depois ? "feito" : ""}"><b>${esc(rot)}</b>${e ? ` <span class="s">${dh(e.data_evento)}${e.transportadora ? " · " + esc(e.transportadora) : ""}</span>` : !m && tem("coletado") && !tem("entregue") ? ` <span class="s">em trânsito</span>` : ""}</li>`; }).join("")}</ol>
       <p class="s">Dados dos avisos que o Scallia manda ao painel (faturado, coletado, entregue, cancelado). Transferência, CD e Last Mile ainda não vêm separados no aviso.</p>`;
     $("modal").hidden = false; document.body.classList.add("sem-rolagem");
