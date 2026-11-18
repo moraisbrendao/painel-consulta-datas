@@ -14,8 +14,8 @@
 
   let L = [], info = null, ok = true, card = "todos", marcadas = new Set(), urls = new Map(), carregou = false;
   const SUG = { barrar: "Barrar ✓", nao_barrar: "Não barrar ✗", manual: "Erro: verificar" };
-  const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao || "manual");
-  const CARDS = [["barrar", "Barrar ✓", "status atual: devolução", "verde"], ["nao_barrar", "Não barrar ✗", "sugestão: não recebeu ou entregue", "vermelho"],
+  const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao === "nao_barrar" ? (x.sugestao_opcao === "Entregue" ? "nb_entregue" : "nb_naorec") : x.sugestao || "manual");
+  const CARDS = [["barrar", "Barrar ✓", "status atual: devolução", "verde"], ["nb_entregue", "Não barrar ✗ · Entregue", "entregue no rastreio", "vermelho"], ["nb_naorec", "Não barrar ✗ · Não recebido", "anotação: transportadora não recebeu", "vermelho"],
     ["manual", "Erro: verificar", "nada no rastreio ou ticket sem transportadora", "laranja"], ["difer", "Transportadora diferente", "rastreio × portal", "roxo"], ["robo", "Aguardando o robô", "ainda não conferidas", ""],
     ["aprovado", "Aprovadas", "vão para o portal", "azul"], ["feito", "Feitas no portal", "✓/✗ já clicado", "verde"], ["erro", "Erro no portal", "", "vermelho"], ["todos", "Todas", "da última planilha", ""]];
   const passa = (x) => {
