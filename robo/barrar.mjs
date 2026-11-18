@@ -113,17 +113,17 @@ async function rastrear(it, R) {
   const um = [{ pedido: it.nf, nf: it.nf, transportadora: tp, chave: "" }];
   let primeiro = null;
   for (const k of ordem) {
-    let r = null, txt = "", transp = null;
+    let r = null, txt = "", transp = null, html = null;
     try {
       if (k === "ssw") {
         const [num, ser] = it.nf.split("-"), c = cnpjDaSerie(ser); if (!c) continue;
         const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: chaveDe(tp) || "" }).toString() });
         await new Promise((ok) => setTimeout(ok, 2500));
         if (pg.status !== 200) continue;
-        r = lerEntrega(pg.txt); txt = sohTexto(pg.txt).join("\n");
+        r = lerEntrega(pg.txt); txt = sohTexto(pg.txt).join("\n"); html = pg.txt;
         const det = (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
         if (det) { const d = await pagina("https://ssw.inf.br" + det.replace(/&amp;/g, "&")).catch(() => null); await new Promise((ok) => setTimeout(ok, 2500));
-          if (d && d.status === 200) { const t = sohTexto(d.txt).join("\n"); txt += "\n" + t; transp = ((t.match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; } }
+          if (d && d.status === 200) { html = d.txt; const t = sohTexto(d.txt).join("\n"); txt += "\n" + t; transp = ((t.match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; } }
       } else if (k === "transiga") {
         const x = (await chamar(`rastreio_transiga?select=descricao,data_evento,entregue&nf=eq.${encodeURIComponent(it.nf)}&limit=1`).catch(() => []))[0];
         r = x ? { situacao: x.entregue ? "entregue" : "nao entregue", ultimo_evento: (x.descricao || "").toUpperCase().slice(0, 60), data_evento: x.data_evento ? String(x.data_evento).slice(0, 10) : null } : { situacao: "sem cte" };
@@ -137,6 +137,7 @@ async function rastrear(it, R) {
     if (!r) continue;
     const res = { situacao: r.situacao, fonte: { ssw: "SSW", jadlog: "Jadlog", bento: "Bento Brasil", transito: "Trânsito Brasil", formato: "Formato", transiga: "Transiga" }[k],
       evento: r.ultimo_evento || null, data_evento: r.data_evento || null, transp, achou_palavra: (sa(txt).match(PAL_BARRAR) || [])[0] || null };
+    Object.defineProperty(res, "_html", { value: html, enumerable: false });   // só para o print, não vai para o banco
     if (!/^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return res;
     if (!primeiro) primeiro = res;
   }
@@ -173,6 +174,23 @@ function sugerir(x) {
   return { sugestao: "manual", opcao: null, motivo: naoAchou ? (pt.anotacao ? "Não achei no rastreio; a anotação não diz que não recebeu." : "Não achei no rastreio e não há anotação no portal.") : "Em rastreio, sem segregação/devolução." };
 }
 
+// print do rastreio: a página do SSW (detalhe) como ela é; nas outras fontes, um quadro com o que o rastreio respondeu
+const escH = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+async function printRastreio(ctx, nf, r) {
+  const pg = await ctx.newPage();
+  try {
+    await pg.setViewportSize({ width: 1100, height: 700 });
+    const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const topo = `<div style="font:14px Arial;background:#0b1f3a;color:#fff;padding:8px 12px">Rastreio ${escH(r.fonte)} · NF ${escH(nf)} · consultado em ${escH(quando)}</div>`;
+    if (r._html) await pg.setContent(`<base href="https://ssw.inf.br/2/">${topo}${r._html.replace(/<script[\s\S]*?<\/script>/gi, "")}`, { waitUntil: "load", timeout: 20000 }).catch(() => {});
+    else await pg.setContent(`${topo}<table style="font:15px Arial;border-collapse:collapse;margin:16px" border="1" cellpadding="8">
+      <tr><th align="left">Situação</th><td>${escH(r.situacao)}</td></tr><tr><th align="left">Último evento</th><td>${escH(r.evento || "—")}</td></tr>
+      <tr><th align="left">Data do evento</th><td>${escH(r.data_evento || "—")}</td></tr><tr><th align="left">Transportadora</th><td>${escH(r.transp || r.fonte)}</td></tr></table>`);
+    await pg.waitForTimeout(800);
+    return await pg.screenshot({ fullPage: true, clip: undefined, type: "png" });
+  } finally { await pg.close(); }
+}
+
 export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirArquivo }) {
   const L = [];
   for (let de = 0; ; de += 1000) { const P = await chamar(`barrar_entrega?select=*&na_planilha=eq.true&portal_status=is.null&order=ticket_criado.asc.nullslast&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
@@ -186,11 +204,12 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
     try {
       const rastreio = await rastrear(x, R);
       const pt = await lerPortal(p, x.nf, R);
-      let print_path = x.print_path;
+      let print_path = x.print_path, print_rastreio = x.print_rastreio || null;
+      if (rastreio.fonte) { try { print_rastreio = await subirArquivo("barrar", `${encodeURIComponent(x.nf)}-rastreio.png`, await printRastreio(ctx, x.nf, rastreio)); } catch (e) { soma("print do rastreio falhou"); } }
       if (pt.print) { try { print_path = await subirArquivo("barrar", `${encodeURIComponent(x.nf)}.png`, pt.print); } catch (e) { soma("print não subiu"); } delete pt.print; }
       const mesma = mesmaTransp(rastreio.transp || (rastreio.fonte !== "SSW" ? rastreio.fonte : ""), pt.transp || x.transp_pedido);
       const s = sugerir({ rastreio, portal: pt });
-      await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path });
+      await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio });
       soma(`sugestão ${s.sugestao}`); if (!pt.achou) soma("não está no portal"); if (mesma === false) soma("transportadora diferente");
     } catch (e) { soma("erro"); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
   }
@@ -237,4 +256,14 @@ export async function aplicarBarrar({ chamar, log, ctx }) {
     } catch (e) { soma("erro"); await grava(x.nf, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); await p.keyboard.press("Escape").catch(() => {}); }
   }
   log("barrar-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+}
+
+// diagnóstico do ticket no Multi360 (login da Brenda): abre 1 ticket da lista, olha a tela e cancela
+export async function diagBarrar3({ chamar, ctx, log }) {
+  const [x] = await chamar("barrar_entrega?select=ticket&na_planilha=eq.true&ticket=not.is.null&order=ticket_criado.asc&limit=1");
+  if (!x) { log("diag-barrar 3: nenhuma nota com ticket (envie a planilha no painel)"); return; }
+  const M = await import("./multi360.mjs");
+  const cred = process.env.BARRAR_EMAIL ? { email: process.env.BARRAR_EMAIL, senha: process.env.BARRAR_SENHA, nome: "BARRAR_EMAIL" } : null;
+  const p = await M.entrarMulti360(ctx, log, cred);
+  await M.diagTicketBarrar(p, x.ticket, log);
 }

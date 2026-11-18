@@ -2273,6 +2273,10 @@ create table if not exists public.barrar_entrega (
   portal_msg      text,
   portal_em       timestamptz,
   print_path      text                   -- print da anotação (bucket "barrar")
+  ,print_rastreio  text                   -- print do rastreio (bucket "barrar")
+  ,ticket_status   text                   -- prints no ticket do Multi360: feito / erro
+  ,ticket_msg      text
+  ,ticket_em       timestamptz
 );
 create table if not exists public.barrar_info (
   id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()

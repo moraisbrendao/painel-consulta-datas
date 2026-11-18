@@ -54,7 +54,7 @@
     const rast = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>`
       : `<b>${esc(r.situacao || "—")}</b>${r.fonte ? ` <span class="s">(${esc(r.fonte)})</span>` : ""}${r.evento ? `<div class="s">${esc(r.evento)}${r.data_evento ? " · " + br(r.data_evento) : ""}</div>` : ""}${r.achou_palavra ? `<div><span class="chip verde">${esc(r.achou_palavra.toLowerCase())}</span></div>` : ""}${r.transp ? `<div class="s">transp. no rastreio: ${esc(r.transp)}</div>` : ""}`;
     const tp = `${esc(x.transp_pedido || "—")}${p.transp ? `<div class="s">portal: ${esc(p.transp)}</div>` : x.conferido_em && p.achou === false ? `<div class="s txt-vermelho">não está na lista do portal</div>` : ""}${x.mesma_transp === false ? `<div><span class="chip roxo">transportadora diferente</span></div>` : ""}`;
-    const an = p.anotacao ? `<div class="br-anot">${esc(p.anotacao)}</div>${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print</a>` : ""}` : `<span class="s">${x.conferido_em ? "sem anotação" : ""}</span>`;
+    const an = p.anotacao ? `<div class="br-anot">${esc(p.anotacao)}</div>${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}` : `<span class="s">${x.conferido_em ? "sem anotação" : ""}</span>`;
     const sug = x.sugestao ? `<span class="chip ${x.sugestao === "barrar" ? "verde" : x.sugestao === "nao_barrar" ? "vermelho" : "ambar"}">${SUG[x.sugestao]}</span>${x.sugestao_opcao ? `<div class="s">${esc(x.sugestao_opcao)}</div>` : ""}${x.sugestao_motivo ? `<div class="s">${esc(x.sugestao_motivo)}</div>` : ""}` : "";
     const travado = !!x.portal_status && x.portal_status === "feito";
     const dec = travado ? `<span class="chip ${x.decisao === "barrar" ? "verde" : "vermelho"}">${SUG[x.decisao] || ""}</span>`
@@ -63,7 +63,7 @@
     const port = x.portal_status === "feito" ? `<span class="chip verde">✓ Feito</span><div class="s">${esc(x.portal_msg || "")} ${hora(x.portal_em)}</div>` : x.portal_status === "erro" ? `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>` : x.decisao ? `<span class="s">na próxima ida ao portal</span>` : "";
     return `<tr><td><input type="checkbox" class="br-sel" data-nf="${esc(x.nf)}"${marcadas.has(x.nf) ? " checked" : ""}${travado ? " disabled" : ""}></td>
       <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}${x.status_intelipost ? `<div class="s">${esc(x.status_intelipost)}</div>` : ""}</td>
-      <td>${tp}</td><td>${rast}</td><td>${an}</td><td>${sug}</td><td>${dec}</td><td>${port}</td></tr>`;
+      <td>${tp}</td><td>${rast}${x.print_rastreio ? `<div><a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a></div>` : ""}</td><td>${an}</td><td>${sug}</td><td>${dec}</td><td>${port}</td></tr>`;
   }
 
   async function salvarDecisao(nfs, dec, opcao, motivo) {

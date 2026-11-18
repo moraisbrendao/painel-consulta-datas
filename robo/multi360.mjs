@@ -3,15 +3,16 @@
 // 7) confere se o ticket foi para a fila "Aguardando entrega".
 // Registro público: nunca nome, telefone, CPF, endereço ou o print; só nomes de botões e de filas.
 const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
-const EMAIL = process.env.MULTI360_EMAIL || process.env.PORTAL_EMAIL;
-const SENHA = process.env.MULTI360_SENHA || process.env.PORTAL_SENHA;
+const EMAIL_PADRAO = process.env.MULTI360_EMAIL || process.env.PORTAL_EMAIL;
+const SENHA_PADRAO = process.env.MULTI360_SENHA || process.env.PORTAL_SENHA;
 
-export async function entrarMulti360(ctx, log) {
+export async function entrarMulti360(ctx, log, cred) {
+  const EMAIL = (cred && cred.email) || EMAIL_PADRAO, SENHA = (cred && cred.senha) || SENHA_PADRAO;
   if (!EMAIL || !SENHA) throw new Error("Falta o login do Multi360 no GitHub (MULTI360_EMAIL/MULTI360_SENHA ou PORTAL_EMAIL/PORTAL_SENHA).");
   const p = await ctx.newPage(); p.setDefaultTimeout(30000);
   await p.goto(BASE + "/tickets", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-  log(`Multi360: usando o login de ${process.env.MULTI360_EMAIL ? "MULTI360_EMAIL" : "PORTAL_EMAIL"}; tela: ${new URL(p.url()).pathname}`);
+  log(`Multi360: usando o login de ${cred && cred.nome ? cred.nome : process.env.MULTI360_EMAIL ? "MULTI360_EMAIL" : "PORTAL_EMAIL"}; tela: ${new URL(p.url()).pathname}`);
   const senha = p.locator("input[type=password]:visible").first();
   await senha.waitFor({ timeout: 15000 }).catch(() => {});
   if (await senha.count()) {
@@ -35,7 +36,7 @@ export async function entrarMulti360(ctx, log) {
   return p;
 }
 
-async function abrirTicket(p, ticket) {
+export async function abrirTicket(p, ticket) {
   await p.goto(`${BASE}/tickets/${encodeURIComponent(ticket)}`, { waitUntil: "domcontentloaded" });
   await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().waitFor({ timeout: 60000 });
   await p.waitForTimeout(1500);
@@ -150,4 +151,39 @@ export async function executarAcao(p, ticket, { titulo, msg, print, real }) {
   await p.waitForTimeout(6000);
   await abrirTicket(p, ticket).catch(() => {});
   return { ok: true, fila: await filaAtual(p).catch(() => "") };
+}
+
+// Barrar entrega: só olha o ticket (botões, campos de arquivo, caixinha "Executar ação") e cancela. Nada é gravado.
+export async function diagTicketBarrar(p, ticket, log) {
+  await abrirTicket(p, ticket);
+  log("Ticket aberto. Fila atual:", (await filaAtual(p)).replace(/\d/g, "#"));
+  const r = await p.evaluate(() => {
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    return {
+      botoes: [...new Set([...document.querySelectorAll("button")].filter(vis).filter((b) => !b.closest("header, nav")).map((b) => (b.innerText || b.title || b.getAttribute("aria-label") || "").trim().slice(0, 30)).filter(Boolean))].slice(0, 40),
+      arquivos: [...document.querySelectorAll("input[type=file]")].map((e) => `accept=${e.accept || ""} multiple=${e.multiple} visivel=${vis(e)} perto="${((e.closest("form, div") || {}).innerText || "").replace(/\s+/g, " ").slice(0, 60)}"`),
+      caixa: [...document.querySelectorAll("textarea, [contenteditable=true]")].filter(vis).map((e) => `${e.tagName.toLowerCase()} placeholder=${e.getAttribute("placeholder") || ""}`),
+    };
+  });
+  log("  botões:", r.botoes.join(" / ").replace(/\d{3,}/g, "#"));
+  log("  campos de arquivo:", (r.arquivos.join(" | ") || "nenhum").replace(/\d{3,}/g, "#"));
+  log("  caixa de mensagem:", r.caixa.join(" | "));
+  const bt = p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first();
+  if (!(await bt.count())) { log("  sem botão Executar ação"); return; }
+  await bt.click(); await p.waitForTimeout(2500);
+  const m = await p.evaluate(() => {
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const perg = [...document.querySelectorAll("body *")].filter((e) => vis(e) && e.children.length === 0 && /\?\s*$/.test((e.textContent || "").trim())).map((e) => e.textContent.trim().slice(0, 80));
+    const d = [...document.querySelectorAll("[role=dialog], [class*=modal i], [class*=drawer i]")].filter(vis).pop();
+    const raiz = d || document.body;
+    return { perg: perg.slice(-5), dialogo: !!d,
+      botoes: [...raiz.querySelectorAll("button")].filter(vis).map((b) => (b.innerText || b.getAttribute("aria-label") || "").trim().slice(0, 30)).filter(Boolean).slice(-15),
+      selects: [...raiz.querySelectorAll("select, [role=combobox]")].filter(vis).map((e) => e.tagName === "SELECT" ? [...e.options].map((o) => o.text.trim()).join("|") : "combobox:" + (e.innerText || "").trim().slice(0, 40)),
+      arquivo: !!raiz.querySelector("input[type=file]"), textarea: !!raiz.querySelector("textarea") };
+  });
+  log("  Executar ação:", JSON.stringify(m).replace(/\d{4,}/g, "#"));
+  const c = p.getByRole("button", { name: /^\s*cancelar\s*$/i }).last();
+  if (await c.count()) await c.click().catch(() => {}); else await p.keyboard.press("Escape").catch(() => {});
+  await p.waitForTimeout(1000);
+  log("  fila depois de cancelar:", (await filaAtual(p)).replace(/\d/g, "#"));
 }

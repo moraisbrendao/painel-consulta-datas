@@ -1269,7 +1269,7 @@ if (MODO === "diag-repo") {   // Reposição: lê 1 ticket pós (Eventos) e 1 pr
 if (MODO === "diag-barrar") {   // Barrar entrega: só olha a tela do portal (estrutura mascarada, não clica em nada)
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", acceptDownloads: true });
-  try { const B = await import("./barrar.mjs"); await (process.env.TRANSP === "2" ? B.diagBarrar2 : B.diagBarrar)({ ctx, log }); } catch (e) { log("diag-barrar: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
+  try { const B = await import("./barrar.mjs"); if (process.env.TRANSP === "3") { await entrarSupabase(); await B.diagBarrar3({ chamar, ctx, log }); } else await (process.env.TRANSP === "2" ? B.diagBarrar2 : B.diagBarrar)({ ctx, log }); } catch (e) { log("diag-barrar: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
 }
 if (MODO === "barrar" || MODO === "barrar-portal") {   // Barrar entrega: confere (rastreio + portal) ou aplica no portal o que foi aprovado
   await entrarSupabase();
