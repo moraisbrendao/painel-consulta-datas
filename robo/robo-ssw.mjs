@@ -1270,7 +1270,7 @@ if (MODO === "repo-itens") {   // Reposição: itens/volumes e cobrança à tran
   await entrarSupabase();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ acceptDownloads: true });
-  try { await (await import("./repo-itens.mjs")).rodarRepo({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 80 }); } finally { await nav.close(); }
+  try { await (await import("./repo-itens.mjs")).rodarRepo({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 150 }); } finally { await nav.close(); }
 }
 if (MODO === "aguardando" || MODO === "aguardando-teste") {   // aba Alterar pedidos → Fila Aguardando entrega (robo/aguardando.mjs)
   await entrarSupabase();

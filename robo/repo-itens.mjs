@@ -159,21 +159,28 @@ export async function diagRepo({ chamar, log, ctx }) {
 export async function rodarRepo({ chamar, log, ctx, limite = 80 }) {
   const sem = (t) => (t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
   const APEL = await chamar("apelidos_transp?select=apelido,chave").catch(() => []);
-  const T = await chamar("reposicoes_tk?select=ticket,tipo,fila,status&fila=ilike.*aguardando*entrega*&limit=5000");
-  const L0 = T.filter((x) => !/^(RESOLVID|ENCERRAD|FINALIZAD)/i.test(sem(x.status)) && (/pos/i.test(sem(x.tipo)) || /^reposicao$/i.test(sem(x.tipo))));
-  const comNf = new Set();
-  for (let i = 0; i < L0.length; i += 150) {
-    const ids = L0.slice(i, i + 150).map((x) => `"${x.ticket}"`).join(",");
+  // todos os tickets de reposição (pré e pós): Eventos dá Parcial/Total em qualquer fila;
+  // o PDF da nota (cobrança) só no pré-entrega quando chega em Aguardando entrega com nova NF
+  const T = [];
+  for (let de = 0; ; de += 1000) { const P = await chamar(`reposicoes_tk?select=ticket,tipo,fila,status&order=ticket&limit=1000&offset=${de}`); T.push(...P); if (P.length < 1000) break; }
+  const L0 = T.filter((x) => /pos/i.test(sem(x.tipo)) || /^reposicao$/i.test(sem(x.tipo)));
+  const ehAE = (x) => /aguardando\s*entrega/i.test(sem(x.fila)) && !/^(RESOLVID|ENCERRAD|FINALIZAD)/i.test(sem(x.status).toUpperCase());
+  const AE = L0.filter(ehAE), comNf = new Set();
+  for (let i = 0; i < AE.length; i += 150) {
+    const ids = AE.slice(i, i + 150).map((x) => `"${x.ticket}"`).join(",");
     (await chamar(`repo_atual?select=ticket&nfs_novas=not.is.null&ticket=in.(${encodeURIComponent(ids)})`)).forEach((x) => comNf.add(String(x.ticket)));
   }
-  const lidos = new Map((await chamar("repo_itens_tk?select=ticket,eventos_ok,pdf_ok,lido_em&limit=20000")).map((x) => [String(x.ticket), x]));
+  const lidos = new Map(); for (let de = 0; ; de += 1000) { const P = await chamar(`repo_itens_tk?select=ticket,eventos_ok,pdf_ok,lido_em&order=ticket&limit=1000&offset=${de}`); P.forEach((x) => lidos.set(String(x.ticket), x)); if (P.length < 1000) break; }
   const pre = (x) => /^reposicao$/i.test(sem(x.tipo));
-  const falta = L0.filter((x) => comNf.has(String(x.ticket))).filter((x) => {
+  const querPdf = (x) => pre(x) && ehAE(x) && comNf.has(String(x.ticket));
+  const velho = (l) => Date.now() - new Date(l.lido_em).getTime() > 20 * 3600e3;   // falhou: tenta de novo no dia seguinte
+  const falta = L0.filter((x) => {
     const l = lidos.get(String(x.ticket)); if (!l) return true;
-    const ok = l.eventos_ok && (!pre(x) || l.pdf_ok);
-    return !ok && Date.now() - new Date(l.lido_em).getTime() > 20 * 3600e3;   // falhou: tenta de novo no dia seguinte
-  });
-  log(`repo-itens: ${L0.length} reposições em Aguardando entrega · ${comNf.size} com nova NF · ${falta.length} para ler (limite ${limite})`);
+    if (!l.eventos_ok) return velho(l);
+    if (querPdf(x) && !l.pdf_ok) return l.pdf_ok === null || velho(l);   // chegou agora em Aguardando entrega: lê a nota
+    return false;
+  }).sort((a, b) => Number(querPdf(b)) - Number(querPdf(a)));   // primeiro os que precisam da nota
+  log(`repo-itens: ${L0.length} reposições (pré e pós) · ${AE.length} em Aguardando entrega · ${comNf.size} com nova NF · ${falta.length} para ler (limite ${limite})`);
   if (!falta.length) return;
   const p = await entrarMulti360(ctx, log);
   const cont = { lidos: 0, eventos: 0, pdf: 0, cobrado: 0, cpf: 0, erro: 0 };
@@ -185,7 +192,7 @@ export async function rodarRepo({ chamar, log, ctx, limite = 80 }) {
       const ev = await lerEventos(p);
       const c = (ev.cards || [])[0];
       if (c) { reg.eventos_ok = true; reg.volumes = c.volumes ? Number(c.volumes) : null; reg.parcial = c.parcial; reg.quando = c.quando; cods = [...new Set(ev.cards.flatMap((k) => k.codigos))].map((codigo) => ({ codigo, fonte: "eventos" })); cont.eventos++; }
-      if (pre(x)) {
+      if (querPdf(x)) {
         await p.goto("about:blank"); await abrir(p, x.ticket);
         const an = await lerPdfs(p);
         const ds = an.pdfs.map(lerDanfe).filter((d) => d.achou.titulo && d.doc);

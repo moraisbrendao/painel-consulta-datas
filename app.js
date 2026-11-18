@@ -4122,8 +4122,8 @@ ${extra}
       case "pre": case "pos": return r._t === repCard;
       case "ab": case "fin": case "rec": return sitRep(r) === repCard;
       case "tempo": return sitRep(r) === "fin";
-      case "total": return !!d.tipo_reposicao && norm(d.tipo_reposicao) === "TOTAL";
-      case "parcial": return !!d.tipo_reposicao && norm(d.tipo_reposicao) !== "TOTAL";
+      case "total": return tpRep(r) === "TOTAL";
+      case "parcial": return tpRep(r) === "PARCIAL";
       case "comdet": return !!r._d;
       case "nfs": return !!d.nfs_novas;
       case "saida": return !!d.data_saida_nf;
@@ -4213,7 +4213,8 @@ ${extra}
   function desenharRepGeral() {
     const L = repFiltradas, pre = L.filter((r) => r._t === "pre").length, pos = L.length - pre, ab = L.filter(abertoRep).length;
     const fin = L.filter((r) => sitRep(r) === "fin").length, rec = L.filter((r) => sitRep(r) === "rec").length;
-    const comDet = L.filter((r) => r._d && r._d.tipo_reposicao), tot = comDet.filter((r) => norm(r._d.tipo_reposicao) === "TOTAL").length;
+    // Parcial/Total: o que o robô leu em Eventos no Multi360 vale primeiro; senão o detalhamento
+    const tot = L.filter((r) => tpRep(r) === "TOTAL").length, par = L.filter((r) => tpRep(r) === "PARCIAL").length, semTp = L.length - tot - par;
     $("rpg-cards").innerHTML = kpiC("todos", "Reposições", fmt(L.length), "tickets (pré + pós)")
       + kpiC("pre", "Pré-entrega", fmt(pre), pct(pre, L.length) + " do total", "laranja")
       + kpiC("pos", "Pós-entrega", fmt(pos), pct(pos, L.length) + " do total", "azul")
@@ -4221,7 +4222,7 @@ ${extra}
       + kpiC("fin", "Finalizados", fmt(fin), `Resolvido ou Encerrado · ${pct(fin, L.length)}`)
       + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(rec), "pendente, fora de reposição", "roxo")
-      + kpiC("comdet", "Totais × parciais", comDet.length ? `${fmt(tot)} × ${fmt(comDet.length - tot)}` : "–", comDet.length ? `só os ${fmt(comDet.length)} tickets com detalhamento` : "sem detalhamento no filtro");
+      + kpiC("comdet", "Totais × parciais", tot + par ? `${fmt(tot)} × ${fmt(par)}` : "–", semTp ? `${fmt(semTp)} ainda sem a informação (o robô lê em Eventos)` : "de todos os tickets do filtro");
     const ev = evolucaoMeses(filtroRep(["rep-mes"]), $("rep-tipo").value), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = new Set([...$("rep-mes").selectedOptions].map((o) => o.value)), tipo = $("rep-tipo").value;
     $("rep-ev-titulo").textContent = `Evolução mensal · ${tipo ? ROT_FLUXO[tipo].toLowerCase() : "pré-entrega × pós-entrega"}`;
     $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${mesSel.has(x.mes) ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
@@ -4234,7 +4235,7 @@ ${extra}
 
   function desenharRepFluxo(tipo) {
     const L = repFiltradas, ab = L.filter(abertoRep), res = L.filter((r) => sitRep(r) === "fin");
-    const comDet = L.filter((r) => r._d), tr = comDet.filter((r) => r._d.tipo_reposicao), tot = tr.filter((r) => norm(r._d.tipo_reposicao) === "TOTAL").length;
+    const comDet = L.filter((r) => r._d), tr = L.filter((r) => tpRep(r)), tot = tr.filter((r) => tpRep(r) === "TOTAL").length;
     const nfs = comDet.filter((r) => r._d.nfs_novas).length, sai = comDet.filter((r) => r._d.data_saida_nf).length;
     const tRes = res.map((r) => Number(r.tempo_resolucao)).filter((n) => Number.isFinite(n) && n >= 0);
     const recN = L.filter((r) => sitRep(r) === "rec").length, finN = L.filter((r) => sitRep(r) === "fin").length;
@@ -4244,8 +4245,8 @@ ${extra}
       + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(recN), "pendente, fora de reposição", "roxo")
       + kpiC("tempo", "Tempo de resolução", tRes.length ? dia1(mediana(tRes)) + " dias" : "–", tRes.length ? `mediana de ${fmt(tRes.length)} resolvidos (média ${dia1(tRes.reduce((a, b) => a + b, 0) / tRes.length)})` : "sem resolvidos no filtro")
-      + kpiC("total", "Totais", tr.length ? fmt(tot) : "–", tr.length ? `de ${fmt(tr.length)} tickets com detalhamento` : "sem detalhamento")
-      + kpiC("parcial", "Parciais", tr.length ? fmt(tr.length - tot) : "–", tr.length ? `de ${fmt(tr.length)} tickets com detalhamento` : "sem detalhamento")
+      + kpiC("total", "Totais", tr.length ? fmt(tot) : "–", tr.length < L.length ? `${fmt(L.length - tr.length)} ainda sem a informação` : `de ${fmt(L.length)} tickets`)
+      + kpiC("parcial", "Parciais", tr.length ? fmt(tr.length - tot) : "–", tr.length < L.length ? `${fmt(L.length - tr.length)} ainda sem a informação` : `de ${fmt(L.length)} tickets`)
       + kpiC("nfs", "Novas NFs emitidas", fmt(nfs), `de ${fmt(comDet.length)} tickets com detalhamento`)
       + kpiC("saida", "Novas NFs com saída", fmt(sai), `de ${fmt(comDet.length)} tickets com detalhamento`);
     desenharParados("rpf-parados-q", L); desenharGargalos("rpf-garg", L); desenharVolumes("rpf-vol", L);
@@ -4287,7 +4288,7 @@ ${extra}
   function linhaDet(r) {
     const d = r._d || {}, ab = abertoRep(r);
     const nova = d.nfs_novas ? esc(d.nfs_novas) : d.fila_atual ? `<span class="s">Sem NF ainda: está na fila ${esc(d.fila_atual)}</span>` : `<span class="s">${r._d ? "Sem NF" : "não está no detalhamento"}</span>`;
-    return `<tr><td>${linkTicket(r.ticket)}</td><td>${esc(r.nf || "")}</td><td>${nova}</td><td>${esc(r.pedido || "")}</td><td>${ROT_FLUXO[r._t]}</td><td>${esc(d.tipo_reposicao || "")}</td>
+    return `<tr><td>${linkTicket(r.ticket)}</td><td>${esc(r.nf || "")}</td><td>${nova}</td><td>${esc(r.pedido || "")}</td><td>${ROT_FLUXO[r._t]}</td><td>${esc(tpRep(r) ? tpRep(r)[0] + tpRep(r).slice(1).toLowerCase() : "")}</td>
       <td>${esc(r.transportadora || "")}</td><td>${esc(r._promob || "")}</td><td>${esc(r.motivo || "")}</td><td>${esc(r.filial || "")}</td><td>${esc(r.responsavel || "")}</td>
       <td>${br(r.criado_em)}</td><td>${br(d.data_emissao_nf)}</td><td>${br(d.data_saida_nf)}</td><td>${esc(r.status || "")}${sitRep(r) === "rec" ? `<div class="s txt-roxo">Pendente Recuperação de crédito</div>` : ""}</td><td>${esc(filaRep(r))}</td><td class="num">${ab ? fmt(diasAberto(r)) : ""}</td><td class="num">${ab && diasFila(r) != null ? fmt(diasFila(r)) : ""}</td><td>${br(r.finalizado_em)}</td>
       <td class="num">${r.valor_pedido != null ? Number(r.valor_pedido).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) : ""}</td></tr>`;
@@ -4446,7 +4447,7 @@ ${extra}
     const cab = ["Ticket", "NF original", "Nova NF", "Fila atual (detalhamento)", "Pedido", "Pré/pós", "Tipo de reposição", "Transportadora da entrega original (com redespacho)", "Transportadora Final (Q)", "Transportadora Redespacho (R)",
       "Transportadora da reposição (Promob)", "Transp. nota reposição (Promob) original", "Transp. redespacho nota reposição (Promob)", "Transportador definido para envio", "Motivo", "Filial", "Responsável", "Criado em", "Mês",
       "Emissão nova NF", "Saída nova NF", "Status", "Situação", "Grupo", "Fila atual", "Série da NF", "Dias em aberto", "Dias parados na fila", "Sem atualização > 2 dias", "Finalizado em", "Tempo de resolução (dias)", "Valor do pedido", "No detalhamento"];
-    const linhas = [cab].concat(ord.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", d.nfs_novas || "", d.fila_atual || "", r.pedido || "", ROT_FLUXO[r._t], d.tipo_reposicao || "", r.transportadora || "", r.transp_final || "", r.transp_redesp || "",
+    const linhas = [cab].concat(ord.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", d.nfs_novas || "", d.fila_atual || "", r.pedido || "", ROT_FLUXO[r._t], tpRep(r) ? tpRep(r)[0] + tpRep(r).slice(1).toLowerCase() : "", r.transportadora || "", r.transp_final || "", r.transp_redesp || "",
       r._promob || "", d.transp_promob || "", d.transp_redesp_promob || "", d.transp_definida || "", r.motivo || "", r.filial || "", r.responsavel || "", br(r.criado_em), rotMes(mesRep(r)),
       br(d.data_emissao_nf), br(d.data_saida_nf), r.status || "", ROT_SIT[sitRep(r)], r.grupo || "", filaRep(r), serieRep(r), abertoRep(r) ? diasAberto(r) : "", abertoRep(r) && diasFila(r) != null ? diasFila(r) : "", semAtualiz(r) ? "Sim" : "", br(r.finalizado_em), r.tempo_resolucao != null ? Math.round(r.tempo_resolucao * 10) / 10 : "",
       r.valor_pedido != null ? Number(r.valor_pedido) : "", r._d ? "Sim" : "Não"]; }));
