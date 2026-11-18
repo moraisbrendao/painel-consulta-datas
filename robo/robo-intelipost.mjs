@@ -270,7 +270,7 @@ async function alterar(pedido, iso) {
 // Adicionar + tabela Vigente, volume com 1 em tudo, Calcular -> "Prazo de entrega" (em dias). Só consulta, não altera pedido.
 async function simularPrazo(cep, metodo, olhar) {
   const p = pagina;
-  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); log("  por quê:", (e.message.split("\n").filter((l) => /intercept|not visible|not enabled|not stable|outside|waiting for/i.test(l)).slice(0, 4).join(" | ") || "-").replace(/\d{5,}/g, "#").slice(0, 500)); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}" (${e.message.split("\n")[0].slice(0, 160)})`); } };
+  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); log("  janela aberta:", (await p.locator(".modal.is-active, .dialog.is-active").first().innerText({ timeout: 3000 }).catch(() => "nenhuma")).replace(/\s+/g, " ").replace(/\d{5,}/g, "#").slice(0, 300)); log("  por quê:", (e.message.split("\n").filter((l) => /intercept|not visible|not enabled|not stable|outside|waiting for/i.test(l)).slice(0, 4).join(" | ") || "-").replace(/\d{5,}/g, "#").slice(0, 500)); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}" (${e.message.split("\n")[0].slice(0, 160)})`); } };
   await p.bringToFront();
   await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
