@@ -94,7 +94,7 @@ export async function diagBarrar2({ ctx, log }) {
 // ---------------------------------------------------------------------------------------------
 // Conferência: rastreio de cada nota + linha da nota no portal (transportadora, anotações, print) → sugestão
 const PAL_BARRAR = /SEGREGAD|DEVOLU|DEVOLVID|EM RETORNO|RETORNO AO REMETENTE/;
-const ENTREGUE_ATUA = false;   // entregue: aguardando confirmação da Brenda
+const ENTREGUE_ATUA = true;   // entregue = não barrado (Entregue) + print do rastreio (Brenda, 18/11)
 const PAL_DEVOLUCAO = /DEVOLU|DEVOLVID|RETORNO AO REMETENTE|EM RETORNO/;
 const PAL_NAO_RECEBEU = /N[AÃ]O\s+(FOI\s+)?(LOCALIZAD|ENCONTRAD|CONSTA|RECEB|IDENTIFICAD)|SEM\s+(REGISTRO|EMISS)|N[AÃ]O\s+TEMOS|DESCONHEC/;
 const OP_NAO_RECEBEU = "Sem Emissão em Sistema / Material Não Recebido";
@@ -236,7 +236,7 @@ export async function aplicarBarrar({ chamar, log, ctx }) {
   // regra (Brenda, 18/11): o robô só atua em devolução (✓) ou "não recebeu" na anotação (✗ Sem Emissão...); o resto ela verifica
   const pode = (x) => x.decisao === "barrar" ? PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
   const fora = L.filter((x) => !pode(x)); if (fora.length) log(`barrar-portal: ${fora.length} aprovada(s) fora da regra do robô (ficam para a Brenda)`);
-  for (const x of fora) await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { portal_status: null, portal_msg: "O robô não atua neste caso (só devolução ou \"não recebeu\"): verificar à mão.", portal_em: new Date().toISOString() }).catch(() => {});
+  for (const x of fora) await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { portal_status: null, portal_msg: "O robô não atua neste caso (só devolução, entregue ou \"não recebeu\"): verificar à mão.", portal_em: new Date().toISOString() }).catch(() => {});
   L.splice(0, L.length, ...L.filter(pode));
   log(`barrar-portal: ${L.length} nota(s) aprovadas para o portal`);
   if (!L.length) return;
