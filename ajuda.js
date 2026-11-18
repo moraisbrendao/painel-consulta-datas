@@ -110,7 +110,7 @@
       "<b>Senhas do SSW</b>: cadastre a senha de rastreio das transportadoras que pedem (ex.: Trans Sua, VM, Aceville, Flog).",
     ], "\"Sem CT-e ainda\" = a transportadora ainda não emitiu o CT-e. VM Transportes e Tempo Justo são a mesma transportadora. Para Dominalog, Tempo Justo, Trans Sua e Transvanio (séries 25, 34, 35) vale o rastreio da Dominalog; Rajlog é só milk run."],
 
-    ["documentos", "Consulta Documento", "Acha a chave das notas e monta o PDF (DANFE) e o XML para mandar às transportadoras.", "Quando a transportadora pede o PDF/XML da nota.", [
+    ["documentos", "Gerar XML", "Acha a chave das notas e monta o PDF (DANFE) e o XML para mandar às transportadoras.", "Quando a transportadora pede o PDF/XML da nota.", [
       "Digite a nota em <b>Digite a nota</b> (ex.: <i>12365-35</i>) e aperte Enter, ou suba a planilha com NF e Transportadora (<b>Modelo da planilha</b>).",
       "Em cada nota, clique em <b>Copiar chave ↗</b>: a chave é copiada e abre o site de consulta. Cole a chave, resolva o captcha e baixe o XML.",
       "Clique em <b>Enviar XMLs</b> e escolha os XMLs baixados (pode ser vários ou um .zip).",
