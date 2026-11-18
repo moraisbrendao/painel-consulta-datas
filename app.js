@@ -3981,7 +3981,8 @@ ${extra}
   const sitRep = (r) => /^(RESOLVID|ENCERRAD|FINALIZAD)/.test(norm(r.status)) ? "fin" : /RECUPERACAO DE CREDITO/.test(norm(filaRep(r))) ? "rec" : "ab";
   const ROT_SIT = { ab: "Em aberto", fin: "Finalizado", rec: "Pendente Recuperação de crédito" };
   const abertoRep = (r) => sitRep(r) === "ab";
-  const SEM_SERIE = "(sem série)", SEM_FILA = "(sem fila)";
+  const SEM_SERIE = "(sem série)", SEM_FILA = "(sem fila)", SEM_GRUPO = "(sem grupo)";
+  const grupoRep = (r) => r.grupo || SEM_GRUPO;   // coluna Grupo da tabela de acompanhamento (parte 47)
   const serieRep = (r) => { const m = String(r.nf || "").trim().match(/-\s*(\d+)\s*$/); return m ? String(Number(m[1])) : SEM_SERIE; };
   // dias parados na fila atual: desde a mudança de fila vista no histórico do detalhamento; se o ticket já estava nessa
   // fila no 1º detalhamento guardado, conta desde a Data da Última Atualização do ticket (tabela de acompanhamento)
@@ -4066,8 +4067,8 @@ ${extra}
   const ROT_CARD = { todos: "Todas as reposições", pre: "Pré-entrega", pos: "Pós-entrega", ab: "Em aberto", fin: "Finalizados (Resolvido/Encerrado)", rec: "Pendente Recuperação de crédito", total: "Reposição total", parcial: "Reposição parcial", comdet: "Com detalhamento", nfs: "Com nova NF emitida", saida: "Nova NF com saída", tempo: "Finalizados (com tempo de resolução)" };
   let repCard = "", repFaixa = -1;
   // quadro "em aberto por fila": só aparece ao clicar no card Em aberto; filtros próprios (série, fila, responsável)
-  let pvAberto = false; const pv = { serie: "", fila: "", resp: "" }; let pvDet = null;
-  const casaPv = (r, f) => (!f.serie || serieRep(r) === f.serie) && (!f.fila || (filaRep(r) || SEM_FILA) === f.fila) && (!f.resp || respRep(r) === f.resp);
+  let pvAberto = false; const pv = { serie: "", fila: "", resp: "", grupo: "" }; let pvDet = null;
+  const casaPv = (r, f) => (!f.serie || serieRep(r) === f.serie) && (!f.fila || (filaRep(r) || SEM_FILA) === f.fila) && (!f.resp || respRep(r) === f.resp) && (!f.grupo || grupoRep(r) === f.grupo);
   function casaCard(r) {
     const d = r._d || {};
     switch (repCard) {
@@ -4109,15 +4110,15 @@ ${extra}
     document.querySelectorAll('#rpg-cards [data-card="ab"], #rpf-cards [data-card="ab"]').forEach((k) => k.classList.toggle("ativa", pvAberto));
     if (!pvAberto) return;
     const ab0 = L.filter(abertoRep), pt = (x, y) => x.localeCompare(y, "pt-BR");
-    const ops = { serie: [...new Set(ab0.map(serieRep))].sort((x, y) => (Number(x) || 1e9) - (Number(y) || 1e9) || pt(x, y)), fila: [...new Set(ab0.map((r) => filaRep(r) || SEM_FILA))].sort(pt), resp: [...new Set(ab0.map(respRep))].sort(pt) };
+    const ops = { serie: [...new Set(ab0.map(serieRep))].sort((x, y) => (Number(x) || 1e9) - (Number(y) || 1e9) || pt(x, y)), fila: [...new Set(ab0.map((r) => filaRep(r) || SEM_FILA))].sort(pt), resp: [...new Set(ab0.map(respRep))].sort(pt), grupo: [...new Set(ab0.map(grupoRep))].sort(pt) };
     box.querySelectorAll(".pv-sel").forEach((s) => { const k = s.dataset.pv; if (pv[k] && !ops[k].includes(pv[k])) ops[k].unshift(pv[k]);
       s.innerHTML = `<option value="">${k === "fila" ? "Todas" : "Todos"}</option>` + ops[k].map((v) => `<option value="${esc(v)}">${esc(k === "serie" && v !== SEM_SERIE ? "Série " + v : v)}</option>`).join(""); s.value = pv[k]; });
     const ab = ab0.filter((r) => casaPv(r, pv));
-    const cel = (n, resp, fila, fx, cls = "") => n ? `<td class="num ${cls}"><a href="#" data-pfila="${esc(fila)}"${resp != null ? ` data-presp="${esc(resp)}"` : ""}${fx >= 0 ? ` data-pfx="${fx}"` : ""}>${fmt(n)}</a></td>` : `<td class="num vazio-c ${cls}">·</td>`;
+    const cel = (n, resp, fila, fx, cls = "") => n ? `<td class="num ${cls}"><a href="#" data-pfila="${esc(fila)}"${resp != null ? ` data-pgrupo="${esc(resp)}"` : ""}${fx >= 0 ? ` data-pfx="${fx}"` : ""}>${fmt(n)}</a></td>` : `<td class="num vazio-c ${cls}">·</td>`;
     const conta = (rs) => { const v = FAIXAS_FILA.map(() => 0); rs.forEach((r) => { const i = faixaFila(diasFila(r)); if (i >= 0) v[i]++; }); return v; };
-    box.querySelector(".rp-pivo-cab").innerHTML = `<tr><th>Responsável / Fila</th>${FAIXAS_FILA.map(([t]) => `<th class="num">${t}</th>`).join("")}<th class="num">Total</th></tr>`;
+    box.querySelector(".rp-pivo-cab").innerHTML = `<tr><th>Grupo / Fila</th>${FAIXAS_FILA.map(([t]) => `<th class="num">${t}</th>`).join("")}<th class="num">Total</th></tr>`;
     let h = "";
-    for (const [resp, rs] of contaPor(ab, respRep)) {
+    for (const [resp, rs] of contaPor(ab, grupoRep)) {
       const v = conta(rs);
       h += `<tr class="rp-grupo"><td>${esc(resp)}</td>${v.map((n, i) => cel(n, resp, "*", i)).join("")}${cel(rs.length, resp, "*", -1, "tot")}</tr>`;
       for (const [fila, fs] of contaPor(rs, (r) => filaRep(r) || SEM_FILA)) {
@@ -4129,7 +4130,7 @@ ${extra}
     h += ab.length ? `<tr class="rp-total"><td>Total geral</td>${t.map((n, i) => cel(n, null, "*", i)).join("")}${cel(ab.length, null, "*", -1, "tot")}</tr>` : `<tr><td colspan="${FAIXAS_FILA.length + 2}" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
     box.querySelector(".rp-pivo-corpo").innerHTML = h;
     const viu = ab.filter((r) => r._d && norm(r._d.fila_atual) === norm(filaRep(r)) && r._d.ultima_mudanca_em > r._d.primeiro_envio_em).length;
-    box.querySelector(".rp-parados-sub").textContent = `${fmt(ab.length)} casos em aberto (sem Recuperação de crédito). Dias na fila: desde que o ticket mudou de fila no detalhamento (${fmt(viu)} casos); nos outros, desde a Data da Última Atualização do ticket. Clique num número para ver os tickets e exportar.`;
+    box.querySelector(".rp-parados-sub").textContent = `${fmt(ab.length)} casos em aberto (sem Recuperação de crédito). Dias na fila: desde que o ticket mudou de fila no detalhamento (${fmt(viu)} casos); nos outros, desde a Data da Última Atualização do ticket. Clique num número para ver os tickets e exportar.` + (ab0.length && ab0.every((r) => !r.grupo) ? " Para separar por grupo (Logística, Sac, Faturamento, Projetos), rode a parte 47 no Supabase e suba a tabela de acompanhamento de novo." : "");
   }
 
   function desenharRepGeral() {
@@ -4221,7 +4222,7 @@ ${extra}
     rpdPag = Math.min(rpdPag, pags);
     $("rpd-titulo").innerHTML = `${fmt(L.length)} tickets` + (repCard ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro do card">${esc(ROT_CARD[repCard] || repCard)} ✕</button>` : "")
       + (repFaixa >= 0 ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro de dias">Parados na fila: ${esc(FAIXAS_FILA[repFaixa][0])} ✕</button>` : "")
-      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.fila, pvDet.resp].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
+      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.grupo && "Grupo " + pvDet.grupo, pvDet.fila, pvDet.resp].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
     $("rpd-linhas").innerHTML = L.slice((rpdPag - 1) * POR, rpdPag * POR).map(linhaDet).join("") || `<tr><td colspan="20" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
     $("rpd-pag").innerHTML = L.length > POR ? `<button class="btn" data-p="-1" ${rpdPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rpdPag} de ${pags}</span><button class="btn" data-p="1" ${rpdPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
@@ -4237,7 +4238,7 @@ ${extra}
     const k = e.target.closest("button[data-card]");
     if (k && k.dataset.card === "ab" && repAba !== "det") { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
       if (pvAberto) { const q = $(repAba === "geral" ? "rpg-parados" : "rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
-    if (e.target.closest(".pv-limpar")) { pv.serie = pv.fila = pv.resp = ""; filtrarRep(); return; }
+    if (e.target.closest(".pv-limpar")) { pv.serie = pv.fila = pv.resp = pv.grupo = ""; filtrarRep(); return; }
     if (k) { e.preventDefault(); e.stopPropagation(); const c = k.dataset.card;
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
       repCard = c === "todos" ? "" : c; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
@@ -4245,7 +4246,7 @@ ${extra}
     const c = e.target.closest("[data-pfila]");
     if (c) { e.preventDefault(); e.stopPropagation();
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
-      pvDet = { ...pv }; if (c.dataset.presp) pvDet.resp = c.dataset.presp; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
+      pvDet = { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
       repCard = "ab"; repFaixa = c.dataset.pfx === undefined ? -1 : +c.dataset.pfx; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); }
   }, true);
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
@@ -4262,10 +4263,10 @@ ${extra}
     const ord = L.slice().sort((a, b) => String(a.criado_em || "").localeCompare(String(b.criado_em || "")));
     const cab = ["Ticket", "NF original", "Nova NF", "Fila atual (detalhamento)", "Pedido", "Pré/pós", "Tipo de reposição", "Transportadora da entrega original (com redespacho)", "Transportadora Final (Q)", "Transportadora Redespacho (R)",
       "Transportadora da reposição (Promob)", "Transp. nota reposição (Promob) original", "Transp. redespacho nota reposição (Promob)", "Transportador definido para envio", "Motivo", "Filial", "Responsável", "Criado em", "Mês",
-      "Emissão nova NF", "Saída nova NF", "Status", "Situação", "Fila atual", "Série da NF", "Dias em aberto", "Dias parados na fila", "Sem atualização > 2 dias", "Finalizado em", "Tempo de resolução (dias)", "Valor do pedido", "No detalhamento"];
+      "Emissão nova NF", "Saída nova NF", "Status", "Situação", "Grupo", "Fila atual", "Série da NF", "Dias em aberto", "Dias parados na fila", "Sem atualização > 2 dias", "Finalizado em", "Tempo de resolução (dias)", "Valor do pedido", "No detalhamento"];
     const linhas = [cab].concat(ord.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", d.nfs_novas || "", d.fila_atual || "", r.pedido || "", ROT_FLUXO[r._t], d.tipo_reposicao || "", r.transportadora || "", r.transp_final || "", r.transp_redesp || "",
       r._promob || "", d.transp_promob || "", d.transp_redesp_promob || "", d.transp_definida || "", r.motivo || "", r.filial || "", r.responsavel || "", br(r.criado_em), rotMes(mesRep(r)),
-      br(d.data_emissao_nf), br(d.data_saida_nf), r.status || "", ROT_SIT[sitRep(r)], filaRep(r), serieRep(r), abertoRep(r) ? diasAberto(r) : "", abertoRep(r) && diasFila(r) != null ? diasFila(r) : "", semAtualiz(r) ? "Sim" : "", br(r.finalizado_em), r.tempo_resolucao != null ? Math.round(r.tempo_resolucao * 10) / 10 : "",
+      br(d.data_emissao_nf), br(d.data_saida_nf), r.status || "", ROT_SIT[sitRep(r)], r.grupo || "", filaRep(r), serieRep(r), abertoRep(r) ? diasAberto(r) : "", abertoRep(r) && diasFila(r) != null ? diasFila(r) : "", semAtualiz(r) ? "Sim" : "", br(r.finalizado_em), r.tempo_resolucao != null ? Math.round(r.tempo_resolucao * 10) / 10 : "",
       r.valor_pedido != null ? Number(r.valor_pedido) : "", r._d ? "Sim" : "Não"]; }));
     const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = cab.map((c) => ({ wch: Math.min(34, Math.max(10, c.length)) }));
     const ev = evolucaoMeses(ord);
@@ -4290,7 +4291,7 @@ ${extra}
       const c = { ticket: col("TICKET"), via: col("VIA"), data: col("DATA DE CRIACAO"), por: col("TICKET CRIADO POR"), fila: col("FILA"), tipo: col("TIPO"), motivo: col("MOTIVO"),
         status: col("STATUS"), redesp: col("TRANSPORTADORA REDESPACHO"), final: col("TRANSPORTADORA FINAL"), nf: col("NOTA FISCAL"), filial: col("CENTRAL DE DISTRIBUICAO"),
         resp: col("RESPONSAVEL"), atual: col("DATA DA ULTIMA ATUALIZACAO"), fim: col("DATA DE FINALIZACAO"), tres: col("TEMPO DE RESOLUCAO DO TICKET (DIA)"),
-        estag: cab.findIndex((x) => x.startsWith("FLAG - TICKET SEM ATUALIZACAO")), pedido: col("HUB - NUMERO DO MARKETPLACE"), valor: col("HUB - VALOR TOTAL") };
+        estag: cab.findIndex((x) => x.startsWith("FLAG - TICKET SEM ATUALIZACAO")), pedido: col("HUB - NUMERO DO MARKETPLACE"), valor: col("HUB - VALOR TOTAL"), grupo: col("GRUPO") };
       if (c.data < 0) throw new Error('Não achei a coluna "Data de Criação".');
       if (c.final < 0) throw new Error('Não achei a coluna "Transportadora Final".');
       const txt = (r, i) => (i >= 0 && r[i] != null && String(r[i]).trim() !== "" ? String(r[i]).trim() : null);
@@ -4304,7 +4305,7 @@ ${extra}
         porTk.set(txt(r, c.ticket), { ticket: txt(r, c.ticket), criado_em: dataCelula(r[c.data], true), criado_por: txt(r, c.por), via: txt(r, c.via),
           fila: txt(r, c.fila), tipo, motivo: txt(r, c.motivo), status: txt(r, c.status), transportadora: txt(r, c.redesp) || txt(r, c.final), nf: txt(r, c.nf),
           filial: txt(r, c.filial), responsavel: txt(r, c.resp), atualizado_em: c.atual >= 0 ? dataCelula(r[c.atual], true) : null, finalizado_em: c.fim >= 0 ? dataCelula(r[c.fim], true) : null,
-          tempo_resolucao: numero(r, c.tres), estagnada: txt(r, c.estag), transp_final: txt(r, c.final), transp_redesp: txt(r, c.redesp), pedido: txt(r, c.pedido), valor_pedido: numero(r, c.valor) });
+          tempo_resolucao: numero(r, c.tres), estagnada: txt(r, c.estag), transp_final: txt(r, c.final), transp_redesp: txt(r, c.redesp), pedido: txt(r, c.pedido), valor_pedido: numero(r, c.valor), grupo: txt(r, c.grupo) });
       });
       linhas = [...porTk.values()];
       if (!linhas.length) throw new Error('A planilha não tem tickets com Tipo "Reposição" ou "Reposição Pós Entrega".');
