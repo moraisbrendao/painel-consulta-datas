@@ -4342,7 +4342,7 @@ ${extra}
     const tit = volTipo === "TOTAL" ? "totais" : volTipo === "PARCIAL" ? "parciais" : "totais e parciais";
     box.innerHTML = `<section class="cartao rp-garg-q"><div class="cartao-topo"><div><h2>Volumes enviados nas reposições · ${tit}</h2>
       <p class="sub">O robô lê cada ticket quando ele chega em <b>Aguardando entrega</b> com nova NF: o quadro Reposição em Eventos (volume, parcial/total) e, no pré-entrega, o PDF da nota (destinatário com CNPJ de transportadora = saiu com cobrança; CPF = sem cobrança). Segue os filtros do topo.</p></div>
-      <div class="rp-vol-bts"><button type="button" class="btn contorno vol-excel">↓ Baixar Excel</button><label class="btn contorno vol-cad" title="Planilha com a aba VOLUMES JADLOG (código do volume e descrição)">Atualizar cadastro de volumes<input type="file" accept=".xlsx,.xlsm,.xls" hidden class="vol-cad-arq"></label></div></div>
+      <div class="rp-vol-bts"><button type="button" class="btn contorno vol-excel">↓ Baixar Excel</button><label class="btn contorno vol-cad" title="Qualquer planilha com o código do item (ex.: 76157.0001) e a descrição">Atualizar cadastro de volumes<input type="file" accept=".xlsx,.xlsm,.xls" hidden class="vol-cad-arq"></label></div></div>
       ${!repItOk ? `<p class="aviso">Para ver os volumes, rode a <b>parte 48</b> no Supabase.</p>` : ""}
       <div class="rp-vol-resumo">
         <div><b>${fmt(lidos.length)}</b><span>tickets lidos (Aguardando entrega)</span></div>
@@ -4382,18 +4382,29 @@ ${extra}
     try {
       carregando("Lendo o cadastro de volumes…");
       const buf = await arq.arrayBuffer();
-      const nomes = XLSX.read(buf, { bookSheets: true }).SheetNames;
-      const aba = nomes.find((n) => norm(n) === "VOLUMES JADLOG") || nomes.find((n) => /VOLUMES/.test(norm(n)) && /JADLOG/.test(norm(n)));
-      if (!aba) throw new Error('Não achei a aba "VOLUMES JADLOG" nessa planilha.');
-      const ws = XLSX.read(buf, { sheets: [aba] }).Sheets[aba];
-      const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
-      const cab = (rows[0] || []).map(norm), iC = cab.findIndex((c) => c === "VOLUME"), iD = cab.findIndex((c) => /^DESCRI/.test(c));
-      if (iC < 0 || iD < 0) throw new Error('A aba precisa das colunas "Volume" e "Descrição".');
-      const mp = new Map(); rows.slice(1).forEach((l) => { const c = String(l[iC] || "").trim(); if (/^\d{5}\.\d{4}$/.test(c)) mp.set(c, String(l[iD] || "").trim()); });
-      if (!mp.size) throw new Error("Nenhum código de volume (ex.: 76157.0001) na aba.");
+      // qualquer planilha: em cada aba acha a coluna com códigos de item (ex.: 76157.0001) e a de descrição
+      const wb = XLSX.read(buf); const mp = new Map(); const RX = /^\d{5}\.\d{4}$/; const usadas = [];
+      for (const aba of wb.SheetNames) {
+        const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, defval: "", raw: false });
+        if (!rows.length) continue;
+        const nc = Math.max(...rows.slice(0, 200).map((l) => l.length));
+        const cont = Array.from({ length: nc }, (_, j) => rows.slice(0, 2000).filter((l) => RX.test(String(l[j] || "").trim())).length);
+        const iC = cont.indexOf(Math.max(...cont)); if (cont[iC] < 3) continue;
+        const iCab = rows.findIndex((l) => RX.test(String(l[iC] || "").trim())) - 1;
+        const cab = iCab >= 0 ? (rows[iCab] || []).map(norm) : [];
+        let iD = cab.findIndex((c, j) => j !== iC && /DESCRI/.test(c));
+        if (iD < 0) {   // sem título: a coluna de texto mais longo
+          const tam = Array.from({ length: nc }, (_, j) => j === iC ? -1 : rows.slice(iCab + 1, iCab + 300).reduce((t, l) => t + (/[A-Za-z]/.test(String(l[j] || "")) ? String(l[j]).length : 0), 0));
+          iD = tam.indexOf(Math.max(...tam));
+        }
+        let n = 0;
+        rows.slice(iCab + 1).forEach((l) => { const c = String(l[iC] || "").trim(), d = String(l[iD] || "").trim(); if (RX.test(c) && d) { mp.set(c, d); n++; } });
+        if (n) usadas.push(`${aba} (${fmt(n)})`);
+      }
+      if (!mp.size) throw new Error("Não achei códigos de item (ex.: 76157.0001) com descrição nessa planilha.");
       const L = [...mp].map(([codigo, descricao]) => ({ codigo, descricao, atualizado_em: new Date().toISOString() }));
       for (let i = 0; i < L.length; i += 1000) { carregando(`Gravando volumes… ${fmt(Math.min(i + 1000, L.length))} de ${fmt(L.length)}`); const { error } = await sb.from("volumes_cad").upsert(L.slice(i, i + 1000)); if (error) throw error; }
-      L.forEach((x) => volCad.set(x.codigo, x.descricao)); carregando(""); toast(`Cadastro de volumes atualizado: ${fmt(L.length)} volumes.`); filtrarRep();
+      L.forEach((x) => volCad.set(x.codigo, x.descricao)); carregando(""); toast(`Cadastro de volumes atualizado: ${fmt(L.length)} itens (aba ${usadas.join(", ")}). Os que já existiam e não vieram continuam.`); filtrarRep();
     } catch (err) { carregando(""); toast(/volumes_cad|relation|schema cache/i.test(err.message) ? "Rode a parte 48 no Supabase antes de enviar o cadastro." : err.message, true); }
   });
 
