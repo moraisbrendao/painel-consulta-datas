@@ -106,6 +106,10 @@ async function entrar() {
       throw new Error("Ninguém digitou o código de verificação a tempo.");
     }
     log(`Código recebido do painel (${codigo.length} dígitos); a tela tem ${n} caixas.`);
+    // registra só o caminho e o status das chamadas de login (nada do conteúdo)
+    const vistas = [];
+    const ouvir = (r) => { const u = new URL(r.url()); if (r.request().method() !== "GET" && /login|auth|token|mfa|otp|code|codigo|verif|session/i.test(u.pathname)) vistas.push(`${r.request().method()} ${u.host}${u.pathname.replace(/\d{4,}/g, "#")} → ${r.status()}`); };
+    pagina.on("response", ouvir);
     // digita como uma pessoa: clica na 1ª caixa e vai teclando (a tela pula sozinha para a próxima caixa)
     await caixas.first().click(); await pagina.keyboard.type(codigo, { delay: 150 });
     await pagina.waitForTimeout(800);
@@ -115,10 +119,6 @@ async function entrar() {
       cheias = await caixas.evaluateAll((L) => L.map((e) => e.value).join("").length).catch(() => 0);
     }
     log(`Dígitos nas caixas: ${cheias} de ${codigo.length}.`);
-    // registra só o caminho e o status das chamadas de login (nada do conteúdo)
-    const vistas = [];
-    const ouvir = (r) => { const u = new URL(r.url()); if (r.request().method() !== "GET" && /login|auth|token|mfa|otp|code|codigo|verif|session/i.test(u.pathname)) vistas.push(`${r.request().method()} ${u.host}${u.pathname.replace(/\d{4,}/g, "#")} → ${r.status()}`); };
-    pagina.on("response", ouvir);
     await pagina.waitForTimeout(2500);
     if (/\/login/i.test(new URL(pagina.url()).pathname)) {
       const bs = pagina.getByRole("button", { name: /fazer login|confirmar|verificar|validar|entrar|continuar/i });
