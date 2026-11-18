@@ -1069,8 +1069,9 @@ ${extra}
   // insucesso na entrega achado pelo robô na Fila Aguardando entrega (nova NF de reposição): entra na fila do robô do portal
   let agOc = [];
   function alvoOc() {
-    const naBase = new Set(base.map((p) => { const { nf, serie } = nfSerie(p); return nf + "-" + serie; }));
-    const extra = agOc.filter((t) => { const { nf, serie } = nfSerie({ nf: t.nf_nova }); return nf && !naBase.has(nf + "-" + serie); })
+    // só fica de fora quem já entra pela base com micro status de ocorrência (senão a nota sumia: ex. AT com a nova NF na base "em trânsito")
+    const jaVai = new Set(base.filter(precisaOc).map((p) => { const { nf, serie } = nfSerie(p); return nf + "-" + serie; }));
+    const extra = agOc.filter((t) => { const { nf, serie } = nfSerie({ nf: t.nf_nova }); return nf && !jaVai.has(nf + "-" + serie); })
       .map((t) => ({ nf: t.nf_nova, micro_status: t.insucesso, transportadora: t.transp_chat || String(t.transportadora || "").split(" / ")[0], _faixa: "ag", _ag: t.ticket }));
     return base.filter(precisaOc).concat(extra);
   }
