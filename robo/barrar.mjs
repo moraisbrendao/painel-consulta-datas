@@ -276,5 +276,5 @@ export async function diagBarrar3({ chamar, ctx, log }) {
   const M = await import("./multi360.mjs");
   const cred = null;   // Multi360: o mesmo login já cadastrado (MULTI360_EMAIL/MULTI360_SENHA), a pedido da Brenda
   const p = await M.entrarMulti360(ctx, log, cred);
-  await M.diagTicketBarrar(p, x.ticket, log);
+  await M.diagComentario(p, x.ticket, log);
 }

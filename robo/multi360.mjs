@@ -204,3 +204,27 @@ export async function lerTranspTicket(p, ticket) {
     return { transp: vazio(transp) ? null : transp.slice(0, 80), redesp: vazio(redesp) ? null : redesp.slice(0, 80), achou: true };
   });
 }
+
+// Barrar: olha o "Comentário Interno" (clica no botão, lista caixa/arquivo/botões) e NÃO envia; recarrega o ticket no fim
+export async function diagComentario(p, ticket, log) {
+  await abrirTicket(p, ticket);
+  const bt = p.getByRole("button", { name: /coment[aá]rio interno/i }).first();
+  log("  botão Comentário Interno:", await bt.count() ? "achei" : "não achei");
+  if (!(await bt.count())) return;
+  await bt.click(); await p.waitForTimeout(2000);
+  const r = await p.evaluate(() => {
+    const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+    const d = [...document.querySelectorAll("[role=dialog], [class*=modal i]")].filter(vis).pop();
+    const raiz = d || document.body;
+    const ta = [...raiz.querySelectorAll("textarea, [contenteditable=true]")].filter(vis);
+    const perto = ta.length ? (() => { let a = ta[ta.length - 1]; for (let k = 0; k < 4 && a.parentElement; k++) a = a.parentElement; return a; })() : null;
+    return { dialogo: !!d, titulo: d ? (d.innerText || "").split("\n").filter(Boolean).slice(0, 3).join(" / ").slice(0, 120) : "",
+      caixas: ta.map((e) => `${e.tagName.toLowerCase()} placeholder=${e.getAttribute("placeholder") || ""}`),
+      arquivos: [...raiz.querySelectorAll("input[type=file]")].map((e) => `accept=${e.accept} multiple=${e.multiple}`),
+      botoesPerto: perto ? [...perto.querySelectorAll("button")].map((b) => (b.innerText || b.title || b.getAttribute("aria-label") || b.querySelector("svg")?.getAttribute("class") || "?").trim().slice(0, 40)) : [],
+      botoes: [...raiz.querySelectorAll("button")].filter(vis).map((b) => (b.innerText || b.title || b.getAttribute("aria-label") || "").trim().slice(0, 30)).filter(Boolean).slice(-15),
+      ativo: (document.querySelector("[aria-pressed=true], .active, [data-state=on]") || {}).innerText?.slice(0, 40) || "" };
+  });
+  log("  depois de clicar Comentário Interno:", JSON.stringify(r).replace(/\d{4,}/g, "#"));
+  await abrirTicket(p, ticket);   // sai sem enviar
+}
