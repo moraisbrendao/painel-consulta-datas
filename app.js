@@ -4106,9 +4106,10 @@ ${extra}
     return `<td class="num"><span class="rp-var ${p > 0 ? "sobe" : p < 0 ? "desce" : ""}">${p > 0 ? "▲ +" : p < 0 ? "▼ " : ""}${p}%</span></td>`; };
 
   // quadro de gargalos (card próprio "Gargalos por fila"): por fila, quantos casos e há quantos dias estão parados
-  let gargAberto = false;
-  function gargalos(L) {
-    const ab = L.filter(abertoRep);
+  let gargAberto = false; const gf = { grupo: "", fila: "" }; let gargCasos = [];
+  const casaGf = (r) => (!gf.grupo || grupoRep(r) === gf.grupo) && (!gf.fila || (filaRep(r) || SEM_FILA) === gf.fila);
+  function gargalos(L, comFiltro) {
+    const ab = L.filter((r) => abertoRep(r) && (!comFiltro || casaGf(r)));
     return contaPor(ab, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const d = rs.map(diasFila).filter((n) => n != null);
       const soma = d.reduce((x, y) => x + y, 0); const grs = contaPor(rs, grupoRep).map((x) => x[0]);
       return { fila, grupo: grs.join(", "), n: rs.length, media: d.length ? soma / d.length : 0, max: d.length ? Math.max(...d) : 0, mais10: d.filter((x) => x >= 10).length, soma }; })
@@ -4118,7 +4119,12 @@ ${extra}
     const gbox = $(caixa); gbox.hidden = !gargAberto;
     document.querySelectorAll('#rpg-cards [data-card="garg"], #rpf-cards [data-card="garg"]').forEach((k) => k.classList.toggle("ativa", gargAberto));
     if (!gargAberto) return;
-    const gs = gargalos(L);
+    const ab0 = L.filter(abertoRep), pt = (x, y) => x.localeCompare(y, "pt-BR");
+    const ops = { grupo: [...new Set(ab0.map(grupoRep))].sort(pt), fila: [...new Set(ab0.filter((r) => !gf.grupo || grupoRep(r) === gf.grupo).map((r) => filaRep(r) || SEM_FILA))].sort(pt) };
+    gbox.querySelectorAll(".garg-sel").forEach((s) => { const k = s.dataset.gf; if (gf[k] && !ops[k].includes(gf[k])) ops[k].unshift(gf[k]);
+      s.innerHTML = `<option value="">${k === "fila" ? "Todas" : "Todos"}</option>` + ops[k].map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join(""); s.value = gf[k]; });
+    gargCasos = ab0.filter(casaGf);
+    const gs = gargalos(L, true);
     const gmax = Math.max(1, ...gs.map((g) => g.soma));
     gbox.querySelector(".rp-garg-corpo").innerHTML = gs.map((g) => `<tr class="rp-garg-l" data-pfila="${esc(g.fila)}" title="Ver os tickets desta fila"><td><a href="#">${esc(g.fila)}</a></td><td class="s">${esc(g.grupo)}</td><td class="num tot">${fmt(g.n)}</td>
       <td class="num"><b class="${g.media >= 20 ? "txt-vermelho" : g.media >= 10 ? "txt-laranja" : ""}">${dia1(g.media)}</b></td><td class="num">${fmt(g.max)}</td>${num(g.mais10)}
@@ -4272,9 +4278,25 @@ ${extra}
     const c = e.target.closest("[data-pfila]");
     if (c) { e.preventDefault(); e.stopPropagation();
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
-      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: "" } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
+      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: gf.grupo } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
       repCard = "ab"; repFaixa = c.dataset.pfx === undefined ? -1 : +c.dataset.pfx; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); }
   }, true);
+  $("pagina-reposicao").addEventListener("change", (e) => { const g = e.target.closest(".garg-sel"); if (g) { gf[g.dataset.gf] = g.value; if (g.dataset.gf === "grupo") gf.fila = ""; filtrarRep(); return; } });
+  $("pagina-reposicao").addEventListener("click", (e) => {
+    if (e.target.closest(".garg-limpar")) { gf.grupo = gf.fila = ""; filtrarRep(); return; }
+    if (!e.target.closest(".garg-excel")) return;
+    if (!gargCasos.length) return toast("Nenhum caso em aberto nesse filtro.", true);
+    const L = gargCasos.slice().sort((x, y) => (diasFila(y) ?? -1) - (diasFila(x) ?? -1));
+    const cab = ["Ticket", "NF original", "Série da NF", "Pedido", "Pré/pós", "Grupo", "Fila atual", "Dias parados na fila", "Dias em aberto", "Status", "Transportadora", "Motivo", "Filial", "Responsável", "Criado em", "Última atualização", "Nova NF", "No detalhamento"];
+    const linhas = [cab].concat(L.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", serieRep(r), r.pedido || "", ROT_FLUXO[r._t], r.grupo || "", filaRep(r), diasFila(r) ?? "", diasAberto(r) ?? "", r.status || "",
+      r.transportadora || "", r.motivo || "", r.filial || "", r.responsavel || "", br(r.criado_em), br(r.atualizado_em), d.nfs_novas || "", r._d ? "Sim" : "Não"]; }));
+    const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = cab.map((c) => ({ wch: Math.min(34, Math.max(10, c.length)) }));
+    const gs = contaPor(L, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const d = rs.map(diasFila).filter((n) => n != null), s = d.reduce((x, y) => x + y, 0);
+      return [fila, contaPor(rs, grupoRep).map((x) => x[0]).join(", "), rs.length, d.length ? Math.round((s / d.length) * 10) / 10 : 0, d.length ? Math.max(...d) : 0, d.filter((x) => x >= 10).length, s]; }).sort((x, y) => y[6] - x[6]);
+    const ws2 = XLSX.utils.aoa_to_sheet([["Fila", "Grupo", "Casos", "Média de dias na fila", "Mais antigo (dias)", "Parados +10 dias", "Dias parados (total)"]].concat(gs));
+    const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws2, "Gargalos por fila"); XLSX.utils.book_append_sheet(wb, ws, "Casos em aberto");
+    XLSX.writeFile(wb, `reposicao_gargalos_${hojeISO()}.xlsx`);
+  });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
   try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
