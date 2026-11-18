@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=160">
+  <link rel="stylesheet" href="styles.css?v=161">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -747,6 +747,8 @@
         <label>Filial<select id="rep-filial"></select></label>
         <label>Status<select id="rep-status"></select></label>
         <label>Responsável<select id="rep-resp"></select></label>
+        <label>Série da NF<select id="rep-serie"></select></label>
+        <label>Fila atual<select id="rep-fila"></select></label>
         <button id="rep-limpar" class="link limpar" type="button">Limpar filtros</button>
       </section>
 
@@ -773,6 +775,7 @@
       <!-- 1) visão geral -->
       <div id="rp-geral">
         <section class="kpis" id="rpg-cards"></section>
+        <div id="rpg-parados"><section class="cartao rp-parados-q"><div class="cartao-topo"><div><h2>Em aberto por fila · dias parados na fila</h2><p class="sub rp-parados-sub"></p></div></div><div class="tabela-rolagem"><table class="tabela rp-pivo"><thead class="rp-pivo-cab"></thead><tbody class="rp-pivo-corpo"></tbody></table></div></section></div>
         <section class="cartao">
           <div class="cartao-topo"><div><h2 id="rep-ev-titulo">Evolução mensal · pré-entrega × pós-entrega</h2><p class="sub">Tickets criados em cada mês (segue os filtros, menos o mês). Clique num mês para ver os tickets.</p></div>
             <div class="rp-legenda"><span class="rp-l pre"></span>Pré-entrega <span class="rp-l pos"></span>Pós-entrega</div></div>
@@ -803,6 +806,7 @@
       <div id="rp-fluxo" hidden>
         <section class="kpis" id="rpf-cards"></section>
         <p class="sub rp-nota" id="rpf-nota"></p>
+        <div id="rpf-parados-q"><section class="cartao rp-parados-q"><div class="cartao-topo"><div><h2>Em aberto por fila · dias parados na fila</h2><p class="sub rp-parados-sub"></p></div></div><div class="tabela-rolagem"><table class="tabela rp-pivo"><thead class="rp-pivo-cab"></thead><tbody class="rp-pivo-corpo"></tbody></table></div></section></div>
         <div class="rp-duas">
           <section class="cartao">
             <div class="cartao-topo"><div><h2>Evolução mensal</h2><p class="sub">Tickets criados no mês e quantos deles ainda estão abertos. Clique num mês para ver os tickets.</p></div></div>
@@ -888,7 +892,7 @@
           <div class="tabela-wrap">
             <table class="tabela-pedidos rp-tab rp-det">
               <thead><tr><th>Ticket</th><th>NF original</th><th>Nova NF</th><th>Pedido</th><th>Pré/pós</th><th>Tipo de reposição</th><th>Transp. entrega original (c/ redesp.)</th><th>Transp. da reposição (Promob)</th>
-                <th>Motivo</th><th>Filial</th><th>Responsável</th><th>Criado</th><th>Emissão nova NF</th><th>Saída nova NF</th><th>Status</th><th class="num">Dias em aberto</th><th>Finalizado</th><th class="num">Valor do pedido</th></tr></thead>
+                <th>Motivo</th><th>Filial</th><th>Responsável</th><th>Criado</th><th>Emissão nova NF</th><th>Saída nova NF</th><th>Status</th><th>Fila atual</th><th class="num">Dias em aberto</th><th class="num">Dias na fila</th><th>Finalizado</th><th class="num">Valor do pedido</th></tr></thead>
               <tbody id="rpd-linhas"></tbody>
             </table>
           </div>
@@ -1417,14 +1421,14 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=160"></script>
-  <script src="mapa-brasil.js?v=160"></script>
-  <script src="troca-notas.js?v=160"></script>
-  <script src="app.js?v=160"></script>
-  <script src="ordenar.js?v=160"></script>
-  <script src="menu.js?v=160"></script>
-  <script src="ajuda.js?v=160"></script>
-  <script src="documentos.js?v=160"></script>
-  <script src="filtros.js?v=160"></script>
+  <script src="config.js?v=161"></script>
+  <script src="mapa-brasil.js?v=161"></script>
+  <script src="troca-notas.js?v=161"></script>
+  <script src="app.js?v=161"></script>
+  <script src="ordenar.js?v=161"></script>
+  <script src="menu.js?v=161"></script>
+  <script src="ajuda.js?v=161"></script>
+  <script src="documentos.js?v=161"></script>
+  <script src="filtros.js?v=161"></script>
 </body>
 </html>

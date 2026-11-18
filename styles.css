@@ -881,3 +881,13 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .kpi.kpi-info.roxo .kpi-num { color: var(--roxo); }
 .txt-roxo { color: var(--roxo); }
 .rp-card-x { margin-left: 8px; font-size: 12px; vertical-align: middle; cursor: pointer; border: 0; }
+
+/* Reposição: em aberto por fila × dias parados */
+.rp-parados-q { margin-top: 14px; }
+.rp-pivo th, .rp-pivo td { white-space: nowrap; }
+.rp-pivo .rp-grupo td { background: #eef3e2; font-weight: 700; }
+.rp-pivo .rp-sub td:first-child { padding-left: 26px; }
+.rp-pivo .rp-total td { font-weight: 800; border-top: 2px solid var(--marinho); }
+.rp-pivo td a { color: inherit; text-decoration: none; display: block; }
+.rp-pivo td a:hover { color: var(--marinho); text-decoration: underline; }
+.rp-pivo th:first-child { text-align: left; }
