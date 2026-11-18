@@ -266,8 +266,8 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
     log(`barrar-ticket: prints no ticket ${ok} · erro ${er}`); return;
   }
   const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500" + (soAuto ? "&decisao_por=like.rob*" : ""));
-  // regra (Brenda, 18/11): o robô só atua em devolução (✓) ou "não recebeu" na anotação (✗ Sem Emissão...); o resto ela verifica
-  const pode = (x) => x.decisao === "barrar" ? PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
+  // regra (Brenda, 18/11): sozinho o robô só atua em devolução, entregue ou "não recebeu"; o que uma pessoa escolheu e aprovou no painel ele sempre aplica
+  const pode = (x) => !/^rob/i.test(x.decisao_por || "") ? true : x.decisao === "barrar" ? PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
   const fora = L.filter((x) => !pode(x)); if (fora.length) log(`barrar-portal: ${fora.length} aprovada(s) fora da regra do robô (ficam para a Brenda)`);
   for (const x of fora) await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { portal_status: null, portal_msg: "O robô não atua neste caso (só devolução, entregue ou \"não recebeu\"): verificar à mão.", portal_em: new Date().toISOString() }).catch(() => {});
   L.splice(0, L.length, ...L.filter(pode));
