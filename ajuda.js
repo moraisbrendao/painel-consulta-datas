@@ -90,7 +90,7 @@
       "Para os dados da nova NF e transportadora da reposição, suba também o detalhamento de tickets (Alterar pedidos › Ajuste Intelipost).",
       "Use as abas <b>Visão geral</b>, <b>Pré-entrega</b>, <b>Pós-entrega</b> e <b>Detalhamento operacional</b>, e os filtros de mês, transportadora, tipo e motivo.",
       "Clique em qualquer card (Em aberto, Finalizados, Recuperação de crédito, Totais...) para ver os tickets dele no Detalhamento; <b>Baixar Excel</b> leva essa lista.",
-      "Clique no card <b>Em aberto</b> (Visão geral, Pré ou Pós) para abrir o quadro <b>Em aberto por fila · dias parados na fila</b>: por responsável e fila, há quantos dias os casos estão parados, com filtros próprios de <b>Série da NF</b>, <b>Fila atual</b> e <b>Responsável</b>; clique num número para ver os tickets. Clique no card de novo para fechar.",
+      "Clique no card <b>Em aberto</b> (Visão geral, Pré ou Pós) para abrir o quadro <b>Em aberto por fila · dias parados na fila</b>: por responsável e fila, há quantos dias os casos estão parados, com filtros próprios de <b>Fila atual</b> e <b>Responsável</b> (a <b>Série da NF</b> fica nos filtros do topo); clique num número para ver os tickets. Clique no card de novo para fechar.",
       "<b>Baixar Excel</b> leva os tickets filtrados.",
     ], "Tipo \"Reposição\" = pré-entrega; \"Reposição Pós Entrega\" = pós-entrega. Transportadora = redespacho (coluna R) se tiver, senão a coluna Q. Status Resolvido ou Encerrado = finalizado. Ticket na fila Recuperação de crédito = pendente de solução da Recuperação de crédito (não conta como em aberto)."],
 

@@ -4043,18 +4043,19 @@ ${extra}
     opcoesRep("rep-filial", [...new Set(reps.map(filRep))].sort(pt), "Todas");
     opcoesRep("rep-status", [...new Set(reps.map((r) => r.status || "(sem status)"))].sort(pt), "Todos");
     opcoesRep("rep-resp", [...new Set(reps.map(respRep))].sort(pt), "Todos");
+    opcoesRep("rep-serie", [...new Set(reps.map(serieRep))].sort((x, y) => (Number(x) || 1e9) - (Number(y) || 1e9) || pt(x, y)), "Todas", (s) => (s === SEM_SERIE ? s : "Série " + s));
     filtrarRep();
   }
   // filtros do topo; "sem" = filtros que essa análise ignora
   function filtroRep(sem = []) {
     const v = (id) => (sem.includes(id) ? "" : $(id).value);
     const ano = v("rep-ano"), mes = v("rep-mes"), de = v("rep-de"), ate = v("rep-ate"), tipo = v("rep-tipo"), tr = v("rep-transp"), mot = v("rep-motivo"),
-      fil = v("rep-filial"), st = v("rep-status"), resp = v("rep-resp");
+      fil = v("rep-filial"), st = v("rep-status"), resp = v("rep-resp"), se = v("rep-serie");
     return reps.filter((r) => {
       const d = String(r.criado_em || "").slice(0, 10);
       return (!ano || d.slice(0, 4) === ano) && (!mes || d.slice(0, 7) === mes) && (!de || (d && d >= de)) && (!ate || (d && d <= ate)) &&
         (!tipo || r._t === tipo) && (!tr || trRep(r) === tr) && (!mot || motRep(r) === mot) && (!fil || filRep(r) === fil) &&
-        (!st || (r.status || "(sem status)") === st) && (!resp || respRep(r) === resp);
+        (!st || (r.status || "(sem status)") === st) && (!resp || respRep(r) === resp) && (!se || serieRep(r) === se);
     });
   }
   const contaPor = (lista, chave) => { const m = new Map(); lista.forEach((r) => { const k = chave(r); m.set(k, (m.get(k) || []).concat(r)); }); return [...m.entries()].sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR")); };
@@ -4250,7 +4251,7 @@ ${extra}
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
   try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
-  const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp"];
+  const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
   $("rep-limpar").addEventListener("click", () => { repCard = ""; repFaixa = -1; pvDet = null; FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });
   let esperaRpd; $("rpd-busca").addEventListener("input", () => { clearTimeout(esperaRpd); esperaRpd = setTimeout(() => { rpdPag = 1; desenharRepDet(); }, 250); });
