@@ -49,8 +49,9 @@ ctx.on("page", (pg) => pg.on("dialog", (d) => d.accept().catch(() => {})));   //
 pagina.on("dialog", (d) => d.accept().catch(() => {}));
 pagina.setDefaultTimeout(30000);
 
-async function entrar() {
-  if (sessaoGuardada) {
+const sessaoExpirou = (pg) => pg.getByText(/sess[aã]o expirou/i).first().isVisible().catch(() => false);
+async function entrar(forcar = false) {
+  if (sessaoGuardada && !forcar) {
     await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }).catch(() => {});
     const ok = await pagina.getByPlaceholder(/digite seus pedidos/i).first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
     // a Busca por Lote abre mesmo com a sessão vencida; a tela de cotação mostra "Esta sessão expirou! (inativo por 240 minutos)"
@@ -278,7 +279,7 @@ async function alterar(pedido, iso) {
 // Adicionar + tabela Vigente, volume com 1 em tudo, Calcular -> "Prazo de entrega" (em dias). Só consulta, não altera pedido.
 async function simularPrazo(cep, metodo, olhar) {
   const p = pagina;
-  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); log("  janela aberta:", (await p.locator(".modal.is-active, .dialog.is-active").first().innerText({ timeout: 3000 }).catch(() => "nenhuma")).replace(/\s+/g, " ").replace(/\d{5,}/g, "#").slice(0, 300)); log("  por quê:", (e.message.split("\n").filter((l) => /intercept|not visible|not enabled|not stable|outside|waiting for/i.test(l)).slice(0, 4).join(" | ") || "-").replace(/\d{5,}/g, "#").slice(0, 500)); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}" (${e.message.split("\n")[0].slice(0, 160)})`); } };
+  const passo = async (nome, fn) => { try { await fn(); if (olhar) log("  ok:", nome); } catch (e) { if (await sessaoExpirou(p)) { const x = new Error("A sessão da Intelipost expirou (240 min sem uso)."); x.sessao = true; throw x; } if (olhar) { log("  falhou:", nome, "-", e.message.split("\n")[0]); log("  janela aberta:", (await p.locator(".modal.is-active, .dialog.is-active").first().innerText({ timeout: 3000 }).catch(() => "nenhuma")).replace(/\s+/g, " ").replace(/\d{5,}/g, "#").slice(0, 300)); log("  por quê:", (e.message.split("\n").filter((l) => /intercept|not visible|not enabled|not stable|outside|waiting for/i.test(l)).slice(0, 4).join(" | ") || "-").replace(/\d{5,}/g, "#").slice(0, 500)); await camposDetalhe(p, "Na hora do erro (" + nome + ")"); } throw new Error(`Simulação de cotação: não consegui "${nome}" (${e.message.split("\n")[0].slice(0, 160)})`); } };
   await p.bringToFront();
   await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
@@ -918,7 +919,14 @@ try {
     for (const job of trocas) {
       const modoJob = MODO === "real" ? job.robo_modo : "teste";   // dryrun nunca salva
       try {
-        const r = serie4(job) ? await soPrint(job) : await fazerTroca({ ...job, robo_modo: modoJob });
+        let r;
+        try { r = serie4(job) ? await soPrint(job) : await fazerTroca({ ...job, robo_modo: modoJob }); }
+        catch (e1) {
+          if (!/expirou/i.test(e1.message)) throw e1;
+          log("A sessão da Intelipost expirou no meio: vou fazer o login de novo (pode pedir o código no painel).");
+          await ctx.clearCookies().catch(() => {}); await entrar(true);
+          r = serie4(job) ? await soPrint(job) : await fazerTroca({ ...job, robo_modo: modoJob });
+        }
         let msgTicket = "";
         try {   // etapas 6 e 7 no Multi360
           if (!multi) multi = await entrarMulti360(ctx, log);
