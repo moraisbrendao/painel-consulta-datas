@@ -72,27 +72,55 @@ export async function lerPdfs(p, max = 3) {
 export async function textoPdf(buf) {
   const pdfjs = await import("pdfjs-dist/legacy/build/pdf.mjs");
   const doc = await pdfjs.getDocument({ data: new Uint8Array(buf), useSystemFonts: true, isEvalSupported: false }).promise;
-  let txt = "";
+  const itens = []; let txt = "";
   for (let i = 1; i <= doc.numPages; i++) {
     const pg = await doc.getPage(i); const c = await pg.getTextContent();
-    let y = null; for (const it of c.items) { const yy = Math.round(it.transform[5]); if (y !== null && Math.abs(yy - y) > 2) txt += "\n"; else if (y !== null) txt += " "; txt += it.str; y = yy; }
-    txt += "\n";
+    const its = c.items.filter((it) => (it.str || "").trim()).map((it) => ({ s: it.str.trim(), x: it.transform[4], y: it.transform[5], p: i }));
+    itens.push(...its);
+    // linhas na ordem de leitura: de cima para baixo, da esquerda para a direita
+    its.sort((a, b) => b.y - a.y || a.x - b.x);
+    let lin = [], y = null;
+    const fecha = () => { if (lin.length) txt += lin.sort((a, b) => a.x - b.x).map((t) => t.s).join(" ") + "\n"; lin = []; };
+    for (const it of its) { if (y !== null && Math.abs(it.y - y) > 2.5) fecha(); lin.push(it); y = it.y; }
+    fecha();
   }
-  return txt;
+  return { txt, itens };
+}
+
+// valor logo abaixo de um rótulo da DANFE (mesma coluna)
+function abaixo(itens, rot) {
+  const v = itens.filter((t) => t.p === rot.p && t.y < rot.y - 1 && t.y > rot.y - 16 && t.x > rot.x - 8 && t.x < rot.x + 260 && t !== rot);
+  v.sort((a, b) => b.y - a.y || Math.abs(a.x - rot.x) - Math.abs(b.x - rot.x));
+  return v[0] || null;
 }
 
 // do texto da DANFE: volumes (código + descrição), quantidade de volumes e a razão social do destinatário (só para comparar)
-export function lerDanfe(txt) {
+export function lerDanfe({ txt, itens }) {
   const vols = [...txt.matchAll(RE_VOL)].map((m) => ({ codigo: m[1], descricao: m[2].replace(/\s+/g, " ").trim() }));
-  const qtd = (txt.match(/QUANTIDADE[\s\S]{0,40}?\n?\s*(\d+)\s*\n?[\s\S]{0,20}VOLUMES?/i) || [])[1] || null;
-  const rz = (txt.match(/NOME\s*\/\s*RAZ[AÃ]O\s+SOCIAL[^\n]*\n([^\n]+)/i) || [])[1] || "";
-  // documento do destinatário: CPF = sem cobrança (regra da Brenda, 18/11); CNPJ = pode ser transportadora
-  const blocoDest = (txt.match(/DESTINAT[AÁ]RIO[\s\S]{0,400}/i) || [""])[0];
-  const doc = /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/.test(blocoDest) ? "cnpj" : /\d{3}\.\d{3}\.\d{3}-\d{2}/.test(blocoDest) ? "cpf" : null;
-  return { vols, qtd, doc, razao: rz.replace(/\s+\d{3}\.\d{3}\.\d{3}-\d{2}.*$/, "").replace(/\s+\d{2}\.\d{3}\.\d{3}\/\d{4}-\d{2}.*$/, "").trim() };
+  const codigos = [...new Set(txt.match(/\b\d{5}\.\d{4}\b/g) || [])];
+  // bloco DESTINATÁRIO / REMETENTE: rótulos "NOME / RAZÃO SOCIAL" e "CNPJ / CPF" logo abaixo do título
+  const tit = itens.find((t) => /DESTINAT[AÁ]RIO\s*\/\s*REMETENTE/i.test(t.s));
+  const perto = (re) => tit ? itens.filter((t) => t.p === tit.p && re.test(t.s) && t.y <= tit.y + 2 && t.y > tit.y - 40).sort((a, b) => b.y - a.y)[0] : null;
+  const rNome = perto(/^NOME\s*\/?\s*RAZ/i), rDoc = perto(/^CNPJ\s*\/\s*CPF/i);
+  const vNome = rNome ? abaixo(itens, rNome) : null, vDoc = rDoc ? abaixo(itens, rDoc) : null;
+  const dtxt = vDoc ? vDoc.s : "";
+  const doc = /\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/.test(dtxt) ? "cnpj" : /\d{3}\.?\d{3}\.?\d{3}-?\d{2}/.test(dtxt) ? "cpf" : null;
+  const cnpj = doc === "cnpj" ? dtxt.replace(/\D/g, "").slice(0, 14) : null;
+  const qVol = itens.find((t) => /^QUANTIDADE$/i.test(t.s)); const vq = qVol ? abaixo(itens, qVol) : null;
+  return { vols, codigos, qtd: vq && /^\d+$/.test(vq.s) ? vq.s : null, doc, cnpj, razao: vNome ? vNome.s : "",
+    achou: { titulo: !!tit, rotNome: !!rNome, rotDoc: !!rDoc } };
+}
+
+const semAc = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").replace(/\s+/g, " ").trim();
+// transportadora pela razão social: chave de busca / apelido / nome cadastrados em Alterar pedidos › TP divergente
+export function qualTransp(razao, apelidos) {
+  const r = semAc(razao); if (!r) return null;
+  for (const a of apelidos) for (const k of [a.chave, a.apelido]) { const kk = semAc(k); if (kk.length >= 4 && r.includes(kk)) return a.apelido || a.chave; }
+  return /TRANSP|LOGIST|CARGAS|EXPRESS/.test(r) ? "?" : null;
 }
 
 export async function diagRepo({ chamar, log, ctx }) {
+  const APEL = await chamar("apelidos_transp?select=apelido,chave").catch(() => []);
   // fila pela tabela de acompanhamento (mais atual); nova NF pelo detalhamento
   const T = await chamar("reposicoes_tk?select=ticket,tipo,fila,status&fila=ilike.*aguardando*entrega*&limit=1000");
   const ids = T.map((x) => `"${x.ticket}"`).join(",");
@@ -118,10 +146,10 @@ export async function diagRepo({ chamar, log, ctx }) {
       const an = await lerPdfs(p);
       log(`${rot}: anexos=${an.anexos} · PDFs lidos=${an.pdfs.length}`);
       an.pdfs.forEach((t, i) => { const d = lerDanfe(t);
-        log(`  PDF ${i + 1}: ${t.length} letras · DANFE=${/DANFE|DOCUMENTO AUXILIAR/i.test(t) ? "sim" : "não"} · volumes com código=${d.vols.length} · qtd volumes=${d.qtd ?? "?"} · doc destinatário=${d.doc || "?"} · razão social achada=${d.razao ? "sim" : "não"} · parece empresa=${/LTDA|EIRELI|S\.?A\.?\b|TRANSP|LOG[IÍ]ST/i.test(d.razao) ? "sim" : "não"}`); });
+        log(`  PDF ${i + 1}: ${t.txt.length} letras · rótulos ${JSON.stringify(d.achou)} · códigos ${d.codigos.length} · razão (forma)="${d.razao.replace(/\d/g, "#").replace(/[A-Za-zÀ-ÿ]+/g, (w) => /^(LTDA|EIRELI|ME|SA|S\/A|TRANSPORTES?|LOG[IÍ]STICA|LOG|CARGAS|EXPRESS|E)$/i.test(w) ? w : "w")}" · volumes com código=${d.vols.length} · qtd volumes=${d.qtd ?? "?"} · doc destinatário=${d.doc || "?"} · razão social achada=${d.razao ? "sim" : "não"} · transportadora=${(() => { const q = qualTransp(d.razao, APEL); return q === null ? "não" : q === "?" ? "parece, sem cadastro" : q; })()} · parece empresa=${/LTDA|EIRELI|S\.?A\.?\b|TRANSP|LOG[IÍ]ST/i.test(d.razao) ? "sim" : "não"}`); });
       if (an.pdfs[0]) {   // forma das linhas: números viram #, palavras que não são rótulos da DANFE viram "w" (nenhum dado de cliente)
         const ROT = /^(DANFE|DOCUMENTO|AUXILIAR|NOTA|FISCAL|ELETR[OÔ]NICA|DESTINAT[AÁ]RIO|REMETENTE|NOME|RAZ[AÃ]O|SOCIAL|CNPJ|CPF|ENDERE[CÇ]O|BAIRRO|CEP|MUNIC[IÍ]PIO|UF|FONE|FAX|INSCRI[CÇ][AÃ]O|ESTADUAL|DATA|EMISS[AÃ]O|SA[IÍ]DA|ENTRADA|HORA|TRANSPORTADOR|VOLUMES?|TRANSPORTADOS|QUANTIDADE|ESP[EÉ]CIE|MARCA|NUMERA[CÇ][AÃ]O|PESO|BRUTO|L[IÍ]QUIDO|DADOS|PRODUTOS?|SERVI[CÇ]OS?|C[OÓ]DIGO|DESCRI[CÇ][AÃ]O|NCM|SH|CST|CFOP|UNID|QUANT|VALOR|UNIT|TOTAL|DESC|BC|ICMS|IPI|AL[IÍ]Q|ADICIONAIS|INFORMA[CÇ][OÕ]ES|COMPLEMENTARES|FRETE|CONTA|S[EÉ]RIE|FOLHA|CHAVE|ACESSO|PROTOCOLO|AUTORIZA[CÇ][AÃ]O|NATUREZA|OPERA[CÇ][AÃ]O|DE|DA|DO|POR|E|VOL|ANTT|PLACA|VE[IÍ]CULO|C[AÁ]LCULO|IMPOSTO|BASE|FATURA|DUPLICATA|RECEBEMOS|IDENTIFICA[CÇ][AÃ]O|ASSINATURA|RECEBEDOR)$/i;
-        an.pdfs[0].split("\n").slice(0, 90).forEach((l, k) => { const f = l.replace(/\d/g, "#").replace(/[A-Za-zÀ-ÿ]+/g, (w) => ROT.test(w) ? w : "w").replace(/\s+/g, " ").trim(); if (f) log(`  L${k}: ${f.slice(0, 140)}`); });
+        an.pdfs[0].txt.split("\n").slice(0, 90).forEach((l, k) => { const f = l.replace(/\d/g, "#").replace(/[A-Za-zÀ-ÿ]+/g, (w) => ROT.test(w) ? w : "w").replace(/\s+/g, " ").trim(); if (f) log(`  L${k}: ${f.slice(0, 140)}`); });
       }
     } catch (e) { log(`${rot}: erro ${String(e.message).split("\n")[0].slice(0, 120)}`); }
   }
