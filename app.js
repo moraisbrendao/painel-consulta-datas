@@ -4181,7 +4181,7 @@ ${extra}
     $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
       + `<td class="rp-col-barra"><div class="rp-barra"><span class="pre" style="width:${tipo === "pos" ? 0 : (x.pre / maior) * 100}%"></span><span class="pos" style="width:${tipo === "pre" ? 0 : (x.pos / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
     const linhaPP = (f, [k, rs]) => { const p = rs.filter((r) => r._t === "pre").length; return `<tr data-f="${f}" data-v="${esc(k)}"><td>${esc(k)}</td>${num(p)}${num(rs.length - p)}<td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td></tr>`; };
-    $("rpg-parados").hidden = true; desenharGargalos("rpg-garg", L);   // quadro de em aberto por fila: só em Pré e Pós (pedido da Brenda)
+    desenharParados("rpg-parados", L); desenharGargalos("rpg-garg", L);
     $("rpg-transps").innerHTML = contaPor(L, trRep).map((e) => linhaPP("rep-transp", e)).join("");
     $("rpg-motivos").innerHTML = contaPor(L, motRep).map((e) => linhaPP("rep-motivo", e)).join("");
   }
@@ -4271,8 +4271,8 @@ ${extra}
     const k = e.target.closest("button[data-card]");
     if (k && k.dataset.card === "garg") { e.preventDefault(); e.stopPropagation(); gargAberto = !gargAberto; filtrarRep();
       if (gargAberto) { const q = $(repAba === "geral" ? "rpg-garg" : "rpf-garg"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
-    if (k && k.dataset.card === "ab" && ["pre", "pos"].includes(repAba)) { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
-      if (pvAberto) { const q = $("rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
+    if (k && k.dataset.card === "ab" && repAba !== "det") { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
+      if (pvAberto) { const q = $(repAba === "geral" ? "rpg-parados" : "rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
     if (e.target.closest(".pv-limpar")) { pv.serie = pv.fila = pv.resp = pv.grupo = ""; filtrarRep(); return; }
     if (k) { e.preventDefault(); e.stopPropagation(); const c = k.dataset.card;
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
