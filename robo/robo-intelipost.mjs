@@ -281,7 +281,7 @@ async function simularPrazo(cep, metodo, olhar) {
     await bloco.waitFor({ timeout: 15000 });
     const caixa = bloco.locator("input[type=checkbox]").first();
     const querSim = process.env.IGNORAR_REGRAS !== "nao";
-    const tentativas = [() => bloco.locator("label.switch, label").first().click({ timeout: 5000 }), () => bloco.locator("span.check").first().click({ force: true, timeout: 5000 }), () => caixa.click({ force: true, timeout: 5000 })];
+    const tentativas = [() => bloco.locator("label.switch").first().evaluate((e) => e.click()), () => caixa.evaluate((e) => e.click()), () => bloco.locator("label.switch, label").first().click({ timeout: 5000 }), () => bloco.locator("span.check").first().click({ force: true, timeout: 5000 }), () => caixa.click({ force: true, timeout: 5000 })];
     for (const t of tentativas) {
       if ((await caixa.isChecked()) === querSim) break;
       await t().catch((e) => { if (olhar) log("    clique falhou:", e.message.split("\n")[0].slice(0, 120)); }); await p.waitForTimeout(1500);
