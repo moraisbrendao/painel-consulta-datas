@@ -53,7 +53,15 @@ async function entrar() {
   if (sessaoGuardada) {
     await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }).catch(() => {});
     const ok = await pagina.getByPlaceholder(/digite seus pedidos/i).first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
-    if (ok && !/\/login/i.test(new URL(pagina.url()).pathname)) { log("Entrei na Intelipost com a sessão guardada."); await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok (sessão guardada)", modo: MODO }); return; }
+    // a Busca por Lote abre mesmo com a sessão vencida; a tela de cotação mostra "Esta sessão expirou! (inativo por 240 minutos)"
+    let expirou = false;
+    if (ok) {
+      await pagina.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" }).catch(() => {});
+      expirou = await pagina.getByText(/sess[aã]o expirou/i).first().waitFor({ timeout: 8000 }).then(() => true).catch(() => false);
+      if (!expirou) await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }).catch(() => {});
+    }
+    if (expirou) { log("A Intelipost diz que a sessão guardada expirou (240 min sem uso)."); await pagina.context().clearCookies().catch(() => {}); }
+    if (ok && !expirou && !/\/login/i.test(new URL(pagina.url()).pathname)) { log("Entrei na Intelipost com a sessão guardada."); await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok (sessão guardada)", modo: MODO }); return; }
     log("A sessão guardada venceu: vou fazer o login.");
   }
   await pagina.goto(BASE, { waitUntil: "domcontentloaded" });
