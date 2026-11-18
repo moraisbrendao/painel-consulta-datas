@@ -286,7 +286,14 @@ export async function aplicarBarrar({ chamar, log, ctx }) {
       // conferência: a nota sai da lista Barrar Entrega
       await filtro.fill(""); await filtro.fill(x.nf); await p.waitForTimeout(2200);
       let ainda = false; const l2 = p.locator("table tbody tr");
-      for (let i = 0; i < await l2.count(); i++) if (((await l2.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim() === x.nf) ainda = true;
+      for (let i = 0; i < await l2.count(); i++) if (((await l2.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim() === x.nf) {
+        // a nota pode ficar na lista com a coluna "Barrado?" preenchida: se os botões ✓/✗ sumiram, o portal registrou
+        const ult = l2.nth(i).locator("td").last();
+        const nb = await ult.locator("button").count(), tx = ((await ult.innerText().catch(() => "")) || "").replace(/\s+/g, " ").trim().slice(0, 40);
+        const desab = await ult.locator("button:disabled").count();
+        log("  depois do clique: coluna Barrado? =", JSON.stringify(tx.replace(/\d/g, "#")), "· botões", nb, "· desabilitados", desab);
+        if (nb > 0 && desab < nb) ainda = true;
+      }
       if (ainda) { await grava(x.nf, "erro", "Cliquei, mas a nota continua na lista Barrar Entrega."); soma("continua na lista"); }
       else {
         await grava(x.nf, "feito", x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.`); soma(`feito ${x.decisao}`);
