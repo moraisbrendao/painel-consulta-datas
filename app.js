@@ -4066,6 +4066,7 @@ ${extra}
   const kpiC = (card, rot, n, sub, cor = "") => `<button type="button" class="kpi kpi-info kpi-clic ${cor}" data-card="${card}" title="Clique para ver os tickets e exportar"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small><i>↗</i></button>`;
   const ROT_CARD = { todos: "Todas as reposições", pre: "Pré-entrega", pos: "Pós-entrega", ab: "Em aberto", fin: "Finalizados (Resolvido/Encerrado)", rec: "Pendente Recuperação de crédito", total: "Reposição total", parcial: "Reposição parcial", comdet: "Com detalhamento", nfs: "Com nova NF emitida", saida: "Nova NF com saída", tempo: "Finalizados (com tempo de resolução)" };
   let repCard = "", repFaixa = -1;
+  const kpiGarg = (L) => { const g = gargalos(L)[0]; return kpiC("garg", "Gargalos por fila", g ? esc(g.fila) : "–", g ? `maior gargalo · ${fmt(g.n)} casos, média ${dia1(g.media)} dias parados` : "nenhum caso em aberto", "laranja kpi-garg"); };
   // quadro "em aberto por fila": só aparece ao clicar no card Em aberto; filtros próprios (série, fila, responsável)
   let pvAberto = false; const pv = { serie: "", fila: "", resp: "", grupo: "" }; let pvDet = null;
   const casaPv = (r, f) => (!f.serie || serieRep(r) === f.serie) && (!f.fila || (filaRep(r) || SEM_FILA) === f.fila) && (!f.resp || respRep(r) === f.resp) && (!f.grupo || grupoRep(r) === f.grupo);
@@ -4103,6 +4104,27 @@ ${extra}
   }
   const varia = (tot, ant) => { if (!ant) return `<td class="num vazio-c">·</td>`; const p = Math.round(((tot - ant) / ant) * 100);
     return `<td class="num"><span class="rp-var ${p > 0 ? "sobe" : p < 0 ? "desce" : ""}">${p > 0 ? "▲ +" : p < 0 ? "▼ " : ""}${p}%</span></td>`; };
+
+  // quadro de gargalos (card próprio "Gargalos por fila"): por fila, quantos casos e há quantos dias estão parados
+  let gargAberto = false;
+  function gargalos(L) {
+    const ab = L.filter(abertoRep);
+    return contaPor(ab, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const d = rs.map(diasFila).filter((n) => n != null);
+      const soma = d.reduce((x, y) => x + y, 0); const grs = contaPor(rs, grupoRep).map((x) => x[0]);
+      return { fila, grupo: grs.join(", "), n: rs.length, media: d.length ? soma / d.length : 0, max: d.length ? Math.max(...d) : 0, mais10: d.filter((x) => x >= 10).length, soma }; })
+      .sort((x, y) => y.soma - x.soma || y.n - x.n);
+  }
+  function desenharGargalos(caixa, L) {
+    const gbox = $(caixa); gbox.hidden = !gargAberto;
+    document.querySelectorAll('#rpg-cards [data-card="garg"], #rpf-cards [data-card="garg"]').forEach((k) => k.classList.toggle("ativa", gargAberto));
+    if (!gargAberto) return;
+    const gs = gargalos(L);
+    const gmax = Math.max(1, ...gs.map((g) => g.soma));
+    gbox.querySelector(".rp-garg-corpo").innerHTML = gs.map((g) => `<tr class="rp-garg-l" data-pfila="${esc(g.fila)}" title="Ver os tickets desta fila"><td><a href="#">${esc(g.fila)}</a></td><td class="s">${esc(g.grupo)}</td><td class="num tot">${fmt(g.n)}</td>
+      <td class="num"><b class="${g.media >= 20 ? "txt-vermelho" : g.media >= 10 ? "txt-laranja" : ""}">${dia1(g.media)}</b></td><td class="num">${fmt(g.max)}</td>${num(g.mais10)}
+      <td class="rp-col-barra"><div class="rp-barra rp-barra-garg"><span class="${g.media >= 20 ? "alto" : g.media >= 10 ? "medio" : "baixo"}" style="width:${(g.soma / gmax) * 100}%"></span></div><span class="s">${fmt(g.soma)} dias</span></td></tr>`).join("")
+      || `<tr><td colspan="7" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
+  }
 
   // quadro "Em aberto por fila × dias parados na fila", agrupado por responsável (como a dinâmica da Brenda)
   function desenharParados(caixa, L) {
@@ -4142,6 +4164,7 @@ ${extra}
       + kpiC("pos", "Pós-entrega", fmt(pos), pct(pos, L.length) + " do total", "azul")
       + kpiC("ab", "Em aberto", fmt(ab), pct(ab, L.length) + " do total", "vermelho")
       + kpiC("fin", "Finalizados", fmt(fin), `Resolvido ou Encerrado · ${pct(fin, L.length)}`)
+      + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(rec), "pendente, fora de reposição", "roxo")
       + kpiC("comdet", "Totais × parciais", comDet.length ? `${fmt(tot)} × ${fmt(comDet.length - tot)}` : "–", comDet.length ? `só os ${fmt(comDet.length)} tickets com detalhamento` : "sem detalhamento no filtro");
     const ev = evolucaoMeses(filtroRep(["rep-mes"]), $("rep-tipo").value), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = $("rep-mes").value, tipo = $("rep-tipo").value;
@@ -4149,7 +4172,7 @@ ${extra}
     $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${x.mes === mesSel ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
       + `<td class="rp-col-barra"><div class="rp-barra"><span class="pre" style="width:${tipo === "pos" ? 0 : (x.pre / maior) * 100}%"></span><span class="pos" style="width:${tipo === "pre" ? 0 : (x.pos / maior) * 100}%"></span></div></td></tr>`).reverse().join("");
     const linhaPP = (f, [k, rs]) => { const p = rs.filter((r) => r._t === "pre").length; return `<tr data-f="${f}" data-v="${esc(k)}"><td>${esc(k)}</td>${num(p)}${num(rs.length - p)}<td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, L.length)}</td></tr>`; };
-    desenharParados("rpg-parados", L);
+    $("rpg-parados").hidden = true; desenharGargalos("rpg-garg", L);   // quadro de em aberto por fila: só em Pré e Pós (pedido da Brenda)
     $("rpg-transps").innerHTML = contaPor(L, trRep).map((e) => linhaPP("rep-transp", e)).join("");
     $("rpg-motivos").innerHTML = contaPor(L, motRep).map((e) => linhaPP("rep-motivo", e)).join("");
   }
@@ -4163,13 +4186,14 @@ ${extra}
     $("rpf-cards").innerHTML = kpiC(tipo, `Reposições · ${ROT_FLUXO[tipo]}`, fmt(L.length), "tickets no filtro", tipo === "pre" ? "laranja" : "azul")
       + kpiC("ab", "Em aberto", fmt(ab.length), pct(ab.length, L.length) + " do total", "vermelho")
       + kpiC("fin", "Finalizados", fmt(finN), `Resolvido ou Encerrado · ${pct(finN, L.length)}`)
+      + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(recN), "pendente, fora de reposição", "roxo")
       + kpiC("tempo", "Tempo de resolução", tRes.length ? dia1(mediana(tRes)) + " dias" : "–", tRes.length ? `mediana de ${fmt(tRes.length)} resolvidos (média ${dia1(tRes.reduce((a, b) => a + b, 0) / tRes.length)})` : "sem resolvidos no filtro")
       + kpiC("total", "Totais", tr.length ? fmt(tot) : "–", tr.length ? `de ${fmt(tr.length)} tickets com detalhamento` : "sem detalhamento")
       + kpiC("parcial", "Parciais", tr.length ? fmt(tr.length - tot) : "–", tr.length ? `de ${fmt(tr.length)} tickets com detalhamento` : "sem detalhamento")
       + kpiC("nfs", "Novas NFs emitidas", fmt(nfs), `de ${fmt(comDet.length)} tickets com detalhamento`)
       + kpiC("saida", "Novas NFs com saída", fmt(sai), `de ${fmt(comDet.length)} tickets com detalhamento`);
-    desenharParados("rpf-parados-q", L);
+    desenharParados("rpf-parados-q", L); desenharGargalos("rpf-garg", L);
     $("rpf-nota").textContent = comDet.length < L.length
       ? `Nova NF, total/parcial, tempos e transportadora Promob só existem para os ${fmt(comDet.length)} de ${fmt(L.length)} tickets que já apareceram no detalhamento Tickets360 (o detalhamento traz só os abertos; o histórico cresce a cada envio).` : "";
     // evolução (sem o filtro de mês)
@@ -4236,8 +4260,10 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("click", (e) => {
     const k = e.target.closest("button[data-card]");
-    if (k && k.dataset.card === "ab" && repAba !== "det") { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
-      if (pvAberto) { const q = $(repAba === "geral" ? "rpg-parados" : "rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
+    if (k && k.dataset.card === "garg") { e.preventDefault(); e.stopPropagation(); gargAberto = !gargAberto; filtrarRep();
+      if (gargAberto) { const q = $(repAba === "geral" ? "rpg-garg" : "rpf-garg"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
+    if (k && k.dataset.card === "ab" && ["pre", "pos"].includes(repAba)) { e.preventDefault(); e.stopPropagation(); pvAberto = !pvAberto; filtrarRep();
+      if (pvAberto) { const q = $("rpf-parados-q"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
     if (e.target.closest(".pv-limpar")) { pv.serie = pv.fila = pv.resp = pv.grupo = ""; filtrarRep(); return; }
     if (k) { e.preventDefault(); e.stopPropagation(); const c = k.dataset.card;
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
@@ -4246,11 +4272,11 @@ ${extra}
     const c = e.target.closest("[data-pfila]");
     if (c) { e.preventDefault(); e.stopPropagation();
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
-      pvDet = { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
+      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: "" } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
       repCard = "ab"; repFaixa = c.dataset.pfx === undefined ? -1 : +c.dataset.pfx; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); }
   }, true);
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
-  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
+  $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
   try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
