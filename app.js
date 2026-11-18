@@ -3749,7 +3749,8 @@ ${extra}
   const D_ORDEM = ["sinistro", "extravio", "naocoletado", "falha", "repo", "ocorr", "parado", "semcte", "semexp", "atraso", "aguardando", "entregue", "prazo"];
   // filtros do topo (mesmo modelo da Visão Gerencial: várias opções em cada um)
   const D_CAMPOS = { canal: (p) => p.canal || "", uf: (p) => p.uf || "", transp: (p) => gProdK(p.transportadora) || "", serie: (p) => String(p.nf || "").split("-")[1]?.trim() || "",
-    forn: (p) => dForn(p) || "", status: (p) => p.status_intelipost || "", micro: (p) => p.micro_status || "" };
+    forn: (p) => dForn(p) || "", status: (p) => p.status_intelipost || "", micro: (p) => p.micro_status || "",
+    scallia: (p) => { const s = dScallia(p); return s ? (SC_ETAPA[s.marco] || [s.marco])[0] : "Sem aviso do Scallia"; } };
   const dMS = Object.fromEntries(Object.keys(D_CAMPOS).map((k) => [k, new Set()]));
   function montarFiltrosD(D) {
     document.querySelectorAll("#d-filtros .multi").forEach((el) => {
