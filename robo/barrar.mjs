@@ -198,7 +198,7 @@ async function printRastreio(ctx, nf, r) {
 export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirArquivo }) {
   const L = [];
   for (let de = 0; ; de += 1000) { const P = await chamar(`barrar_entrega?select=*&na_planilha=eq.true&portal_status=is.null&order=ticket_criado.asc.nullslast&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
-  const falta = L.filter((x) => !x.conferido_em || Date.now() - new Date(x.conferido_em).getTime() > 3 * 3600e3).slice(0, limite);
+  const falta = L.filter((x) => process.env.TRANSP === "refazer" || !x.conferido_em || Date.now() - new Date(x.conferido_em).getTime() > 3 * 3600e3).slice(0, limite);
   log(`barrar: ${L.length} notas na planilha sem ação no portal · ${falta.length} para conferir`);
   if (!falta.length) return;
   await R.carregarSenhasDB();
