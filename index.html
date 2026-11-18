@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=189">
+  <link rel="stylesheet" href="styles.css?v=190">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -47,7 +47,6 @@
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
       <button class="menu-item so-log" data-pagina="documentos"><span class="menu-icone">🗎</span>Gerar XML</button>
-      <button class="menu-item so-log" data-pagina="barrar"><span class="menu-icone">⛔</span>Barrar entrega</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
       <button class="menu-item so-log" data-pagina="ajuda"><span class="menu-icone">❔</span>Passo a passo</button>
       <button class="menu-item so-admin" data-pagina="logins"><span class="menu-icone">🔑</span>Logins</button>
@@ -1103,7 +1102,38 @@
       </section>
     </main>
 
-    <main class="conteudo" id="pagina-barrar" hidden>
+
+    <!-- ============ CONSULTA SAC ============ -->
+    <main class="conteudo" id="pagina-alterar" hidden>
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Alterar pedidos</h1>
+          <p class="sub">Diga o pedido e a nova data. O robô altera na Intelipost e avisa aqui.</p>
+        </div>
+        <div class="acoes-titulo" id="ap-abas">
+          <button class="btn amarelo" data-ap="data">📅 Nova previsão de entrega</button>
+          <button class="btn contorno" data-ap="troca">⇄ Ajuste Intelipost</button>
+          <button class="btn contorno" data-ap="ag">🚚 Fila Aguardando entrega</button>
+          <button class="btn contorno" data-ap="at">🔧 Aguardando entrega AT</button>
+          <button class="btn contorno" data-ap="dv">⇄ Transportadora divergente</button>
+          <button class="btn contorno" data-ap="oc">⚑ Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
+          <button class="btn contorno" data-ap="barrar">⛔ Barrar entrega</button>
+        </div>
+      </div>
+
+      <section id="ap-robo-alerta" class="alerta alerta-erro" hidden>
+        <span class="alerta-ic">⚠</span>
+        <div><b id="ap-robo-titulo"></b><p id="ap-robo-texto"></p></div>
+      </section>
+
+      <section class="cartao ip-codigo-fixo">
+        <div><b>Código de verificação da Intelipost</b>
+          <span class="s">O código chega <b>só no e-mail logistica11</b> (login do robô na Intelipost). Quem tiver acesso a esse e-mail digita aqui e clica em Enviar. O robô usa o código mais recente.</span></div>
+        <form id="ip-codigo-form2"><input id="ip-codigo-num2" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000"><button type="submit" class="btn amarelo">Enviar código</button></form>
+      </section>
+
+      <div id="ap-sec-oc" hidden></div>
+    <div id="pagina-barrar" hidden>
       <section class="filtros-cartao" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
         <label>Nota ou ticket<input id="br-busca" type="search" placeholder="# nota ou ticket"></label>
@@ -1131,37 +1161,8 @@
           <thead><tr><th><input type="checkbox" id="br-todos" aria-label="Marcar todas"></th><th>Nota / ticket</th><th>Transportadora (pedido · portal)</th><th>Rastreio</th><th>Anotação no portal</th><th>Sugestão do robô</th><th>Decisão</th><th>Portal</th></tr></thead>
           <tbody id="br-linhas"></tbody></table></div>
       </section>
-    </main>
+    </div>
 
-    <!-- ============ CONSULTA SAC ============ -->
-    <main class="conteudo" id="pagina-alterar" hidden>
-      <div class="titulo-pagina com-acoes">
-        <div>
-          <h1>Alterar pedidos</h1>
-          <p class="sub">Diga o pedido e a nova data. O robô altera na Intelipost e avisa aqui.</p>
-        </div>
-        <div class="acoes-titulo" id="ap-abas">
-          <button class="btn amarelo" data-ap="data">📅 Nova previsão de entrega</button>
-          <button class="btn contorno" data-ap="troca">⇄ Ajuste Intelipost</button>
-          <button class="btn contorno" data-ap="ag">🚚 Fila Aguardando entrega</button>
-          <button class="btn contorno" data-ap="at">🔧 Aguardando entrega AT</button>
-          <button class="btn contorno" data-ap="dv">⇄ Transportadora divergente</button>
-          <button class="btn contorno" data-ap="oc">⚑ Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
-        </div>
-      </div>
-
-      <section id="ap-robo-alerta" class="alerta alerta-erro" hidden>
-        <span class="alerta-ic">⚠</span>
-        <div><b id="ap-robo-titulo"></b><p id="ap-robo-texto"></p></div>
-      </section>
-
-      <section class="cartao ip-codigo-fixo">
-        <div><b>Código de verificação da Intelipost</b>
-          <span class="s">O código chega <b>só no e-mail logistica11</b> (login do robô na Intelipost). Quem tiver acesso a esse e-mail digita aqui e clica em Enviar. O robô usa o código mais recente.</span></div>
-        <form id="ip-codigo-form2"><input id="ip-codigo-num2" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000"><button type="submit" class="btn amarelo">Enviar código</button></form>
-      </section>
-
-      <div id="ap-sec-oc" hidden></div>
       <div id="ap-sec-dv" hidden>
         <section class="cartao ap-cartao">
           <div class="ap-cab">
@@ -1456,15 +1457,15 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=189"></script>
-  <script src="mapa-brasil.js?v=189"></script>
-  <script src="troca-notas.js?v=189"></script>
-  <script src="app.js?v=189"></script>
-  <script src="ordenar.js?v=189"></script>
-  <script src="menu.js?v=189"></script>
-  <script src="ajuda.js?v=189"></script>
-  <script src="documentos.js?v=189"></script>
-  <script src="barrar.js?v=189"></script>
-  <script src="filtros.js?v=189"></script>
+  <script src="config.js?v=190"></script>
+  <script src="mapa-brasil.js?v=190"></script>
+  <script src="troca-notas.js?v=190"></script>
+  <script src="app.js?v=190"></script>
+  <script src="ordenar.js?v=190"></script>
+  <script src="menu.js?v=190"></script>
+  <script src="ajuda.js?v=190"></script>
+  <script src="documentos.js?v=190"></script>
+  <script src="barrar.js?v=190"></script>
+  <script src="filtros.js?v=190"></script>
 </body>
 </html>

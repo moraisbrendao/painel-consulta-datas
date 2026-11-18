@@ -147,6 +147,6 @@
   });
   // carrega quando a página aparece; enquanto aberta, relê a cada 30 s (o robô vai preenchendo)
   new MutationObserver(() => { if (!$("pagina-barrar").hidden) carregar(); }).observe($("pagina-barrar"), { attributes: true, attributeFilter: ["hidden"] });
-  setInterval(() => { if (!$("pagina-barrar").hidden && !document.hidden && !document.activeElement.closest("#pagina-barrar textarea, #pagina-barrar select")) carregar(); }, 30000);
+  setInterval(() => { if (!$("pagina-barrar").hidden && $("pagina-barrar").offsetParent && !document.hidden && !document.activeElement.closest("#pagina-barrar textarea, #pagina-barrar select")) carregar(); }, 30000);
   if (!$("pagina-barrar").hidden) carregar();
 })();

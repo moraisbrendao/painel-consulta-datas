@@ -117,7 +117,7 @@
       "Em <b>Por transportadora</b>, clique em <b>Baixar .zip</b> (XML + PDF de cada nota) e mande para a transportadora.",
     ], "Os XMLs ficam só no seu computador; nada vai para o banco."],
 
-    ["barrar", "Barrar entrega", "Confere as notas que o Multi pediu para barrar: rastreio (status atual em devolução) e anotações da transportadora no portal.", "Quando chega a planilha de tickets Barrar entrega.", [
+    ["barrar", "Barrar entrega (em Alterar pedidos)", "Confere as notas que o Multi pediu para barrar: rastreio (status atual em devolução) e anotações da transportadora no portal.", "Quando chega a planilha de tickets Barrar entrega.", [
       "Clique em <b>Enviar planilha</b> e escolha a planilha de tickets <b>Barrar entrega</b>.",
       "Clique em <b>Conferir agora</b>: o robô olha o rastreio e as anotações do portal e tira print da anotação.",
       "Confira a <b>Sugestão do robô</b>, marque as notas e clique em <b>Aprovar sugestão</b> (ou escolha a decisão na linha).",

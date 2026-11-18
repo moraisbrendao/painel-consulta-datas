@@ -3031,7 +3031,7 @@ ${extra}
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     try { localStorage.setItem("painel.ap", b.dataset.ap); } catch (_) {}
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv"; $("ap-sec-oc").hidden = b.dataset.ap !== "oc";
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv"; $("ap-sec-oc").hidden = b.dataset.ap !== "oc"; $("pagina-barrar").hidden = b.dataset.ap !== "barrar";
     if (b.dataset.ap === "oc") { const de = $("pagina-ocorrencias"), para = $("ap-sec-oc"); while (de.firstChild) para.appendChild(de.firstChild); desenharOcorrencias(); }
     if (b.dataset.ap === "dv") desenharDivTP();
     if (b.dataset.ap === "troca") carregarTrocas();
@@ -3638,7 +3638,8 @@ ${extra}
   function abrirRespPrev() { const d = $("prev-resp"); d.open = true; setTimeout(() => d.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
   $("btn-prev-resp").addEventListener("click", abrirRespPrev);
   function irPara(pag) {
-    if (pag === "responsaveis") { pag = "preventivo"; setTimeout(abrirRespPrev, 100); }   // Responsáveis agora fica dentro do Preventivo
+    if (pag === "responsaveis") { pag = "preventivo"; setTimeout(abrirRespPrev, 100); }
+    if (pag === "barrar") { pag = "alterar"; try { localStorage.setItem("painel.ap", "barrar"); } catch (_) {} setTimeout(() => { const b = document.querySelector('#ap-abas [data-ap="barrar"]'); if (b) b.click(); }, 300); }   // Barrar entrega agora fica dentro de Alterar pedidos   // Responsáveis agora fica dentro do Preventivo
     if (perfil !== "sac" && !podePag(pag)) { toast("Você não tem acesso a essa aba. Fale com a administradora do painel.", true); pag = primeiraPag(); }
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
