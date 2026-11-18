@@ -204,17 +204,18 @@
   function vigiarCodigoIntelipost() {
     if (codigoTimer) return;
     checarCodigoIntelipost().catch(() => {});
-    codigoTimer = setInterval(() => { if (!document.hidden) checarCodigoIntelipost().catch(() => {}); }, 15000);
+    codigoTimer = setInterval(() => { if (!document.hidden) checarCodigoIntelipost().catch(() => {}); }, 8000);
   }
-  $("ip-codigo-form").addEventListener("submit", async (e) => {
-    e.preventDefault();
-    const c = $("ip-codigo-num").value.replace(/\D/g, "");
+  $("ip-codigo-form2").addEventListener("submit", (e) => { e.preventDefault(); enviarCodigoIntelipost($("ip-codigo-num2")); });
+  $("ip-codigo-form").addEventListener("submit", (e) => { e.preventDefault(); enviarCodigoIntelipost($("ip-codigo-num")); });
+  async function enviarCodigoIntelipost(campo) {
+    const c = campo.value.replace(/\D/g, "");
     if (c.length < 4) return toast("Digite o código que chegou no e-mail.", true);
     const { error } = await sb.from("robo_estado").upsert({ nome: "intelipost_codigo", valor: { codigo: c, em: new Date().toISOString() }, atualizado_em: new Date().toISOString() }, { onConflict: "nome" });
     if (error) return toast("Não consegui enviar o código: " + error.message, true);
-    $("ip-codigo").dataset.enviado = codigoPedidoEm; $("ip-codigo").hidden = true;
+    $("ip-codigo").dataset.enviado = codigoPedidoEm; $("ip-codigo").hidden = true; campo.value = "";
     toast("Código enviado. O robô continua o login em alguns segundos.");
-  });
+  }
 
   // ---------------- carregar ----------------
   // busca a tabela inteira em páginas de 1.000, várias ao mesmo tempo (bem mais rápido que uma por vez)

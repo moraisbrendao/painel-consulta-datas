@@ -869,3 +869,8 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .ip-codigo form { display: flex; gap: 8px; }
 .ip-codigo input { flex: 1; font-size: 20px; letter-spacing: 4px; text-align: center; padding: 6px 8px; border: 1px solid #c9d2e0; border-radius: 8px; min-width: 0; }
 @media (max-width: 760px) { .ip-codigo { left: 16px; right: 16px; max-width: none; } }
+
+.ip-codigo-fixo { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 16px; margin-bottom: 12px; }
+.ip-codigo-fixo > div { display: grid; gap: 2px; }
+.ip-codigo-fixo form { display: flex; gap: 8px; }
+.ip-codigo-fixo input { width: 130px; font-size: 18px; letter-spacing: 4px; text-align: center; padding: 6px 8px; border: 1px solid #c9d2e0; border-radius: 8px; }
