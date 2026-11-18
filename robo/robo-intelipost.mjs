@@ -276,14 +276,12 @@ async function simularPrazo(cep, metodo, olhar) {
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await passo("abrir a aba Simulação de cotação", async () => { await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(2000); });
   await passo("marcar Sim em ignorar regras", async () => {
-    let i = -1;
-    for (let k = 0; k < 15 && i < 0; k++) { if (k) await p.waitForTimeout(1000); i = await p.evaluate(() => [...document.querySelectorAll("input[type=checkbox]")].filter((e) => e.getBoundingClientRect().width > 0)
-      .findIndex((e) => { let a = e.parentElement; while (a && (a.innerText || "").trim().length < 25) a = a.parentElement; return a && /ignorar regras/i.test(a.innerText); })); }
-    if (i < 0) throw new Error("não achei a chave");
-    const caixa = p.locator("input[type=checkbox]:visible").nth(i);
+    // o menor bloco com "ignorar regras" e uma chave (sem pegar o de "modo de validação"); clica no rótulo da chave (Buefy)
+    const bloco = p.locator("xpath=(//*[contains(normalize-space(.),'ignorar regras') and .//input[@type='checkbox'] and not(.//*[contains(normalize-space(.),'modo de valida')])])[last()]").first();
+    await bloco.waitFor({ timeout: 15000 });
+    const caixa = bloco.locator("input[type=checkbox]").first();
     const querSim = process.env.IGNORAR_REGRAS !== "nao";
-    // a chave às vezes não responde ao clique no input: tenta o input, depois a "bolinha" ao lado (pai/avô visível), esperando a tela assentar
-    const tentativas = [() => caixa.locator("xpath=ancestor::label[1]").click({ timeout: 5000 }), () => caixa.click({ force: true, timeout: 5000 }), () => caixa.locator("xpath=..").click({ force: true }), () => caixa.locator("xpath=../..").click({ force: true }), () => caixa.check({ force: true })];
+    const tentativas = [() => bloco.locator("label.switch, label").first().click({ timeout: 5000 }), () => bloco.locator("span.check").first().click({ force: true, timeout: 5000 }), () => caixa.click({ force: true, timeout: 5000 })];
     for (const t of tentativas) {
       if ((await caixa.isChecked()) === querSim) break;
       await t().catch(() => {}); await p.waitForTimeout(1200);
