@@ -500,9 +500,12 @@ if (MODO === "teste-velocidade") {   // mede quanto demora baixar a base como o 
 }
 if (MODO === "teste-scallia") {   // conta os eventos do Scallia que já chegaram (só contagens) e testa se a função responde
   await entrarSupabase();
-  const E = await chamar("scallia_eventos?select=marco,recebido_em&order=recebido_em.desc&limit=1000").catch((e) => { log("scallia_eventos erro:", e.message.slice(0, 120)); return []; });
-  const c = {}; E.forEach((x) => (c[x.marco] = (c[x.marco] || 0) + 1));
-  log("Scallia: eventos gravados:", E.length, "·", JSON.stringify(c), "· último recebido:", E[0] ? E[0].recebido_em : "nenhum");
+  // tira o pedido de teste que o admin do Scallia gravou (TESTE-1)
+  await chamar("scallia_eventos?pedido=eq.TESTE-1", "DELETE").then(() => log("Scallia: TESTE-1 apagado (se existia)")).catch((e) => log("Scallia: não apaguei o TESTE-1:", e.message.slice(0, 100)));
+  const E = [];
+  for (let de = 0; de < 60000; de += 1000) { const P = await chamar(`scallia_eventos?select=marco,chave,nf,recebido_em&order=recebido_em.desc&limit=1000&offset=${de}`).catch((e) => { log("scallia_eventos erro:", e.message.slice(0, 120)); return []; }); E.push(...P); if (P.length < 1000) break; }
+  const c = {}, ch = {}, nf = {}; E.forEach((x) => { c[x.marco] = (c[x.marco] || 0) + 1; if (x.chave) ch[x.marco] = (ch[x.marco] || 0) + 1; if (x.nf) nf[x.marco] = (nf[x.marco] || 0) + 1; });
+  log("Scallia: eventos gravados:", E.length, "· por marco:", JSON.stringify(c), "· com chave da NF:", JSON.stringify(ch), "· com número da NF:", JSON.stringify(nf), "· último recebido:", E[0] ? E[0].recebido_em : "nenhum");
   const r = await fetch("https://qncselfuymeximgmetjp.supabase.co/functions/v1/scallia-webhook", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch((e) => ({ status: e.message, text: async () => "" }));
   log("Scallia: função respondeu (sem assinatura, esperado 401):", r.status, String(await r.text()).slice(0, 120));
   for (const nome of ["transiga-webhook", "scallia_webhook", "scallia", "Scallia-webhook", "scallia-webhook-"]) { const q = await fetch(`https://qncselfuymeximgmetjp.supabase.co/functions/v1/${nome}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" }).catch(() => ({ status: "erro" })); log(`  função ${nome}:`, q.status); }
