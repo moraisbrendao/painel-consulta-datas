@@ -109,7 +109,7 @@ async function rastrear(it, R) {
   const { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } = R;
   const tp = it.transp_pedido || "";
   const ordem = [EH_JADLOG.test(tp) ? "jadlog" : EH_BENTO.test(tp) ? "bento" : EH_TRANSITO.test(tp) ? "transito" : EH_FORMATO.test(tp) ? "formato" : /transiga/i.test(tp) ? "transiga" : "ssw"];
-  ["ssw", "jadlog"].forEach((k) => { if (!ordem.includes(k) && !/transiga|formato/i.test(tp)) ordem.push(k); });
+  // regra (Brenda): olha só o rastreio da transportadora do ticket (redespacho, se tiver); não procura em outras
   const um = [{ pedido: it.nf, nf: it.nf, transportadora: tp, chave: "" }];
   let primeiro = null;
   for (const k of ordem) {
@@ -167,11 +167,15 @@ async function lerPortal(p, nf, R) {
 
 function sugerir(x) {
   const r = x.rastreio || {}, pt = x.portal || {}, an = sa(pt.anotacao);
+  if (r.sem_transp) return { sugestao: "manual", opcao: null, motivo: "Erro: o ticket do 360 não tem transportadora nem redespacho." };
+  const ultimoBarra = PAL_BARRAR.test(sa(r.evento));
+  if (r.situacao === "entregue" && !ultimoBarra) return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
   if (r.achou_palavra) return { sugestao: "barrar", opcao: null, motivo: `Rastreio (${r.fonte}) mostra ${r.achou_palavra.toLowerCase()}.` };
   if (r.situacao === "entregue") return { sugestao: "nao_barrar", opcao: "Entregue", motivo: `Entregue conforme rastreio (${r.fonte}${r.data_evento ? ", " + r.data_evento : ""}).` };
   const naoAchou = !r.situacao || /^(sem cte|sem nf|sem permissao|sem rastreio)$/.test(r.situacao);
   if (naoAchou && PAL_NAO_RECEBEU.test(an)) return { sugestao: "nao_barrar", opcao: OP_NAO_RECEBEU, motivo: (pt.anotacao || "").replace(/^.*?\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}\s*/, "").slice(0, 300) };
-  return { sugestao: "manual", opcao: null, motivo: naoAchou ? (pt.anotacao ? "Não achei no rastreio; a anotação não diz que não recebeu." : "Não achei no rastreio e não há anotação no portal.") : "Em rastreio, sem segregação/devolução." };
+  const quem = r.alvo ? ` da ${r.alvo}${r.alvo_e_redesp ? " (redespacho)" : ""}` : "";
+  return { sugestao: "manual", opcao: null, motivo: naoAchou ? `Erro: nada no rastreio${quem}${pt.anotacao ? "; a anotação não diz que não recebeu" : ""}.` : `Em rastreio${quem}, sem segregação/devolução nem entrega.` };
 }
 
 // print do rastreio: a página do SSW (detalhe) como ela é; nas outras fontes, um quadro com o que o rastreio respondeu
@@ -198,16 +202,23 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
   log(`barrar: ${L.length} notas na planilha sem ação no portal · ${falta.length} para conferir`);
   if (!falta.length) return;
   await R.carregarSenhasDB();
+  const M = await import("./multi360.mjs");
+  let m360 = null; try { m360 = await M.entrarMulti360(ctx, log); } catch (e) { log("barrar: não entrei no 360:", String(e.message).slice(0, 100)); }
   const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   for (const x of falta) {
     try {
-      const rastreio = await rastrear(x, R);
+      let tk = { transp: null, redesp: null };
+      if (m360 && x.ticket) { try { tk = await M.lerTranspTicket(m360, x.ticket); } catch (e) { soma("ticket do 360 não abriu"); } }
+      const alvo = tk.redesp || tk.transp || null;
+      const rastreio = alvo ? await rastrear({ ...x, transp_pedido: alvo }, R) : { situacao: null, fonte: null, sem_transp: true };
+      rastreio.alvo = alvo; rastreio.alvo_e_redesp = !!tk.redesp; rastreio.transp_ticket = tk.transp; rastreio.redesp_ticket = tk.redesp;
+      if (!rastreio.transp && alvo && rastreio.fonte && !/^(sem cte|sem nf|sem permissao)$/.test(rastreio.situacao || "")) rastreio.transp = alvo;
       const pt = await lerPortal(p, x.nf, R);
       let print_path = x.print_path, print_rastreio = x.print_rastreio || null;
       if (rastreio.fonte) { try { print_rastreio = await subirArquivo("barrar", `${encodeURIComponent(x.nf)}-rastreio.png`, await printRastreio(ctx, x.nf, rastreio)); } catch (e) { soma("print do rastreio falhou"); } }
       if (pt.print) { try { print_path = await subirArquivo("barrar", `${encodeURIComponent(x.nf)}.png`, pt.print); } catch (e) { soma("print não subiu"); } delete pt.print; }
-      const mesma = mesmaTransp(rastreio.transp || (rastreio.fonte !== "SSW" ? rastreio.fonte : ""), pt.transp || x.transp_pedido);
+      const mesma = mesmaTransp(rastreio.alvo || "", pt.transp || x.transp_pedido);   // transportadora do ticket (redespacho, se tiver) × a do portal
       const s = sugerir({ rastreio, portal: pt });
       await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio });
       soma(`sugestão ${s.sugestao}`); if (!pt.achou) soma("não está no portal"); if (mesma === false) soma("transportadora diferente");

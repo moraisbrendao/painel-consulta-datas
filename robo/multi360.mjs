@@ -187,3 +187,20 @@ export async function diagTicketBarrar(p, ticket, log) {
   await p.waitForTimeout(1000);
   log("  fila depois de cancelar:", (await filaAtual(p)).replace(/\d/g, "#"));
 }
+
+// Barrar entrega: lê no ticket o quadro da transportadora ("TSL Transportes - Matriz / Redespacho: ZAFER"). Nada vai para o registro.
+export async function lerTranspTicket(p, ticket) {
+  await abrirTicket(p, ticket);
+  return p.evaluate(() => {
+    const vazio = (t) => !t || /^[-–—\s]*$/.test(t);
+    const el = [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && /^\s*Redespacho:/i.test(e.textContent || ""));
+    if (!el) return { transp: null, redesp: null, achou: false };
+    const redesp = (el.textContent || "").replace(/^\s*Redespacho:\s*/i, "").trim();
+    // o nome da transportadora é a linha de cima no mesmo quadro
+    let bloco = el.parentElement; while (bloco && (bloco.innerText || "").split("\n").filter((l) => l.trim()).length < 2) bloco = bloco.parentElement;
+    const linhas = ((bloco && bloco.innerText) || "").split("\n").map((l) => l.trim()).filter(Boolean);
+    const i = linhas.findIndex((l) => /^Redespacho:/i.test(l));
+    const transp = i > 0 ? linhas[i - 1] : null;
+    return { transp: vazio(transp) ? null : transp.slice(0, 80), redesp: vazio(redesp) ? null : redesp.slice(0, 80), achou: true };
+  });
+}

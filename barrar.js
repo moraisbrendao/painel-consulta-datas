@@ -13,10 +13,10 @@
   const OP = ["Entregue", "Avaria", "Extravio", "Falta Parcial", "Sem Emissão em Sistema / Material Não Recebido"];
 
   let L = [], info = null, ok = true, card = "todos", marcadas = new Set(), urls = new Map(), carregou = false;
-  const SUG = { barrar: "Barrar ✓", nao_barrar: "Não barrar ✗", manual: "Conferir à mão" };
+  const SUG = { barrar: "Barrar ✓", nao_barrar: "Não barrar ✗", manual: "Erro: verificar" };
   const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao || "manual");
   const CARDS = [["barrar", "Barrar ✓", "sugestão: segregado / devolução", "verde"], ["nao_barrar", "Não barrar ✗", "sugestão: não recebeu ou entregue", "vermelho"],
-    ["manual", "Conferir à mão", "o robô não teve certeza", "laranja"], ["difer", "Transportadora diferente", "rastreio × portal", "roxo"], ["robo", "Aguardando o robô", "ainda não conferidas", ""],
+    ["manual", "Erro: verificar", "nada no rastreio ou ticket sem transportadora", "laranja"], ["difer", "Transportadora diferente", "rastreio × portal", "roxo"], ["robo", "Aguardando o robô", "ainda não conferidas", ""],
     ["aprovado", "Aprovadas", "vão para o portal", "azul"], ["feito", "Feitas no portal", "✓/✗ já clicado", "verde"], ["erro", "Erro no portal", "", "vermelho"], ["todos", "Todas", "da última planilha", ""]];
   const passa = (x) => {
     if (card === "difer") { if (x.mesma_transp !== false) return false; } else if (card !== "todos" && sit(x) !== card) return false;
@@ -53,7 +53,7 @@
     const r = x.rastreio || {}, p = x.portal || {};
     const rast = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>`
       : `<b>${esc(r.situacao || "—")}</b>${r.fonte ? ` <span class="s">(${esc(r.fonte)})</span>` : ""}${r.evento ? `<div class="s">${esc(r.evento)}${r.data_evento ? " · " + br(r.data_evento) : ""}</div>` : ""}${r.achou_palavra ? `<div><span class="chip verde">${esc(r.achou_palavra.toLowerCase())}</span></div>` : ""}${r.transp ? `<div class="s">transp. no rastreio: ${esc(r.transp)}</div>` : ""}`;
-    const tp = `${esc(x.transp_pedido || "—")}${p.transp ? `<div class="s">portal: ${esc(p.transp)}</div>` : x.conferido_em && p.achou === false ? `<div class="s txt-vermelho">não está na lista do portal</div>` : ""}${x.mesma_transp === false ? `<div><span class="chip roxo">transportadora diferente</span></div>` : ""}`;
+    const tp = `${esc(x.transp_pedido || "—")}${r.transp_ticket || r.redesp_ticket ? `<div class="s">ticket 360: ${esc(r.transp_ticket || "—")}${r.redesp_ticket ? ` · redespacho <b>${esc(r.redesp_ticket)}</b>` : ""}</div>` : ""}${p.transp ? `<div class="s">portal: ${esc(p.transp)}</div>` : x.conferido_em && p.achou === false ? `<div class="s txt-vermelho">não está na lista do portal</div>` : ""}${x.mesma_transp === false ? `<div><span class="chip roxo">transportadora diferente</span></div>` : ""}`;
     const an = p.anotacao ? `<div class="br-anot">${esc(p.anotacao)}</div>${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}` : `<span class="s">${x.conferido_em ? "sem anotação" : ""}</span>`;
     const sug = x.sugestao ? `<span class="chip ${x.sugestao === "barrar" ? "verde" : x.sugestao === "nao_barrar" ? "vermelho" : "ambar"}">${SUG[x.sugestao]}</span>${x.sugestao_opcao ? `<div class="s">${esc(x.sugestao_opcao)}</div>` : ""}${x.sugestao_motivo ? `<div class="s">${esc(x.sugestao_motivo)}</div>` : ""}` : "";
     const travado = !!x.portal_status && x.portal_status === "feito";
