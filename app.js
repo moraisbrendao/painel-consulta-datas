@@ -184,9 +184,37 @@
       if (volta === "conferencia") carregarConferencia();
       if (volta === "retornos") setTimeout(function esperaBase() { if (base.length) abrirRetornos(); else setTimeout(esperaBase, 800); }, 800);
       ligarTempoReal();
+      vigiarCodigoIntelipost();
       setTimeout(() => carregarSenhas().catch(() => {}), 3000);   // senhas do SSW para os botões de rastreio de todas as páginas
     }
   }
+
+  // ---------- código de verificação da Intelipost ----------
+  // quando o robô chega na tela do código, ele grava robo_estado "intelipost" = {tipo:"codigo"}; aqui aparece a caixa
+  // em qualquer página; o código digitado vai para robo_estado "intelipost_codigo" e o robô continua o login.
+  let codigoPedidoEm = "", codigoTimer = null;
+  async function checarCodigoIntelipost() {
+    if (perfil === "sac") return;
+    const r = await sb.from("robo_estado").select("valor").eq("nome", "intelipost").limit(1);
+    const v = r.data && r.data[0] && r.data[0].valor;
+    const pede = v && v.tipo === "codigo" && v.pedido_em && Date.now() - new Date(v.pedido_em).getTime() < 10 * 60e3;
+    if (pede && codigoPedidoEm !== v.pedido_em) { codigoPedidoEm = v.pedido_em; $("ip-codigo-num").value = ""; }
+    $("ip-codigo").hidden = !pede || $("ip-codigo").dataset.enviado === codigoPedidoEm;
+  }
+  function vigiarCodigoIntelipost() {
+    if (codigoTimer) return;
+    checarCodigoIntelipost().catch(() => {});
+    codigoTimer = setInterval(() => { if (!document.hidden) checarCodigoIntelipost().catch(() => {}); }, 15000);
+  }
+  $("ip-codigo-form").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const c = $("ip-codigo-num").value.replace(/\D/g, "");
+    if (c.length < 4) return toast("Digite o código que chegou no e-mail.", true);
+    const { error } = await sb.from("robo_estado").upsert({ nome: "intelipost_codigo", valor: { codigo: c, em: new Date().toISOString() }, atualizado_em: new Date().toISOString() }, { onConflict: "nome" });
+    if (error) return toast("Não consegui enviar o código: " + error.message, true);
+    $("ip-codigo").dataset.enviado = codigoPedidoEm; $("ip-codigo").hidden = true;
+    toast("Código enviado. O robô continua o login em alguns segundos.");
+  });
 
   // ---------------- carregar ----------------
   // busca a tabela inteira em páginas de 1.000, várias ao mesmo tempo (bem mais rápido que uma por vez)

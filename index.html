@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=157">
+  <link rel="stylesheet" href="styles.css?v=158">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1402,18 +1402,23 @@
   </div>
 
   <div id="carregando" class="carregando" hidden><div class="caixa"><div class="giro"></div><p id="carregando-texto">Carregando…</p></div></div>
+  <div id="ip-codigo" class="ip-codigo" hidden>
+    <b>A Intelipost pediu o código de verificação</b>
+    <span class="s">Digite o código de 6 dígitos que chegou no e-mail do login do robô. O robô espera até 10 minutos.</span>
+    <form id="ip-codigo-form"><input id="ip-codigo-num" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="000000"><button type="submit" class="amarelo">Enviar código</button></form>
+  </div>
   <div id="toast" class="toast" role="status" hidden></div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=157"></script>
-  <script src="mapa-brasil.js?v=157"></script>
-  <script src="troca-notas.js?v=157"></script>
-  <script src="app.js?v=157"></script>
-  <script src="ordenar.js?v=157"></script>
-  <script src="menu.js?v=157"></script>
-  <script src="ajuda.js?v=157"></script>
-  <script src="documentos.js?v=157"></script>
-  <script src="filtros.js?v=157"></script>
+  <script src="config.js?v=158"></script>
+  <script src="mapa-brasil.js?v=158"></script>
+  <script src="troca-notas.js?v=158"></script>
+  <script src="app.js?v=158"></script>
+  <script src="ordenar.js?v=158"></script>
+  <script src="menu.js?v=158"></script>
+  <script src="ajuda.js?v=158"></script>
+  <script src="documentos.js?v=158"></script>
+  <script src="filtros.js?v=158"></script>
 </body>
 </html>

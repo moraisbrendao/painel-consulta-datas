@@ -862,3 +862,10 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 }
 .filtros-cartao.f-aberto > .sel-bonito[hidden], .filtros-topo.f-aberto > .sel-bonito[hidden] { display: none !important; }
 .sel-bonito .multi-botao { width: 100%; }
+
+/* caixa do código de verificação da Intelipost (aparece em qualquer página) */
+.ip-codigo { position: fixed; right: 16px; bottom: 16px; z-index: 9999; max-width: 360px; background: #fff; border: 2px solid #f5b800; border-radius: 12px; box-shadow: 0 8px 28px rgba(0,0,0,.18); padding: 14px 16px; display: grid; gap: 8px; color: #0b2545; }
+.ip-codigo[hidden] { display: none; }
+.ip-codigo form { display: flex; gap: 8px; }
+.ip-codigo input { flex: 1; font-size: 20px; letter-spacing: 4px; text-align: center; padding: 6px 8px; border: 1px solid #c9d2e0; border-radius: 8px; min-width: 0; }
+@media (max-width: 760px) { .ip-codigo { left: 16px; right: 16px; max-width: none; } }

@@ -9,7 +9,7 @@
 // de novo enquanto a senha guardada no GitHub for a mesma, para a Intelipost não bloquear a conta do time.
 import { chromium } from "playwright";
 import { entrarMulti360, olharTicket, fazerTicket } from "./multi360.mjs";
-import { createHash } from "node:crypto";
+import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro, trocaDoTicket } from "./supa.mjs";
 
 const MODO = (process.env.MODO || "diag").toLowerCase();
@@ -31,17 +31,29 @@ if (estado.falhou === impressao) {
   process.exit(0);
 }
 // a Intelipost passou a pedir código de verificação no login: não tenta de novo por 3 h (cada tentativa manda um código por e-mail)
-if (estado.codigo_em && Date.now() - new Date(estado.codigo_em).getTime() < 3 * 3600e3 && !MODO.startsWith("diag")) {
+if (estado.codigo_em && Date.now() - new Date(estado.codigo_em).getTime() < 3 * 3600e3 && process.env.GITHUB_EVENT_NAME === "schedule") {
   log("A Intelipost pediu código de verificação há menos de 3 h: não vou tentar agora.");
   process.exit(0);
 }
 
 const navegador = await chromium.launch({ headless: false });   // a Intelipost recusa navegador sem janela (o workflow usa xvfb)
-const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+// sessão guardada (depois de um login com código): fica CRIPTOGRAFADA no Supabase com chave tirada da senha do GitHub
+const chaveSessao = createHash("sha256").update("sessao-intelipost:" + INTELIPOST_EMAIL + ":" + INTELIPOST_SENHA).digest();
+function cifrar(obj) { const iv = randomBytes(12), c = createCipheriv("aes-256-gcm", chaveSessao, iv); const d = Buffer.concat([c.update(JSON.stringify(obj), "utf8"), c.final()]); return { iv: iv.toString("base64"), tag: c.getAuthTag().toString("base64"), dados: d.toString("base64") }; }
+function decifrar(v) { try { const c = createDecipheriv("aes-256-gcm", chaveSessao, Buffer.from(v.iv, "base64")); c.setAuthTag(Buffer.from(v.tag, "base64")); return JSON.parse(Buffer.concat([c.update(Buffer.from(v.dados, "base64")), c.final()]).toString("utf8")); } catch { return null; } }
+const sessaoGuardada = await lerEstado("intelipost_sessao").then((v) => (v && v.dados ? decifrar(v) : null)).catch(() => null);
+const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo", ...(sessaoGuardada ? { storageState: sessaoGuardada } : {}) });
+async function guardarSessao() { try { await gravarEstado("intelipost_sessao", cifrar(await ctx.storageState())); log("Sessão da Intelipost guardada (criptografada)."); } catch (e) { log("Não consegui guardar a sessão:", e.message.slice(0, 80)); } }
 let pagina = await ctx.newPage();
 pagina.setDefaultTimeout(30000);
 
 async function entrar() {
+  if (sessaoGuardada) {
+    await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }).catch(() => {});
+    const ok = await pagina.getByPlaceholder(/digite seus pedidos/i).first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
+    if (ok && !/\/login/i.test(new URL(pagina.url()).pathname)) { log("Entrei na Intelipost com a sessão guardada."); await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok (sessão guardada)", modo: MODO }); return; }
+    log("A sessão guardada venceu: vou fazer o login.");
+  }
   await pagina.goto(BASE, { waitUntil: "domcontentloaded" });
   await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   const usuario = pagina.locator("input[type=email], input[name*=mail i], input[id*=mail i], input[name*=user i], input[id*=user i], input[name*=login i], input[type=text]").first();
@@ -69,11 +81,45 @@ async function entrar() {
   if (MODO.startsWith("diag")) await esqueleto("Logo depois do login");
   // a Intelipost às vezes não guarda a sessão (volta para a tela de login ou pede mais uma etapa): para aqui com aviso claro
   if (/\/login/i.test(new URL(pagina.url()).pathname)) {
-    await esqueleto("Depois do login continuou na tela de login");
-    await gravarEstado("intelipost", { tipo: "erro", codigo_em: new Date().toISOString(), titulo: "A Intelipost está pedindo código de verificação no login do robô.",
-      msg: "Depois da senha, a Intelipost pede um código de 6 dígitos (verificação em duas etapas). O robô não consegue entrar assim e tenta de novo a cada 3 h. Peça para desligar a verificação no login do robô." });
-    throw new Error("A Intelipost voltou para a tela de login depois da senha.");
+    const caixas = pagina.locator("input[type=text]:visible, input[type=tel]:visible, input[type=number]:visible, input[autocomplete=one-time-code]:visible");
+    const n = await caixas.count();
+    if (!n) {
+      await esqueleto("Depois do login continuou na tela de login");
+      await gravarEstado("intelipost", { tipo: "erro", titulo: "A Intelipost não deixou o robô entrar.", msg: "Depois da senha, a Intelipost voltou para a tela de login. Entre no site com o login do robô para ver o que ela pede." });
+      throw new Error("A Intelipost voltou para a tela de login depois da senha.");
+    }
+    // pede o código no painel e espera alguém digitar (até 10 min)
+    const pedidoEm = new Date().toISOString();
+    await gravarEstado("intelipost", { tipo: "codigo", pedido_em: pedidoEm, titulo: "A Intelipost pediu o código de verificação.",
+      msg: "Digite no painel o código de 6 dígitos que chegou no e-mail do login do robô. O robô espera até 10 minutos." });
+    log("A Intelipost pediu código de verificação: esperando alguém digitar no painel (até 10 min).");
+    let codigo = "";
+    for (let i = 0; i < 120 && !codigo; i++) {
+      const c = await lerEstado("intelipost_codigo").catch(() => null);
+      if (c && c.codigo && c.em && c.em > pedidoEm) codigo = String(c.codigo).replace(/\D/g, "");
+      else await pagina.waitForTimeout(5000);
+    }
+    await gravarEstado("intelipost_codigo", { usado_em: new Date().toISOString() }).catch(() => {});
+    if (!codigo) {
+      await gravarEstado("intelipost", { tipo: "erro", codigo_em: new Date().toISOString(), titulo: "Ninguém digitou o código da Intelipost.",
+        msg: "O robô esperou 10 minutos e parou. Ele pede de novo quando você mandar um pedido para alterar (ou na próxima rodada, em até 3 h)." });
+      throw new Error("Ninguém digitou o código de verificação a tempo.");
+    }
+    if (n >= codigo.length) { for (let i = 0; i < codigo.length; i++) await caixas.nth(i).fill(codigo[i]); }
+    else { await caixas.first().click(); await pagina.keyboard.type(codigo, { delay: 80 }); }
+    await pagina.waitForTimeout(1000);
+    if (/\/login/i.test(new URL(pagina.url()).pathname)) {
+      const b = pagina.locator("button[type=submit]:visible, input[type=submit]:visible").first();
+      if (await b.count()) await b.click().catch(() => {}); else await pagina.keyboard.press("Enter");
+    }
+    await pagina.waitForURL((u) => !/\/login/i.test(u.pathname), { timeout: 45000 }).catch(() => {});
+    if (/\/login/i.test(new URL(pagina.url()).pathname)) {
+      await gravarEstado("intelipost", { tipo: "erro", titulo: "A Intelipost não aceitou o código.", msg: "Confira se digitou o código mais recente do e-mail. Mande o pedido de novo para o robô pedir outro código." });
+      throw new Error("A Intelipost não aceitou o código de verificação.");
+    }
+    log("Código aceito.");
   }
+  await guardarSessao();
   await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok", modo: MODO });
   log("Entrei na Intelipost.");
 }
