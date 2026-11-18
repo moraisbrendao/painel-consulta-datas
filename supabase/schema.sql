@@ -2296,7 +2296,7 @@ returns integer language plpgsql security definer set search_path = public as $$
 declare n integer;
 begin
   if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
-  update public.barrar_entrega set na_planilha = false;
+  update public.barrar_entrega set na_planilha = false where na_planilha is true;
   insert into public.barrar_entrega (nf, ticket, transp_pedido, status_intelipost, ticket_criado, na_planilha)
   select x->>'nf', x->>'ticket', x->>'transp_pedido', x->>'status_intelipost', nullif(x->>'ticket_criado','')::timestamp, true
   from jsonb_array_elements(linhas) x where coalesce(x->>'nf','') <> ''
