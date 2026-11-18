@@ -274,7 +274,7 @@ async function simularPrazo(cep, metodo, olhar) {
   await p.bringToFront();
   await p.goto(BASE + "/quote/freight-quote", { waitUntil: "domcontentloaded" });
   await p.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
-  await passo("abrir a aba Simulação de cotação", async () => { await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(2000); });
+  await passo("abrir a aba Simulação de cotação", async () => { await p.getByText(/^\s*Simulação de cotação\s*$/i).first().click(); await p.waitForTimeout(3500); });
   await passo("marcar Sim em ignorar regras", async () => {
     // o menor bloco com "ignorar regras" e uma chave (sem pegar o de "modo de validação"); clica no rótulo da chave (Buefy)
     const bloco = p.locator("xpath=(//*[contains(normalize-space(.),'ignorar regras') and .//input[@type='checkbox'] and not(.//*[contains(normalize-space(.),'modo de valida')])])[last()]").first();
@@ -284,7 +284,8 @@ async function simularPrazo(cep, metodo, olhar) {
     const tentativas = [() => bloco.locator("label.switch, label").first().click({ timeout: 5000 }), () => bloco.locator("span.check").first().click({ force: true, timeout: 5000 }), () => caixa.click({ force: true, timeout: 5000 })];
     for (const t of tentativas) {
       if ((await caixa.isChecked()) === querSim) break;
-      await t().catch(() => {}); await p.waitForTimeout(1200);
+      await t().catch((e) => { if (olhar) log("    clique falhou:", e.message.split("\n")[0].slice(0, 120)); }); await p.waitForTimeout(1500);
+      if (olhar) log("    chave agora:", await caixa.isChecked().catch(() => "?"), "· url:", new URL(p.url()).pathname);
     }
     if ((await caixa.isChecked()) !== querSim) throw new Error("a chave não mudou");
   });
