@@ -17,7 +17,7 @@
     box.innerHTML = `<span class="multi-rotulo">${esc(rot)}</span>
       <button type="button" class="multi-botao"><span class="multi-valor"></span><span class="seta">▾</span></button>
       <div class="multi-painel" hidden><input class="multi-busca" type="search" placeholder="Procurar…"><div class="multi-lista"></div>
-        <div class="multi-acoes"><button type="button" class="link" data-acao="limpar">Limpar</button><span class="s"></span></div></div>`;
+        <div class="multi-acoes">${sel.multiple ? `<button type="button" class="link" data-acao="todos">Selecionar todos</button>` : ""}<button type="button" class="link" data-acao="limpar">Limpar</button><span class="s"></span></div></div>`;
     (lab || sel).replaceWith(box);
     box.appendChild(sel); sel.hidden = true; sel.tabIndex = -1;
     todos.push({ sel, box });
@@ -45,7 +45,10 @@
   const fechar = (exceto) => todos.forEach(({ box }) => { if (box !== exceto) box.querySelector(".multi-painel").hidden = true; });
   function escolher(sel, box, i) {
     if (sel.multiple) {   // liga/desliga a opção e deixa a lista aberta
-      if (i < 0) [...sel.options].forEach((o) => (o.selected = false)); else sel.options[i].selected = !sel.options[i].selected;
+      if (i === -2) {   // "Selecionar todos": marca as opções que estão aparecendo (respeita a busca)
+        const vis = new Set([...box.querySelectorAll(".sel-op")].filter((op) => !op.hidden).map((op) => +op.dataset.i));
+        [...sel.options].forEach((o, k) => { if (vis.has(k)) o.selected = true; });
+      } else if (i < 0) [...sel.options].forEach((o) => (o.selected = false)); else sel.options[i].selected = !sel.options[i].selected;
       sel.dispatchEvent(new Event("change", { bubbles: true }));
       const lst = box.querySelector(".multi-lista"), top = lst.scrollTop, q = box.querySelector(".multi-busca").value;
       listar(sel, box); box.querySelector(".multi-busca").value = q; box.querySelector(".multi-busca").dispatchEvent(new Event("input", { bubbles: true })); lst.scrollTop = top;
@@ -65,6 +68,7 @@
       return;
     }
     const op = e.target.closest(".sel-op"); if (op) { e.preventDefault(); escolher(it.sel, box, +op.dataset.i); return; }
+    if (e.target.closest('[data-acao="todos"]')) { escolher(it.sel, box, -2); return; }
     if (e.target.closest('[data-acao="limpar"]')) escolher(it.sel, box, it.sel.multiple ? -1 : 0);
   });
   document.addEventListener("input", (e) => {
