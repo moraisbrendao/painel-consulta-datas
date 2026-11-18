@@ -3479,10 +3479,13 @@ ${extra}
     if (/jadlog|formato|transiga/i.test(transp || "") || (x && /jadlog|formato|transiga/i.test(x.transportadora || ""))) return cfJanela(x || { pedido: pedido || "", nf, transportadora: transp, situacao: "pendente" });
     const prop = rastreioDe(transp);
     if (prop) { if (!num) return toast("Esse pedido não tem NF.", true); const msg = prop[2](num, ser); if (msg) toast(msg); return; }
-    const c = cnpjDaSerie(ser);
+    // usa o mesmo jeito que o robô achou a nota: outro CNPJ (detalhe.cnpj_outro) e/ou sem a senha (detalhe.sem_senha)
+    if (!x && nf) x = cfLista.find((y) => y.nf === nf) || null;   // sem esperar o banco: o navegador só abre a aba nova se for na hora do clique
+    const d = (x && x.detalhe) || {}, outro = d.cnpj_outro ? Object.keys(CNPJ_SERIE).find((k) => k.endsWith(d.cnpj_outro)) : null;
+    const c = outro || cnpjDaSerie(ser);
     if (!num || !c) return toast("Essa NF não tem série com CNPJ conhecido.", true);
     const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/ssw_resultSSW"; f.target = "_blank"; f.rel = "noopener";
-    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", senhaDe(transp)], ["urlori", "https://ssw.inf.br/ajuda/rastreamento.html"]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
+    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", d.sem_senha ? "" : senhaDe(transp)], ["urlori", "https://ssw.inf.br/ajuda/rastreamento.html"]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
     document.body.appendChild(f); f.submit(); f.remove();
   }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());
