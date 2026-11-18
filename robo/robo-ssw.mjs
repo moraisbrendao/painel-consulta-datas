@@ -1,9 +1,20 @@
 // Robô da conferência SSW: lê a previsão de entrega no rastreio público do SSW (ssw.inf.br)
 // pela NF (sem a série) + CNPJ do remetente (escolhido pela série da NF).
 // Registro público (Actions): só contagens, nomes de campos e datas — nunca nome, endereço ou NF.
-import { entrarSupabase, chamar } from "./supa.mjs";
+import { entrarSupabase, chamar, gravarEstado } from "./supa.mjs";
 const MODO = process.env.MODO || "diag";
-const log = (...a) => console.log(...a.map((x) => String(x).replace(/\d{5,}/g, "#####")));
+let ultimaLinha = "";
+const log = (...a) => { const t = a.map((x) => String(x).replace(/\d{5,}/g, "#####")).join(" "); ultimaLinha = t; console.log(t); };
+// aviso verde no painel: robô começou / terminou (só nome do robô, horário e a última linha do registro, que já é mascarada)
+const ANDAMENTO = { aguardando: "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", transportadora: "Conferência de uma transportadora" }[MODO];
+if (ANDAMENTO) {
+  const inicio = new Date().toISOString(); let fechou = false;
+  try { await entrarSupabase(); await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: true, inicio }); } catch (_) {}
+  const fim = async (resumo) => { if (fechou) return; fechou = true; await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: false, inicio, fim: new Date().toISOString(), resumo: String(resumo || "").slice(0, 220) }).catch(() => {}); };
+  process.on("beforeExit", () => fim(ultimaLinha));
+  process.on("uncaughtException", async (e) => { await fim("Parou com erro: " + String(e && e.message).split("\n")[0].slice(0, 120)); process.exit(1); });
+  process.on("unhandledRejection", async (e) => { await fim("Parou com erro: " + String(e && e.message).split("\n")[0].slice(0, 120)); process.exit(1); });
+}
 const tags = (html, re) => [...html.matchAll(re)].map((m) => m[0].replace(/\s+/g, " ").slice(0, 200));
 
 async function pagina(url, opts) {

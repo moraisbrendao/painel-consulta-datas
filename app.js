@@ -203,9 +203,27 @@
   }
   function vigiarCodigoIntelipost() {
     if (codigoTimer) return;
-    checarCodigoIntelipost().catch(() => {});
-    codigoTimer = setInterval(() => { if (!document.hidden) checarCodigoIntelipost().catch(() => {}); }, 8000);
+    checarCodigoIntelipost().catch(() => {}); checarRobos().catch(() => {});
+    let n = 0;
+    codigoTimer = setInterval(() => { if (document.hidden) return; checarCodigoIntelipost().catch(() => {}); if (++n % 2 === 0) checarRobos().catch(() => {}); }, 8000);
   }
+
+  // ---------- aviso pequeno no canto: robô rodando (azul) / terminou (verde) ----------
+  const fechados = (() => { try { return new Set(JSON.parse(localStorage.getItem("painel.robosVistos") || "[]")); } catch (_) { return new Set(); } })();
+  async function checarRobos() {
+    if (perfil === "sac") return;
+    const r = await sb.from("robo_estado").select("nome,valor,atualizado_em").like("nome", "andamento:%");
+    if (r.error) return;
+    const hora = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const agora = Date.now();
+    const itens = (r.data || []).map((x) => ({ nome: x.nome, ...(x.valor || {}) })).filter((v) => v.inicio
+      && (v.rodando ? agora - new Date(v.inicio).getTime() < 6 * 3600e3 : v.fim && agora - new Date(v.fim).getTime() < 2 * 3600e3 && !fechados.has(v.nome + "|" + v.fim)));
+    $("robo-avisos").innerHTML = itens.sort((a, b) => String(b.inicio).localeCompare(String(a.inicio))).map((v) => v.rodando
+      ? `<div class="robo-aviso rodando"><span class="pisca"></span><div><b>${esc(v.robo)}</b><small>rodando desde ${hora(v.inicio)}</small></div></div>`
+      : `<div class="robo-aviso feito" title="${esc(v.resumo || "")}"><span>✓</span><div><b>${esc(v.robo)}</b><small>terminou às ${hora(v.fim)}${v.resumo ? " · " + esc(v.resumo) : ""}</small></div><button type="button" class="robo-aviso-x" data-k="${esc(v.nome + "|" + v.fim)}" title="Fechar">✕</button></div>`).join("");
+  }
+  $("robo-avisos").addEventListener("click", (e) => { const b = e.target.closest(".robo-aviso-x"); if (!b) return; fechados.add(b.dataset.k);
+    try { localStorage.setItem("painel.robosVistos", JSON.stringify([...fechados].slice(-50))); } catch (_) {} b.closest(".robo-aviso").remove(); });
   $("ip-codigo-form2").addEventListener("submit", (e) => { e.preventDefault(); enviarCodigoIntelipost($("ip-codigo-num2")); });
   $("ip-codigo-form").addEventListener("submit", (e) => { e.preventDefault(); enviarCodigoIntelipost($("ip-codigo-num")); });
   async function enviarCodigoIntelipost(campo) {

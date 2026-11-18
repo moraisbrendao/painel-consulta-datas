@@ -799,6 +799,9 @@ async function fazerTroca(job) {
 }
 
 let ok = 0, erro = 0;
+const andaIni = new Date().toISOString(), anda = MODO === "real";
+if (anda) await gravarEstado("andamento:intelipost", { robo: "Nova data na Intelipost", rodando: true, inicio: andaIni }).catch(() => {});
+let andaResumo = "";
 try {
   await entrar();
   if (MODO === "diag-troca") await diagTroca();
@@ -850,6 +853,7 @@ try {
       if (MODO !== "real") break;   // dryrun devolve para pendente: um lote só
     }
     log(`Fim: ${ok} ${MODO === "real" ? "alterados" : "preenchidos sem salvar"}, ${erro} com problema.`);
+    andaResumo = `${ok} alterados, ${erro} com problema` + (sobrou ? "; ainda tem pedido na fila, a próxima rodada já foi chamada" : "");
     if (sobrou && MODO === "real" && process.env.GH_TOKEN && process.env.GITHUB_REPOSITORY) {
       const r = await fetch(`https://api.github.com/repos/${process.env.GITHUB_REPOSITORY}/actions/workflows/robo-intelipost.yml/dispatches`, { method: "POST",
         headers: { Authorization: `Bearer ${process.env.GH_TOKEN}`, Accept: "application/vnd.github+json", "Content-Type": "application/json" }, body: JSON.stringify({ ref: "main", inputs: { modo: "real" } }) }).catch(() => null);
@@ -881,7 +885,8 @@ try {
     if (trocas.length) log(`Troca de notas: ${tOk} ok, ${tErro} com problema.`);
   }
 } catch (e) {
-  log("Parei:", e.message);
+  log("Parei:", e.message); andaResumo = "Parou: " + mascara(String(e.message).split("\n")[0]).slice(0, 150);
 } finally {
   await navegador.close();
+  if (anda) await gravarEstado("andamento:intelipost", { robo: "Nova data na Intelipost", rodando: false, inicio: andaIni, fim: new Date().toISOString(), resumo: andaResumo }).catch(() => {});
 }
