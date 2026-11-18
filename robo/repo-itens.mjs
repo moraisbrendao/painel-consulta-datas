@@ -24,7 +24,8 @@ export async function lerEventos(p) {
     const tits = [...document.querySelectorAll("body *")].filter((e) => vis(e) && e.children.length === 0 && /^\s*Reposi[cç][aã]o\s*$/i.test(e.textContent || ""));
     const cards = [];
     for (const t of tits) {
-      let d = t; for (let i = 0; i < 6 && d && !/volume/i.test(d.innerText || ""); i++) d = d.parentElement;
+      let d = t; for (let i = 0; i < 10 && d && !/\d{5}\.\d{4}/.test(d.innerText || ""); i++) d = d.parentElement;
+      if (!d || !/\d{5}\.\d{4}/.test(d.innerText || "")) { d = t; for (let i = 0; i < 6 && d && !/volume/i.test(d.innerText || ""); i++) d = d.parentElement; }
       if (!d) continue;
       const txt = d.innerText || "";
       const codigos = [...txt.matchAll(/\b(\d{5}\.\d{4})\b/g)].map((m) => m[1]);
@@ -33,6 +34,18 @@ export async function lerEventos(p) {
         forma: txt.replace(/\d/g, "#").replace(/\s+/g, " ").slice(0, 160) });
     }
     return { cards, titulos: tits.length };
+  });
+}
+
+// estrutura (mascarada) de onde podem estar os anexos e o código do volume
+export async function sondar(p) {
+  return p.evaluate(() => {
+    const m = (x) => String(x || "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 60);
+    const cand = [...document.querySelectorAll("button,a,[role=button],[title],[aria-label],[download]")]
+      .filter((e) => /anexo|baixar|download|pdf|arquivo|attach/i.test([e.getAttribute("aria-label"), e.getAttribute("title"), e.getAttribute("href"), e.textContent].join(" ")));
+    const abas = [...document.querySelectorAll("button,[role=tab],a")].map((e) => (e.textContent || "").trim()).filter((t) => t && t.length < 25 && !/\d{3}/.test(t));
+    return { anexos: cand.slice(0, 15).map((e) => `${e.tagName}|aria=${m(e.getAttribute("aria-label"))}|title=${m(e.getAttribute("title"))}|txt=${m(e.textContent)}|href=${/\.pdf/i.test(e.getAttribute("href") || "") ? "pdf" : e.getAttribute("href") ? "sim" : ""}`),
+      abas: [...new Set(abas)].slice(0, 40), codigosNaPagina: (document.body.innerText.match(/\b\d{5}\.\d{4}\b/g) || []).length };
   });
 }
 
@@ -93,8 +106,12 @@ export async function diagRepo({ chamar, log, ctx }) {
     try {
       await abrir(p, x.ticket);
       const ev = await lerEventos(p);
+      const so2 = await sondar(p); log(`${rot}: depois de Eventos, códigos NNNNN.NNNN na página=${so2.codigosNaPagina}`);
       log(`${rot}: Eventos → quadros Reposição: ${ev.titulos ?? 0} · ` + (ev.cards || []).map((c) => `volumes=${c.volumes} ${c.parcial || "?"} ${c.quando || "?"} códigos=${c.codigos.length} forma="${c.forma}"`).join(" | ") + (ev.erro ? " · " + ev.erro : ""));
       await abrir(p, x.ticket);
+      const so = await sondar(p);
+      log(`${rot}: códigos NNNNN.NNNN na página=${so.codigosNaPagina} · abas/botões: ${so.abas.join(" / ")}`);
+      so.anexos.forEach((a) => log(`  anexo? ${a}`));
       const an = await lerPdfs(p);
       log(`${rot}: anexos=${an.anexos} · PDFs lidos=${an.pdfs.length}`);
       an.pdfs.forEach((t, i) => { const d = lerDanfe(t);
