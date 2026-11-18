@@ -30,6 +30,11 @@ if (estado.falhou === impressao) {
   log("A senha guardada é a mesma que já falhou: não vou tentar de novo (para não bloquear a conta). Troque o segredo INTELIPOST_SENHA.");
   process.exit(0);
 }
+// a Intelipost passou a pedir código de verificação no login: não tenta de novo por 3 h (cada tentativa manda um código por e-mail)
+if (estado.codigo_em && Date.now() - new Date(estado.codigo_em).getTime() < 3 * 3600e3 && !MODO.startsWith("diag")) {
+  log("A Intelipost pediu código de verificação há menos de 3 h: não vou tentar agora.");
+  process.exit(0);
+}
 
 const navegador = await chromium.launch({ headless: false });   // a Intelipost recusa navegador sem janela (o workflow usa xvfb)
 const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
@@ -65,8 +70,8 @@ async function entrar() {
   // a Intelipost às vezes não guarda a sessão (volta para a tela de login ou pede mais uma etapa): para aqui com aviso claro
   if (/\/login/i.test(new URL(pagina.url()).pathname)) {
     await esqueleto("Depois do login continuou na tela de login");
-    await gravarEstado("intelipost", { tipo: "erro", titulo: "A Intelipost não deixou o robô entrar.",
-      msg: "Depois de digitar a senha, a Intelipost voltou para a tela de login (pode estar pedindo código de verificação ou troca de senha). Entre no site com o login do robô para ver o que ela pede." });
+    await gravarEstado("intelipost", { tipo: "erro", codigo_em: new Date().toISOString(), titulo: "A Intelipost está pedindo código de verificação no login do robô.",
+      msg: "Depois da senha, a Intelipost pede um código de 6 dígitos (verificação em duas etapas). O robô não consegue entrar assim e tenta de novo a cada 3 h. Peça para desligar a verificação no login do robô." });
     throw new Error("A Intelipost voltou para a tela de login depois da senha.");
   }
   await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok", modo: MODO });
