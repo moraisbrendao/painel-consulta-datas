@@ -4117,9 +4117,9 @@ ${extra}
   }
   function desenharGargalos(caixa, L) {
     const gbox = $(caixa); gbox.hidden = !gargAberto;
-    // com os gargalos abertos, a página mostra só os cards e os gargalos (os outros quadros somem até fechar o card)
+    // com Gargalos ou Em aberto abertos, a página mostra só os cards e esses quadros (os outros somem até fechar o card)
     [...gbox.parentElement.children].forEach((el) => { if (el === gbox || el.classList.contains("kpis") || el.id === "rpf-parados-q" || el.id === "rpg-parados") return;
-      if (gargAberto) { if (!el.hidden) { el.hidden = true; el.dataset.gargEsc = "1"; } } else if (el.dataset.gargEsc) { el.hidden = false; delete el.dataset.gargEsc; } });
+      if (gargAberto || pvAberto) { if (!el.hidden) { el.hidden = true; el.dataset.gargEsc = "1"; } } else if (el.dataset.gargEsc) { el.hidden = false; delete el.dataset.gargEsc; } });
     document.querySelectorAll('#rpg-cards [data-card="garg"], #rpf-cards [data-card="garg"]').forEach((k) => k.classList.toggle("ativa", gargAberto));
     if (!gargAberto) return;
     const ab0 = L.filter(abertoRep), pt = (x, y) => x.localeCompare(y, "pt-BR");
