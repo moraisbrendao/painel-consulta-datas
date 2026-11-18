@@ -4069,7 +4069,7 @@ ${extra}
   const kpiGarg = (L) => { const g = gargalos(L)[0]; return kpiC("garg", "Gargalos por fila", g ? esc(g.fila) : "–", g ? `maior gargalo · ${fmt(g.n)} casos, média ${dia1(g.media)} dias parados` : "nenhum caso em aberto", "laranja kpi-garg"); };
   // quadro "em aberto por fila": só aparece ao clicar no card Em aberto; filtros próprios (série, fila, responsável)
   let pvAberto = false; const pv = { serie: "", fila: "", resp: "", grupo: "" }; let pvDet = null;
-  const casaPv = (r, f) => (!f.serie || serieRep(r) === f.serie) && (!f.fila || (filaRep(r) || SEM_FILA) === f.fila) && (!f.resp || respRep(r) === f.resp) && (!f.grupo || grupoRep(r) === f.grupo);
+  const casaPv = (r, f) => (!f.serie || serieRep(r) === f.serie) && (!f.fila || (filaRep(r) || SEM_FILA) === f.fila) && (!f.resp || respRep(r) === f.resp) && (!f.grupo || grupoRep(r) === f.grupo) && (!f.grupos || !f.grupos.length || f.grupos.includes(grupoRep(r)));
   function casaCard(r) {
     const d = r._d || {};
     switch (repCard) {
@@ -4106,8 +4106,8 @@ ${extra}
     return `<td class="num"><span class="rp-var ${p > 0 ? "sobe" : p < 0 ? "desce" : ""}">${p > 0 ? "▲ +" : p < 0 ? "▼ " : ""}${p}%</span></td>`; };
 
   // quadro de gargalos (card próprio "Gargalos por fila"): por fila, quantos casos e há quantos dias estão parados
-  let gargAberto = false; const gf = { grupo: "", fila: "" }; let gargCasos = [];
-  const casaGf = (r) => (!gf.grupo || grupoRep(r) === gf.grupo) && (!gf.fila || (filaRep(r) || SEM_FILA) === gf.fila);
+  let gargAberto = false; const gf = { grupo: [], fila: [] };   // várias escolhas let gargCasos = [];
+  const casaGf = (r) => (!gf.grupo.length || gf.grupo.includes(grupoRep(r))) && (!gf.fila.length || gf.fila.includes(filaRep(r) || SEM_FILA));
   function gargalos(L, comFiltro) {
     const ab = L.filter((r) => abertoRep(r) && (!comFiltro || casaGf(r)));
     return contaPor(ab, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const d = rs.map(diasFila).filter((n) => n != null);
@@ -4123,9 +4123,9 @@ ${extra}
     document.querySelectorAll('#rpg-cards [data-card="garg"], #rpf-cards [data-card="garg"]').forEach((k) => k.classList.toggle("ativa", gargAberto));
     if (!gargAberto) return;
     const ab0 = L.filter(abertoRep), pt = (x, y) => x.localeCompare(y, "pt-BR");
-    const ops = { grupo: [...new Set(ab0.map(grupoRep))].sort(pt), fila: [...new Set(ab0.filter((r) => !gf.grupo || grupoRep(r) === gf.grupo).map((r) => filaRep(r) || SEM_FILA))].sort(pt) };
-    gbox.querySelectorAll(".garg-sel").forEach((s) => { const k = s.dataset.gf; if (gf[k] && !ops[k].includes(gf[k])) ops[k].unshift(gf[k]);
-      s.innerHTML = `<option value="">${k === "fila" ? "Todas" : "Todos"}</option>` + ops[k].map((v) => `<option value="${esc(v)}">${esc(v)}</option>`).join(""); s.value = gf[k]; });
+    const ops = { grupo: [...new Set(ab0.map(grupoRep))].sort(pt), fila: [...new Set(ab0.filter((r) => !gf.grupo.length || gf.grupo.includes(grupoRep(r))).map((r) => filaRep(r) || SEM_FILA))].sort(pt) };
+    gbox.querySelectorAll(".garg-sel").forEach((s) => { const k = s.dataset.gf; gf[k].forEach((v) => { if (!ops[k].includes(v)) ops[k].unshift(v); });
+      s.innerHTML = ops[k].map((v) => `<option value="${esc(v)}"${gf[k].includes(v) ? " selected" : ""}>${esc(v)}</option>`).join(""); });
     gargCasos = ab0.filter(casaGf);
     const gs = gargalos(L, true);
     const gmax = Math.max(1, ...gs.map((g) => g.soma));
@@ -4255,7 +4255,7 @@ ${extra}
     rpdPag = Math.min(rpdPag, pags);
     $("rpd-titulo").innerHTML = `${fmt(L.length)} tickets` + (repCard ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro do card">${esc(ROT_CARD[repCard] || repCard)} ✕</button>` : "")
       + (repFaixa >= 0 ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro de dias">Parados na fila: ${esc(FAIXAS_FILA[repFaixa][0])} ✕</button>` : "")
-      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.grupo && "Grupo " + pvDet.grupo, pvDet.fila, pvDet.resp].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
+      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.grupo && "Grupo " + pvDet.grupo, pvDet.grupos && pvDet.grupos.length && "Grupo " + pvDet.grupos.join(", "), pvDet.fila, pvDet.resp].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
     $("rpd-linhas").innerHTML = L.slice((rpdPag - 1) * POR, rpdPag * POR).map(linhaDet).join("") || `<tr><td colspan="20" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
     $("rpd-pag").innerHTML = L.length > POR ? `<button class="btn" data-p="-1" ${rpdPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rpdPag} de ${pags}</span><button class="btn" data-p="1" ${rpdPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
@@ -4281,12 +4281,12 @@ ${extra}
     const c = e.target.closest("[data-pfila]");
     if (c) { e.preventDefault(); e.stopPropagation();
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
-      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: gf.grupo } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
+      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: "", grupos: gf.grupo.slice() } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
       repCard = "ab"; repFaixa = c.dataset.pfx === undefined ? -1 : +c.dataset.pfx; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); }
   }, true);
-  $("pagina-reposicao").addEventListener("change", (e) => { const g = e.target.closest(".garg-sel"); if (g) { gf[g.dataset.gf] = g.value; if (g.dataset.gf === "grupo") gf.fila = ""; filtrarRep(); return; } });
+  $("pagina-reposicao").addEventListener("change", (e) => { const g = e.target.closest(".garg-sel"); if (g) { gf[g.dataset.gf] = [...g.selectedOptions].map((o) => o.value); filtrarRep(); return; } });
   $("pagina-reposicao").addEventListener("click", (e) => {
-    if (e.target.closest(".garg-limpar")) { gf.grupo = gf.fila = ""; filtrarRep(); return; }
+    if (e.target.closest(".garg-limpar")) { gf.grupo = []; gf.fila = []; filtrarRep(); return; }
     if (!e.target.closest(".garg-excel")) return;
     if (!gargCasos.length) return toast("Nenhum caso em aberto nesse filtro.", true);
     const L = gargCasos.slice().sort((x, y) => (diasFila(y) ?? -1) - (diasFila(x) ?? -1));

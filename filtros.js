@@ -12,7 +12,7 @@
     const lab = sel.closest("label");
     const rot = lab ? [...lab.childNodes].filter((n) => n.nodeType === 3).map((n) => n.textContent).join(" ").trim() : (sel.title || "");
     const box = document.createElement("div");
-    box.className = "multi sel-bonito";
+    box.className = "multi sel-bonito" + (sel.multiple ? " sel-multi" : "");
     if (lab) { if (lab.id) { box.id = lab.id; lab.removeAttribute("id"); } if (lab.hidden) box.hidden = true; if (lab.className) box.className += " " + lab.className; }
     box.innerHTML = `<span class="multi-rotulo">${esc(rot)}</span>
       <button type="button" class="multi-botao"><span class="multi-valor"></span><span class="seta">▾</span></button>
@@ -24,6 +24,12 @@
     atualizar(sel, box);
   }
   function atualizar(sel, box) {
+    if (sel.multiple) {   // várias escolhas: "Todas", o nome (se 1) ou "N selecionados"
+      const ss = [...sel.selectedOptions];
+      const t = !ss.length ? (sel.dataset.todos || "Todos") : ss.length === 1 ? ss[0].textContent : `${ss.length} selecionados`;
+      const vv = box.querySelector(".multi-valor"); if (vv.textContent !== t) vv.textContent = t;
+      box.classList.toggle("ativo", ss.length > 0); return;
+    }
     const op = sel.options[sel.selectedIndex];
     const txt = op ? op.textContent : "";
     const v = box.querySelector(".multi-valor"); if (v.textContent !== txt) v.textContent = txt;
@@ -31,12 +37,20 @@
   }
   function listar(sel, box) {
     const ops = [...sel.options];
-    box.querySelector(".multi-lista").innerHTML = ops.map((o, i) => `<label class="multi-op sel-op${i === sel.selectedIndex ? " escolhido" : ""}" data-i="${i}"><span>${esc(o.textContent)}</span>${i === sel.selectedIndex ? "<em>✓</em>" : ""}</label>`).join("");
+    const marcado = (o, i) => (sel.multiple ? o.selected : i === sel.selectedIndex);
+    box.querySelector(".multi-lista").innerHTML = ops.map((o, i) => `<label class="multi-op sel-op${marcado(o, i) ? " escolhido" : ""}" data-i="${i}">${sel.multiple ? `<span class="caixa">${marcado(o, i) ? "☑" : "☐"}</span>` : ""}<span>${esc(o.textContent)}</span>${!sel.multiple && marcado(o, i) ? "<em>✓</em>" : ""}</label>`).join("");
     box.querySelector(".multi-acoes .s").textContent = `${ops.length} opções`;
     const b = box.querySelector(".multi-busca"); b.value = ""; b.hidden = ops.length <= 6;
   }
   const fechar = (exceto) => todos.forEach(({ box }) => { if (box !== exceto) box.querySelector(".multi-painel").hidden = true; });
   function escolher(sel, box, i) {
+    if (sel.multiple) {   // liga/desliga a opção e deixa a lista aberta
+      if (i < 0) [...sel.options].forEach((o) => (o.selected = false)); else sel.options[i].selected = !sel.options[i].selected;
+      sel.dispatchEvent(new Event("change", { bubbles: true }));
+      const lst = box.querySelector(".multi-lista"), top = lst.scrollTop, q = box.querySelector(".multi-busca").value;
+      listar(sel, box); box.querySelector(".multi-busca").value = q; box.querySelector(".multi-busca").dispatchEvent(new Event("input", { bubbles: true })); lst.scrollTop = top;
+      atualizar(sel, box); return;
+    }
     if (sel.selectedIndex !== i) { sel.selectedIndex = i; sel.dispatchEvent(new Event("input", { bubbles: true })); sel.dispatchEvent(new Event("change", { bubbles: true })); }
     box.querySelector(".multi-painel").hidden = true; atualizar(sel, box);
   }
@@ -51,7 +65,7 @@
       return;
     }
     const op = e.target.closest(".sel-op"); if (op) { e.preventDefault(); escolher(it.sel, box, +op.dataset.i); return; }
-    if (e.target.closest('[data-acao="limpar"]')) escolher(it.sel, box, 0);
+    if (e.target.closest('[data-acao="limpar"]')) escolher(it.sel, box, it.sel.multiple ? -1 : 0);
   });
   document.addEventListener("input", (e) => {
     if (!e.target.classList.contains("multi-busca") || !e.target.closest(".sel-bonito")) return;
