@@ -1266,6 +1266,11 @@ if (MODO === "diag-repo") {   // Reposição: lê 1 ticket pós (Eventos) e 1 pr
   const nav = await chromium.launch(); const ctx = await nav.newContext({ acceptDownloads: true });
   try { await (await import("./repo-itens.mjs")).diagRepo({ chamar, log, ctx }); } finally { await nav.close(); }
 }
+if (MODO === "diag-barrar") {   // Barrar entrega: só olha a tela do portal (estrutura mascarada, não clica em nada)
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR" });
+  try { await (await import("./barrar.mjs")).diagBarrar({ ctx, log }); } catch (e) { log("diag-barrar: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
+}
 if (MODO === "repo-itens") {   // Reposição: itens/volumes e cobrança à transportadora dos tickets em Aguardando entrega (robo/repo-itens.mjs)
   await entrarSupabase();
   const { chromium } = await import("playwright");
