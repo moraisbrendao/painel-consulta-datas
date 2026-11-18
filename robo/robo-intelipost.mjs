@@ -45,6 +45,8 @@ const sessaoGuardada = await lerEstado("intelipost_sessao").then((v) => (v && v.
 const ctx = await navegador.newContext({ viewport: { width: 1440, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo", ...(sessaoGuardada ? { storageState: sessaoGuardada } : {}) });
 async function guardarSessao() { try { await gravarEstado("intelipost_sessao", cifrar(await ctx.storageState())); log("Sessão da Intelipost guardada (criptografada)."); } catch (e) { log("Não consegui guardar a sessão:", e.message.slice(0, 80)); } }
 let pagina = await ctx.newPage();
+ctx.on("page", (pg) => pg.on("dialog", (d) => d.accept().catch(() => {})));   // "sair da página?" da simulação travava a próxima busca
+pagina.on("dialog", (d) => d.accept().catch(() => {}));
 pagina.setDefaultTimeout(30000);
 
 async function entrar() {
@@ -280,13 +282,17 @@ async function simularPrazo(cep, metodo, olhar) {
     if (i < 0) throw new Error("não achei a chave");
     const caixa = p.locator("input[type=checkbox]:visible").nth(i);
     const querSim = process.env.IGNORAR_REGRAS !== "nao";
-    if ((await caixa.isChecked()) !== querSim) await caixa.click({ force: true });
-    await p.waitForTimeout(800);
+    // a chave às vezes não responde ao clique no input: tenta o input, depois a "bolinha" ao lado (pai/avô visível), esperando a tela assentar
+    const tentativas = [() => caixa.click({ force: true }), () => caixa.locator("xpath=..").click({ force: true }), () => caixa.locator("xpath=../..").click({ force: true }), () => caixa.check({ force: true })];
+    for (const t of tentativas) {
+      if ((await caixa.isChecked()) === querSim) break;
+      await t().catch(() => {}); await p.waitForTimeout(1200);
+    }
     if ((await caixa.isChecked()) !== querSim) throw new Error("a chave não mudou");
   });
   const destino = p.locator("input[placeholder*='cep de destino' i]:visible").first();
   if (!cep) cep = await p.locator("xpath=//*[starts-with(normalize-space(text()),'Cep Origem')]/following::input[1] >> visible=true").first().inputValue();   // teste: usa o CEP da própria loja
-  await passo("preencher o CEP de destino", async () => { await destino.click(); await destino.fill(""); await p.keyboard.type(String(cep).replace(/\D/g, ""), { delay: 40 }); await destino.press("Tab");
+  await passo("preencher o CEP de destino", async () => { await destino.waitFor({ state: "visible", timeout: 30000 }); await destino.scrollIntoViewIfNeeded().catch(() => {}); await destino.click({ force: true }); await destino.fill(""); await p.keyboard.type(String(cep).replace(/\D/g, ""), { delay: 40 }); await destino.press("Tab");
     if (olhar) log("  CEP destino ficou com", (await destino.inputValue()).replace(/\D/g, "").length, "dígitos"); });
   await passo("escolher o método de entrega", async () => {
     const sel = p.locator("select:visible").filter({ has: p.locator("option", { hasText: /selecione um método/i }) }).first();
