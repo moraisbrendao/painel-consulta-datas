@@ -3977,7 +3977,7 @@ ${extra}
   const respRep = (r) => r.responsavel || SEM_RESP;
   // situação (regra da Brenda 18/11): Resolvido ou Encerrado = finalizado; fila "Recuperação de crédito" = pendente de
   // solução da Recuperação de crédito (não faz mais parte de reposição, não conta como em aberto); o resto = em aberto
-  const filaRep = (r) => (r._d && r._d.fila_atual) || r.fila || "";
+  const filaRep = (r) => r.fila || (r._d && r._d.fila_atual) || "";   // regra da Brenda (18/11): fila da TABELA DE ACOMPANHAMENTO vale primeiro
   const sitRep = (r) => /^(RESOLVID|ENCERRAD|FINALIZAD)/.test(norm(r.status)) ? "fin" : /RECUPERACAO DE CREDITO/.test(norm(filaRep(r))) ? "rec" : "ab";
   const ROT_SIT = { ab: "Em aberto", fin: "Finalizado", rec: "Pendente Recuperação de crédito" };
   const abertoRep = (r) => sitRep(r) === "ab";
@@ -3987,7 +3987,8 @@ ${extra}
   // fila no 1º detalhamento guardado, conta desde a Data da Última Atualização do ticket (tabela de acompanhamento)
   function diasFila(r) {
     const d = r._d, hoje = hojeISO();
-    const viu = d && d.ultima_mudanca_em && d.primeiro_envio_em && d.ultima_mudanca_em > d.primeiro_envio_em ? d.ultima_mudanca_em : null;
+    const mesma = d && norm(d.fila_atual) === norm(filaRep(r));   // a mudança vista no detalhamento só vale se for a mesma fila da tabela
+    const viu = mesma && d.ultima_mudanca_em && d.primeiro_envio_em && d.ultima_mudanca_em > d.primeiro_envio_em ? d.ultima_mudanca_em : null;
     const base = viu || r.atualizado_em || r.criado_em;
     return base ? Math.max(0, diasEntre(diaLocal(base), hoje)) : null;
   }
@@ -4118,7 +4119,7 @@ ${extra}
     const t = conta(ab);
     h += ab.length ? `<tr class="rp-total"><td>Total geral</td>${t.map((n, i) => cel(n, null, "*", i)).join("")}${cel(ab.length, null, "*", -1, "tot")}</tr>` : `<tr><td colspan="${FAIXAS_FILA.length + 2}" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
     box.querySelector(".rp-pivo-corpo").innerHTML = h;
-    const viu = ab.filter((r) => r._d && r._d.ultima_mudanca_em > r._d.primeiro_envio_em).length;
+    const viu = ab.filter((r) => r._d && norm(r._d.fila_atual) === norm(filaRep(r)) && r._d.ultima_mudanca_em > r._d.primeiro_envio_em).length;
     box.querySelector(".rp-parados-sub").textContent = `${fmt(ab.length)} casos em aberto (sem Recuperação de crédito). Dias na fila: desde que o ticket mudou de fila no detalhamento (${fmt(viu)} casos); nos outros, desde a Data da Última Atualização do ticket. Clique num número para ver os tickets e exportar.`;
   }
 
