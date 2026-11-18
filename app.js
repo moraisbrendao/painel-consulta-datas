@@ -3677,19 +3677,50 @@ ${extra}
   let dLista = [], dPagina = 1, dDetTentou = false;
   const ehDrop = (p) => norm(p.origem).includes("DROP");
   // Scallia (webhook "retorno dos pedidos", parte 45): último marco por NF e por número de pedido
-  let scMapa = null, scTentou = false, scInfo = "";
+  let scMapa = null, scTentou = false, scInfo = "", scTodos = new Map();
   const SC_ORDEM = { faturado: 1, coletado: 2, entregue: 3, cancelado: 4 };
   async function carregarScallia() {
     try {
       const L = await buscarTudo("scallia_eventos", "pedido"), m = new Map();
       const poe = (k, e) => { if (!k) return; const a = m.get(k); if (!a || (SC_ORDEM[e.marco] || 0) > (SC_ORDEM[a.marco] || 0) || ((SC_ORDEM[e.marco] || 0) === (SC_ORDEM[a.marco] || 0) && String(e.data_evento || "") > String(a.data_evento || ""))) m.set(k, e); };
-      L.forEach((e) => { poe(e.pedido ? "P:" + norm(e.pedido) : "", e); if (e.nf) poe("N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf), e); });
+      const todos = new Map(); const junta = (k, e) => { if (!k) return; const a = todos.get(k) || []; a.push(e); todos.set(k, a); };
+      L.forEach((e) => { poe(e.pedido ? "P:" + norm(e.pedido) : "", e); if (e.nf) poe("N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf), e);
+        junta(e.pedido ? "P:" + norm(e.pedido) : "", e); if (e.nf) junta("N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf), e); });
+      L.forEach((e) => { if (e.pedido && e.nf) { const k = "N:" + chaveNF(e.serie ? `${e.nf}-${e.serie}` : e.nf); const a = todos.get("P:" + norm(e.pedido)); if (a) a.forEach((x) => { if (!(todos.get(k) || []).includes(x)) junta(k, x); }); } });
+      scTodos = todos;
       scMapa = m; scInfo = L.length ? `Scallia: ${fmt(L.length)} avisos recebidos` : "Scallia: nenhum aviso recebido ainda";
     } catch (_) { scMapa = new Map(); scInfo = ""; }
   }
-  const dScallia = (p) => { if (!scMapa || !scMapa.size) return null; const x = p.extra || {};
-    for (const k of ["N:" + chaveNF(p.nf), "P:" + norm(p.pedido), x.promob && "P:" + norm(x.promob), x.pedido_any && "P:" + norm(x.pedido_any), x.id_any && "P:" + norm(x.id_any)]) if (k && scMapa.has(k)) return scMapa.get(k);
+  const scChaves = (p) => { const x = p.extra || {}; return ["N:" + chaveNF(p.nf), "P:" + norm(p.pedido), x.promob && "P:" + norm(x.promob), x.pedido_any && "P:" + norm(x.pedido_any), x.id_any && "P:" + norm(x.id_any)].filter(Boolean); };
+  const dScallia = (p) => { if (!scMapa || !scMapa.size) return null;
+    for (const k of scChaves(p)) if (scMapa.has(k)) return scMapa.get(k);
     return null; };
+  const scEventos = (p) => { for (const k of scChaves(p)) if (scTodos.has(k)) return scTodos.get(k); return []; };
+  // etapa no jeito do Scallia. O aviso só traz faturado/coletado/entregue/cancelado: depois da coleta não dá para separar Transferência, CD e Last Mile
+  const SC_ETAPA = { faturado: ["Aguardando Coleta", "azul"], coletado: ["Transferência", "lilas"], entregue: ["Entregue", "verde"], cancelado: ["Devolução/Cancelado", "cinza"] };
+  function scJanela(p) {
+    const ev = [...scEventos(p)].sort((a, b) => (SC_ORDEM[a.marco] || 0) - (SC_ORDEM[b.marco] || 0) || String(a.data_evento || "").localeCompare(String(b.data_evento || "")));
+    const ult = dScallia(p) || {}, et = SC_ETAPA[ult.marco] || [ult.marco || "—"];
+    const dh = (v) => v ? new Date(v).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
+    const passos = [["faturado", "Aguardando Faturamento → faturado"], ["coletado", "Aguardando Coleta → coletado"], ["", "Transferência / CD / Last Mile"], ["entregue", "Entregue"]];
+    const tem = (m) => ev.find((e) => e.marco === m);
+    const nfE = ev.find((e) => e.nf) || {};
+    $("modal-titulo").textContent = `Jornada no Scallia · Pedido ${p.pedido || ""}`;
+    $("modal-corpo").innerHTML = `
+      <div class="det-grade">
+        <div class="det-item"><span>Etapa</span><b>${esc(et[0])}</b></div>
+        <div class="det-item"><span>NF</span><b>${esc(nfE.nf ? nfE.nf + (nfE.serie ? "-" + nfE.serie : "") : p.nf || "—")}</b></div>
+        <div class="det-item"><span>Transportadora (coleta)</span><b>${esc((tem("coletado") || {}).transportadora || ult.transportadora || "—")}</b></div>
+        <div class="det-item"><span>Chave da NF-e</span><b style="font-size:11px;word-break:break-all">${esc(nfE.chave || "—")}</b></div>
+      </div>
+      <h3 class="cf-h3">Jornada</h3>
+      <ol class="sc-jornada">${tem("cancelado") ? `<li class="feito"><b>Devolução/Cancelado</b> <span class="s">${dh(tem("cancelado").data_evento)}</span></li>` : ""}
+        ${passos.map(([m, rot]) => { const e = m && tem(m); const depois = !m && (tem("entregue") || tem("coletado"));
+          const passou = m && SC_ORDEM[m] < 4 && ev.some((x) => (SC_ORDEM[x.marco] || 0) > SC_ORDEM[m] && x.marco !== "cancelado");
+          return `<li class="${e || passou ? "feito" : !m && tem("coletado") && !tem("entregue") ? "atual" : depois ? "feito" : ""}"><b>${esc(rot)}</b>${e ? ` <span class="s">${dh(e.data_evento)}${e.transportadora ? " · " + esc(e.transportadora) : ""}</span>` : !m && tem("coletado") && !tem("entregue") ? ` <span class="s">em trânsito</span>` : ""}</li>`; }).join("")}</ol>
+      <p class="s">Dados dos avisos que o Scallia manda ao painel (faturado, coletado, entregue, cancelado). Transferência, CD e Last Mile ainda não vêm separados no aviso.</p>`;
+    $("modal").hidden = false; document.body.classList.add("sem-rolagem");
+  }
   const dDet = (p) => (detNF ? detNF.get(chaveNF(p.nf)) || null : null);
   const dForn = (p) => (p.extra && p.extra.fornecedor) || "";
   function dDiag(p) {
@@ -3802,7 +3833,7 @@ ${extra}
       + (d.ocorr_status ? `<div class="s" title="${esc(d.ocorr_msg || "")}">Ocorrência: ${esc(d.ocorr_status)}</div>` : "")
       + (ids.length ? `<div class="s tk-links">Reposição ${ids.map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer">#${esc(id)}</a>`).join(" ")}${d.repo_fila ? " · " + esc(d.repo_fila) : ""}</div>` : "")
       + (dForn(p) ? `<div class="s">Fornecedor: ${esc(dForn(p))}</div>` : "")
-      + ((s) => (s ? `<div class="s sc">Scallia: <b>${esc(s.marco)}</b>${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + esc(s.transportadora) : ""}</div>` : ""))(dScallia(p));
+      + ((s) => (s ? `<div class="s sc"><a href="#" class="sc-abrir" data-p="${esc(p.pedido)}" title="Ver a jornada no Scallia">Scallia</a>: <span class="chip ${(SC_ETAPA[s.marco] || [, "cinza"])[1]}">${esc((SC_ETAPA[s.marco] || [s.marco])[0])}</span>${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}</div>` : ""))(dScallia(p));
   }
   function desenharDLista() {
     const total = dLista.length, pags = Math.max(1, Math.ceil(total / POR_PAGINA)); dPagina = Math.min(Math.max(1, dPagina), pags);
@@ -3813,6 +3844,7 @@ ${extra}
   const dMudou = () => { dPagina = 1; desenharDrop(); };
   $("d-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-d]"); if (!b) return; dSel.card = b.dataset.d; dMudou(); });
   $("pagina-drop").addEventListener("click", (e) => {
+    const sa = e.target.closest(".sc-abrir"); if (sa) { e.preventDefault(); const p = dLista.find((x) => String(x.pedido) === sa.dataset.p); if (p) scJanela(p); return; }
     const dx = e.target.closest("[data-dx]"); if (dx) { dSel[dx.dataset.dx] = ""; return dMudou(); }
     const dd = e.target.closest("tr[data-dd]"); if (dd) { dSel.diag = dSel.diag === dd.dataset.dd ? "" : dd.dataset.dd; if (dSel.diag) dSel.card = "abertos"; dMudou(); return $("d-lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" }); }
     const dt = e.target.closest("tr[data-dt]"); if (dt) { dSel.transp = dSel.transp === dt.dataset.dt ? "" : dt.dataset.dt; dMudou(); return $("d-lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" }); }

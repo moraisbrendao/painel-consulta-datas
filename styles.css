@@ -942,3 +942,14 @@ table thead th.ord-asc::after { content: " ▲"; font-size: 10px; }
 .br-mot { width: 100%; min-width: 170px; min-height: 48px; margin-top: 4px; font: inherit; font-size: 12px; }
 .br-acoes-sel { display: flex; gap: 8px; flex-wrap: wrap; }
 .br-print { font-size: 12px; }
+
+/* Jornada do Scallia (Dropshipping) */
+.sc-abrir { font-weight: 700; }
+.sc-jornada { list-style: none; padding: 0; margin: 8px 0 12px; border-left: 2px solid #d9dde5; }
+.sc-jornada li { position: relative; padding: 6px 0 10px 18px; color: #8a93a3; }
+.sc-jornada li::before { content: ""; position: absolute; left: -7px; top: 9px; width: 12px; height: 12px; border-radius: 50%; background: #d9dde5; }
+.sc-jornada li.feito { color: #1d2433; }
+.sc-jornada li.feito::before { background: #1f9d6a; }
+.sc-jornada li.atual { color: #1d2433; }
+.sc-jornada li.atual::before { background: #f5c518; }
+.chip.lilas{background:#efe7ff;color:#6d28d9}
