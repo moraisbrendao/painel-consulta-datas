@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=204">
+  <link rel="stylesheet" href="styles.css?v=205">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -793,6 +793,7 @@
         <button class="btn contorno" data-ra="pos">Pós-entrega</button>
         <button class="btn contorno" data-ra="det">☰ Detalhamento operacional</button>
         <button class="btn contorno" data-ra="faltas">📦 Falta de volumes</button>
+        <button class="btn contorno" data-ra="filasoc">🗂 Filas atualizadas e ocorrências</button>
       </div>
 
       <!-- 1) visão geral -->
@@ -956,6 +957,36 @@
             <thead><tr><th>Nota / ticket</th><th>Transportadora</th><th>Motivo</th><th class="num">Dias parado</th><th>Prazo limite</th><th>Retorno da transportadora</th></tr></thead>
             <tbody id="fv-linhas"></tbody></table></div>
           <p id="fv-mais" class="s"></p>
+        </section>
+      </div>
+      <!-- 6) Filas atualizadas e ocorrências (filas.js) -->
+      <div id="rp-filas" hidden>
+        <div class="titulo-pagina com-acoes">
+          <div>
+            <h2 id="fo-titulo">Filas atualizadas e ocorrências</h2>
+            <p class="sub">Filas: tickets em aberto da tabela de acompanhamento, por responsável e fila (o responsável de cada fila vocês escrevem aqui). Ocorrências: aba Ocorrências do detalhamento de tickets, por transportador. Clique em qualquer número para ver os casos.</p>
+            <p id="fo-info" class="info-base">Carregando…</p>
+          </div>
+          <div class="acoes-robo">
+            <label class="btn amarelo" id="fo-arq-tab-l" for="arquivo-rep" title="Planilha TABELA DE ACOMPANHAMENTO do BI (aba Export): atualiza as filas e as reposições">⇪ Subir tabela de acompanhamento</label>
+            <label class="btn amarelo" id="fo-arq-oc-l" hidden title="Detalhamento de tickets (aba Ocorrências) ou a planilha de ocorrências">⇪ Carregar ocorrências<input id="fo-arq-oc" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
+            <button id="fo-excel" class="btn contorno" type="button">Baixar Excel</button>
+          </div>
+        </div>
+        <div class="acoes-titulo rp-abas" id="fo-vis">
+          <button class="btn amarelo" type="button" data-vis="filas">Filas</button>
+          <button class="btn contorno" type="button" data-vis="oc">Ocorrências</button>
+        </div>
+        <section class="fo-quadro">
+          <div class="fo-filtros" id="fo-filtros"></div>
+          <p class="fo-sub" id="fo-sub"></p>
+          <div class="tabela-wrap"><table class="fo-pivo"><thead id="fo-cab"></thead><tbody id="fo-corpo"></tbody></table></div>
+          <datalist id="fo-pessoas"></datalist>
+        </section>
+        <section class="fo-quadro fo-casos" id="fo-casos" hidden>
+          <div class="fo-casos-topo"><h3 id="fo-casos-tit"></h3><div><button type="button" class="btn mini amarelo" id="fo-casos-exp">↓ Exportar estes casos</button> <button type="button" class="btn mini contorno" id="fo-casos-x" title="Fechar">✕</button></div></div>
+          <div class="tabela-wrap"><table class="fo-lista" id="fo-casos-t"></table></div>
+          <p class="fo-sub" id="fo-casos-mais"></p>
         </section>
       </div>
     </main>
@@ -1516,17 +1547,18 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=204"></script>
-  <script src="mapa-brasil.js?v=204"></script>
-  <script src="troca-notas.js?v=204"></script>
-  <script src="app.js?v=204"></script>
-  <script src="ordenar.js?v=204"></script>
-  <script src="menu.js?v=204"></script>
-  <script src="ajuda.js?v=204"></script>
-  <script src="documentos.js?v=204"></script>
-  <script src="barrar.js?v=204"></script>
-  <script src="faltas.js?v=204"></script>
-  <script src="motor.js?v=204"></script>
-  <script src="filtros.js?v=204"></script>
+  <script src="config.js?v=205"></script>
+  <script src="mapa-brasil.js?v=205"></script>
+  <script src="troca-notas.js?v=205"></script>
+  <script src="app.js?v=205"></script>
+  <script src="ordenar.js?v=205"></script>
+  <script src="menu.js?v=205"></script>
+  <script src="ajuda.js?v=205"></script>
+  <script src="documentos.js?v=205"></script>
+  <script src="barrar.js?v=205"></script>
+  <script src="faltas.js?v=205"></script>
+  <script src="motor.js?v=205"></script>
+  <script src="filas.js?v=205"></script>
+  <script src="filtros.js?v=205"></script>
 </body>
 </html>

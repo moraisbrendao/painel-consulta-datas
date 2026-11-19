@@ -2595,3 +2595,111 @@ grant execute on function public.recalcular_tempos() to authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'tempos-referencia';
 select cron.schedule('tempos-referencia', '30 9 * * *', 'select public.recalcular_tempos()');
 select public.recalcular_tempos();
+
+-- PARTE 52) Reposições › Filas atualizadas e ocorrências
+--   filas_tk: tickets EM ABERTO da tabela de acompanhamento (todas as filas, não só reposição). Cada envio substitui o anterior.
+--   fila_responsavel: quem cuida de cada fila (a Logística edita no painel; muda de um dia para o outro).
+--   ocorrencias_tk: aba Ocorrências do detalhamento de tickets (ou a planilha de ocorrências). Cada envio substitui o anterior.
+--   Nome de quem escreveu a última mensagem NÃO é guardado.
+create table if not exists public.filas_tk (
+  ticket        text primary key,
+  nf            text,
+  pedido        text,
+  grupo         text,
+  canal         text,
+  fila          text,
+  tipo          text,
+  motivo        text,
+  status        text,
+  transportadora text,          -- redespacho, se houver; senão a final
+  criado_em     timestamp,
+  atualizado_em timestamp       -- Data da Última Atualização
+);
+create table if not exists public.filas_tk_info (
+  id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+create table if not exists public.fila_responsavel (
+  fila          text primary key,
+  responsavel   text,
+  atualizado_por text,
+  atualizado_em timestamptz not null default now()
+);
+create table if not exists public.ocorrencias_tk (
+  id            bigserial primary key,
+  nf            text,
+  transportador text,
+  criado_em     timestamp,
+  motivo        text,
+  status        text,
+  operacao      text,
+  canal         text,
+  solicitante   text,           -- Último Solicitante (Multimoveis / Transportador)
+  mensagem      text,           -- Última Mensagem (até 500 letras)
+  mensagem_em   timestamp,
+  status_macro  text,
+  status_micro  text,
+  dias_arquivo  integer         -- "Dias sem atualização" da planilha, quando vier
+);
+create index if not exists ocorrencias_tk_nf on public.ocorrencias_tk (nf);
+create table if not exists public.ocorrencias_tk_info (
+  id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.filas_tk enable row level security;
+alter table public.filas_tk_info enable row level security;
+alter table public.fila_responsavel enable row level security;
+alter table public.ocorrencias_tk enable row level security;
+alter table public.ocorrencias_tk_info enable row level security;
+revoke all on public.filas_tk, public.filas_tk_info, public.fila_responsavel, public.ocorrencias_tk, public.ocorrencias_tk_info from anon;
+grant select on public.filas_tk, public.filas_tk_info, public.ocorrencias_tk, public.ocorrencias_tk_info to authenticated;
+grant select, insert, update, delete on public.fila_responsavel to authenticated;
+drop policy if exists "logistica le" on public.filas_tk;
+drop policy if exists "logistica le" on public.filas_tk_info;
+drop policy if exists "logistica le" on public.ocorrencias_tk;
+drop policy if exists "logistica le" on public.ocorrencias_tk_info;
+drop policy if exists "logistica cuida" on public.fila_responsavel;
+create policy "logistica le" on public.filas_tk for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.filas_tk_info for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.ocorrencias_tk for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.ocorrencias_tk_info for select to authenticated using ((select not public.e_sac()));
+create policy "logistica cuida" on public.fila_responsavel for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+create or replace function public.importar_filas_tk(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if limpar then
+    delete from public.filas_tk where true;
+    insert into public.filas_tk_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  end if;
+  insert into public.filas_tk (ticket, nf, pedido, grupo, canal, fila, tipo, motivo, status, transportadora, criado_em, atualizado_em)
+  select r.ticket, r.nf, r.pedido, r.grupo, r.canal, r.fila, r.tipo, r.motivo, r.status, r.transportadora, r.criado_em, r.atualizado_em
+  from jsonb_to_recordset(linhas) as r(ticket text, nf text, pedido text, grupo text, canal text, fila text, tipo text, motivo text, status text,
+                                       transportadora text, criado_em timestamp, atualizado_em timestamp)
+  where coalesce(r.ticket, '') <> ''
+  on conflict (ticket) do update set nf = excluded.nf, pedido = excluded.pedido, grupo = excluded.grupo, canal = excluded.canal, fila = excluded.fila,
+    tipo = excluded.tipo, motivo = excluded.motivo, status = excluded.status, transportadora = excluded.transportadora,
+    criado_em = excluded.criado_em, atualizado_em = excluded.atualizado_em;
+  return (select count(*) from public.filas_tk);
+end $$;
+revoke all on function public.importar_filas_tk(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_filas_tk(jsonb, boolean, text, integer) to authenticated;
+
+create or replace function public.importar_ocorrencias_tk(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if limpar then
+    delete from public.ocorrencias_tk where true;
+    insert into public.ocorrencias_tk_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  end if;
+  insert into public.ocorrencias_tk (nf, transportador, criado_em, motivo, status, operacao, canal, solicitante, mensagem, mensagem_em, status_macro, status_micro, dias_arquivo)
+  select r.nf, r.transportador, r.criado_em, r.motivo, r.status, r.operacao, r.canal, r.solicitante, left(r.mensagem, 500), r.mensagem_em, r.status_macro, r.status_micro, r.dias_arquivo
+  from jsonb_to_recordset(linhas) as r(nf text, transportador text, criado_em timestamp, motivo text, status text, operacao text, canal text, solicitante text,
+                                       mensagem text, mensagem_em timestamp, status_macro text, status_micro text, dias_arquivo integer)
+  where coalesce(r.nf, '') <> '';
+  return (select count(*) from public.ocorrencias_tk);
+end $$;
+revoke all on function public.importar_ocorrencias_tk(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_ocorrencias_tk(jsonb, boolean, text, integer) to authenticated;

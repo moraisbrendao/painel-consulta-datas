@@ -3495,6 +3495,7 @@ ${extra}
     if (error) return toast("Não salvei: " + error.message, true);
     toast(sn ? "Senha salva." : "Senha apagada."); await carregarSenhas(); janelaSenhas();
   });
+  window.__abrirSSW = (...a) => abrirSSW(...a);   // filas.js (Ocorrências) usa o mesmo "Ver rastreio"
   async function abrirSSW(nf, transp, pedido, dados) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
     let x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));
@@ -4008,7 +4009,8 @@ ${extra}
       detNF = null; gDetTentou = false;
     }
     carregando("");
-    const avisoHist = wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "";
+    const avisoOc = wbDet && window.__ocorr ? await window.__ocorr.enviar(wbDet, arq.name).catch((err) => " · ocorrências: " + err.message) : "";
+    const avisoHist = (wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "") + avisoOc;
     carregando("Atualizando o painel…");
     try { await carregar(); } finally { carregando(""); }   // o histórico deixava a janela "Enviando…" aberta para sempre
     if (avisoHist && /guardados/.test(avisoHist)) carregarReposicoes();
@@ -4188,13 +4190,15 @@ ${extra}
     document.querySelectorAll("#rep-abas [data-ra]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.ra === repAba); b.classList.toggle("contorno", b.dataset.ra !== repAba); });
     $("rp-geral").hidden = repAba !== "geral"; $("rp-fluxo").hidden = !["pre", "pos"].includes(repAba); $("rp-det").hidden = repAba !== "det";
     // aba Falta de volumes (faltas.js) tem filtros e lista próprios: esconde os filtros e o título da Reposição
-    if ($("rp-faltas")) { $("rp-faltas").hidden = repAba !== "faltas"; document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas")); }
+    if ($("rp-faltas")) $("rp-faltas").hidden = repAba !== "faltas";
+    if ($("rp-filas")) $("rp-filas").hidden = repAba !== "filasoc";
+    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc"));
     const fl = repAba === "pre" || repAba === "pos";
     repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
     if (repAba === "det" && pvDet) repFiltradas = repFiltradas.filter((r) => casaPv(r, pvDet));
     if (repAba === "det" && repFaixa >= 0) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && faixaFila(diasFila(r)) === repFaixa);
-    $("rep-vazio").hidden = repFiltradas.length > 0 || repAba === "det";
+    $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc"].includes(repAba);
     if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
   }
 
@@ -4528,7 +4532,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; volAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
-  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas"].includes(s)) repAba = s; } catch (_) {}
+  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
   $("rep-limpar").addEventListener("click", () => { repCard = ""; repFaixa = -1; pvDet = null; FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });
@@ -4551,6 +4555,7 @@ ${extra}
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Tickets"); XLSX.utils.book_append_sheet(wb, ws2, "Por mês");
     XLSX.writeFile(wb, `reposicoes_${repAba}_${hojeISO()}.xlsx`);
   });
+  let filasAb = new Map();   // tickets em aberto (todas as filas) da última tabela de acompanhamento lida
   $("arquivo-rep").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = "";
     if (!arq) return;
@@ -4568,16 +4573,20 @@ ${extra}
       const c = { ticket: col("TICKET"), via: col("VIA"), data: col("DATA DE CRIACAO"), por: col("TICKET CRIADO POR"), fila: col("FILA"), tipo: col("TIPO"), motivo: col("MOTIVO"),
         status: col("STATUS"), redesp: col("TRANSPORTADORA REDESPACHO"), final: col("TRANSPORTADORA FINAL"), nf: col("NOTA FISCAL"), filial: col("CENTRAL DE DISTRIBUICAO"),
         resp: col("RESPONSAVEL"), atual: col("DATA DA ULTIMA ATUALIZACAO"), fim: col("DATA DE FINALIZACAO"), tres: col("TEMPO DE RESOLUCAO DO TICKET (DIA)"),
-        estag: cab.findIndex((x) => x.startsWith("FLAG - TICKET SEM ATUALIZACAO")), pedido: col("HUB - NUMERO DO MARKETPLACE"), valor: col("HUB - VALOR TOTAL"), grupo: col("GRUPO") };
+        estag: cab.findIndex((x) => x.startsWith("FLAG - TICKET SEM ATUALIZACAO")), pedido: col("HUB - NUMERO DO MARKETPLACE"), valor: col("HUB - VALOR TOTAL"), grupo: col("GRUPO"), canal: col("CANAL") };
       if (c.data < 0) throw new Error('Não achei a coluna "Data de Criação".');
       if (c.final < 0) throw new Error('Não achei a coluna "Transportadora Final".');
       const txt = (r, i) => (i >= 0 && r[i] != null && String(r[i]).trim() !== "" ? String(r[i]).trim() : null);
       const numero = (r, i) => { const v = i >= 0 ? r[i] : null; const n = typeof v === "number" ? v : parseFloat(String(v ?? "").replace(",", ".")); return Number.isFinite(n) ? n : null; };
-      const porTk = new Map();
+      const porTk = new Map(); filasAb = new Map();
       rows.slice(iCab + 1).forEach((r) => {
         if (!r || txt(r, c.ticket) == null || LINHA_RODAPE.test(txt(r, c.ticket))) return;
         total++;
         const tipo = txt(r, c.tipo);
+        // aba "Filas atualizadas e ocorrências": todos os tickets em aberto, de qualquer tipo (parte 52)
+        if (!/^(RESOLVIDO|ENCERRADO)/.test(norm(txt(r, c.status)))) filasAb.set(txt(r, c.ticket), { ticket: txt(r, c.ticket), nf: txt(r, c.nf), pedido: txt(r, c.pedido), grupo: txt(r, c.grupo), canal: txt(r, c.canal),
+          fila: txt(r, c.fila), tipo, motivo: txt(r, c.motivo), status: txt(r, c.status), transportadora: txt(r, c.redesp) || txt(r, c.final),
+          criado_em: dataCelula(r[c.data], true), atualizado_em: c.atual >= 0 ? dataCelula(r[c.atual], true) : null });
         if (!tipoRep({ tipo })) return;
         porTk.set(txt(r, c.ticket), { ticket: txt(r, c.ticket), criado_em: dataCelula(r[c.data], true), criado_por: txt(r, c.por), via: txt(r, c.via),
           fila: txt(r, c.fila), tipo, motivo: txt(r, c.motivo), status: txt(r, c.status), transportadora: txt(r, c.redesp) || txt(r, c.final), nf: txt(r, c.nf),
@@ -4593,9 +4602,15 @@ ${extra}
     try {
       await enviarLotes("importar_reposicoes_tk", linhas, 2000, (lote, primeiro) => ({ linhas: lote, primeiro, arquivo: arq.name, total }));
     } catch (err) { carregando(""); toast("Erro ao enviar: " + (/column|filial|function/i.test(err.message) ? "rode a parte 36 do schema.sql no Supabase." : err.message), true); return; }
+    let avisoFilas = "";
+    if (filasAb.size) {
+      const fl = [...filasAb.values()];
+      try { await enviarLotes("importar_filas_tk", fl, 2000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total: fl.length })); avisoFilas = ` · ${fmt(fl.length)} tickets em aberto nas filas`; window.dispatchEvent(new Event("filas-atualizadas")); }
+      catch (err) { avisoFilas = /importar_filas_tk|function|schema cache/i.test(err.message) ? " · filas: falta rodar a parte 52 no Supabase" : " · filas: " + err.message; }
+    }
     await carregarReposicoes();
     carregando("");
-    toast(`Reposições atualizadas: ${fmt(reps.length)} tickets.`);
+    toast(`Reposições atualizadas: ${fmt(reps.length)} tickets${avisoFilas}.`, /falta|filas: /.test(avisoFilas));
   });
 
   // histórico do detalhamento (aba Reposições): cada envio é guardado; nada é apagado (parte 36)
