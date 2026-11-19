@@ -4202,6 +4202,9 @@ ${extra}
       return `<span class="kpi-q" data-semtp="${k}" title="Clique para ver esses tickets"><span>${SEM_TP[k]}</span><b>${fmt(c[k])}</b></span>${det}`; }).join("")}</span>`; };
   const clic = (f, v, txt) => `<a href="#" class="rp-ir" data-f="${f}" data-v="${esc(v)}">${esc(txt)}</a>`;
 
+  // estado da Reposição para o "↶ Voltar" (Ctrl+Z) geral
+  const repEstado = () => ({ repAba, repCard, pvDet, repFaixa, pvAberto, gargAberto, volAberto, fo: window.__foUndo ? window.__foUndo.get() : null });
+  function repRestaurar(f) { ({ repAba, repCard, pvDet, repFaixa, pvAberto, gargAberto, volAberto } = f); rpdPag = 1; filtrarRep(); if (f.fo && window.__foUndo) window.__foUndo.set(f.fo); }
   function filtrarRep() {
     document.querySelectorAll("#rep-abas [data-ra]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.ra === repAba); b.classList.toggle("contorno", b.dataset.ra !== repAba); });
     $("rp-geral").hidden = repAba !== "geral"; $("rp-fluxo").hidden = !["pre", "pos"].includes(repAba); $("rp-det").hidden = repAba !== "det";
@@ -4550,6 +4553,52 @@ ${extra}
   try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
+  // ---------------- "↶ Voltar" / Ctrl+Z em todas as abas ----------------
+  // guarda a foto da tela (aba, filtros dos cartões de filtro e o card/linha clicado) a cada clique; Voltar devolve a anterior
+  const UNDO = {
+    preventivo: { get: () => ({ visao, msSel, rangeSel }), set: (o) => { ({ visao, msSel, rangeSel } = o); redesenhar(); } },
+    gerencial: { get: () => ({ gCard, gSelecao, k: gSelecao ? gSelecao.titulo : "" }), set: (o) => { gCard = o.gCard; gSelecao = o.gSelecao; gPagina = 1; desenharGLista(true); } },
+    retornos: { get: () => ({ rtCards: [...rtCards], rtTransp, rtCatSel }), set: (o) => { rtCards = new Set(o.rtCards); rtTransp = o.rtTransp; rtCatSel = o.rtCatSel; rtPag = 1; desenharRetornos(); } },
+    conferencia: { get: () => ({ cfCard }), set: (o) => { cfCard = o.cfCard; cfPag = 1; desenharConferencia(); } },
+    reposicao: { get: repEstado, set: repRestaurar },
+  };
+  const undoPilha = []; let undoUlt = null, undoVoltando = false;
+  const undoCampos = (pag) => [...document.querySelectorAll(`#pagina-${pag} :is(.filtros-cartao, .filtros-topo, #filtros, .rp-pv-filtros, #g-filtros) :is(select, input[type=search], input[type=text], input[type=date], input[type=checkbox])`)].filter((el) => el.id);
+  function undoFoto() {
+    const pag = paginaAtual, c = {};
+    undoCampos(pag).forEach((el) => (c[el.id] = el.type === "checkbox" ? el.checked : el.multiple ? [...el.selectedOptions].map((o) => o.value) : el.value));
+    let st = null; try { st = UNDO[pag] ? UNDO[pag].get() : null; } catch (_) {}
+    let chave; try { chave = JSON.stringify({ pag, c, st }, (k, v) => (v instanceof Set ? [...v] : typeof v === "function" ? undefined : v)); } catch (_) { chave = pag + JSON.stringify(c); }
+    return { pag, c, st, chave };
+  }
+  function undoRegistrar() {
+    if (undoVoltando || !paginaAtual) return;
+    const f = undoFoto();
+    if (undoUlt && f.chave !== undoUlt.chave) { undoPilha.push(undoUlt); if (undoPilha.length > 40) undoPilha.shift(); }
+    undoUlt = f; const b = $("btn-voltar"); if (b) b.disabled = !undoPilha.length;
+  }
+  let undoEspera; const undoDepois = () => { clearTimeout(undoEspera); undoEspera = setTimeout(undoRegistrar, 350); };
+  ["click", "change"].forEach((ev) => document.addEventListener(ev, (e) => { if (!e.target.closest || !e.target.closest("#btn-voltar")) undoDepois(); }));
+  document.addEventListener("input", (e) => { if (e.target.matches && e.target.matches("input[type=search], input[type=text]")) undoDepois(); });
+  function undoVoltar() {
+    clearTimeout(undoEspera); undoRegistrar();   // grava o que estiver pendente antes de voltar
+    const f = undoPilha.pop(); if (!f) return toast("Nada para voltar.");
+    undoVoltando = true;
+    try {
+      if (f.pag !== paginaAtual) irPara(f.pag);
+      Object.entries(f.c).forEach(([id, v]) => { const el = $(id); if (!el) return;
+        const igual = el.type === "checkbox" ? el.checked === v : el.multiple ? JSON.stringify([...el.selectedOptions].map((o) => o.value)) === JSON.stringify(v) : el.value === v;
+        if (igual) return;
+        if (el.type === "checkbox") el.checked = v; else if (el.multiple) [...el.options].forEach((o) => (o.selected = v.includes(o.value))); else el.value = v;
+        el.dispatchEvent(new Event("input", { bubbles: true })); el.dispatchEvent(new Event("change", { bubbles: true })); });
+      if (f.st && UNDO[f.pag]) UNDO[f.pag].set(f.st);
+    } catch (err) { console.warn(err); }
+    setTimeout(() => { undoVoltando = false; clearTimeout(undoEspera); undoUlt = undoFoto(); const b = $("btn-voltar"); if (b) b.disabled = !undoPilha.length; }, 400);
+  }
+  $("btn-voltar").addEventListener("click", undoVoltar);
+  document.addEventListener("keydown", (e) => { if (!(e.ctrlKey || e.metaKey) || e.shiftKey || e.key.toLowerCase() !== "z") return;
+    if (e.target.closest && e.target.closest("input, textarea, [contenteditable]")) return;   // dentro de um campo de texto o Ctrl+Z desfaz a digitação
+    e.preventDefault(); undoVoltar(); });
   $("rep-limpar").addEventListener("click", () => { repCard = ""; repFaixa = -1; pvDet = null; FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });
   let esperaRpd; $("rpd-busca").addEventListener("input", () => { clearTimeout(esperaRpd); esperaRpd = setTimeout(() => { rpdPag = 1; desenharRepDet(); }, 250); });
   $("rpd-pag").addEventListener("click", (e) => { const b = e.target.closest("button[data-p]"); if (!b) return; rpdPag += Number(b.dataset.p); desenharRepDet(); });

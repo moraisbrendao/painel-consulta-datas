@@ -231,6 +231,11 @@
     return ` · ${fmt(L.length)} ocorrências guardadas`;
   }
   window.__ocorr = { ler: lerOcorrencias, enviar: enviarOcorrencias };
+  // "↶ Voltar" (Ctrl+Z) do painel: foto e volta dos filtros desta aba
+  window.__foUndo = {
+    get: () => ({ vis, porO, modoDias, sel, f: Object.fromEntries(Object.entries(filtros).map(([k, v]) => [k, [...v]])) }),
+    set: (o) => { vis = o.vis; porO = o.porO; modoDias = o.modoDias; sel = o.sel; Object.keys(filtros).forEach((k) => (filtros[k] = new Set(o.f[k] || []))); if (carregou) desenhar(); },
+  };
 
   // ---------- eventos ----------
   $("rp-filas").addEventListener("click", async (e) => {
