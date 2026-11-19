@@ -1032,9 +1032,16 @@ ${extra}
     } catch (err) {
       carregando(""); toast("Erro ao enviar: " + err.message, true); return;
     }
+    // o mesmo arquivo já alimenta a Conferência SSW (não precisa importar de novo lá)
+    let avisoCf = "";
+    if (cfOk) {
+      try { const { itens } = await lerConferencia(arq);
+        if (itens.length) { carregando("Mandando para a Conferência SSW…"); const { error } = await sb.rpc("importar_conferencia", { linhas: itens }); avisoCf = error ? " · Conferência SSW: " + error.message : ` · ${fmt(itens.length)} em aberto foram para a Conferência SSW`; } }
+      catch (err) { avisoCf = " · Conferência SSW: " + err.message; }
+    }
     carregando("");
-    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel.`);
-    carregar();
+    toast(`Intelipost atualizada: ${fmt(sairao)} pedido${sairao === 1 ? "" : "s"} saíram do painel${avisoCf}.`, /Conferência SSW: /.test(avisoCf));
+    carregar(); if (typeof carregarConferencia === "function" && avisoCf && !/: /.test(avisoCf)) carregarConferencia();
   });
   // =================================================================
   // OCORRÊNCIAS: micro status que precisam de ocorrência no portal
@@ -3606,23 +3613,27 @@ ${extra}
     const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = [{ wch: 34 }, { wch: 12 }, { wch: 22 }, { wch: 18 }, { wch: 16 }, { wch: 26 }, { wch: 12 }, { wch: 14 }];
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Conferência SSW"); XLSX.writeFile(wb, `conferencia_ssw_${cfCard}_${hojeISO()}.xlsx`);
   });
+  // lê o arquivo de transações da Intelipost para a Conferência SSW (usado aqui e no "Enviar Intelipost" do topo)
+  async function lerConferencia(arq) {
+    let semNf = 0;
+    const dados = await arq.arrayBuffer();
+    const res = await new Promise((ok, falha) => {
+      const w = new Worker("leitor-conferencia.js?v=75");
+      w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
+      w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
+      carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
+    });
+    const porPed = new Map(base.map((p) => [norm(p.pedido), p]));
+    const itens = res.abertos.map((x) => { const b = porPed.get(norm(x.pedido)) || {}; const nf = x.nf || b.nf || ""; if (!nf) semNf++;
+      return { ...x, nf: chaveNF(nf), transportadora: x.transportadora || b.transportadora || "" }; });
+    return { itens, semNf, res };
+  }
   $("arquivo-cf").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = "";
     if (!arq) return;
     if (!cfOk) return toast("Rode no Supabase a parte 21 do supabase/schema.sql para usar a Conferência SSW.", true);
     let itens = [], semNf = 0, res;
-    try {
-      const dados = await arq.arrayBuffer();
-      res = await new Promise((ok, falha) => {
-        const w = new Worker("leitor-conferencia.js?v=75");
-        w.onmessage = (m) => { if (m.data.etapa) carregando(m.data.etapa); else { w.terminate(); m.data.erro ? falha(new Error(m.data.erro)) : ok(m.data); } };
-        w.onerror = (er) => { w.terminate(); falha(new Error(er.message || "Não consegui ler o arquivo.")); };
-        carregando("Lendo o arquivo da Intelipost…"); w.postMessage(dados, [dados]);
-      });
-      const porPed = new Map(base.map((p) => [norm(p.pedido), p]));
-      itens = res.abertos.map((x) => { const b = porPed.get(norm(x.pedido)) || {}; const nf = x.nf || b.nf || ""; if (!nf) semNf++;
-        return { ...x, nf: chaveNF(nf), transportadora: x.transportadora || b.transportadora || "" }; });
-      if (!itens.length) throw new Error("O arquivo não tem pedidos em aberto (todos estão Entregue ou Cancelado).");
+    try { ({ itens, semNf, res } = await lerConferencia(arq)); if (!itens.length) throw new Error("O arquivo não tem pedidos em aberto (todos estão Entregue ou Cancelado)."); 
     } catch (err) { carregando(""); toast(err.message, true); return; }
     carregando("");
     const minutos = Math.max(5, Math.round((itens.length / 9000) * 10) + 3);   // em lotes de 100: ~9 mil notas em ~10 min (16/11)
