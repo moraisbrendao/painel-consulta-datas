@@ -12,8 +12,8 @@ if (ANDAMENTO) {
   try { await entrarSupabase(); await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: true, inicio }); } catch (_) {}
   const fim = async (resumo) => { if (fechou) return; fechou = true; await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: false, inicio, fim: new Date().toISOString(), resumo: String(resumo || "").slice(0, 220) }).catch(() => {}); };
   process.on("beforeExit", () => fim(ultimaLinha));
-  process.on("uncaughtException", async (e) => { await fim("Parou com erro: " + String(e && e.message).split("\n")[0].slice(0, 120)); process.exit(1); });
-  process.on("unhandledRejection", async (e) => { await fim("Parou com erro: " + String(e && e.message).split("\n")[0].slice(0, 120)); process.exit(1); });
+  process.on("uncaughtException", async (e) => { log("Parou com erro:", String(e && e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 200)); await fim("Parou com erro: " + String(e && e.message).split("\n")[0].slice(0, 120)); process.exit(1); });
+  process.on("unhandledRejection", async (e) => { log("Parou com erro:", String(e && e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 200)); await fim("Parou com erro: " + String(e && e.message).split("\n")[0].slice(0, 120)); process.exit(1); });
 }
 const tags = (html, re) => [...html.matchAll(re)].map((m) => m[0].replace(/\s+/g, " ").slice(0, 200));
 
