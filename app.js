@@ -5025,4 +5025,58 @@ ${extra}
     if (error) return toast("Erro: " + error.message, true);
     carregarLoginsSac(); if (paginaAtual === "logins") carregarLogins();
   });
+
+  // ---------------- lista em janela ao clicar nos cards (Brenda 19/11, no modelo do E-loggia do Danilo) ----------------
+  let lmMapa = null, lmMapaDe = null, lmLinhas = [], lmTitulo = "";
+  const lmBase = (ped) => { if (!gDados) return null; if (lmMapaDe !== gDados) { lmMapa = new Map(gDados.map((r) => [r.pedido, r])); lmMapaDe = gDados; } return lmMapa.get(ped) || null; };
+  function lmNorm(x) {
+    const r = x.transp !== undefined && x._sit !== undefined ? x : lmBase(x.pedido), t = trat.get(x.pedido) || {};
+    const nf = r ? `${r.nf}${r.serie ? "-" + r.serie : ""}` : String(x.nf || "");
+    const sit = r ? r._sit : x._atrasoG || x._atraso ? "ab_atraso" : "ab_prazo";
+    return { pedido: x.pedido, nf, transp: r ? r.transp : x.transportadora || "", uf: r ? r.uf : x.uf || "", cidade: (r ? r.cidade : x.cidade) || "", sit,
+      atraso: r ? r._atraso || 0 : x._atrasoG || x._atraso || 0, prom: r ? r._prom : x.prev_original || null, nova: t.nova_data || null,
+      ult: r ? r.ult : x.ultima_atualizacao ? String(x.ultima_atualizacao).slice(0, 10) : null, micro: (r ? r.micro : x.micro_status) || "" };
+  }
+  const LM_COR = { ab_atraso: "vermelho", ab_risco: "ambar", ab_prazo: "azul", ent_atraso: "vermelho", ent_prazo: "verde", cancelado: "cinza" };
+  function abrirListaCard(titulo, lista) {
+    lmTitulo = titulo; lmLinhas = (lista || []).map(lmNorm);
+    let m = $("lista-modal");
+    if (!m) {
+      m = document.createElement("div"); m.id = "lista-modal"; m.className = "lm-fundo"; m.hidden = true;
+      m.innerHTML = `<div class="lm-caixa" role="dialog" aria-modal="true"><header class="lm-topo"><div><h2 id="lm-tit"></h2><small id="lm-qtd"></small></div>
+        <div class="lm-acoes"><button type="button" class="btn lm-excel" id="lm-excel">⤓ Baixar Excel</button><button type="button" class="lm-fechar" id="lm-fechar" aria-label="Fechar">×</button></div></header>
+        <div class="lm-corpo"><table class="lm-tab"><thead><tr><th>Nota</th><th>Transportadora</th><th>UF</th><th>Cidade</th><th>Micro status</th><th>Situação</th><th class="num">Dias atraso</th><th>Prometida</th><th>Nova data</th><th>Últ. movim.</th><th>Rastreio</th></tr></thead><tbody id="lm-linhas"></tbody></table></div>
+        <footer class="lm-rodape" id="lm-rodape"></footer></div>`;
+      document.body.appendChild(m);
+      const fechar = () => { m.hidden = true; document.body.classList.remove("lm-aberto"); };
+      m.addEventListener("click", (e) => {
+        if (e.target === m || e.target.closest("#lm-fechar")) return fechar();
+        const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido);
+        if (e.target.closest("#lm-excel")) {
+          const aoa = [["Pedido", "Nota", "Transportadora", "UF", "Cidade", "Micro status", "Situação", "Dias atraso", "Prometida", "Nova data", "Últ. movim."]]
+            .concat(lmLinhas.map((l) => [l.pedido, l.nf, l.transp, l.uf, l.cidade, l.micro, G_SIT_NOME[l.sit] || "", l.atraso, br(l.prom), br(l.nova), br(l.ult)]));
+          const ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
+          XLSX.writeFile(wb, `${lmTitulo.replace(/\s*\(\d[\d.]*\)\s*$/, "").replace(/[^\wÀ-ú]+/g, "_").slice(0, 60)}_${hojeISO()}.xlsx`);
+        }
+      });
+      document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !m.hidden) fechar(); });
+    }
+    const MAX = 500, L = lmLinhas;
+    $("lm-tit").textContent = titulo.replace(/\s*\(\d[\d.]*\)\s*$/, "");
+    $("lm-qtd").textContent = `${fmt(L.length)} pedido(s)`;
+    $("lm-linhas").innerHTML = L.slice(0, MAX).map((l) => `<tr><td class="p" title="${esc(l.pedido)}">${esc(l.nf)}</td><td>${esc(l.transp)}</td><td>${esc(l.uf)}</td><td>${esc(l.cidade)}</td><td class="s">${esc(l.micro)}</td>
+      <td><span class="chip ${LM_COR[l.sit] || "cinza"}">${esc(G_SIT_NOME[l.sit] || "")}</span></td><td class="num">${l.atraso || "—"}</td><td>${br(l.prom) || "—"}</td><td>${br(l.nova) || "—"}</td><td>${br(l.ult) || "—"}</td>
+      <td>${l.nf ? `<button type="button" class="link" data-ssw="${esc(l.nf)}" data-transp="${esc(l.transp)}" data-pedido="${esc(l.pedido)}">abrir</button>` : ""}</td></tr>`).join("")
+      || `<tr><td colspan="11" class="vazio">Nenhum pedido neste card.</td></tr>`;
+    $("lm-rodape").textContent = L.length > MAX ? `Mostrando os primeiros ${fmt(MAX)} de ${fmt(L.length)}. Clique em "Baixar Excel" para o relatório completo.` : `${fmt(L.length)} pedido(s).`;
+    $("lm-rodape").hidden = false;
+    m.hidden = false; document.body.classList.add("lm-aberto"); m.querySelector(".lm-corpo").scrollTop = 0;
+  }
+  // cards de cada página → lista da própria página (registrado por último: roda depois do clique normal do card, que já filtrou)
+  [["visoes", ".kpi", () => filtrados, "lista-titulo"], ["g-cards", ".kpi[data-g]", () => gLista, "g-lista-titulo"], ["e-cards", ".kpi[data-e]", () => eLista, "e-lista-titulo"],
+   ["c-cards", ".kpi[data-c]", () => cLista, "c-lista-titulo"], ["c-m-cards", ".kpi[data-r]", () => cLista, "c-lista-titulo"], ["d-cards", ".kpi[data-d]", () => dLista, "d-lista-titulo"],
+   ["rt-cards", ".kpi[data-rt]", () => rtLista, "rt-titulo"]].forEach(([id, sel, lista, tit]) => {
+    const el = $(id); if (!el) return;
+    el.addEventListener("click", (e) => { if (!e.target.closest(sel)) return; setTimeout(() => abrirListaCard($(tit) ? $(tit).textContent : "Pedidos", lista()), 0); });
+  });
 })();

@@ -1090,3 +1090,24 @@ body.fundo-escuro #rp-filas > .titulo-pagina .info-base { color: #e8edf7; }
 .tabela-msr td.msv-n { font-weight: 700; }
 .tabela-msr td.num.alto { color: var(--vermelho); font-weight: 700; }
 .tabela-msr td:nth-child(4) { border-right: 2px solid var(--borda); }
+/* janela de lista ao clicar nos cards (modelo do E-loggia do Danilo) */
+.lm-fundo { position: fixed; inset: 0; background: rgba(13,34,64,.45); z-index: 70; display: flex; align-items: center; justify-content: center; padding: 24px 16px; }
+.lm-fundo[hidden] { display: none; }
+body.lm-aberto { overflow: hidden; }
+.lm-caixa { background: #fff; border-radius: 10px; width: min(1100px, 100%); max-height: calc(100vh - 48px); display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 50px rgba(0,0,0,.3); }
+.lm-topo { background: #f6c635; padding: 12px 16px; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.lm-topo h2 { margin: 0; font-size: 16px; color: #0d2240; }
+.lm-topo small { color: #0d2240; font-size: 12px; }
+.lm-acoes { display: flex; align-items: center; gap: 10px; }
+.lm-excel { background: #0d2240 !important; color: #fff !important; border-color: #0d2240 !important; }
+.lm-fechar { background: none; border: 0; font-size: 26px; line-height: 1; cursor: pointer; color: #0d2240; }
+.lm-corpo { overflow: auto; flex: 1; padding: 0 8px; }
+.lm-tab { width: 100%; border-collapse: collapse; font-size: 13px; }
+.lm-tab th { position: sticky; top: 0; background: #fff; text-align: left; font-size: 12px; color: var(--texto-2); padding: 10px 8px 6px; border-bottom: 2px solid var(--texto-2); white-space: nowrap; }
+.lm-tab th.num, .lm-tab td.num { text-align: right; }
+.lm-tab td { padding: 6px 8px; border-bottom: 1px solid var(--borda); white-space: nowrap; }
+.lm-tab td .chip { font-size: 11px; }
+.lm-tab button.link { color: #0369a1; text-decoration: underline; }
+.lm-rodape { background: #fffbea; border-top: 1px solid var(--borda); padding: 8px 16px; font-size: 12px; text-align: center; color: var(--texto-2); }
+@media (max-width: 640px) { .lm-fundo { padding: 0; } .lm-caixa { border-radius: 0; max-height: 100vh; height: 100vh; } }
+body.lm-aberto .modal { z-index: 80; } body.lm-aberto .carregando { z-index: 85; } body.lm-aberto .toast { z-index: 90; }
