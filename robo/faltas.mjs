@@ -2,7 +2,7 @@
 //   1) no ticket do Multi360, as mensagens "Externo" que a transportadora mandou pelo portal do transportador
 //      ("Enviado pelo portal do transportador por <nome>" + texto) e o motivo do ticket;
 //   2) no portal ccp.360multi.com › Reposições › aba "Faltas / Inversões (Pós Entrega)", as anotações da NF.
-// Com retorno = alguma das duas tem mensagem da transportadora. O nome de quem escreveu NÃO é guardado.
+// Com retorno = alguma das duas tem mensagem da transportadora. Quem respondeu pela transportadora é guardado no Supabase (pedido da Brenda, 19/11), nunca no registro.
 // Registro público (Actions): só contagens e estrutura mascarada — nunca ticket, nota, nome ou texto.
 import { entrarMulti360 } from "./multi360.mjs";
 import { entrarPortal } from "./barrar.mjs";
@@ -34,8 +34,9 @@ async function lerTicket(p, ticket) {
       if (!/^Enviado pelo portal do transportador/i.test(l)) return;
       let quando = null; for (let k = i - 1; k >= Math.max(0, i - 4); k--) { const d = ls[k].match(DATA); if (d) { quando = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; break; } }
       const corpo = []; for (let k = i + 1; k < ls.length && k < i + 15; k++) { if (cab(ls[k]) || /^Enviado pelo portal do transportador/i.test(ls[k]) || /^(Externo|Interno)$/i.test(ls[k])) break; corpo.push(ls[k]); }
-      const texto = corpo.join(" ").replace(/\s+/g, " ").trim().slice(0, 400);
-      if (texto) msgs.push({ quando, texto });
+      const texto = corpo.join(" ").replace(/\s+/g, " ").trim().slice(0, 1000);
+      const por = ((l.match(/transportador\s+por\s+(.+)$/i) || [])[1] || "").trim().slice(0, 80) || null;   // quem respondeu pela transportadora
+      if (texto) msgs.push({ quando, texto, por });
     });
     // motivo do ticket: rótulo "Motivo" seguido do valor
     let motivo = null; const i = ls.findIndex((l) => /^Motivo:?$/i.test(l)); if (i >= 0 && ls[i + 1]) motivo = ls[i + 1].slice(0, 120);
@@ -77,8 +78,9 @@ async function lerPortalFalta(p, nf) {
       const ls = (await d.innerText()).split("\n").map((l) => l.trim()).filter((l) => l && !/^(close|fechar|×|x)$/i.test(l) && !/^Anota[cç][oõ]es$/i.test(l) && !/^Aqui voc[eê] pode ver/i.test(l) && !/^Adicione aqui/i.test(l));
       const ehData = (l) => /^\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}$/.test(l);
       const idx = ls.map((l, i) => (ehData(l) ? i : -1)).filter((i) => i >= 0);
-      // cada anotação: inicial, nome, data, texto → guarda só data e texto
-      out.anotacoes = idx.map((i, k) => { const fim = k + 1 < idx.length ? idx[k + 1] - 2 : ls.length; return { quando: isoBR(ls[i]), texto: ls.slice(i + 1, Math.max(i + 1, fim)).join(" ").slice(0, 400) }; }).filter((a) => a.texto);
+      // cada anotação: inicial, nome, data, texto → data, quem escreveu e texto
+      out.anotacoes = idx.map((i, k) => { const fim = k + 1 < idx.length ? idx[k + 1] - 2 : ls.length; const por = i > 0 && !ehData(ls[i - 1]) && ls[i - 1].length > 2 ? ls[i - 1].slice(0, 80) : null;
+        return { quando: isoBR(ls[i]), texto: ls.slice(i + 1, Math.max(i + 1, fim)).join(" ").slice(0, 1000), por }; }).filter((a) => a.texto);
       await p.keyboard.press("Escape"); await p.waitForTimeout(600);
     } catch (_) { out.anotacoes = [{ quando: null, texto: col(/anota/).replace(/\.\.\.$|…$/, "").slice(0, 400) }]; out.parcial = true; }
   } else if (temTexto) out.anotacoes = [{ quando: null, texto: col(/anota/).slice(0, 400) }];

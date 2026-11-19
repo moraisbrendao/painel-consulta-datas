@@ -2703,3 +2703,42 @@ begin
 end $$;
 revoke all on function public.importar_ocorrencias_tk(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_ocorrencias_tk(jsonb, boolean, text, integer) to authenticated;
+
+-- PARTE 53) Falta de volumes: data prometida pela transportadora + anotações da Logística, com histórico de cada alteração
+alter table public.falta_volumes add column if not exists data_prometida date;
+alter table public.falta_volumes add column if not exists anotacao text;
+alter table public.falta_volumes add column if not exists editado_por text;
+alter table public.falta_volumes add column if not exists editado_em timestamptz;
+
+create table if not exists public.falta_volumes_hist (
+  id      bigserial primary key,
+  ticket  text not null,
+  campo   text not null,     -- data_prometida | anotacao
+  antes   text,
+  depois  text,
+  por     text,
+  quando  timestamptz not null default now()
+);
+create index if not exists falta_volumes_hist_tk on public.falta_volumes_hist (ticket, quando desc);
+alter table public.falta_volumes_hist enable row level security;
+revoke all on public.falta_volumes_hist from anon;
+grant select on public.falta_volumes_hist to authenticated;
+drop policy if exists "logistica le" on public.falta_volumes_hist;
+create policy "logistica le" on public.falta_volumes_hist for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public._fv_anota()
+returns trigger language plpgsql security definer set search_path = public as $$
+declare quem text := nullif(coalesce(auth.jwt() ->> 'email', ''), '');
+begin
+  if new.data_prometida is distinct from old.data_prometida then
+    insert into public.falta_volumes_hist (ticket, campo, antes, depois, por) values (new.ticket, 'data_prometida', old.data_prometida::text, new.data_prometida::text, quem);
+    new.editado_por := quem; new.editado_em := now();
+  end if;
+  if new.anotacao is distinct from old.anotacao then
+    insert into public.falta_volumes_hist (ticket, campo, antes, depois, por) values (new.ticket, 'anotacao', old.anotacao, new.anotacao, quem);
+    new.editado_por := quem; new.editado_em := now();
+  end if;
+  return new;
+end $$;
+drop trigger if exists fv_anota on public.falta_volumes;
+create trigger fv_anota before update on public.falta_volumes for each row execute function public._fv_anota();

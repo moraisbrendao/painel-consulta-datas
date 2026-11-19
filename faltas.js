@@ -54,21 +54,51 @@
     $("fv-cards").innerHTML = CARDS.map(([k, rot, sub, cor]) => `<button type="button" class="kpi ${cor}${card === k ? " ativa" : ""}" data-fv="${k}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${fmt(n(k))}</b><small>${sub}</small><i>↗</i></button>`).join("");
     const V = L.filter(passa).sort((a, b) => (dias(abertoEm(b)) ?? -1) - (dias(abertoEm(a)) ?? -1));
     $("fv-titulo").textContent = `${CARDS.find((c) => c[0] === card)[1]} (${fmt(V.length)})`;
-    $("fv-linhas").innerHTML = V.slice(0, 500).map(linha).join("") || `<tr><td colspan="6" class="vazio">Nenhum ticket aqui.</td></tr>`;
+    $("fv-linhas").innerHTML = V.slice(0, 500).map(linha).join("") || `<tr><td colspan="8" class="vazio">Nenhum ticket aqui.</td></tr>`;
+    document.querySelectorAll("#fv-linhas .fv-conversa").forEach((c) => (c.scrollTop = c.scrollHeight));
     $("fv-mais").textContent = V.length > 500 ? `Mostrando 500 de ${fmt(V.length)}. O Excel traz todos.` : "";
     desenharSem();
   }
+  const hojeISO = () => { const d = new Date(), z = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
+  const promVencida = (x) => x.data_prometida && x.data_prometida < hojeISO();
+  const quem = (r) => (r.por ? ` <b class="fv-por">${esc(r.por)}</b>` : "");
   function linha(x) {
     const p = x.portal || {}, R = retornos(x), d = dias(abertoEm(x)), pv = prazoVencido(x);
+    // todas as mensagens da transportadora, da 1ª resposta até a última (rola dentro da caixa)
     const ret = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>` : R.length
-      ? R.slice(0, 3).map((r) => `<div class="fv-ret"><span class="chip ${r.onde === "360" ? "azul" : "lilas"}">${r.onde === "360" ? "360 · externo" : "portal · anotação"}</span>${r.quando ? ` <span class="s">${hora(r.quando)}</span>` : ""}<div>${esc(r.texto)}</div></div>`).join("") + (R.length > 3 ? `<div class="s">+${R.length - 3} retorno(s) mais antigo(s) no Excel</div>` : "")
+      ? `<div class="fv-conversa">${R.slice().reverse().map((r) => `<div class="fv-ret"><span class="chip ${r.onde === "360" ? "azul" : "lilas"}">${r.onde === "360" ? "360 · externo" : "portal · anotação"}</span>${quem(r)}${r.quando ? ` <span class="s">${hora(r.quando)}</span>` : ""}<div>${esc(r.texto)}</div></div>`).join("")}</div>${R.length > 1 ? `<div class="s">${fmt(R.length)} mensagens · a mais nova embaixo</div>` : ""}`
       : `<span class="txt-vermelho">Sem retorno da transportadora</span>${p.achou === false ? `<div class="s">NF não está na aba Faltas / Inversões do portal</div>` : ""}`;
+    const ed = x.editado_em ? `<div class="s">gravado${x.editado_por ? " por " + esc(String(x.editado_por).split("@")[0]) : ""} em ${hora(x.editado_em)}</div>` : "";
     return `<tr><td><b>${esc(x.nf || "—")}</b><div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>${x.fila ? `<div class="s">${esc(x.fila)}</div>` : ""}</td>
       <td>${esc(transpDe(x))}</td><td>${esc(motivoDe(x))}</td>
       <td class="num">${d ?? "—"}${abertoEm(x) ? `<div class="s">desde ${br(abertoEm(x))}</div>` : ""}</td>
       <td>${p.prazo ? `${esc(p.prazo)}${pv ? ` <span class="chip vermelho">vencido</span>` : ""}` : "—"}</td>
-      <td class="fv-col-ret">${ret}${x.erro && !x.tem_retorno ? `<div class="s txt-vermelho">⚠ ${esc(x.erro)}</div>` : ""}</td></tr>`;
+      <td class="fv-prom"><input type="date" class="fv-data" data-tk="${esc(x.ticket)}" value="${esc(x.data_prometida || "")}" title="Data que a transportadora informou para finalizar">${promVencida(x) ? ` <span class="chip vermelho">promessa vencida</span>` : ""}</td>
+      <td class="fv-col-ret">${ret}${x.erro && !x.tem_retorno ? `<div class="s txt-vermelho">⚠ ${esc(x.erro)}</div>` : ""}</td>
+      <td class="fv-anot"><textarea class="fv-nota" data-tk="${esc(x.ticket)}" rows="3" placeholder="Anotações da Logística">${esc(x.anotacao || "")}</textarea>${ed}<a href="#" class="s fv-hist" data-tk="${esc(x.ticket)}">histórico</a></td></tr>`;
   }
+  async function gravar(tk, campos) {
+    try {
+      const { data, error } = await sb().from("falta_volumes").update(campos).eq("ticket", tk).select("*");
+      if (error) throw error;
+      const i = L.findIndex((x) => x.ticket === tk); if (i >= 0 && data && data[0]) L[i] = data[0];
+      toast("Gravado."); desenhar();
+    } catch (e) { toast(/data_prometida|anotacao|column/i.test(e.message || "") ? "Rode a parte 53 no Supabase para gravar anotações e datas." : "Não gravou: " + (e.message || e), true); }
+  }
+  $("fv-linhas").addEventListener("change", (e) => {
+    const t = e.target;
+    if (t.classList.contains("fv-data")) gravar(t.dataset.tk, { data_prometida: t.value || null });
+    if (t.classList.contains("fv-nota")) gravar(t.dataset.tk, { anotacao: t.value.trim() || null });
+  });
+  $("fv-linhas").addEventListener("click", async (e) => {
+    const a = e.target.closest(".fv-hist"); if (!a) return; e.preventDefault();
+    try {
+      const { data, error } = await sb().from("falta_volumes_hist").select("*").eq("ticket", a.dataset.tk).order("quando", { ascending: false }).limit(30);
+      if (error) throw error;
+      const ROT = { data_prometida: "Data prometida", anotacao: "Anotação" };
+      alert(data.length ? data.map((h) => `${hora(h.quando)}${h.por ? " · " + h.por.split("@")[0] : ""} · ${ROT[h.campo] || h.campo}: ${h.campo === "data_prometida" ? br(h.antes) || "(vazia)" : h.antes || "(vazia)"} → ${h.campo === "data_prometida" ? br(h.depois) || "(vazia)" : h.depois || "(vazia)"}`).join("\n") : "Ainda sem alterações gravadas nesse ticket.");
+    } catch (err) { toast(/falta_volumes_hist|does not exist|schema cache/i.test(err.message || "") ? "Rode a parte 53 no Supabase." : err.message, true); }
+  });
 
   // Sem retorno: quadrinhos por transportadora, separados por motivo, com dias parados, mensagem e Excel
   function grupos() {
@@ -86,10 +116,10 @@
     return `Olá, ${t}! Estamos com ${plural(xs.length, "caso", "casos")} de ${mot} parados sem retorno de vocês: ${fim}.${venc ? ` ${venc === 1 ? "Um deles já passou" : venc + " já passaram"} do prazo limite no portal.` : ""} Precisamos do retorno de vocês para seguir com as tratativas. Conseguem verificar?\n\n`
       + xs.map((x) => { const d = dias(abertoEm(x)), pv = prazoVencido(x); return `• NF ${x.nf || "—"} · ${motivoDe(x)}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""}${pv ? ` · prazo limite ${br(pv)} vencido` : ""}`; }).join("\n");
   }
-  const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Dias parado", "Prazo limite (portal)", "Prazo vencido", "Com retorno", "Último retorno em", "Onde", "Texto do último retorno", "Todos os retornos"];
+  const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Dias parado", "Prazo limite (portal)", "Prazo vencido", "Data prometida pela transportadora", "Promessa vencida", "Anotações", "Com retorno", "Último retorno em", "Onde", "Quem retornou", "Texto do último retorno", "Todos os retornos"];
   const linhasXls = (xs) => xs.map((x) => { const R = retornos(x), u = R[0] || {}, pv = prazoVencido(x);
-    return [transpDe(x), x.nf || "", x.ticket, motivoDe(x), x.fila || "", br(abertoEm(x)), dias(abertoEm(x)) ?? "", (x.portal || {}).prazo || "", pv ? "Sim" : "", !x.conferido_em ? "Não conferido" : x.tem_retorno ? "Sim" : "Não",
-      u.quando ? hora(u.quando) : "", u.onde === "360" ? "Ticket 360 (externo)" : u.onde === "portal" ? "Portal (anotação)" : "", u.texto || "", R.map((r) => `${r.quando ? hora(r.quando) + " " : ""}[${r.onde}] ${r.texto}`).join(" | ")]; });
+    return [transpDe(x), x.nf || "", x.ticket, motivoDe(x), x.fila || "", br(abertoEm(x)), dias(abertoEm(x)) ?? "", (x.portal || {}).prazo || "", pv ? "Sim" : "", br(x.data_prometida), promVencida(x) ? "Sim" : "", x.anotacao || "", !x.conferido_em ? "Não conferido" : x.tem_retorno ? "Sim" : "Não",
+      u.quando ? hora(u.quando) : "", u.onde === "360" ? "Ticket 360 (externo)" : u.onde === "portal" ? "Portal (anotação)" : "", u.por || "", u.texto || "", R.slice().reverse().map((r) => `${r.quando ? hora(r.quando) + " " : ""}[${r.onde}${r.por ? " · " + r.por : ""}] ${r.texto}`).join(" | ")]; });
   function baixar(G, nome) {
     const wb = XLSX.utils.book_new(), usados = new Set();
     if (G.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB].concat(G.flatMap(([, xs]) => linhasXls(xs)))), "Todas");

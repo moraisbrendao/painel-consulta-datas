@@ -1062,3 +1062,8 @@ body.fundo-escuro #rp-filas > .titulo-pagina h2,
 body.fundo-escuro #rp-filas > .titulo-pagina .sub,
 body.fundo-escuro #rp-filas > .titulo-pagina .info-base { color: #e8edf7; }
 @media (max-width: 700px) { .fo-quadro { padding: 12px; } .fo-multi { min-width: 140px; } .fo-resp { display: block; margin: 4px 0 0; width: 100%; } }
+.fv-conversa { max-height: 260px; overflow-y: auto; padding-right: 6px; }
+.fv-por { font-size: 12.5px; color: #1d4ed8; }
+.fv-prom input[type=date] { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; }
+.fv-anot { min-width: 220px; }
+.fv-anot textarea { width: 100%; font: inherit; font-size: 13px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; resize: vertical; }
