@@ -1074,5 +1074,5 @@ body.fundo-escuro #rp-filas > .titulo-pagina .info-base { color: #e8edf7; }
 .fo-pivo td { padding: 4px 7px; }
 .fo-pivo tr.fo-s td:first-child { padding-left: 22px; }
 .fo-pivo tr.fo-s1 td:first-child { padding-left: 7px; }
-.fo-pivo td:first-child { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-pivo td:first-child { white-space: nowrap; }
 .fo-casos { max-width: none; }
