@@ -32,7 +32,7 @@ on:
         default: ""
 
 concurrency:
-  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora' || startsWith(github.event.inputs.modo || '', 'aguardando') || github.event.inputs.modo == 'conferencia-tudo' || github.event.inputs.modo == 'parar-tudo' || github.event.inputs.modo == 'repo-itens' || startsWith(github.event.inputs.modo || '', 'barrar')) && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
+  group: robo-ssw-${{ (startsWith(github.event.inputs.modo || 'real', 'diag') || github.event.inputs.modo == 'jadlog' || github.event.inputs.modo == 'transito-cte' || github.event.inputs.modo == 'transportadora' || startsWith(github.event.inputs.modo || '', 'aguardando') || github.event.inputs.modo == 'conferencia-tudo' || github.event.inputs.modo == 'parar-tudo' || github.event.inputs.modo == 'repo-itens' || startsWith(github.event.inputs.modo || '', 'barrar') || startsWith(github.event.inputs.modo || '', 'faltas')) && github.event.inputs.modo || 'consulta' }}   # real e conferência nunca ao mesmo tempo (respeita o limite do SSW)
   cancel-in-progress: false
 
 permissions:
