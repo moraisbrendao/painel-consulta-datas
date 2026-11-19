@@ -23,7 +23,7 @@
   const SEM_RESP = "Sem responsável";
   const ls = (k, v) => { try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (_) { return null; } };
 
-  let vis = ls("painel.fo.vis") === "oc" ? "oc" : "filas", modoDias = ls("painel.fo.dias") === "criado" ? "criado" : "atual", editar = false;
+  let vis = ls("painel.fo.vis") === "oc" ? "oc" : "filas", porO = ls("painel.fo.por") === "canal" ? "canal" : "transp", modoDias = ls("painel.fo.dias") === "criado" ? "criado" : "atual", editar = false;
   let F = [], fInfo = null, resp = new Map(), fOk = true, O = [], oInfo = null, oOk = true, carregou = false, tk = null;
   let sel = null;   // célula aberta: { vis, g, f, fx }
   const filtros = { grupo: new Set(), resp: new Set(), ostatus: new Set(), osol: new Set(["Transportador"]), omacro: new Set(), ocanal: new Set(), otransp: new Set() };
@@ -110,15 +110,17 @@
     $("fo-sub").textContent = `${fmt(L.length)} tickets em aberto (status diferente de Resolvido/Encerrado). Dias desde ${modoDias === "criado" ? "a criação do ticket" : "a última atualização do ticket"}; vermelho = 20 dias ou mais. ${editar ? "Escreva o responsável de cada fila: grava sozinho e vale para toda a Logística." : "Clique num número para ver os tickets."}`;
   }
 
+  const linhaO = () => (porO === "canal" ? canalO : transpO);   // linhas do quadro: transportadora ou canal
   function desenharOc() {
     $("fo-filtros").innerHTML = multi("ostatus", "Status Ocorrência", uniq(O, OF.ostatus)) + multi("osol", "Último Solicitante", uniq(O, OF.osol)) + multi("omacro", "Status macro Intelipost", uniq(O, OF.omacro))
-      + multi("ocanal", "Canal", uniq(O, OF.ocanal)) + multi("otransp", "Transportadora", uniq(O, OF.otransp)) + `<button type="button" class="link limpar" id="fo-limpar">Limpar filtros</button>`;
+      + `<label class="fo-sel">Ver por<select id="fo-por"><option value="transp"${porO === "transp" ? " selected" : ""}>Transportadora</option><option value="canal"${porO === "canal" ? " selected" : ""}>Canal</option></select></label>`
+      + (porO === "canal" ? multi("ocanal", "Canal", uniq(O, OF.ocanal)) : multi("otransp", "Transportadora", uniq(O, OF.otransp))) + `<button type="button" class="link limpar" id="fo-limpar">Limpar filtros</button>`;
     const L = O.filter((x) => passaO(x));
-    const G = [...agrupa(L, transpO).entries()].sort((a, b) => pt(a[0], b[0]));
+    const G = [...agrupa(L, linhaO()).entries()].sort((a, b) => pt(a[0], b[0]));
     let h = G.map(([g, rs]) => { const v = contar(rs, diasO); return `<tr class="fo-s fo-s1"><td>${esc(g)}</td>${v.map((n, i) => celula(n, g, "*", i)).join("")}${celula(rs.length, g, "*", -1, "tot")}</tr>`; }).join("");
     const t = contar(L, diasO);
     h += L.length ? `<tr class="fo-t"><td>Total geral</td>${t.map((n, i) => celula(n, "*", "*", i)).join("")}${celula(L.length, "*", "*", -1, "tot")}</tr>` : `<tr><td colspan="${FAIXAS.length + 2}" class="vz">${O.length ? "Nenhuma ocorrência nesse filtro." : oOk ? "Ainda sem ocorrências: clique em Carregar tickets no topo (detalhamento) ou em Carregar ocorrências." : "Para usar esta visão, rode a parte 52 no Supabase."}</td></tr>`;
-    $("fo-cab").innerHTML = cab("Transportador");
+    $("fo-cab").innerHTML = cab(porO === "canal" ? "Canal" : "Transportador");
     $("fo-corpo").innerHTML = h;
     $("fo-sub").textContent = `${fmt(L.length)} ocorrências (contagem de nota fiscal). Dias sem atualização = desde a data da última mensagem; vermelho = 20 dias ou mais. Clique num número para ver os casos.`;
   }
@@ -126,7 +128,7 @@
   function desenhar() {
     if (!carregou) return;
     document.querySelectorAll("#fo-vis [data-vis]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.vis === vis); b.classList.toggle("contorno", b.dataset.vis !== vis); });
-    $("fo-titulo").textContent = vis === "filas" ? "Filas atualizadas · tickets em aberto por responsável e fila" : "Ocorrências · por transportador e dias sem atualização";
+    $("fo-titulo").textContent = vis === "filas" ? "Filas atualizadas · tickets em aberto por responsável e fila" : `Ocorrências · por ${porO === "canal" ? "canal" : "transportador"} e dias sem atualização`;
     const inf = vis === "filas" ? fInfo : oInfo;
     if (vis === "filas" ? fOk : oOk) $("fo-info").textContent = inf ? `${vis === "filas" ? "Tabela de acompanhamento" : "Ocorrências"}: ${inf.arquivo || ""} · enviada em ${hora(inf.enviado_em)}${inf.enviado_por ? " por " + inf.enviado_por.split("@")[0] : ""}` : "Ainda não enviada.";
     else if (vis === "oc") $("fo-info").textContent = "Para usar esta visão, rode a parte 52 no Supabase.";
@@ -140,7 +142,7 @@
     if (!sel || sel.vis !== vis) return null;
     const { g, f, fx } = sel, q = +fx;
     if (vis === "filas") return F.filter(passaF).filter((x) => (g === "*" || respDe(filaDe(x)) === g) && (f === "*" || filaDe(x) === f) && (q < 0 || faixa(diasFila(x)) === q)).sort((a, b) => (diasFila(b) ?? -1) - (diasFila(a) ?? -1));
-    return O.filter((x) => passaO(x)).filter((x) => (g === "*" || transpO(x) === g) && (q < 0 || faixa(diasO(x)) === q)).sort((a, b) => (diasO(b) ?? -1) - (diasO(a) ?? -1));
+    return O.filter((x) => passaO(x)).filter((x) => (g === "*" || linhaO()(x) === g) && (q < 0 || faixa(diasO(x)) === q)).sort((a, b) => (diasO(b) ?? -1) - (diasO(a) ?? -1));
   }
   const linkTk = (id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)} ↗</a>`;
   const linkOc = (nf) => `https://ccp.360multi.com/occurrences/${encodeURIComponent(chaveNF(nf))}`;   // ocorrência no portal do transportador: /occurrences/NF-série
@@ -177,8 +179,8 @@
     const wb = XLSX.utils.book_new(), cab = vis === "filas" ? CAB_F : CAB_O, lin = vis === "filas" ? linF : linO;
     const ws = XLSX.utils.aoa_to_sheet([cab, ...L.map(lin)]); ws["!cols"] = cab.map((c) => ({ wch: Math.max(12, Math.min(40, c.length + 4)) }));
     // resumo igual ao quadro (linhas × faixas de dias)
-    const dias = vis === "filas" ? diasFila : diasO, chave = vis === "filas" ? (x) => `${respDe(filaDe(x))} › ${filaDe(x)}` : transpO;
-    const res = [[vis === "filas" ? "Responsável › Fila" : "Transportador", ...FAIXAS.map((f) => f[0]), "Total"]];
+    const dias = vis === "filas" ? diasFila : diasO, chave = vis === "filas" ? (x) => `${respDe(filaDe(x))} › ${filaDe(x)}` : linhaO();
+    const res = [[vis === "filas" ? "Responsável › Fila" : porO === "canal" ? "Canal" : "Transportador", ...FAIXAS.map((f) => f[0]), "Total"]];
     [...agrupa(L, chave).entries()].sort((a, b) => pt(a[0], b[0])).forEach(([k, rs]) => res.push([k, ...contar(rs, dias).map((n) => n || ""), rs.length]));
     res.push(["Total geral", ...contar(L, dias), L.length]);
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(res), "Quadro");
@@ -245,6 +247,7 @@
   });
   $("rp-filas").addEventListener("change", async (e) => {
     const t = e.target;
+    if (t.id === "fo-por") { porO = t.value; ls("painel.fo.por", porO); filtros.ocanal.clear(); filtros.otransp.clear(); sel = null; return desenhar(); }
     if (t.id === "fo-dias") { modoDias = t.value; ls("painel.fo.dias", modoDias); return desenhar(); }
     if (t.dataset.todos) { filtros[t.dataset.todos].clear(); return desenharMantendo(t.dataset.todos); }
     if (t.dataset.mk) { const s = filtros[t.dataset.mk]; if (t.checked) s.add(t.value); else s.delete(t.value); return desenharMantendo(t.dataset.mk); }

@@ -1067,3 +1067,12 @@ body.fundo-escuro #rp-filas > .titulo-pagina .info-base { color: #e8edf7; }
 .fv-prom input[type=date] { font: inherit; font-size: 13px; padding: 4px 6px; border: 1px solid #cbd5e1; border-radius: 6px; }
 .fv-anot { min-width: 220px; }
 .fv-anot textarea { width: 100%; font: inherit; font-size: 13px; padding: 6px; border: 1px solid #cbd5e1; border-radius: 6px; resize: vertical; }
+/* quadros compactos (cabem num print) */
+.fo-quadro { max-width: 1020px; }
+.fo-pivo { font-size: 12.5px; min-width: 640px; }
+.fo-pivo th { padding: 6px 7px; font-size: 12px; }
+.fo-pivo td { padding: 4px 7px; }
+.fo-pivo tr.fo-s td:first-child { padding-left: 22px; }
+.fo-pivo tr.fo-s1 td:first-child { padding-left: 7px; }
+.fo-pivo td:first-child { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fo-casos { max-width: none; }
