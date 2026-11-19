@@ -4155,7 +4155,7 @@ ${extra}
   const kpi = (rot, n, sub, cor = "", extra = "") => `<div class="kpi kpi-info ${cor}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small>${extra}</div>`;
   // card clicável: abre os tickets dele no Detalhamento (e dá para exportar de lá)
   const kpiC = (card, rot, n, sub, cor = "") => `<button type="button" class="kpi kpi-info kpi-clic ${cor}" data-card="${card}" title="Clique para ver os tickets e exportar"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small><i>↗</i></button>`;
-  const ROT_CARD = { todos: "Todas as reposições", pre: "Pré-entrega", pos: "Pós-entrega", ab: "Em aberto", fin: "Finalizados (Resolvido/Encerrado)", rec: "Pendente Recuperação de crédito", total: "Reposição total", parcial: "Reposição parcial", comdet: "Com detalhamento", nfs: "Com nova NF emitida", saida: "Nova NF com saída", tempo: "Finalizados (com tempo de resolução)" };
+  const ROT_CARD = { todos: "Todas as reposições", pre: "Pré-entrega", pos: "Pós-entrega", ab: "Em aberto", fin: "Finalizados (Resolvido/Encerrado)", rec: "Pendente Recuperação de crédito", total: "Reposição total", parcial: "Reposição parcial", comdet: "Com detalhamento", "sq-fin": "Sem Parcial/Total: finalizados sem a informação no ticket", "sq-ab": "Sem Parcial/Total: em aberto, ticket ainda sem a informação", "sq-rec": "Sem Parcial/Total: Recuperação de crédito", err: "Sem Parcial/Total: robô não conseguiu ler o ticket", nl: "Sem Parcial/Total: ainda não lidos pelo robô", nfs: "Com nova NF emitida", saida: "Nova NF com saída", tempo: "Finalizados (com tempo de resolução)" };
   let repCard = "", repFaixa = -1;
   const kpiGarg = (L) => { const g = gargalos(L)[0]; return kpiC("garg", "Gargalos por fila", g ? esc(g.fila) : "–", g ? `maior gargalo · ${fmt(g.n)} casos, média ${dia1(g.media)} dias parados` : "nenhum caso em aberto", "laranja kpi-garg"); };
   // quadro "em aberto por fila": só aparece ao clicar no card Em aberto; filtros próprios (série, fila, responsável)
@@ -4170,11 +4170,17 @@ ${extra}
       case "total": return tpRep(r) === "TOTAL";
       case "parcial": return tpRep(r) === "PARCIAL";
       case "comdet": return !!r._d;
+      case "sq-fin": case "sq-ab": case "sq-rec": case "err": case "nl": return semTpMot(r) === repCard;
       case "nfs": return !!d.nfs_novas;
       case "saida": return !!d.data_saida_nf;
       default: return true;
     }
   }
+  // por que o ticket não tem Parcial/Total: quadro dentro do card "Totais × parciais"
+  const SEM_TP = { "sq-fin": "Finalizados, ticket sem a informação", "sq-ab": "Em aberto, ticket ainda sem a informação", "sq-rec": "Recup. de crédito, sem a informação", err: "Robô não conseguiu ler o ticket", nl: "Ainda não lidos pelo robô" };
+  const semTpMot = (r) => tpRep(r) ? "" : !r._it ? "nl" : r._it.erro ? "err" : "sq-" + sitRep(r);
+  const quebraSemTp = (L) => { const c = {}; L.forEach((r) => { const k = semTpMot(r); if (k) c[k] = (c[k] || 0) + 1; });
+    return `<span class="kpi-quebra">${Object.keys(SEM_TP).filter((k) => c[k]).map((k) => `<span class="kpi-q" data-semtp="${k}" title="Clique para ver esses tickets"><span>${SEM_TP[k]}</span><b>${fmt(c[k])}</b></span>`).join("")}</span>`; };
   const clic = (f, v, txt) => `<a href="#" class="rp-ir" data-f="${f}" data-v="${esc(v)}">${esc(txt)}</a>`;
 
   function filtrarRep() {
@@ -4267,7 +4273,7 @@ ${extra}
       + kpiC("fin", "Finalizados", fmt(fin), `Resolvido ou Encerrado · ${pct(fin, L.length)}`)
       + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(rec), "pendente, fora de reposição", "roxo")
-      + kpiC("comdet", "Totais × parciais", tot + par ? `${fmt(tot)} × ${fmt(par)}` : "–", semTp ? `${fmt(semTp)} ainda sem a informação (o robô lê em Eventos)` : "de todos os tickets do filtro");
+      + kpiC("comdet", "Totais × parciais", tot + par ? `${fmt(tot)} × ${fmt(par)}` : "–", semTp ? `${fmt(semTp)} ainda sem a informação:` + quebraSemTp(L) : "de todos os tickets do filtro");
     const ev = evolucaoMeses(filtroRep(["rep-mes"]), $("rep-tipo").value), maior = Math.max(1, ...ev.map((x) => x.tot)), mesSel = new Set([...$("rep-mes").selectedOptions].map((o) => o.value)), tipo = $("rep-tipo").value;
     $("rep-ev-titulo").textContent = `Evolução mensal · ${tipo ? ROT_FLUXO[tipo].toLowerCase() : "pré-entrega × pós-entrega"}`;
     $("rep-meses").innerHTML = ev.map((x, i) => `<tr data-f="rep-mes" data-v="${esc(x.mes)}" class="${mesSel.has(x.mes) ? "sel" : ""}"><td>${esc(rotMes(x.mes))}</td>${num(tipo === "pos" ? 0 : x.pre)}${num(tipo === "pre" ? 0 : x.pos)}<td class="num tot">${fmt(x.tot)}</td>${varia(x.tot, i ? ev[i - 1].tot : 0)}`
@@ -4353,7 +4359,7 @@ ${extra}
   }
 
   // ---------- volumes enviados na reposição (card Totais × parciais): robô lê o Multi360 em Aguardando entrega (parte 48) ----------
-  let repItTk = new Map(), repItens = new Map(), volCad = new Map(), repItOk = false, volAberto = false, volTipo = "", volCasos = [];
+  let repItTk = new Map(), repItens = new Map(), volCad = new Map(), repItOk = false, volAberto = false, volTipo = "", volCasos = [], volQ = {}, volSel = null;
   const ehAgEnt = (r) => /AGUARDANDO ENTREGA/.test(norm(filaRep(r)));
   const tpRep = (r) => { const t = norm((r._it && r._it.parcial) || (r._d && r._d.tipo_reposicao) || ""); return /PARCIAL/.test(t) ? "PARCIAL" : /TOTAL/.test(t) ? "TOTAL" : ""; };
   const descVol = (c) => volCad.get(c) || "(sem cadastro)";
@@ -4377,6 +4383,19 @@ ${extra}
     // cobrança (pré)
     const pre = lidos.filter((r) => r._t === "pre"), cob = contaPor(pre, cobRep);
     const tit = volTipo === "TOTAL" ? "totais" : volTipo === "PARCIAL" ? "parciais" : "totais e parciais";
+    // cada quadro: linhas clicáveis (mostram os casos embaixo) + Exportar em cima
+    volQ = { vol: { rot: "Volumes mais enviados", todos: lidos.filter((r) => r._cods.length), de: (k) => lidos.filter((r) => r._cods.includes(k)) },
+      mot: { rot: "Por motivo", todos: lidos, de: (k) => lidos.filter((r) => motRep(r) === k) },
+      cob: { rot: "Pré-entrega · cobrança", todos: pre, de: (k) => pre.filter((r) => cobRep(r) === k) },
+      proc: { rot: "Em processo", todos: proc, de: (k) => proc.filter((r) => (filaRep(r) || SEM_FILA) === k) } };
+    if (volSel && (!volQ[volSel.q] || !volQ[volSel.q].de(volSel.k).length)) volSel = null;
+    const volCab = (q, t) => `<div class="rp-q-cab"><h3>${t}</h3><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" title="Baixar em Excel os tickets deste quadro">↓ Exportar</button></div>`;
+    const volLin = (q, k) => `class="rp-q-lin${volSel && volSel.q === q && volSel.k === k ? " sel" : ""}" data-vq="${q}" data-vk="${esc(k)}" title="Clique para ver os casos"`;
+    const volCasosH = (q) => { if (!volSel || volSel.q !== q) return ""; const rs = volQ[q].de(volSel.k);
+      return `<div class="rp-q-casos"><div class="rp-q-cab"><h3>${esc(volSel.k)} · ${fmt(rs.length)} tickets</h3><span><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" data-vk="${esc(volSel.k)}">↓ Exportar estes casos</button> <button type="button" class="btn contorno mini vol-fechar" title="Fechar a lista">✕</button></span></div>
+        <div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Ticket</th><th>NF original</th><th>Pré/pós</th><th>Total/Parcial</th><th>Motivo</th><th>Transportadora</th><th>Fila atual</th><th>Volumes</th></tr></thead>
+        <tbody>${rs.slice(0, 300).map((r) => `<tr><td><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(r.ticket)}" target="_blank" rel="noopener noreferrer">${esc(r.ticket)}</a></td><td>${esc(r.nf || "")}</td><td>${esc(ROT_FLUXO[r._t] || "")}</td><td>${esc(tpRep(r))}</td><td>${esc(motRep(r))}</td><td>${esc(trRep(r))}</td><td>${esc(filaRep(r) || "")}</td><td class="s">${esc(r._cods.join(", "))}</td></tr>`).join("")}</tbody></table></div>
+        ${rs.length > 300 ? `<p class="s">Mostrando 300 de ${fmt(rs.length)}. O Exportar traz todos.</p>` : ""}</div>`; };
     box.innerHTML = `<section class="cartao rp-garg-q"><div class="cartao-topo"><div><h2>Volumes enviados nas reposições · ${tit}</h2>
       <p class="sub">O robô lê cada ticket quando ele chega em <b>Aguardando entrega</b> com nova NF: o quadro Reposição em Eventos (volume, parcial/total) e, no pré-entrega, o PDF da nota (destinatário com CNPJ de transportadora = saiu com cobrança; CPF = sem cobrança). Segue os filtros do topo.</p></div>
       <div class="rp-vol-bts"><button type="button" class="btn contorno vol-excel">↓ Baixar Excel</button><label class="btn contorno vol-cad" title="Qualquer planilha com o código do item (ex.: 76157.0001) e a descrição">Atualizar cadastro de volumes<input type="file" accept=".xlsx,.xlsm,.xls" hidden class="vol-cad-arq"></label></div></div>
@@ -4389,20 +4408,34 @@ ${extra}
         <div><b>${volCad.size ? fmt(volCad.size) : "–"}</b><span>${volCad.size ? "volumes no cadastro" : "cadastro de volumes não enviado"}</span></div>
       </div>
       <div class="rp-vol-grade">
-        <div><h3>Volumes mais enviados</h3><div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Volume</th><th>Descrição</th><th class="num">Tickets</th><th class="num">Total</th><th class="num">Parcial</th><th class="num">Pré</th><th class="num">Pós</th><th>Motivo que mais aparece</th></tr></thead>
-          <tbody>${vs.slice(0, 50).map((v) => { const tm = topMot(v.mot); return `<tr><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td>${num(v.tot)}${num(v.par)}${num(v.pre)}${num(v.pos)}<td class="s">${esc(tm[0])}${tm[1] ? ` (${fmt(tm[1])})` : ""}</td></tr>`; }).join("")
-            || `<tr><td colspan="8" class="vazio">Nenhum ticket lido ainda nesse filtro.</td></tr>`}</tbody></table></div>${vs.length > 50 ? `<p class="s">Mostrando os 50 mais enviados de ${fmt(vs.length)}. O Excel traz todos.</p>` : ""}</div>
-        <div class="rp-vol-lado"><div><h3>Por motivo</h3><div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
-          <tbody>${pm.map((x) => `<tr><td>${esc(x.mot)}</td><td class="num tot">${fmt(x.n)}</td>${num(x.vols)}<td class="s">${x.top ? esc(x.top + " · " + descVol(x.top)) + ` (${fmt(x.topN)})` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="vazio">—</td></tr>`}</tbody></table></div>
-</div>
-          ${repAba !== "pos" ? `<div><h3>Pré-entrega · cobrança à transportadora</h3><div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Nota da reposição</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
-          <tbody>${cob.map(([k, rs]) => `<tr><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, pre.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody></table></div></div>` : ""}
-          <div><h3>Em processo · ainda não chegaram em Aguardando entrega</h3><div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Fila atual</th><th class="num">Tickets</th></tr></thead>
-          <tbody>${contaPor(proc, (r) => filaRep(r) || SEM_FILA).map(([f, rs]) => `<tr><td>${esc(f)}</td><td class="num tot">${fmt(rs.length)}</td></tr>`).join("") || `<tr><td colspan="2" class="vazio">Nenhum.</td></tr>`}</tbody></table></div></div>
+        <div>${volCab("vol", "Volumes mais enviados")}<div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Volume</th><th>Descrição</th><th class="num">Tickets</th><th class="num">Total</th><th class="num">Parcial</th><th class="num">Pré</th><th class="num">Pós</th><th>Motivo que mais aparece</th></tr></thead>
+          <tbody>${vs.slice(0, 50).map((v) => { const tm = topMot(v.mot); return `<tr ${volLin("vol", v.c)}><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td>${num(v.tot)}${num(v.par)}${num(v.pre)}${num(v.pos)}<td class="s">${esc(tm[0])}${tm[1] ? ` (${fmt(tm[1])})` : ""}</td></tr>`; }).join("")
+            || `<tr><td colspan="8" class="vazio">Nenhum ticket lido ainda nesse filtro.</td></tr>`}</tbody>
+          ${lidos.length ? `<tfoot><tr class="rp-total"><td colspan="2">Total geral (${fmt(vs.length)} volumes diferentes)</td><td class="num">${fmt(lidos.length)}</td>${num(lidos.filter((r) => tpRep(r) === "TOTAL").length)}${num(lidos.filter((r) => tpRep(r) === "PARCIAL").length)}${num(pre.length)}${num(lidos.length - pre.length)}<td></td></tr></tfoot>` : ""}</table></div>${vs.length > 50 ? `<p class="s">Mostrando os 50 mais enviados de ${fmt(vs.length)}. O Exportar traz todos.</p>` : ""}${volCasosH("vol")}</div>
+        <div class="rp-vol-lado"><div>${volCab("mot", "Por motivo")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
+          <tbody>${pm.map((x) => `<tr ${volLin("mot", x.mot)}><td>${esc(x.mot)}</td><td class="num tot">${fmt(x.n)}</td>${num(x.vols)}<td class="s">${x.top ? esc(x.top + " · " + descVol(x.top)) + ` (${fmt(x.topN)})` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="vazio">—</td></tr>`}</tbody>
+          ${pm.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(lidos.length)}</td>${num(pm.reduce((t, x) => t + x.vols, 0))}<td></td></tr></tfoot>` : ""}</table></div>${volCasosH("mot")}</div>
+          ${repAba !== "pos" ? `<div>${volCab("cob", "Pré-entrega · cobrança à transportadora")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Nota da reposição</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
+          <tbody>${cob.map(([k, rs]) => `<tr ${volLin("cob", k)}><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, pre.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody>
+          ${pre.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(pre.length)}</td><td class="num">100%</td></tr></tfoot>` : ""}</table></div>${volCasosH("cob")}</div>` : ""}
+          <div>${volCab("proc", "Em processo · ainda não chegaram em Aguardando entrega")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Fila atual</th><th class="num">Tickets</th></tr></thead>
+          <tbody>${contaPor(proc, (r) => filaRep(r) || SEM_FILA).map(([f, rs]) => `<tr ${volLin("proc", f)}><td>${esc(f)}</td><td class="num tot">${fmt(rs.length)}</td></tr>`).join("") || `<tr><td colspan="2" class="vazio">Nenhum.</td></tr>`}</tbody>
+          ${proc.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(proc.length)}</td></tr></tfoot>` : ""}</table></div>${volCasosH("proc")}</div>
         </div>
       </div></section>`;
   }
+  const linhaVolXls = (r) => [r.ticket, r.nf || "", serieRep(r), ROT_FLUXO[r._t], tpRep(r), (r._it && r._it.quando) || "", r._it ? r._it.volumes ?? "" : "", r._cods.join(", "), r._cods.map(descVol).join(" | "), motRep(r), trRep(r), cobRep(r), filaRep(r), (r._d && r._d.nfs_novas) || "", r._it ? br(r._it.lido_em) : ""];
+  const CAB_VOL_XLS = ["Ticket", "NF original", "Série da NF", "Pré/pós", "Total/Parcial", "Antes/depois da entrega", "Qtd volumes", "Volumes (código)", "Descrição dos volumes", "Motivo", "Transportadora", "Nota da reposição (pré)", "Fila atual", "Nova NF", "Lido pelo robô em"];
   $("pagina-reposicao").addEventListener("click", (e) => {
+    if (e.target.closest(".vol-fechar")) { e.preventDefault(); volSel = null; filtrarRep(); return; }
+    const ex = e.target.closest(".vol-exp");
+    if (ex) { e.preventDefault(); const q = volQ[ex.dataset.vq]; if (!q) return; const k = ex.dataset.vk; const rs = k != null ? q.de(k) : q.todos;
+      if (!rs.length) return toast("Nenhum ticket nesse quadro.", true);
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_VOL_XLS].concat(rs.map(linhaVolXls))), "Tickets");
+      const nome = (q.rot + (k != null ? " " + k : "")).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
+      XLSX.writeFile(wb, `reposicao_${nome}_${hojeISO()}.xlsx`); return; }
+    const ln = e.target.closest("tr.rp-q-lin");
+    if (ln && !e.target.closest("a")) { e.preventDefault(); const q = ln.dataset.vq, k = ln.dataset.vk; volSel = volSel && volSel.q === q && volSel.k === k ? null : { q, k }; filtrarRep(); return; }
     if (!e.target.closest(".vol-excel")) return;
     if (!volCasos.length) return toast("Nenhum ticket lido nesse filtro.", true);
     const cab = ["Ticket", "NF original", "Série da NF", "Pré/pós", "Total/Parcial", "Antes/depois da entrega", "Qtd volumes", "Volumes (código)", "Descrição dos volumes", "Motivo", "Transportadora", "Nota da reposição (pré)", "Fila atual", "Nova NF", "Lido pelo robô em"];
@@ -4453,6 +4486,8 @@ ${extra}
     $(a.dataset.f).value = a.dataset.v; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" });
   });
   $("pagina-reposicao").addEventListener("click", (e) => {
+    const q0 = e.target.closest("[data-semtp]");
+    if (q0) { e.preventDefault(); e.stopPropagation(); repCard = q0.dataset.semtp; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
     const k = e.target.closest("button[data-card]");
     if (k && k.dataset.card === "garg") { e.preventDefault(); e.stopPropagation(); gargAberto = !gargAberto; filtrarRep();
       if (gargAberto) { const q = $(repAba === "geral" ? "rpg-garg" : "rpf-garg"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
