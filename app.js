@@ -1648,7 +1648,7 @@ ${extra}
     $("g-paginacao").innerHTML = total > POR_PAGINA
       ? `<button class="btn" data-p="-1" ${gPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${gPagina} de ${paginas}</span>
          <button class="btn" data-p="1" ${gPagina === paginas ? "disabled" : ""}>Próxima ›</button>` : "";
-    if (rolar) $("g-lista-cartao").scrollIntoView({ behavior: "smooth", block: "start" });
+    if (rolar) abrirListaCard($("g-lista-titulo").textContent, gLista);   // a lista de baixo saiu (Brenda 19/11): cards, barras e números abrem a janela
   }
 
   // cliques
@@ -4568,7 +4568,7 @@ ${extra}
   // guarda a foto da tela (aba, filtros dos cartões de filtro e o card/linha clicado) a cada clique; Voltar devolve a anterior
   const UNDO = {
     preventivo: { get: () => ({ visao, msSel, rangeSel }), set: (o) => { ({ visao, msSel, rangeSel } = o); redesenhar(); } },
-    gerencial: { get: () => ({ gCard, gSelecao, k: gSelecao ? gSelecao.titulo : "" }), set: (o) => { gCard = o.gCard; gSelecao = o.gSelecao; gPagina = 1; desenharGLista(true); } },
+    gerencial: { get: () => ({ gCard, gSelecao, k: gSelecao ? gSelecao.titulo : "" }), set: (o) => { gCard = o.gCard; gSelecao = o.gSelecao; gPagina = 1; desenharGLista(false); } },
     retornos: { get: () => ({ rtCards: [...rtCards], rtTransp, rtCatSel }), set: (o) => { rtCards = new Set(o.rtCards); rtTransp = o.rtTransp; rtCatSel = o.rtCatSel; rtPag = 1; desenharRetornos(); } },
     conferencia: { get: () => ({ cfCard }), set: (o) => { cfCard = o.cfCard; cfPag = 1; desenharConferencia(); } },
     reposicao: { get: repEstado, set: repRestaurar },
@@ -5073,7 +5073,7 @@ ${extra}
     m.hidden = false; document.body.classList.add("lm-aberto"); m.querySelector(".lm-corpo").scrollTop = 0;
   }
   // cards de cada página → lista da própria página (registrado por último: roda depois do clique normal do card, que já filtrou)
-  [["visoes", ".kpi", () => filtrados, "lista-titulo"], ["g-cards", ".kpi[data-g]", () => gLista, "g-lista-titulo"], ["e-cards", ".kpi[data-e]", () => eLista, "e-lista-titulo"],
+  [["visoes", ".kpi", () => filtrados, "lista-titulo"], ["e-cards", ".kpi[data-e]", () => eLista, "e-lista-titulo"],
    ["c-cards", ".kpi[data-c]", () => cLista, "c-lista-titulo"], ["c-m-cards", ".kpi[data-r]", () => cLista, "c-lista-titulo"], ["d-cards", ".kpi[data-d]", () => dLista, "d-lista-titulo"],
    ["rt-cards", ".kpi[data-rt]", () => rtLista, "rt-titulo"]].forEach(([id, sel, lista, tit]) => {
     const el = $(id); if (!el) return;
