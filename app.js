@@ -1781,9 +1781,17 @@ ${extra}
     const B = cBase(), mK = metodoDe(cSel.canal);
     let risco = null;
     if (mK) { carregarImpactos(mK); const im = cImpCarregado[mK]; if (im && im !== "carregando") risco = riscoCanal(B, im.lista); }
+    else {
+      // risco alto para todos os canais (Brenda 19/11): mesmo score (atraso, alterações da data, status crítico, rastreio parado);
+      // Amazon e Mercado Livre usam também os impactos enviados (transportadora de risco), como na visão do próprio canal
+      risco = riscoCanal(B, []);
+      ["amazon", "ml"].forEach((k) => { if (!B.some((r) => metodoDe(r.canal) === k)) return; carregarImpactos(k); const im = cImpCarregado[k];
+        if (im && im !== "carregando" && im.lista.length) riscoCanal(B.filter((r) => metodoDe(r.canal) === k), im.lista).score.forEach((v, ped) => risco.score.set(ped, v)); });
+    }
     if (!mK) cSel.risco = null;
     cRiscoAtual = risco; if (!risco && cSel.card === "alto") cSel.card = "agir";
     $("c-cards").querySelector('[data-c="alto"]').hidden = !risco;
+    $("c-cards").querySelector('[data-c="alto"] small').textContent = mK ? `podem virar reclamação (${C_METODO[mK].nome})` : "podem virar reclamação no canal (score 5+)";
     // cards (seguem transportadora / UF / faixa / risco, não o próprio card)
     const base = B.filter((r) => cPassa(r, "card", risco));
     const cont = Object.fromEntries(Object.entries(C_CARD).map(([k, f]) => [k, base.filter(f).length]));
