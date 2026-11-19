@@ -1648,7 +1648,7 @@ ${extra}
     $("g-paginacao").innerHTML = total > POR_PAGINA
       ? `<button class="btn" data-p="-1" ${gPagina === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${gPagina} de ${paginas}</span>
          <button class="btn" data-p="1" ${gPagina === paginas ? "disabled" : ""}>Próxima ›</button>` : "";
-    if (rolar) abrirListaCard($("g-lista-titulo").textContent, gLista);   // a lista de baixo saiu (Brenda 19/11): cards, barras e números abrem a janela
+    if (rolar) abrirListaCard($("g-lista-titulo").textContent, gLista, "g-exportar");   // a lista de baixo saiu (Brenda 19/11): cards, barras e números abrem a janela
   }
 
   // cliques
@@ -5027,7 +5027,7 @@ ${extra}
   });
 
   // ---------------- lista em janela ao clicar nos cards (Brenda 19/11, no modelo do E-loggia do Danilo) ----------------
-  let lmMapa = null, lmMapaDe = null, lmLinhas = [], lmTitulo = "";
+  let lmMapa = null, lmMapaDe = null, lmLinhas = [], lmTitulo = "", lmExcel = null;
   const lmBase = (ped) => { if (!gDados) return null; if (lmMapaDe !== gDados) { lmMapa = new Map(gDados.map((r) => [r.pedido, r])); lmMapaDe = gDados; } return lmMapa.get(ped) || null; };
   function lmNorm(x) {
     const r = x.transp !== undefined && x._sit !== undefined ? x : lmBase(x.pedido), t = trat.get(x.pedido) || {};
@@ -5038,8 +5038,8 @@ ${extra}
       ult: r ? r.ult : x.ultima_atualizacao ? String(x.ultima_atualizacao).slice(0, 10) : null, micro: (r ? r.micro : x.micro_status) || "" };
   }
   const LM_COR = { ab_atraso: "vermelho", ab_risco: "ambar", ab_prazo: "azul", ent_atraso: "vermelho", ent_prazo: "verde", cancelado: "cinza" };
-  function abrirListaCard(titulo, lista) {
-    lmTitulo = titulo; lmLinhas = (lista || []).map(lmNorm);
+  function abrirListaCard(titulo, lista, excelBtn) {
+    lmTitulo = titulo; lmExcel = excelBtn || null; lmLinhas = (lista || []).map(lmNorm);
     let m = $("lista-modal");
     if (!m) {
       m = document.createElement("div"); m.id = "lista-modal"; m.className = "lm-fundo"; m.hidden = true;
@@ -5052,6 +5052,7 @@ ${extra}
       m.addEventListener("click", (e) => {
         if (e.target === m || e.target.closest("#lm-fechar")) return fechar();
         const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido);
+        if (e.target.closest("#lm-excel") && lmExcel && $(lmExcel)) return $(lmExcel).click();   // mesmo relatório de antes da página
         if (e.target.closest("#lm-excel")) {
           const aoa = [["Pedido", "Nota", "Transportadora", "UF", "Cidade", "Micro status", "Situação", "Dias atraso", "Prometida", "Nova data", "Últ. movim."]]
             .concat(lmLinhas.map((l) => [l.pedido, l.nf, l.transp, l.uf, l.cidade, l.micro, G_SIT_NOME[l.sit] || "", l.atraso, br(l.prom), br(l.nova), br(l.ult)]));
@@ -5073,10 +5074,10 @@ ${extra}
     m.hidden = false; document.body.classList.add("lm-aberto"); m.querySelector(".lm-corpo").scrollTop = 0;
   }
   // cards de cada página → lista da própria página (registrado por último: roda depois do clique normal do card, que já filtrou)
-  [["visoes", ".kpi", () => filtrados, "lista-titulo"], ["e-cards", ".kpi[data-e]", () => eLista, "e-lista-titulo"],
-   ["c-cards", ".kpi[data-c]", () => cLista, "c-lista-titulo"], ["c-m-cards", ".kpi[data-r]", () => cLista, "c-lista-titulo"], ["d-cards", ".kpi[data-d]", () => dLista, "d-lista-titulo"],
-   ["rt-cards", ".kpi[data-rt]", () => rtLista, "rt-titulo"]].forEach(([id, sel, lista, tit]) => {
+  [["visoes", ".kpi", () => filtrados, "lista-titulo", "btn-exportar"], ["e-cards", ".kpi[data-e]", () => eLista, "e-lista-titulo", "e-exportar"],
+   ["c-cards", ".kpi[data-c]", () => cLista, "c-lista-titulo", "c-exportar"], ["c-m-cards", ".kpi[data-r]", () => cLista, "c-lista-titulo", "c-exportar"], ["d-cards", ".kpi[data-d]", () => dLista, "d-lista-titulo", "d-exportar"],
+   ["rt-cards", ".kpi[data-rt]", () => rtLista, "rt-titulo", "rt-excel"]].forEach(([id, sel, lista, tit, xl]) => {
     const el = $(id); if (!el) return;
-    el.addEventListener("click", (e) => { if (!e.target.closest(sel)) return; setTimeout(() => abrirListaCard($(tit) ? $(tit).textContent : "Pedidos", lista()), 0); });
+    el.addEventListener("click", (e) => { if (!e.target.closest(sel)) return; setTimeout(() => abrirListaCard($(tit) ? $(tit).textContent : "Pedidos", lista(), xl), 0); });
   });
 })();
