@@ -173,13 +173,27 @@ async function esqueleto(titulo) {
   if (/inicial/i.test(titulo)) info.links.forEach((l) => log("  link:", l));
 }
 
+// abre uma tela da Intelipost que tem a caixa "Digite seus pedidos". Se a caixa não aparecer, diz o porquê no registro
+// (tela de login / sessão expirada → erro com "expirou", para o robô entrar de novo) e tenta recarregar 1x.
+async function caixaPedidos(caminho) {
+  for (let tent = 1; tent <= 2; tent++) {
+    await pagina.goto(BASE + caminho, { waitUntil: "domcontentloaded" }).catch(() => {});
+    const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
+    if (await caixa.waitFor({ timeout: 40000 }).then(() => true).catch(() => false)) return caixa;
+    const p = (() => { try { return new URL(pagina.url()).pathname; } catch (_) { return "?"; } })();
+    const exp = await sessaoExpirou(pagina), login = /login|auth|signin/i.test(p) || (await pagina.locator("input[type=password]:visible").count().catch(() => 0)) > 0;
+    const tit = await pagina.evaluate(() => [...document.querySelectorAll("h1,h2,h3,.modal-title,[role=dialog] *")].map((e) => e.textContent.trim()).filter((t) => t && t.length < 60).slice(0, 6).join(" | ")).catch(() => "");
+    log(`Tela ${p} sem a caixa de pedidos (tentativa ${tent}) · login ${login ? "sim" : "não"} · sessão expirada ${exp ? "sim" : "não"} · títulos: ${mascara(tit).slice(0, 200)}`);
+    if (exp || login) throw new Error("A sessão da Intelipost expirou (a tela de busca pediu login).");
+  }
+  throw new Error(`A tela ${caminho} da Intelipost não mostrou a caixa "Digite seus pedidos".`);
+}
+
 // abre o pedido pela "Busca por Lote" (a Gestão de Pedidos tem filtro de data e esconde pedido antigo).
 // Clicar no pedido da lista abre a tela dele em ABA NOVA. Essa tela (/ng#/order-number/) nunca "termina"
 // de carregar: espera o CAMPO aparecer, não a página.
 async function abrirPedido(pedido, olhar, soAbrir, aceitarEntregue) {
-  await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" });
-  const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
-  await caixa.waitFor({ timeout: 45000 });
+  const caixa = await caixaPedidos("/order/transactions-batch");
   await pagina.locator("select").first().selectOption({ label: "Pedido" }).catch(() => {});   // buscar por "Pedido" (não por rastreio)
   await caixa.fill(pedido);
   await caixa.press("Enter").catch(() => {});
@@ -767,9 +781,7 @@ async function fazerTroca(job) {
     etapa = "mudar o status (Alterar Pedidos)";
     if (!soData) {
     await pagina.bringToFront();
-    await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
-    const caixa = pagina.getByPlaceholder(/digite seus pedidos/i).first();
-    await caixa.waitFor({ timeout: 45000 });
+    const caixa = await caixaPedidos("/order/change-order");
     await pagina.locator("select:visible").first().selectOption({ label: "Pedido" });
     await caixa.fill(job.pedido);
     await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
