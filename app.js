@@ -4303,8 +4303,7 @@ ${extra}
       + kpiGarg(L)
       + kpiC("rec", "Recup. de crédito", fmt(recN), "pendente, fora de reposição", "roxo")
       + kpiC("tempo", "Tempo de resolução", tRes.length ? dia1(mediana(tRes)) + " dias" : "–", tRes.length ? `mediana de ${fmt(tRes.length)} resolvidos (média ${dia1(tRes.reduce((a, b) => a + b, 0) / tRes.length)})` : "sem resolvidos no filtro")
-      + kpiC("total", "Totais", tr.length ? fmt(tot) : "–", tr.length < L.length ? `${fmt(L.length - tr.length)} ainda sem a informação` : `de ${fmt(L.length)} tickets`)
-      + kpiC("parcial", "Parciais", tr.length ? fmt(tr.length - tot) : "–", tr.length < L.length ? `${fmt(L.length - tr.length)} ainda sem a informação` : `de ${fmt(L.length)} tickets`)
+      + kpiC("comdet", "Totais × parciais", tr.length ? `${fmt(tot)} × ${fmt(tr.length - tot)}` : "–", tr.length < L.length ? `${fmt(L.length - tr.length)} ainda sem a informação:` + quebraSemTp(L) : `de ${fmt(L.length)} tickets`)
       + kpiC("nfs", "Novas NFs emitidas", fmt(nfs), `de ${fmt(comDet.length)} tickets com detalhamento`)
       + kpiC("saida", "Novas NFs com saída", fmt(sai), `de ${fmt(comDet.length)} tickets com detalhamento`);
     desenharParados("rpf-parados-q", L); desenharGargalos("rpf-garg", L); desenharVolumes("rpf-vol", L);
@@ -4494,7 +4493,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("click", (e) => {
     const q0 = e.target.closest("[data-semtp]");
-    if (q0) { e.preventDefault(); e.stopPropagation(); repCard = q0.dataset.semtp; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
+    if (q0) { e.preventDefault(); e.stopPropagation(); if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba; repCard = q0.dataset.semtp; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
     const k = e.target.closest("button[data-card]");
     if (k && k.dataset.card === "garg") { e.preventDefault(); e.stopPropagation(); gargAberto = !gargAberto; filtrarRep();
       if (gargAberto) { const q = $(repAba === "geral" ? "rpg-garg" : "rpf-garg"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
