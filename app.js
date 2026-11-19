@@ -19,6 +19,7 @@
   let perfil = "";              // "sac" ou "logistica"
   let paginaAtual = "preventivo";
   let base = [];               // pedidos da planilha
+  window.__basePainel = () => base;   // motor.js (Tempos reais) usa a mesma base já carregada, sem ler tudo de novo
   let trat = new Map();        // pedido -> tratativa
   let info = null;
   let infoFech = null;         // último arquivo da Intelipost enviado

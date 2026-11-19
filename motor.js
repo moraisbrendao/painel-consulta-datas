@@ -32,18 +32,27 @@
   let T = [], trecho = "expedicao_entrega", abertos = null, aberto = {}, etapasVer = false, carregando = false, carregou = false, mudancas = null;
   const tEf = (t, rd) => { const x = norm((rd && !/^SEM\b|^-$/i.test(rd) ? rd : t) || "(SEM TRANSPORTADORA)"); return /TEMPO\s*JUSTO|^VM\b|VM TRANSP/.test(x) ? "VM TRANSPORTES / TEMPO JUSTO" : x; };
 
-  async function paginas(tab, sel, filtro) {
-    const out = []; for (let de = 0; ; de += 1000) { let q = sb().from(tab).select(sel).range(de, de + 999); if (filtro) q = filtro(q); const { data, error } = await q; if (error) throw error; out.push(...data); if (data.length < 1000) break; }
+  async function paginas(tab, sel, chave, filtro) {
+    // páginas pela chave (sempre na mesma ordem): não repete nem pula linhas e não pesa no Supabase
+    const [k1, ...ks] = chave; const out = []; let ult = null;
+    for (;;) { let q = sb().from(tab).select(sel); q = [k1, ...ks].reduce((a, k) => a.order(k), q); if (filtro) q = filtro(q);
+      q = ks.length ? q.range(out.length, out.length + 999) : (ult != null ? q.gt(k1, ult) : q).limit(1000);
+      const { data, error } = await q; if (error) throw error; out.push(...data); if (data.length < 1000) break; ult = data[data.length - 1][k1]; }
     return out;
+  }
+  // pedidos em aberto: os que o painel já carregou (mesma base da Visão Gerencial); espera até 1 min por eles
+  async function baseAberta() {
+    for (let i = 0; i < 120; i++) { const b = window.__basePainel && window.__basePainel(); if (b && b.length) return b.map((p) => ({ pedido: p.pedido, transportadora: p.transportadora, uf: p.uf, cidade: p.cidade, micro_status: p.micro_status, redespacho: (p.extra && p.extra.redespacho) || p.redespacho || null })); await new Promise((r) => setTimeout(r, 500)); }
+    throw new Error("a base ainda não carregou: atualize a página");
   }
   async function carregar() {
     if (carregando) return; carregando = true; $("mt-info").textContent = "Carregando…";
     try {
-      T = await paginas("tempos_referencia", "*");
+      T = await paginas("tempos_referencia", "*", ["trecho", "transp", "uf", "cidade"]);
       const m = await sb().from("pedido_mudancas").select("id", { count: "exact", head: true }); mudancas = m.error ? null : m.count;
       // pedidos em aberto (mesma base da Visão Gerencial) + quando o rastreio foi lido
-      const [ab, cf, ps] = await Promise.all([paginas("base_aberta_bi", "pedido,transportadora,uf,cidade,micro_status,extra->>redespacho"),
-        paginas("conferencia_ssw", "pedido,consultado_em").catch(() => []), paginas("previsao_ssw", "pedido,consultado_em").catch(() => [])]);
+      const [ab, cf, ps] = await Promise.all([baseAberta(),
+        paginas("conferencia_ssw", "pedido,consultado_em", ["pedido"]).catch(() => []), paginas("previsao_ssw", "pedido,consultado_em", ["pedido"]).catch(() => [])]);
       const lido = new Map(); [...cf, ...ps].forEach((x) => { if (x.consultado_em && (!lido.get(x.pedido) || x.consultado_em > lido.get(x.pedido))) lido.set(x.pedido, x.consultado_em); });
       abertos = ab.map((p) => ({ ...p, _t: tEf(p.transportadora, p.redespacho), _uf: norm(p.uf) || "?", _cid: norm(p.cidade) || "?", _lido: lido.get(p.pedido) || null, _et: etapaDe(p.micro_status) }));
       carregou = true; desenhar();
