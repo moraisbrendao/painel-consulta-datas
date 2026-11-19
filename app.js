@@ -645,35 +645,37 @@
     const somaP = daVisao.reduce((s, p) => s + (p._parado || 0), 0);
     const nomes = { vencem: "vencem nos próximos 5 dias", parados: `parados há mais de ${DIAS_PARADO} dias`, vencidos: "atrasados", hoje: "que vencem hoje", amanha: "que vencem amanhã", todos: "em aberto" };
     $("ms-resumo").textContent = `${fmt(daVisao.length)} pedidos ${visao.split("+").map((k) => nomes[k]).join(" ou ")} · em média ${(daVisao.length ? somaP / daVisao.length : 0).toFixed(1).replace(".", ",")} dias sem movimento no rastreio · clique para ver e exportar.`;
-    if (msSel && !grupos.has(msSel)) msSel = "";
-    $("ms-linhas").innerHTML = ord.length ? ord.map(([k, g]) => {
-      const media = g.cont ? g.soma / g.cont : 0;
-      return `<tr data-ms="${esc(k)}" class="${k === msSel ? "sel" : ""}"><td>${esc(k)}</td><td>${nomeResp(k)}</td><td class="num">${fmt(g.n)}</td>
-        <td class="num ${media >= 10 ? "alto" : ""}">${media.toFixed(1).replace(".", ",")}</td><td class="num">${fmt(g.trat)}</td></tr>`;
-    }).join("") : `<tr><td colspan="5" class="vazio">Nenhum pedido nesta visão.</td></tr>`;
-
-    desenharRange();
+    desenharRange(grupos);
     filtrar(manterPagina, daVisao);
   }
 
-  function desenharRange() {
+  function desenharRange(grupos) {
+    grupos = grupos || new Map();
     const linhas = new Map(), tot = {};
     vistos.forEach((p) => {
-      if (!p._faixa) return;
       const k = p.micro_status || "(sem micro status)";
       const l = linhas.get(k) || { total: 0 };
-      l[p._faixa] = (l[p._faixa] || 0) + 1; l.total++;
-      tot[p._faixa] = (tot[p._faixa] || 0) + 1; tot.total = (tot.total || 0) + 1;
+      if (p._faixa) { l[p._faixa] = (l[p._faixa] || 0) + 1; l.total++; tot[p._faixa] = (tot[p._faixa] || 0) + 1; tot.total = (tot.total || 0) + 1; }
       linhas.set(k, l);
     });
+    grupos.forEach((g, k) => { if (!linhas.has(k)) linhas.set(k, { total: 0 }); });
     const cel = (ms, id, n) => n
       ? `<td class="num clic ${id[0] === "v" ? "venc" : ""} ${visao === "todos" && rangeSel === id && msSel === ms ? "sel" : ""}" data-ms="${esc(ms)}" data-faixa="${id}">${fmt(n)}</td>`
       : `<td class="num vazio-c ${id[0] === "v" ? "venc" : ""}">·</td>`;
-    $("range-linhas").innerHTML = [...linhas.entries()].sort((a, b) => b[1].total - a[1].total).map(([ms, l]) =>
-      `<tr><td>${esc(ms)}</td>${RANGES.map((r) => cel(ms, r.id, l[r.id])).join("")}<td class="num tot clic" data-ms="${esc(ms)}" data-faixa="">${fmt(l.total)}</td></tr>`).join("")
-      || `<tr><td colspan="12" class="vazio">Sem pedidos com data prometida.</td></tr>`;
-    document.querySelectorAll(".tabela-range th.clic").forEach((th) => th.classList.toggle("sel", visao === "todos" && !msSel && rangeSel === (th.dataset.faixa || "__avencer")));
-    $("range-total").innerHTML = `<tr><td>Total geral</td>${RANGES.map((r) => `<td class="num clic" data-ms="" data-faixa="${r.id}">${fmt(tot[r.id] || 0)}</td>`).join("")}<td class="num clic" data-ms="" data-faixa="">${fmt(tot.total || 0)}</td></tr>`;
+    const gv = (k) => grupos.get(k) || { n: 0, soma: 0, cont: 0, trat: 0 };
+    const tv = { n: 0, trat: 0 }; grupos.forEach((g) => { tv.n += g.n; tv.trat += g.trat; });
+    const ord = [...linhas.entries()].filter(([k, l]) => l.total || gv(k).n)
+      .sort((a, b) => gv(b[0]).n - gv(a[0]).n || b[1].total - a[1].total);
+    $("range-linhas").innerHTML = ord.map(([ms, l]) => {
+      const g = gv(ms), media = g.cont ? g.soma / g.cont : 0;
+      const msv = g.n
+        ? `<td class="num neutro msv-n">${fmt(g.n)}</td><td class="num neutro ${media >= 10 ? "alto" : ""}">${media.toFixed(1).replace(".", ",")}</td><td class="num neutro">${fmt(g.trat)}</td>`
+        : `<td class="num vazio-c">·</td><td class="num vazio-c">·</td><td class="num vazio-c">·</td>`;
+      return `<tr data-ms="${esc(ms)}" class="${ms === msSel && !rangeSel ? "sel" : ""}"><td class="ms-nome" title="Ver os pedidos deste micro status na visão escolhida">${esc(ms)}</td>${msv}${RANGES.map((r) => cel(ms, r.id, l[r.id])).join("")}<td class="num tot ${l.total ? "clic" : "vazio-c"}" data-ms="${esc(ms)}" data-faixa="">${l.total ? fmt(l.total) : "·"}</td></tr>`;
+    }).join("") || `<tr><td colspan="15" class="vazio">Nenhum pedido.</td></tr>`;
+    if (msSel && !linhas.has(msSel)) msSel = "";
+    document.querySelectorAll(".tabela-msr th.clic").forEach((th) => th.classList.toggle("sel", visao === "todos" && !msSel && rangeSel === (th.dataset.faixa || "__avencer")));
+    $("range-total").innerHTML = `<tr><td>Total geral</td><td class="num neutro">${fmt(tv.n)}</td><td></td><td class="num neutro">${fmt(tv.trat)}</td>${RANGES.map((r) => `<td class="num clic" data-ms="" data-faixa="${r.id}">${fmt(tot[r.id] || 0)}</td>`).join("")}<td class="num clic" data-ms="" data-faixa="">${fmt(tot.total || 0)}</td></tr>`;
   }
 
   function filtrar(manterPagina, daVisao) {
@@ -741,15 +743,16 @@ ${extra}
     visao = atuais.size ? [...atuais].join("+") : "todos";
     msSel = ""; rangeSel = ""; redesenhar();
   });
-  $("ms-linhas").addEventListener("click", (e) => {
-    const tr = e.target.closest("tr[data-ms]"); if (!tr) return;
-    msSel = msSel === tr.dataset.ms ? "" : tr.dataset.ms; rangeSel = "";
-    document.querySelectorAll("#ms-linhas tr").forEach((r) => r.classList.toggle("sel", r.dataset.ms === msSel));
-    filtrar();
+  // clique no nome do micro status: pedidos dele na visão escolhida nos cards
+  $("range-linhas").addEventListener("click", (e) => {
+    const td = e.target.closest("td.ms-nome"); if (!td) return;
+    const tr = td.closest("tr[data-ms]");
+    msSel = msSel === tr.dataset.ms && !rangeSel ? "" : tr.dataset.ms; rangeSel = "";
+    redesenhar();
     if (msSel) $("lista-titulo").scrollIntoView({ behavior: "smooth", block: "start" });
   });
   // clique na tabela de range: abre os pedidos daquela linha/coluna
-  document.querySelector(".tabela-range").addEventListener("click", (e) => {
+  document.querySelector(".tabela-msr").addEventListener("click", (e) => {
     const td = e.target.closest("td.clic, th.clic"); if (!td) return;
     const ms = td.dataset.ms || "", fx = td.dataset.faixa || "__avencer";
     if (msSel === ms && rangeSel === fx && visao === "todos") { msSel = ""; rangeSel = ""; } else { msSel = ms; rangeSel = fx; }

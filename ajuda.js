@@ -60,7 +60,7 @@
 
     ["preventivo", "Preventivo", "A lista de trabalho da Logística: pedidos em aberto pela data prometida ao cliente, para agir antes de atrasar.", "Todo dia, várias vezes.", [
       "Clique nos cards: <b>Atrasados</b> (mesmo número da Visão Gerencial), <b>Vencem hoje</b>, <b>Vencem amanhã</b>, <b>Vencem em até 5 dias</b>, <b>Parados no rastreio</b>, <b>Data do SSW</b> (pode marcar vários).",
-      "Use a tabela <b>por micro status</b> e o <b>Range de vencimento</b> para filtrar (clique no número ou no nome da coluna).",
+      "Use a tabela <b>O que está acontecendo, por micro status</b> (já com o range de vencimento ao lado) para filtrar: clique no micro status, num número ou no nome da coluna.",
       "Na lista, para cada pedido: veja o rastreio (<b>Rastreio ↗</b>), cobre a transportadora e preencha <b>Nova data</b> e <b>Observação</b>. Salva sozinho, para todos.",
       "Para muitos pedidos: <b>Modelo de retornos</b> → preencha no Excel → <b>Enviar retornos</b>.",
       "<b>Exportar (Excel)</b> baixa a lista que está na tela.",

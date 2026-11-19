@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=221">
+  <link rel="stylesheet" href="styles.css?v=222">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -627,31 +627,16 @@
             <p id="ms-resumo" class="sub"></p>
           </div>
         </div>
-        <div class="tabela-ms-wrap">
-          <table class="tabela-ms sem-resp">
-            <thead><tr><th>Micro status</th><th>Responsável</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com observação</th></tr></thead>
-            <tbody id="ms-linhas"></tbody>
-          </table>
-        </div>
-        <p class="dica">Parado no rastreio = mais de 7 dias sem nenhuma atualização na Intelipost. Clique nos cards acima para escolher a visão (pode marcar vários), ou num micro status para ver os pedidos.</p>
-      </section>
-
-      <!-- range de vencimento por micro status -->
-      <section class="cartao">
-        <div class="cartao-topo">
-          <div>
-            <h2>Range de vencimento por micro status</h2>
-            <p class="sub">Pela data prometida ao cliente (Data Original Estimada da Entrega). Inclui os que já venceram. Clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status.</p>
-          </div>
-        </div>
-        <div class="tabela-wrap">
-          <table class="tabela-range">
-            <thead><tr><th>Micro status</th><th class="num clic venc" data-faixa="v30">Vencido 30+ d</th><th class="num clic venc" data-faixa="v10">Vencido 10–29 d</th><th class="num clic venc" data-faixa="v1">Vencido 1–9 d</th><th class="num clic" data-faixa="hoje">Vence hoje</th><th class="num clic" data-faixa="1">Vence ≥ 1 dia</th><th class="num clic" data-faixa="2">Vence ≥ 2 dias</th>
+        <div class="tabela-wrap tabela-msr-wrap">
+          <table class="tabela-range tabela-msr">
+            <thead><tr><th>Micro status</th><th class="num msv" title="Pedidos da visão escolhida nos cards acima">Na visão</th><th class="num msv">Dias parados (média)</th><th class="num msv">Com observação</th>
+              <th class="num clic venc" data-faixa="v30">Vencido 30+ d</th><th class="num clic venc" data-faixa="v10">Vencido 10–29 d</th><th class="num clic venc" data-faixa="v1">Vencido 1–9 d</th><th class="num clic" data-faixa="hoje">Vence hoje</th><th class="num clic" data-faixa="1">Vence ≥ 1 dia</th><th class="num clic" data-faixa="2">Vence ≥ 2 dias</th>
               <th class="num clic" data-faixa="5">Vence ≥ 5 dias</th><th class="num clic" data-faixa="10">Vence ≥ 10 dias</th><th class="num clic" data-faixa="20">Vence ≥ 20 dias</th><th class="num clic" data-faixa="30">Vence ≥ 30 dias</th><th class="num clic" data-faixa="">Total</th></tr></thead>
             <tbody id="range-linhas"></tbody>
             <tfoot id="range-total"></tfoot>
           </table>
         </div>
+        <p class="dica">Na visão / Dias parados / Com observação seguem os cards acima (clique no micro status para ver os pedidos). O range de vencimento é pela data prometida ao cliente (Data Original Estimada da Entrega), com todos os pedidos em aberto: clique no nome de uma coluna para ver todos os pedidos daquele range, ou num número para ver só os daquele micro status. Parado no rastreio = mais de 7 dias sem nenhuma atualização na Intelipost.</p>
       </section>
 
       <!-- lista -->
@@ -1548,18 +1533,18 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=221"></script>
-  <script src="mapa-brasil.js?v=221"></script>
-  <script src="troca-notas.js?v=221"></script>
-  <script src="app.js?v=221"></script>
-  <script src="ordenar.js?v=221"></script>
-  <script src="menu.js?v=221"></script>
-  <script src="ajuda.js?v=221"></script>
-  <script src="documentos.js?v=221"></script>
-  <script src="barrar.js?v=221"></script>
-  <script src="faltas.js?v=221"></script>
-  <script src="motor.js?v=221"></script>
-  <script src="filas.js?v=221"></script>
-  <script src="filtros.js?v=221"></script>
+  <script src="config.js?v=222"></script>
+  <script src="mapa-brasil.js?v=222"></script>
+  <script src="troca-notas.js?v=222"></script>
+  <script src="app.js?v=222"></script>
+  <script src="ordenar.js?v=222"></script>
+  <script src="menu.js?v=222"></script>
+  <script src="ajuda.js?v=222"></script>
+  <script src="documentos.js?v=222"></script>
+  <script src="barrar.js?v=222"></script>
+  <script src="faltas.js?v=222"></script>
+  <script src="motor.js?v=222"></script>
+  <script src="filas.js?v=222"></script>
+  <script src="filtros.js?v=222"></script>
 </body>
 </html>
