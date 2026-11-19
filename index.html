@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=200">
+  <link rel="stylesheet" href="styles.css?v=201">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -770,6 +770,7 @@
         <button class="btn contorno" data-ra="pre">Pré-entrega</button>
         <button class="btn contorno" data-ra="pos">Pós-entrega</button>
         <button class="btn contorno" data-ra="det">☰ Detalhamento operacional</button>
+        <button class="btn contorno" data-ra="faltas">📦 Falta de volumes</button>
       </div>
 
       <!-- 1) visão geral -->
@@ -904,6 +905,37 @@
         </section>
       </div>
       <p id="rep-vazio" class="vazio" hidden>Nenhuma reposição nesse filtro.</p>
+      <!-- 5) Falta de volumes: a transportadora retornou? (faltas.js) -->
+      <div id="rp-faltas" hidden>
+        <section class="filtros-cartao" aria-label="Filtros da falta de volumes">
+          <span class="filtros-rot">⛉ Filtros</span>
+          <label>Nota ou ticket<input id="fv-busca" type="search" placeholder="# nota ou ticket"></label>
+          <label>Transportadora<select id="fv-transp"></select></label>
+          <label>Motivo<select id="fv-motivo"></select></label>
+          <button id="fv-limpar" class="link limpar" type="button">Limpar filtros</button>
+        </section>
+        <div class="titulo-pagina com-acoes">
+          <div>
+            <h2>Falta de volumes · retorno da transportadora</h2>
+            <p class="sub">1) Envie a planilha de tickets. 2) <b>Conferir retornos agora</b>: o robô abre cada ticket no Multi360 e procura as mensagens <b>Externo</b> que a transportadora mandou pelo portal do transportador, e olha as <b>anotações</b> da NF no portal (Reposições › Faltas / Inversões). Ele só lê, não escreve nada. 3) No card <b>Sem retorno</b>, cobre cada transportadora pelo WhatsApp.</p>
+            <p id="fv-info" class="info-base">Carregando…</p>
+          </div>
+          <div class="acoes-robo">
+            <label class="btn amarelo" title="Planilha com os tickets de falta de volumes (precisa da coluna do ticket; NF, transportadora, motivo e criação ajudam)">⇪ Enviar planilha de tickets<input id="fv-arq" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label>
+            <button id="fv-conferir" class="btn contorno" type="button">Conferir retornos agora</button>
+            <button id="fv-excel" class="btn contorno" type="button">Baixar Excel</button>
+          </div>
+        </div>
+        <section class="kpis" id="fv-cards"></section>
+        <section class="cartao br-et" id="fv-sem" hidden></section>
+        <section class="cartao">
+          <div class="cartao-topo"><div><h2 id="fv-titulo">Tickets</h2><p class="sub">Retorno = última mensagem da transportadora (360 externo ou anotação no portal), sem o nome de quem escreveu. Mais parados primeiro.</p></div></div>
+          <div class="tabela-wrap"><table class="tabela-pedidos fv-tab">
+            <thead><tr><th>Nota / ticket</th><th>Transportadora</th><th>Motivo</th><th class="num">Dias parado</th><th>Prazo limite</th><th>Retorno da transportadora</th></tr></thead>
+            <tbody id="fv-linhas"></tbody></table></div>
+          <p id="fv-mais" class="s"></p>
+        </section>
+      </div>
     </main>
 
     <main class="conteudo" id="pagina-conferencia" hidden>
@@ -1462,15 +1494,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=200"></script>
-  <script src="mapa-brasil.js?v=200"></script>
-  <script src="troca-notas.js?v=200"></script>
-  <script src="app.js?v=200"></script>
-  <script src="ordenar.js?v=200"></script>
-  <script src="menu.js?v=200"></script>
-  <script src="ajuda.js?v=200"></script>
-  <script src="documentos.js?v=200"></script>
-  <script src="barrar.js?v=200"></script>
-  <script src="filtros.js?v=200"></script>
+  <script src="config.js?v=201"></script>
+  <script src="mapa-brasil.js?v=201"></script>
+  <script src="troca-notas.js?v=201"></script>
+  <script src="app.js?v=201"></script>
+  <script src="ordenar.js?v=201"></script>
+  <script src="menu.js?v=201"></script>
+  <script src="ajuda.js?v=201"></script>
+  <script src="documentos.js?v=201"></script>
+  <script src="barrar.js?v=201"></script>
+  <script src="faltas.js?v=201"></script>
+  <script src="filtros.js?v=201"></script>
 </body>
 </html>

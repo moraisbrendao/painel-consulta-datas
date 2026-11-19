@@ -4186,6 +4186,8 @@ ${extra}
   function filtrarRep() {
     document.querySelectorAll("#rep-abas [data-ra]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.ra === repAba); b.classList.toggle("contorno", b.dataset.ra !== repAba); });
     $("rp-geral").hidden = repAba !== "geral"; $("rp-fluxo").hidden = !["pre", "pos"].includes(repAba); $("rp-det").hidden = repAba !== "det";
+    // aba Falta de volumes (faltas.js) tem filtros e lista próprios: esconde os filtros e o título da Reposição
+    if ($("rp-faltas")) { $("rp-faltas").hidden = repAba !== "faltas"; document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas")); }
     const fl = repAba === "pre" || repAba === "pos";
     repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
@@ -4525,7 +4527,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; volAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
-  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det"].includes(s)) repAba = s; } catch (_) {}
+  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
   $("rep-limpar").addEventListener("click", () => { repCard = ""; repFaixa = -1; pvDet = null; FILTROS_REP.forEach((id) => ($(id).value = "")); $("rpd-busca").value = ""; filtrarRep(); });

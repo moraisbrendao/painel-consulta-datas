@@ -2337,3 +2337,69 @@ drop policy if exists "barrar trocar" on storage.objects;
 create policy "barrar ler" on storage.objects for select to authenticated using (bucket_id = 'barrar' and (select not public.e_sac()));
 create policy "barrar gravar" on storage.objects for insert to authenticated with check (bucket_id = 'barrar' and (select not public.e_sac()));
 create policy "barrar trocar" on storage.objects for update to authenticated using (bucket_id = 'barrar' and (select not public.e_sac()));
+-- PARTE 50) Reposições › Falta de volumes: planilha de tickets + robô que olha se a transportadora retornou
+--   (no ticket do Multi360: mensagens "Externo" enviadas pelo portal do transportador; no portal: anotações em Reposições › Faltas / Inversões)
+create table if not exists public.falta_volumes (
+  ticket          text primary key,
+  nf              text,                  -- "615-35"
+  transp          text,                  -- redespacho se houver, senão a transportadora (da planilha)
+  motivo          text,                  -- motivo do ticket (planilha; se vazio, o robô lê no ticket)
+  fila            text,
+  ticket_criado   timestamp,
+  na_planilha     boolean not null default true,
+  retorno_360     jsonb,                 -- [{quando, texto}] mensagens da transportadora no ticket (sem o nome de quem escreveu)
+  portal          jsonb,                 -- {achou, transp, solicitado, prazo, anotacoes:[{quando, texto}]}
+  motivo_ticket   text,
+  tem_retorno     boolean,
+  ultimo_retorno_em timestamptz,
+  conferido_em    timestamptz,
+  erro            text
+);
+create table if not exists public.falta_volumes_info (
+  id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.falta_volumes enable row level security;
+alter table public.falta_volumes_info enable row level security;
+revoke all on public.falta_volumes, public.falta_volumes_info from anon;
+grant select, insert, update, delete on public.falta_volumes, public.falta_volumes_info to authenticated;
+drop policy if exists "logistica cuida" on public.falta_volumes;
+drop policy if exists "logistica cuida" on public.falta_volumes_info;
+create policy "logistica cuida" on public.falta_volumes for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create policy "logistica cuida" on public.falta_volumes_info for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+create or replace function public.importar_faltas(linhas jsonb, arquivo text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.falta_volumes set na_planilha = false where na_planilha is true;
+  insert into public.falta_volumes (ticket, nf, transp, motivo, fila, ticket_criado, na_planilha)
+  select x->>'ticket', nullif(x->>'nf',''), nullif(x->>'transp',''), nullif(x->>'motivo',''), nullif(x->>'fila',''), nullif(x->>'ticket_criado','')::timestamp, true
+  from jsonb_array_elements(linhas) x where coalesce(x->>'ticket','') <> ''
+  on conflict (ticket) do update set nf = coalesce(excluded.nf, falta_volumes.nf), transp = coalesce(excluded.transp, falta_volumes.transp),
+    motivo = coalesce(excluded.motivo, falta_volumes.motivo), fila = excluded.fila, ticket_criado = coalesce(excluded.ticket_criado, falta_volumes.ticket_criado), na_planilha = true;
+  get diagnostics n = row_count;
+  insert into public.falta_volumes_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, n, auth.jwt() ->> 'email', now())
+  on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  return n;
+end $$;
+revoke all on function public.importar_faltas(jsonb, text) from public, anon;
+grant execute on function public.importar_faltas(jsonb, text) to authenticated;
+
+-- botão "Conferir retornos agora" (modo faltas) — mesmo token do robô
+create or replace function public.rodar_robo_faltas()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', 'faltas')));
+end $$;
+revoke all on function public.rodar_robo_faltas() from public, anon;
+grant execute on function public.rodar_robo_faltas() to authenticated;

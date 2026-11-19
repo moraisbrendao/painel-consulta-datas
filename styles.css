@@ -991,3 +991,12 @@ tr.rp-q-lin.sel td { background: #ffe9a3; font-weight: 600; }
 .br-et-lista .num { text-align: right; }
 .br-et-msg { width: 100%; box-sizing: border-box; font: inherit; font-size: 12.5px; padding: 6px; border: 1px solid #d5dbe5; border-radius: 6px; resize: vertical; }
 .br-et-bts { display: flex; gap: 6px; flex-wrap: wrap; }
+/* Reposições › Falta de volumes */
+.fv-col-ret { min-width: 320px; }
+.fv-ret { margin-bottom: 6px; }
+.fv-ret > div { font-size: 13px; margin-top: 2px; }
+.br-et-lista .fv-mot { font-size: 11.5px; font-weight: 700; color: var(--texto-2); margin: 6px 0 2px; text-transform: uppercase; letter-spacing: .02em; }
+body.fundo-escuro #rp-faltas > .titulo-pagina h2,
+body.fundo-escuro #rp-faltas > .titulo-pagina .sub,
+body.fundo-escuro #rp-faltas > .titulo-pagina .info-base { color: #e8edf7; }
+body.fundo-escuro #rp-faltas > .titulo-pagina .sub b { color: #fff; }
