@@ -53,7 +53,12 @@ const sessaoExpirou = (pg) => pg.getByText(/sess[aã]o expirou/i).first().isVisi
 async function entrar(forcar = false) {
   if (sessaoGuardada && !forcar) {
     await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }).catch(() => {});
-    const ok = await pagina.getByPlaceholder(/digite seus pedidos/i).first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
+    let ok = await pagina.getByPlaceholder(/digite seus pedidos/i).first().waitFor({ timeout: 25000 }).then(() => true).catch(() => false);
+    // a tela da busca aparece por alguns segundos mesmo com a sessão morta e depois a Intelipost joga para o /login:
+    // espera e confere de novo, para pedir o código já no começo (e não estourar o tempo no meio do ajuste)
+    if (ok) { await pagina.waitForTimeout(6000);
+      const naLogin = /\/login/i.test(new URL(pagina.url()).pathname) || (await pagina.locator("input[type=password]:visible").count().catch(() => 0)) > 0;
+      if (naLogin) { ok = false; log("A sessão guardada caiu (a Intelipost voltou para o login)."); await pagina.context().clearCookies().catch(() => {}); } }
     // a Busca por Lote abre mesmo com a sessão vencida; a tela de cotação mostra "Esta sessão expirou! (inativo por 240 minutos)"
     let expirou = false;
     if (ok) {
@@ -62,7 +67,11 @@ async function entrar(forcar = false) {
       if (!expirou) await pagina.goto(BASE + "/order/transactions-batch", { waitUntil: "domcontentloaded" }).catch(() => {});
     }
     if (expirou) { log("A Intelipost diz que a sessão guardada expirou (240 min sem uso)."); await pagina.context().clearCookies().catch(() => {}); }
-    if (ok && !expirou && !/\/login/i.test(new URL(pagina.url()).pathname)) { log("Entrei na Intelipost com a sessão guardada."); await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok (sessão guardada)", modo: MODO }); return; }
+    if (ok && !expirou && !/\/login/i.test(new URL(pagina.url()).pathname)) { log("Entrei na Intelipost com a sessão guardada."); await gravarEstado("intelipost", { tipo: "ok", msg: "Login ok (sessão guardada)", modo: MODO }); await guardarSessao(); return true; }
+    if (MODO === "manter") {   // rodada só para manter a sessão viva: não pede código fora de hora
+      await gravarEstado("intelipost", { tipo: "aviso", titulo: "A sessão da Intelipost caiu.", msg: "No próximo envio para o robô, a Intelipost vai pedir o código de 6 dígitos: a caixa amarela aparece aqui e o robô espera até 10 minutos.", modo: MODO });
+      log("Sessão caiu: aviso deixado no painel (o código será pedido no próximo envio)."); return false;
+    }
     log("A sessão guardada venceu: vou fazer o login.");
   }
   await pagina.goto(BASE, { waitUntil: "domcontentloaded" });
@@ -867,8 +876,9 @@ const andaIni = new Date().toISOString(), anda = MODO === "real";
 if (anda) await gravarEstado("andamento:intelipost", { robo: "Nova data na Intelipost", rodando: true, inicio: andaIni }).catch(() => {});
 let andaResumo = "";
 try {
-  await entrar();
-  if (MODO === "diag-sim") await diagSim();
+  const entrou = await entrar();
+  if (MODO === "manter") { await gravarEstado("intelipost_manter", { em: new Date().toISOString(), ok: entrou !== false }).catch(() => {}); log(entrou !== false ? "Sessão da Intelipost mantida viva." : "Sessão não estava viva."); }
+  else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();

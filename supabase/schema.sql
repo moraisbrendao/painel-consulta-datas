@@ -2742,3 +2742,24 @@ begin
 end $$;
 drop trigger if exists fv_anota on public.falta_volumes;
 create trigger fv_anota before update on public.falta_volumes for each row execute function public._fv_anota();
+
+-- PARTE 54) Mantém viva a sessão do robô na Intelipost (a Intelipost derruba depois de 240 min sem uso e pede o código de novo).
+-- De 2 em 2 horas o Supabase chama o robô no modo "manter": ele só abre a Intelipost com a sessão guardada e guarda de novo.
+-- Se a sessão já tiver caído, ele NÃO pede código fora de hora: deixa um aviso no painel e o código é pedido no próximo envio.
+create or replace function public._robo_intelipost_manter()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-intelipost.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"manter"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_intelipost_manter() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-intelipost-manter';
+select cron.schedule('robo-intelipost-manter', '15 */2 * * *', 'select public._robo_intelipost_manter()');

@@ -3006,8 +3006,8 @@ ${extra}
       const [lista, est] = await Promise.all([buscarTudo("fila_intelipost", "pedido"), sb.from("robo_estado").select("*").eq("nome", "intelipost").limit(1)]);
       apFila = lista; apCarregadoEm = Date.now();
       const e = est && est.data && est.data[0] && est.data[0].valor;
-      $("ap-robo-alerta").hidden = !(e && e.tipo === "erro");
-      if (e && e.tipo === "erro") { $("ap-robo-titulo").textContent = e.titulo || "O robô da Intelipost parou."; $("ap-robo-texto").textContent = (e.msg || "") + (est.data[0].atualizado_em ? ` (${new Date(est.data[0].atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""); }
+      $("ap-robo-alerta").hidden = !(e && (e.tipo === "erro" || e.tipo === "aviso"));
+      if (e && (e.tipo === "erro" || e.tipo === "aviso")) { $("ap-robo-titulo").textContent = e.titulo || "O robô da Intelipost parou."; $("ap-robo-texto").textContent = (e.msg || "") + (est.data[0].atualizado_em ? ` (${new Date(est.data[0].atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""); }
     } catch (err) {
       $("ap-vazio").hidden = false;
       $("ap-vazio").textContent = /fila_intelipost|robo_estado|does not exist|schema cache/i.test(err.message || "") ? "Para usar esta aba, rode de novo o supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
