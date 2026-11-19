@@ -27,6 +27,9 @@
   let F = [], fInfo = null, resp = new Map(), fOk = true, O = [], oInfo = null, oOk = true, carregou = false, tk = null;
   let sel = null;   // célula aberta: { vis, g, f, fx }
   const filtros = { grupo: new Set(), resp: new Set(), ostatus: new Set(), osol: new Set(["Transportador"]), omacro: new Set(), ocanal: new Set(), otransp: new Set() };
+  // filtros ficam gravados neste navegador e só mudam quando a pessoa mexe neles
+  try { const g = JSON.parse(ls("painel.fo.filtros") || "null"); if (g) Object.keys(filtros).forEach((k) => { if (Array.isArray(g[k])) filtros[k] = new Set(g[k]); }); } catch (_) {}
+  const guardarFiltros = () => ls("painel.fo.filtros", JSON.stringify(Object.fromEntries(Object.entries(filtros).map(([k, v]) => [k, [...v]]))));
 
   // ---------- leitura ----------
   async function todas(tab, sel, chave) {
@@ -127,6 +130,7 @@
 
   function desenhar() {
     if (!carregou) return;
+    guardarFiltros();
     document.querySelectorAll("#fo-vis [data-vis]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.vis === vis); b.classList.toggle("contorno", b.dataset.vis !== vis); });
     $("fo-titulo").textContent = vis === "filas" ? "Filas atualizadas · tickets em aberto por responsável e fila" : `Ocorrências · por ${porO === "canal" ? "canal" : "transportador"} e dias sem atualização`;
     const inf = vis === "filas" ? fInfo : oInfo;
