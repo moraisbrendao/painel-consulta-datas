@@ -2403,3 +2403,195 @@ begin
 end $$;
 revoke all on function public.rodar_robo_faltas() from public, anon;
 grant execute on function public.rodar_robo_faltas() to authenticated;
+-- PARTE 51) Preventivo · Fase 1: memória dos pedidos (pedido_mudancas), feriados, dias úteis e tempos reais de entrega
+-- Nada do que existe muda: só acrescenta tabelas, gatilhos que ANOTAM mudanças e uma função de cálculo.
+
+-- 1) Memória: uma linha cada vez que um campo de um pedido muda (nunca apaga, nunca altera)
+create table if not exists public.pedido_mudancas (
+  id      bigserial primary key,
+  pedido  text not null,
+  campo   text not null,      -- micro_status, status_intelipost, prev_atual, transportadora, redespacho, data_expedicao, emissao_cte, data_entrega, previsao_transp (SSW), previsao_rastreio, evento_transp, situacao_transp
+  antes   text,
+  depois  text,
+  fonte   text,               -- base | ssw | rastreio:<fonte>
+  quando  timestamptz not null default now()
+);
+create index if not exists pedido_mudancas_pc on public.pedido_mudancas (pedido, campo, quando desc);
+create index if not exists pedido_mudancas_q on public.pedido_mudancas (quando);
+alter table public.pedido_mudancas enable row level security;
+revoke all on public.pedido_mudancas from anon;
+grant select on public.pedido_mudancas to authenticated;
+drop policy if exists "logistica le" on public.pedido_mudancas;
+create policy "logistica le" on public.pedido_mudancas for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public._pm_anota(p text, c text, a text, d text, f text, novo boolean)
+returns void language plpgsql security definer set search_path = public as $$
+declare ult text;
+begin
+  if p is null then return; end if;
+  if novo then   -- linha nova (pedido novo ou base recarregada do zero): compara com o último valor anotado
+    select m.depois into ult from public.pedido_mudancas m where m.pedido = p and m.campo = c order by m.quando desc, m.id desc limit 1;
+    if found and ult is not distinct from d then return; end if;
+    if not found and d is null then return; end if;
+    a := ult;
+  elsif a is not distinct from d then return; end if;
+  insert into public.pedido_mudancas (pedido, campo, antes, depois, fonte) values (p, c, a, d, f);
+end $$;
+revoke all on function public._pm_anota(text, text, text, text, text, boolean) from public, anon, authenticated;
+
+create or replace function public._pm_base() returns trigger language plpgsql security definer set search_path = public as $$
+declare novo boolean := tg_op = 'INSERT';
+begin
+  perform public._pm_anota(new.pedido, 'micro_status',      case when novo then null else old.micro_status end, new.micro_status, 'base', novo);
+  perform public._pm_anota(new.pedido, 'status_intelipost', case when novo then null else old.status_intelipost end, new.status_intelipost, 'base', novo);
+  perform public._pm_anota(new.pedido, 'prev_atual',        case when novo then null else old.prev_atual::text end, new.prev_atual::text, 'base', novo);
+  perform public._pm_anota(new.pedido, 'transportadora',    case when novo then null else old.transportadora end, new.transportadora, 'base', novo);
+  perform public._pm_anota(new.pedido, 'redespacho',        case when novo then null else nullif(old.extra->>'redespacho', '') end, nullif(new.extra->>'redespacho', ''), 'base', novo);
+  perform public._pm_anota(new.pedido, 'data_expedicao',    case when novo then null else old.data_expedicao::text end, new.data_expedicao::text, 'base', novo);
+  perform public._pm_anota(new.pedido, 'emissao_cte',       case when novo then null else nullif(old.extra->>'emissao_cte', '') end, nullif(new.extra->>'emissao_cte', ''), 'base', novo);
+  perform public._pm_anota(new.pedido, 'data_entrega',      case when novo then null else old.data_entrega::text end, new.data_entrega::text, 'base', novo);
+  return null;
+end $$;
+drop trigger if exists pm_base on public.base_pedidos;
+create trigger pm_base after insert or update on public.base_pedidos for each row execute function public._pm_base();
+
+create or replace function public._pm_ssw() returns trigger language plpgsql security definer set search_path = public as $$
+declare novo boolean := tg_op = 'INSERT';
+begin
+  if new.previsao is not null then
+    perform public._pm_anota(new.pedido, 'previsao_transp', case when novo then null else old.previsao::text end, new.previsao::text, 'ssw', novo);
+  end if;
+  return null;
+end $$;
+drop trigger if exists pm_ssw on public.previsao_ssw;
+create trigger pm_ssw after insert or update on public.previsao_ssw for each row execute function public._pm_ssw();
+
+create or replace function public._pm_conf() returns trigger language plpgsql security definer set search_path = public as $$
+declare novo boolean := tg_op = 'INSERT'; f text := 'rastreio:' || coalesce(new.detalhe->>'fonte', 'ssw');
+begin
+  perform public._pm_anota(new.pedido, 'evento_transp',
+    case when novo then null else nullif(concat_ws(' @ ', old.ultimo_evento, old.data_evento::text), '') end,
+    nullif(concat_ws(' @ ', new.ultimo_evento, new.data_evento::text), ''), f, novo);
+  perform public._pm_anota(new.pedido, 'situacao_transp', case when novo then null else old.situacao end, new.situacao, f, novo);
+  if new.detalhe->>'previsao' is not null then
+    perform public._pm_anota(new.pedido, 'previsao_rastreio', case when novo then null else old.detalhe->>'previsao' end, new.detalhe->>'previsao', f, novo);
+  end if;
+  return null;
+end $$;
+drop trigger if exists pm_conf on public.conferencia_ssw;
+create trigger pm_conf after insert or update on public.conferencia_ssw for each row execute function public._pm_conf();
+
+-- ponto de partida: o micro status atual de cada pedido em aberto, com a data da última atualização na Intelipost (só uma vez)
+insert into public.pedido_mudancas (pedido, campo, antes, depois, fonte, quando)
+select b.pedido, 'micro_status', null, b.micro_status, 'inicial', coalesce(b.ultima_atualizacao::timestamptz, now())
+from public.base_pedidos b
+where b.micro_status is not null and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+  and not exists (select 1 from public.pedido_mudancas m where m.pedido = b.pedido and m.campo = 'micro_status');
+
+-- 2) Feriados (nacional: uf = ''; estadual: uf; municipal: uf + cidade em maiúsculas sem acento)
+create table if not exists public.feriados (
+  data   date not null,
+  uf     text not null default '',
+  cidade text not null default '',
+  nome   text,
+  primary key (data, uf, cidade)
+);
+alter table public.feriados enable row level security;
+revoke all on public.feriados from anon;
+grant select, insert, update, delete on public.feriados to authenticated;
+drop policy if exists "todos leem" on public.feriados;
+drop policy if exists "logistica cuida" on public.feriados;
+create policy "todos leem" on public.feriados for select to authenticated using (true);
+create policy "logistica cuida" on public.feriados for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+insert into public.feriados (data, uf, cidade, nome) values
+  ('2026-01-01','','','Confraternização Universal'), ('2026-02-16','','','Carnaval'), ('2026-02-17','','','Carnaval'), ('2026-04-03','','','Sexta-feira Santa'),
+  ('2026-04-21','','','Tiradentes'), ('2026-05-01','','','Dia do Trabalho'), ('2026-06-04','','','Corpus Christi'), ('2026-09-07','','','Independência'),
+  ('2026-10-12','','','Nossa Senhora Aparecida'), ('2026-11-02','','','Finados'), ('2026-11-15','','','Proclamação da República'), ('2026-11-20','','','Consciência Negra'),
+  ('2026-12-25','','','Natal'),
+  ('2027-01-01','','','Confraternização Universal'), ('2027-02-08','','','Carnaval'), ('2027-02-09','','','Carnaval'), ('2027-03-26','','','Sexta-feira Santa'),
+  ('2027-04-21','','','Tiradentes'), ('2027-05-01','','','Dia do Trabalho'), ('2027-05-27','','','Corpus Christi'), ('2027-09-07','','','Independência'),
+  ('2027-10-12','','','Nossa Senhora Aparecida'), ('2027-11-02','','','Finados'), ('2027-11-15','','','Proclamação da República'), ('2027-11-20','','','Consciência Negra'),
+  ('2027-12-25','','','Natal'),
+  ('2026-07-09','SP','','Revolução Constitucionalista'), ('2027-07-09','SP','','Revolução Constitucionalista'),
+  ('2026-04-23','RJ','','São Jorge'), ('2027-04-23','RJ','','São Jorge'),
+  ('2026-07-02','BA','','Independência da Bahia'), ('2027-07-02','BA','','Independência da Bahia'),
+  ('2026-09-20','RS','','Revolução Farroupilha'), ('2027-09-20','RS','','Revolução Farroupilha'),
+  ('2026-03-25','CE','','Data Magna do Ceará'), ('2027-03-25','CE','','Data Magna do Ceará'),
+  ('2026-12-19','PR','','Emancipação do Paraná'), ('2027-12-19','PR','','Emancipação do Paraná'),
+  ('2026-09-05','AM','','Elevação do Amazonas'), ('2027-09-05','AM','','Elevação do Amazonas'),
+  ('2026-08-15','PA','','Adesão do Pará'), ('2027-08-15','PA','','Adesão do Pará'),
+  ('2026-01-25','SP','SAO PAULO','Aniversário de São Paulo'), ('2027-01-25','SP','SAO PAULO','Aniversário de São Paulo'),
+  ('2026-01-20','RJ','RIO DE JANEIRO','São Sebastião'), ('2027-01-20','RJ','RIO DE JANEIRO','São Sebastião')
+on conflict do nothing;
+
+create or replace function public._sem_acento(t text) returns text language sql immutable as $$
+  select upper(trim(translate(coalesce(t, ''), 'áàâãäéèêëíìîïóòôõöúùûüçÁÀÂÃÄÉÈÊËÍÌÎÏÓÒÔÕÖÚÙÛÜÇ', 'aaaaaeeeeiiiiooooouuuucAAAAAEEEEIIIIOOOOOUUUUC')))
+$$;
+-- dias úteis entre a (exclusive) e b (inclusive), sem sábado, domingo e feriados do destino
+create or replace function public.dias_uteis(a date, b date, uf text default '', cidade text default '')
+returns integer language sql stable set search_path = public as $$
+  select case when a is null or b is null then null
+              when b < a then -(select count(*) from generate_series(b + 1, a, interval '1 day') g(d)
+                                 where extract(isodow from g.d) < 6 and not exists (select 1 from public.feriados f where f.data = g.d::date and (f.uf = '' or (f.uf = upper(coalesce($3, '')) and (f.cidade = '' or f.cidade = public._sem_acento($4))))))::int
+              else (select count(*) from generate_series(a + 1, b, interval '1 day') g(d)
+                     where extract(isodow from g.d) < 6 and not exists (select 1 from public.feriados f where f.data = g.d::date and (f.uf = '' or (f.uf = upper(coalesce($3, '')) and (f.cidade = '' or f.cidade = public._sem_acento($4))))))::int end
+$$;
+grant execute on function public.dias_uteis(date, date, text, text) to authenticated;
+
+-- 3) Tempos reais por transportadora efetiva (redespacho, senão transportadora) × UF × cidade, das entregas dos últimos 3 meses
+create table if not exists public.tempos_referencia (
+  trecho       text not null,     -- expedicao_entrega | cte_entrega | criacao_expedicao | expedicao_cte
+  transp       text not null,
+  uf           text not null default '',
+  cidade       text not null default '',
+  n            integer not null,
+  p50          numeric, p80 numeric, p90 numeric, media numeric,
+  no_prazo     numeric,           -- % entregue até a promessa original (só no trecho expedicao_entrega)
+  periodo_de   date, periodo_ate date,
+  calculado_em timestamptz not null default now(),
+  primary key (trecho, transp, uf, cidade)
+);
+alter table public.tempos_referencia enable row level security;
+revoke all on public.tempos_referencia from anon;
+grant select on public.tempos_referencia to authenticated;
+drop policy if exists "logistica le" on public.tempos_referencia;
+create policy "logistica le" on public.tempos_referencia for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public._data_ok(t text) returns date language plpgsql immutable as $$
+begin return case when t ~ '^\d{4}-\d{2}-\d{2}' then left(t, 10)::date else null end; exception when others then return null; end $$;
+create or replace function public._transp_efetiva(t text, redesp text) returns text language sql immutable as $$
+  select case when x ~* 'tempo\s*justo|^vm\M|vm transp' then 'VM TRANSPORTES / TEMPO JUSTO' else x end
+  from (select upper(trim(coalesce(nullif(trim(coalesce(redesp, '')), ''), nullif(trim(coalesce(t, '')), ''), '(SEM TRANSPORTADORA)'))) as x) s
+$$;
+
+create or replace function public.recalcular_tempos()
+returns integer language plpgsql security definer set search_path = public set statement_timeout = '300s' as $$
+declare n integer; ate date := current_date; de date := current_date - 92;
+begin
+  if auth.uid() is not null and public.e_sac() then raise exception 'Sem permissão.'; end if;
+  create temp table _ent on commit drop as
+    select public._transp_efetiva(b.transportadora, b.extra->>'redespacho') as transp, coalesce(nullif(upper(trim(coalesce(b.uf, ''))), ''), '?') as uf, coalesce(nullif(public._sem_acento(b.cidade), ''), '?') as cidade,
+           b.data_criacao, b.data_expedicao, public._data_ok(b.extra->>'emissao_cte') as cte, b.data_entrega, b.prev_original
+    from public.base_pedidos b
+    where b.data_entrega between de and ate and coalesce(b.status_intelipost, '') ilike 'entregue%';
+  create temp table _t on commit drop as
+    select 'expedicao_entrega'::text as trecho, transp, uf, cidade, public.dias_uteis(data_expedicao, data_entrega, uf, cidade) as d, (data_entrega <= prev_original) as ok from _ent where data_expedicao is not null and data_expedicao <= data_entrega
+    union all select 'cte_entrega', transp, uf, cidade, public.dias_uteis(cte, data_entrega, uf, cidade), null from _ent where cte is not null and cte <= data_entrega
+    union all select 'criacao_expedicao', transp, uf, cidade, public.dias_uteis(data_criacao, data_expedicao, uf, cidade), null from _ent where data_criacao is not null and data_expedicao is not null and data_criacao <= data_expedicao
+    union all select 'expedicao_cte', transp, uf, cidade, public.dias_uteis(data_expedicao, cte, uf, cidade), null from _ent where data_expedicao is not null and cte is not null and data_expedicao <= cte;
+  delete from public.tempos_referencia where true;
+  insert into public.tempos_referencia (trecho, transp, uf, cidade, n, p50, p80, p90, media, no_prazo, periodo_de, periodo_ate, calculado_em)
+  select trecho, transp, coalesce(uf, ''), coalesce(cidade, ''), count(*),
+         round(percentile_cont(0.5) within group (order by d)::numeric, 1), round(percentile_cont(0.8) within group (order by d)::numeric, 1),
+         round(percentile_cont(0.9) within group (order by d)::numeric, 1), round(avg(d)::numeric, 1),
+         case when count(ok) > 0 then round(100.0 * count(*) filter (where ok) / count(ok), 1) end, de, ate, now()
+  from _t group by grouping sets ((trecho, transp), (trecho, transp, uf), (trecho, transp, uf, cidade));
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.recalcular_tempos() from public, anon;
+grant execute on function public.recalcular_tempos() to authenticated;
+-- recalcula todo dia às 06:30 (Brasília)
+select cron.unschedule(jobid) from cron.job where jobname = 'tempos-referencia';
+select cron.schedule('tempos-referencia', '30 9 * * *', 'select public.recalcular_tempos()');
+select public.recalcular_tempos();

@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=201">
+  <link rel="stylesheet" href="styles.css?v=202">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -348,6 +348,28 @@
           </div>
         </div>
         <div class="tabela-wrap tabela-alta"><table class="tabela-range tabela-pt"><thead id="g-pt-cab"></thead><tbody id="g-pt-linhas"></tbody></table></div>
+      </section>
+          <section class="cartao" id="mt-fase1">
+        <div class="cartao-topo">
+          <div>
+            <h2>Tempos reais de entrega · base do novo Preventivo</h2>
+            <p class="sub">Quanto tempo cada transportadora leva de verdade, em <b>dias úteis</b> (sem sábado, domingo e feriados do destino), nas entregas dos últimos 3 meses. Transportadora = redespacho, se houver. <b>Mediana</b> = metade das entregas chega até esse dia; <b>P80</b> e <b>P90</b> = 80% e 90% chegam até esse dia. Grupos com menos de 30 entregas não servem para previsão. Clique numa transportadora para ver por UF e cidade. Recalcula sozinho todo dia às 06h30.</p>
+            <p id="mt-info" class="info-base">Carregando…</p>
+          </div>
+          <div class="acoes-robo">
+            <div class="seg" id="mt-trechos"></div>
+            <button id="mt-recalc" class="btn contorno" type="button">Recalcular agora</button>
+            <button id="mt-excel" class="btn contorno" type="button">Baixar Excel</button>
+          </div>
+        </div>
+        <div class="kpis" id="mt-cards"></div>
+        <div id="mt-etapas" class="mt-etapas" hidden>
+          <h3>Etapas logísticas: confira se cada micro status está na etapa certa</h3>
+          <p class="sub">O motor vai medir o tempo em cada etapa e comparar com o normal da transportadora. Os vermelhos ainda não têm etapa. Me diga o que mudar.</p>
+          <p id="mt-et-resumo"></p>
+          <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos"><thead><tr><th>Micro status (Intelipost)</th><th>Etapa</th><th class="num">Em aberto</th></tr></thead><tbody id="mt-et-linhas"></tbody></table></div>
+        </div>
+        <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos mt-tab"><thead id="mt-cab"></thead><tbody id="mt-linhas"></tbody></table></div>
       </section>
     </main>
 
@@ -1494,16 +1516,17 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=201"></script>
-  <script src="mapa-brasil.js?v=201"></script>
-  <script src="troca-notas.js?v=201"></script>
-  <script src="app.js?v=201"></script>
-  <script src="ordenar.js?v=201"></script>
-  <script src="menu.js?v=201"></script>
-  <script src="ajuda.js?v=201"></script>
-  <script src="documentos.js?v=201"></script>
-  <script src="barrar.js?v=201"></script>
-  <script src="faltas.js?v=201"></script>
-  <script src="filtros.js?v=201"></script>
+  <script src="config.js?v=202"></script>
+  <script src="mapa-brasil.js?v=202"></script>
+  <script src="troca-notas.js?v=202"></script>
+  <script src="app.js?v=202"></script>
+  <script src="ordenar.js?v=202"></script>
+  <script src="menu.js?v=202"></script>
+  <script src="ajuda.js?v=202"></script>
+  <script src="documentos.js?v=202"></script>
+  <script src="barrar.js?v=202"></script>
+  <script src="faltas.js?v=202"></script>
+  <script src="motor.js?v=202"></script>
+  <script src="filtros.js?v=202"></script>
 </body>
 </html>

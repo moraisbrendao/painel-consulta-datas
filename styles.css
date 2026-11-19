@@ -1000,3 +1000,13 @@ body.fundo-escuro #rp-faltas > .titulo-pagina h2,
 body.fundo-escuro #rp-faltas > .titulo-pagina .sub,
 body.fundo-escuro #rp-faltas > .titulo-pagina .info-base { color: #e8edf7; }
 body.fundo-escuro #rp-faltas > .titulo-pagina .sub b { color: #fff; }
+/* Transportadoras › tempos reais (Preventivo fase 1) */
+#mt-fase1 .kpis { margin: 10px 0; }
+.mt-tab tr.mt-abre { cursor: pointer; }
+.mt-tab tr.mt-t td { font-weight: 600; }
+.mt-tab tr.mt-u td:first-child { padding-left: 26px; }
+.mt-tab tr.mt-c td:first-child { padding-left: 48px; color: var(--texto-2); }
+.mt-etapas { margin: 8px 0 16px; padding: 12px; border: 1px solid #f2c94c; border-radius: 8px; background: #fffdf5; }
+.mt-etapas h3 { margin: 0 0 4px; }
+.mt-tab { table-layout: fixed; }
+.mt-tab th:first-child, .mt-tab td:first-child { width: 40%; }

@@ -33,6 +33,7 @@
       "Veja a tabela <b>Detalhe por transportadora</b>.",
       "Marque até 8 na coluna <b>Comparar</b> para ver lado a lado (a melhor de cada linha fica em negrito).",
       "Clique no nome para abrir os pedidos dela na Visão Gerencial.",
+      "Quadro <b>Tempos reais de entrega</b>: mediana, P80 e P90 em dias úteis das entregas dos últimos 3 meses, por transportadora (redespacho, se houver), UF e cidade. Card <b>Etapas para conferir</b> mostra em qual etapa logística cada micro status entra.",
     ], ""],
 
     ["uf", "Atrasos por UF", "Mapa do Brasil com o percentual de atraso por estado, cidades e transportadoras de cada estado.", "Para descobrir onde está o atraso e quem atende cada região.", [
