@@ -69,10 +69,62 @@
     const nm = [...marcadas].filter((nf) => L.some((x) => x.nf === nf)).length;
     $("br-aprovar").textContent = `Aprovar sugestão (${nm})`; $("br-aprovar").disabled = !nm; $("br-desfazer").disabled = !nm;
     $("br-todos").checked = V.length > 0 && V.every((x) => marcadas.has(x.nf));
-    desenharEnvios();
+    desenharEnvios(); desenharErroTransp();
     const aprov = L.filter((x) => x.decisao && !x.portal_status).length;
     $("br-portal").textContent = `Mandar para o portal (${aprov})`; $("br-portal").disabled = !aprov;
   }
+  // "Erro: verificar" = rastreio sem devolução/entrega e sem anotação: a transportadora não atuou.
+  // Quadrinhos por transportadora (a do ticket 360: redespacho, senão a transportadora; senão a do pedido) com Excel e mensagem para o WhatsApp.
+  const alvoTransp = (x) => { const r = x.rastreio || {}; return (r.redesp_ticket || r.transp_ticket || x.transp_pedido || "").trim() || "(sem transportadora no ticket)"; };
+  const diasDesde = (d) => (d ? Math.max(0, Math.floor((Date.now() - Date.parse(String(d).replace(" ", "T"))) / 864e5)) : null);
+  const ultStatus = (x) => { const r = x.rastreio || {}; return r.evento ? `${r.evento}${r.data_evento ? " em " + br(r.data_evento) : ""}` : r.situacao && !/^erro/i.test(r.situacao) ? r.situacao : "sem informação no rastreio"; };
+  const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
+  function gruposErro() {
+    const m = new Map(); L.filter((x) => sit(x) === "manual").forEach((x) => { const t = alvoTransp(x); m.set(t, (m.get(t) || []).concat(x)); });
+    return [...m.entries()].map(([t, xs]) => [t, xs.sort((a, b) => (diasDesde(b.ticket_criado) ?? -1) - (diasDesde(a.ticket_criado) ?? -1))]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR"));
+  }
+  function msgTransp(t, xs) {
+    const pd = new Map(); xs.forEach((x) => { const d = diasDesde(x.ticket_criado); pd.set(d, (pd.get(d) || 0) + 1); });
+    const partes = [...pd.entries()].sort((a, b) => (b[0] ?? -1) - (a[0] ?? -1)).map(([d, n]) => d === null ? `${n} sem data de abertura` : `${n} há ${plural(d, "dia", "dias")}`);
+    const sts = [...new Set(xs.map(ultStatus))];
+    const fim = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0];
+    return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar: ${fim}.`
+      + (sts.length === 1 ? (sts[0] === "sem informação no rastreio" ? " No rastreio ainda não aparece nenhuma informação." : ` O último status no rastreio é: ${sts[0]}.`) : "")
+      + ` Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
+      + xs.map((x) => { const d = diasDesde(x.ticket_criado); return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""}${sts.length > 1 ? ` · ${ultStatus(x)}` : ""}`; }).join("\n");
+  }
+  const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || ""]; });
+  const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô"];
+  function baixarErro(grupos, nome) {
+    const wb = XLSX.utils.book_new(); const usados = new Set();
+    if (grupos.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(grupos.flatMap(([, xs]) => linhasXls(xs)))), "Todas");
+    grupos.forEach(([t, xs]) => { let a = t.replace(/[\\/?*\[\]:]/g, " ").slice(0, 28).trim() || "Transp"; while (usados.has(a)) a += "_"; usados.add(a); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(linhasXls(xs))), a); });
+    XLSX.writeFile(wb, `barrar_pendentes_${nome}_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  }
+  function desenharErroTransp() {
+    let box = $("br-erro-transp");
+    if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
+    box.hidden = card !== "manual"; if (box.hidden) return;
+    const G = gruposErro();
+    box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem anotação no portal: a transportadora ainda não atuou. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
+      ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
+      <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
+        return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
+          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Último status</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${esc(ultStatus(x))}</td></tr>`).join("")}</tbody></table></div>
+          <textarea class="br-et-msg" rows="6" data-i="${i}">${esc(msgTransp(t, xs))}</textarea>
+          <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
+    box._G = G;
+  }
+  document.addEventListener("click", async (e) => {
+    const box = $("br-erro-transp"); if (!box || !box.contains(e.target)) return;
+    const G = box._G || [], i = Number((e.target.closest("[data-i]") || {}).dataset?.i);
+    if (e.target.closest(".br-et-todas")) return baixarErro(G, "todas");
+    if (e.target.closest(".br-et-xls")) return baixarErro([G[i]], G[i][0].normalize("NFD").replace(/[^\w]+/g, "_").slice(0, 30));
+    const txt = () => (box.querySelector(`.br-et-msg[data-i="${i}"]`) || {}).value || "";
+    if (e.target.closest(".br-et-copiar")) { try { await navigator.clipboard.writeText(txt()); toast("Mensagem copiada. Cole no WhatsApp da transportadora."); } catch { const t = box.querySelector(`.br-et-msg[data-i="${i}"]`); t.select(); document.execCommand("copy"); toast("Mensagem copiada."); } return; }
+    const wa = e.target.closest(".br-et-wa"); if (wa) { e.preventDefault(); window.open("https://wa.me/?text=" + encodeURIComponent(txt()), "_blank", "noopener"); }
+  });
+
   function linha(x) {
     const r = x.rastreio || {}, p = x.portal || {};
     const rast = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>`
