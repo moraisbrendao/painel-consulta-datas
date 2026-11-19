@@ -168,7 +168,7 @@
           return `<tr><td><a href="${linkOc(x.nf)}" target="_blank" rel="noopener noreferrer" title="Abrir a ocorrência no portal do transportador"><b>${esc(x.nf)}</b> ↗</a>${p ? `<div class="s">${esc(p.pedido || "")}</div>` : ""}</td><td>${esc(transpO(x))}</td><td>${esc(x.motivo || "")}<div class="s">${esc(x.status || "")} · ${esc(x.operacao || "")} · aberta ${brD(x.criado_em)}</div></td><td>${esc(canalO(x))}</td><td>${esc(x.solicitante || "")}</td>
             <td class="fo-msg">${esc(x.mensagem || "")}<div class="s">${hora(x.mensagem_em ? String(x.mensagem_em).replace(" ", "T") : "")}</div></td><td class="num">${diasO(x) ?? "—"}</td>
             <td>${esc(x.status_macro || "—")}<div class="s">${esc(x.status_micro || "")}</div></td>
-            <td class="fo-links"><a class="btn mini amarelo" href="${linkOc(x.nf)}" target="_blank" rel="noopener noreferrer" title="Abre a ocorrência dessa NF no portal do transportador">Abrir ocorrência ↗</a> ${ids.map(linkTk).join(" ")}${t && t.fila ? `<div class="s">fila ${esc(t.fila)}</div>` : ""}${p && /^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Intelipost ↗</a> ` : ""}<button type="button" class="btn mini contorno" data-rastreio="${esc(x.nf)}" data-transp="${esc((p && p.transportadora) || x.transportador || "")}" data-pedido="${esc((p && p.pedido) || "")}">Ver rastreio ↗</button></td></tr>`; }).join("") + "</tbody>";
+            <td class="fo-links"><a class="btn mini amarelo" href="${linkOc(x.nf)}" target="_blank" rel="noopener noreferrer" title="Abre a ocorrência dessa NF no portal do transportador">Abrir ocorrência ↗</a> <button type="button" class="btn mini contorno" data-copiar="${linkOc(x.nf)}" title="Copia o link: cole na aba do portal que já está aberta">📋 Copiar link</button> ${ids.map(linkTk).join(" ")}${t && t.fila ? `<div class="s">fila ${esc(t.fila)}</div>` : ""}${p && /^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Intelipost ↗</a> ` : ""}<button type="button" class="btn mini contorno" data-rastreio="${esc(x.nf)}" data-transp="${esc((p && p.transportadora) || x.transportador || "")}" data-pedido="${esc((p && p.pedido) || "")}">Ver rastreio ↗</button></td></tr>`; }).join("") + "</tbody>";
     }
     $("fo-casos-mais").textContent = L.length > V.length ? `Mostrando ${fmt(V.length)} de ${fmt(L.length)}. "Exportar estes casos" traz todos.` : "";
   }
@@ -246,6 +246,9 @@
     if (e.target.closest("#fo-excel")) return baixar(vis === "filas" ? F.filter(passaF) : O.filter((x) => passaO(x)), vis === "filas" ? "filas_atualizadas" : "ocorrencias");
     if (e.target.closest("#fo-editar")) { editar = !editar; return desenharFilas(); }
     if (e.target.closest("#fo-limpar")) { Object.values(filtros).forEach((s) => s.clear()); sel = null; return desenhar(); }
+    const cp = e.target.closest("[data-copiar]");
+    if (cp) { const u = cp.dataset.copiar; try { await navigator.clipboard.writeText(u); } catch (_) { const t = document.createElement("textarea"); t.value = u; document.body.appendChild(t); t.select(); document.execCommand("copy"); t.remove(); }
+      cp.textContent = "✓ Copiado"; setTimeout(() => (cp.textContent = "📋 Copiar link"), 2000); toast("Link copiado. Cole na barra de endereço da aba do portal que já está aberta."); return; }
     const r = e.target.closest("[data-rastreio]");
     if (r && window.__abrirSSW) window.__abrirSSW(r.dataset.rastreio, r.dataset.transp, r.dataset.pedido);
   });
