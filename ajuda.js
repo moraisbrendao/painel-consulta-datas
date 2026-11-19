@@ -107,7 +107,7 @@
     ], "Tudo que vai para a Intelipost ou o Multi360 pede confirmação antes. Se o robô parar, aparece um aviso vermelho no alto da tela."],
 
     ["conferencia", "Conferência SSW", "O robô confere no rastreio (SSW, Jadlog, Bento, Trânsito, Transiga) se os pedidos em aberto na Intelipost já foram entregues.", "Todo dia, para dar baixa na Intelipost.", [
-      "Clique em <b>Importar pedidos (Intelipost)</b> e escolha o arquivo transactions da Intelipost.",
+      "Envie o arquivo transactions da Intelipost no botão <b>Enviar Intelipost</b>, no topo: ele já alimenta a Conferência SSW.",
       "O robô confere sozinho: de 30 em 30 min das 6h às 18h e de 2 em 2 h à noite. Para conferir na hora, <b>🔄 Conferir tudo agora</b>.",
       "Trate o card <b>Falta atualizar a Intelipost</b> (entregue no rastreio, mas não na Intelipost).",
       "Use <b>Ver no SSW</b> para abrir o rastreio da nota; na Jadlog abre uma janela com o histórico.",
