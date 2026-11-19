@@ -1076,3 +1076,5 @@ body.fundo-escuro #rp-filas > .titulo-pagina .info-base { color: #e8edf7; }
 .fo-pivo tr.fo-s1 td:first-child { padding-left: 7px; }
 .fo-pivo td:first-child { white-space: nowrap; }
 .fo-casos { max-width: none; }
+.fo-multi-lista label { flex-direction: row !important; justify-content: flex-start !important; align-items: center !important; text-align: left !important; font-weight: 500; }
+.fo-multi-lista label input[type=checkbox] { width: auto !important; min-width: 0 !important; margin: 0; flex: 0 0 auto; accent-color: #f5c84b; }
