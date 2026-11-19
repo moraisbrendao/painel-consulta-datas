@@ -3415,7 +3415,7 @@ ${extra}
     if (!confirm(`${arq.name}\n\n${fmt(itens.length)} ticket(s) na fila ${agFila === "AT" ? "Aguardando entrega (AT)" : "Aguardando entrega"}${foraFila ? ` (${fmt(foraFila)} linha(s) de outra fila ficam de fora)` : ""}.\n\nO robô vai abrir os tickets, conferir o rastreio da nova NF e dar baixa nos entregues. As observações continuam salvas. Enviar?`)) return;
     const { error } = await sb.rpc("importar_aguardando", agFila === "AT" ? { itens, arquivo: arq.name, p_fila: "AT" } : { itens, arquivo: arq.name });
     if (error) return toast("Erro ao enviar: " + error.message + (/importar_aguardando|schema cache|p_fila/i.test(error.message) ? ` (rode a parte ${agFila === "AT" ? "26" : "24"} do supabase/schema.sql)` : ""), true);
-    toast(`${fmt(itens.length)} ticket(s) enviados. O robô começa em 1 ou 2 minutos.`); await carregarAguardando();
+    toast(`${fmt(itens.length)} ticket(s) enviados. Clique em "Rodar o robô agora" quando quiser que ele confira.`); await carregarAguardando();
   });
   $("ag-baixar").addEventListener("click", () => {
     const L = agLista.filter((t) => agCard === "todos" || agGrupo(t) === agCard); if (!L.length) return toast("Nada para exportar.", true);
