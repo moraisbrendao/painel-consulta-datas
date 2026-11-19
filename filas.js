@@ -143,6 +143,7 @@
     return O.filter((x) => passaO(x)).filter((x) => (g === "*" || transpO(x) === g) && (q < 0 || faixa(diasO(x)) === q)).sort((a, b) => (diasO(b) ?? -1) - (diasO(a) ?? -1));
   }
   const linkTk = (id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)} ↗</a>`;
+  const linkOc = (nf) => `https://ccp.360multi.com/occurrences/${encodeURIComponent(chaveNF(nf))}`;   // ocorrência no portal do transportador: /occurrences/NF-série
   function basePorNF() { const b = (window.__basePainel && window.__basePainel()) || []; const m = new Map(); b.forEach((p) => { if (p.nf) m.set(chaveNF(p.nf), p); }); return m; }
   function desenharCasos() {
     const box = $("fo-casos"), L = casosSel();
@@ -158,7 +159,7 @@
       const B = basePorNF(), T = tk || new Map();
       $("fo-casos-t").innerHTML = `<thead><tr><th>NF</th><th>Transportador</th><th>Motivo · status</th><th>Canal</th><th>Último solicitante</th><th>Última mensagem</th><th class="num">Dias</th><th>Intelipost</th><th>Links</th></tr></thead><tbody>`
         + V.map((x) => { const nf = chaveNF(x.nf), p = B.get(nf), t = T.get(nf), ids = String((t && t.id_ticket) || "").split(",").map((s) => s.trim()).filter(Boolean);
-          return `<tr><td><b>${esc(x.nf)}</b>${p ? `<div class="s">${esc(p.pedido || "")}</div>` : ""}</td><td>${esc(transpO(x))}</td><td>${esc(x.motivo || "")}<div class="s">${esc(x.status || "")} · ${esc(x.operacao || "")} · aberta ${brD(x.criado_em)}</div></td><td>${esc(canalO(x))}</td><td>${esc(x.solicitante || "")}</td>
+          return `<tr><td><a href="${linkOc(x.nf)}" target="_blank" rel="noopener noreferrer" title="Abrir a ocorrência no portal do transportador"><b>${esc(x.nf)}</b> ↗</a>${p ? `<div class="s">${esc(p.pedido || "")}</div>` : ""}</td><td>${esc(transpO(x))}</td><td>${esc(x.motivo || "")}<div class="s">${esc(x.status || "")} · ${esc(x.operacao || "")} · aberta ${brD(x.criado_em)}</div></td><td>${esc(canalO(x))}</td><td>${esc(x.solicitante || "")}</td>
             <td class="fo-msg">${esc(x.mensagem || "")}<div class="s">${hora(x.mensagem_em ? String(x.mensagem_em).replace(" ", "T") : "")}</div></td><td class="num">${diasO(x) ?? "—"}</td>
             <td>${esc(x.status_macro || "—")}<div class="s">${esc(x.status_micro || "")}</div></td>
             <td class="fo-links">${ids.map(linkTk).join(" ")}${t && t.fila ? `<div class="s">fila ${esc(t.fila)}</div>` : ""}${p && /^https?:\/\//i.test(p.link_rastreio || "") ? `<a href="${esc(p.link_rastreio)}" target="_blank" rel="noopener noreferrer">Intelipost ↗</a> ` : ""}<button type="button" class="btn mini contorno" data-rastreio="${esc(x.nf)}" data-transp="${esc((p && p.transportadora) || x.transportador || "")}" data-pedido="${esc((p && p.pedido) || "")}">Ver rastreio ↗</button></td></tr>`; }).join("") + "</tbody>";
@@ -169,8 +170,8 @@
   // ---------- Excel ----------
   const CAB_F = ["Responsável", "Fila", "Ticket", "NF", "Pedido", "Grupo", "Tipo", "Motivo", "Status", "Transportadora", "Canal", "Dias", "Faixa", "Criado em", "Última atualização", "Link do ticket"];
   const linF = (x) => { const d = diasFila(x), i = faixa(d); return [respDe(filaDe(x)), filaDe(x), x.ticket, x.nf || "", x.pedido || "", x.grupo || "", x.tipo || "", x.motivo || "", x.status || "", x.transportadora || "", x.canal || "", d ?? "", i >= 0 ? FAIXAS[i][0] : "", brD(x.criado_em), brD(x.atualizado_em), `https://appv2.360multi.com/tickets/${x.ticket}`]; };
-  const CAB_O = ["NF", "Transportador", "Data criação ocorrência", "Motivo", "Status ocorrência", "Operação", "Canal", "Último solicitante", "Última mensagem", "Data última mensagem", "Status macro Intelipost", "Status micro Intelipost", "Dias sem atualização", "Faixa", "Tickets abertos da NF"];
-  const linO = (x) => { const d = diasO(x), i = faixa(d), t = (tk || new Map()).get(chaveNF(x.nf)); return [x.nf, transpO(x), brD(x.criado_em), x.motivo || "", x.status || "", x.operacao || "", canalO(x), x.solicitante || "", x.mensagem || "", brD(x.mensagem_em), x.status_macro || "", x.status_micro || "", d ?? "", i >= 0 ? FAIXAS[i][0] : "", (t && t.id_ticket) || ""]; };
+  const CAB_O = ["NF", "Transportador", "Data criação ocorrência", "Motivo", "Status ocorrência", "Operação", "Canal", "Último solicitante", "Última mensagem", "Data última mensagem", "Status macro Intelipost", "Status micro Intelipost", "Dias sem atualização", "Faixa", "Tickets abertos da NF", "Link da ocorrência"];
+  const linO = (x) => { const d = diasO(x), i = faixa(d), t = (tk || new Map()).get(chaveNF(x.nf)); return [x.nf, transpO(x), brD(x.criado_em), x.motivo || "", x.status || "", x.operacao || "", canalO(x), x.solicitante || "", x.mensagem || "", brD(x.mensagem_em), x.status_macro || "", x.status_micro || "", d ?? "", i >= 0 ? FAIXAS[i][0] : "", (t && t.id_ticket) || "", linkOc(x.nf)]; };
   function baixar(L, nome) {
     if (!L.length) return toast("Nada para exportar.", true);
     const wb = XLSX.utils.book_new(), cab = vis === "filas" ? CAB_F : CAB_O, lin = vis === "filas" ? linF : linO;
