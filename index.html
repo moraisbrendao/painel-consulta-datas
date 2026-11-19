@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=214">
+  <link rel="stylesheet" href="styles.css?v=215">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -597,7 +597,7 @@
       </section>
 
       <div class="titulo-pagina">
-        <h1>Preventivo <button id="btn-prev-resp" class="btn contorno mini" type="button">👤 Responsáveis</button></h1>
+        <h1>Preventivo <button id="btn-prev-resp" class="btn contorno mini" type="button" hidden>👤 Responsáveis</button></h1>
         <p id="info-base" class="sub">Carregando…</p>
         <p id="info-intelipost" class="info-base"></p>
         <p id="info-tickets" class="info-base"></p>
@@ -627,7 +627,7 @@
           </div>
         </div>
         <div class="tabela-ms-wrap">
-          <table class="tabela-ms">
+          <table class="tabela-ms sem-resp">
             <thead><tr><th>Micro status</th><th>Responsável</th><th class="num">Pedidos</th><th class="num">Dias parados (média)</th><th class="num">Com observação</th></tr></thead>
             <tbody id="ms-linhas"></tbody>
           </table>
@@ -1547,18 +1547,18 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=214"></script>
-  <script src="mapa-brasil.js?v=214"></script>
-  <script src="troca-notas.js?v=214"></script>
-  <script src="app.js?v=214"></script>
-  <script src="ordenar.js?v=214"></script>
-  <script src="menu.js?v=214"></script>
-  <script src="ajuda.js?v=214"></script>
-  <script src="documentos.js?v=214"></script>
-  <script src="barrar.js?v=214"></script>
-  <script src="faltas.js?v=214"></script>
-  <script src="motor.js?v=214"></script>
-  <script src="filas.js?v=214"></script>
-  <script src="filtros.js?v=214"></script>
+  <script src="config.js?v=215"></script>
+  <script src="mapa-brasil.js?v=215"></script>
+  <script src="troca-notas.js?v=215"></script>
+  <script src="app.js?v=215"></script>
+  <script src="ordenar.js?v=215"></script>
+  <script src="menu.js?v=215"></script>
+  <script src="ajuda.js?v=215"></script>
+  <script src="documentos.js?v=215"></script>
+  <script src="barrar.js?v=215"></script>
+  <script src="faltas.js?v=215"></script>
+  <script src="motor.js?v=215"></script>
+  <script src="filas.js?v=215"></script>
+  <script src="filtros.js?v=215"></script>
 </body>
 </html>

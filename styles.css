@@ -1078,3 +1078,4 @@ body.fundo-escuro #rp-filas > .titulo-pagina .info-base { color: #e8edf7; }
 .fo-casos { max-width: none; }
 .fo-multi-lista label { flex-direction: row !important; justify-content: flex-start !important; align-items: center !important; text-align: left !important; font-weight: 500; }
 .fo-multi-lista label input[type=checkbox] { width: auto !important; min-width: 0 !important; margin: 0; flex: 0 0 auto; accent-color: #f5c84b; }
+.tabela-ms.sem-resp th:nth-child(2), .tabela-ms.sem-resp td:nth-child(2) { display: none; }   /* Responsáveis não é mais usado (Brenda, 19/11) */
