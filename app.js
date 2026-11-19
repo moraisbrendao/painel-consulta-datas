@@ -4182,8 +4182,13 @@ ${extra}
   // por que o ticket não tem Parcial/Total: quadro dentro do card "Totais × parciais"
   const SEM_TP = { "sq-fin": "Finalizados, ticket sem a informação", "sq-ab": "Em aberto, ticket ainda sem a informação", "sq-rec": "Recup. de crédito, sem a informação", err: "Robô não conseguiu ler o ticket", nl: "Ainda não lidos pelo robô" };
   const semTpMot = (r) => tpRep(r) ? "" : !r._it ? "nl" : r._it.erro ? "err" : "sq-" + sitRep(r);
-  const quebraSemTp = (L) => { const c = {}; L.forEach((r) => { const k = semTpMot(r); if (k) c[k] = (c[k] || 0) + 1; });
-    return `<span class="kpi-quebra">${Object.keys(SEM_TP).filter((k) => c[k]).map((k) => `<span class="kpi-q" data-semtp="${k}" title="Clique para ver esses tickets"><span>${SEM_TP[k]}</span><b>${fmt(c[k])}</b></span>`).join("")}</span>`; };
+  // onde está cada ticket sem Parcial/Total: finalizado, recuperação de crédito ou em qual fila (aguardando análise de reposição etc.)
+  const ondeSemTp = (r) => (sitRep(r) === "fin" ? "fin" : sitRep(r) === "rec" ? "rec" : filaRep(r) || SEM_FILA);
+  const quebraSemTp = (L) => { const c = {}, sub = {}; L.forEach((r) => { const k = semTpMot(r); if (!k) return; c[k] = (c[k] || 0) + 1; const o = ondeSemTp(r); (sub[k] = sub[k] || {})[o] = (sub[k][o] || 0) + 1; });
+    const rot = (o) => (o === "fin" ? "finalizados" : o === "rec" ? "Recuperação de crédito" : "fila " + o);
+    return `<span class="kpi-quebra">${Object.keys(SEM_TP).filter((k) => c[k]).map((k) => { const ss = Object.entries(sub[k]).sort((a, b) => b[1] - a[1]);
+      const det = ss.length > 1 || (ss[0] && !["fin", "rec"].includes(ss[0][0])) ? ss.map(([o, n]) => `<span class="kpi-q kpi-q2" data-semtp="${k}"${["fin", "rec"].includes(o) ? "" : ` data-fila="${esc(o)}"`} title="Clique para ver esses tickets"><span>↳ ${esc(rot(o))}</span><b>${fmt(n)}</b></span>`).join("") : "";
+      return `<span class="kpi-q" data-semtp="${k}" title="Clique para ver esses tickets"><span>${SEM_TP[k]}</span><b>${fmt(c[k])}</b></span>${det}`; }).join("")}</span>`; };
   const clic = (f, v, txt) => `<a href="#" class="rp-ir" data-f="${f}" data-v="${esc(v)}">${esc(txt)}</a>`;
 
   function filtrarRep() {
@@ -4493,7 +4498,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("click", (e) => {
     const q0 = e.target.closest("[data-semtp]");
-    if (q0) { e.preventDefault(); e.stopPropagation(); if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba; repCard = q0.dataset.semtp; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
+    if (q0) { e.preventDefault(); e.stopPropagation(); if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba; repCard = q0.dataset.semtp; pvDet = q0.dataset.fila ? { fila: q0.dataset.fila } : null; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); return; }
     const k = e.target.closest("button[data-card]");
     if (k && k.dataset.card === "garg") { e.preventDefault(); e.stopPropagation(); gargAberto = !gargAberto; filtrarRep();
       if (gargAberto) { const q = $(repAba === "geral" ? "rpg-garg" : "rpf-garg"); if (q) q.scrollIntoView({ block: "start", behavior: "smooth" }); } return; }
