@@ -1010,3 +1010,6 @@ body.fundo-escuro #rp-faltas > .titulo-pagina .sub b { color: #fff; }
 .mt-etapas h3 { margin: 0 0 4px; }
 .mt-tab { table-layout: fixed; }
 .mt-tab th:first-child, .mt-tab td:first-child { width: 40%; }
+.btn.verde { background: #1f9d55; border-color: #1f9d55; color: #fff; }
+.btn.verde:hover { background: #17834a; }
+.btn.amarelo:disabled { opacity: 1; cursor: progress; }

@@ -123,10 +123,28 @@
   $("fv-limpar").addEventListener("click", () => { $("fv-busca").value = ""; $("fv-transp").value = ""; $("fv-motivo").value = ""; card = "todos"; desenhar(); });
   $("fv-excel").addEventListener("click", () => { const V = L.filter(passa); if (!V.length) return toast("Nada para exportar.", true);
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB].concat(linhasXls(V))), "Falta de volumes"); XLSX.writeFile(wb, `falta_volumes_${new Date().toISOString().slice(0, 10)}.xlsx`); });
+  // botão: amarelo enquanto o robô confere, verde quando terminou (lê o andamento que o robô grava em robo_estado)
+  let pedidoEm = null, estado = null;
+  function pintarBotao() {
+    const b = $("fv-conferir"), v = estado || {}, fimOk = v.fim && (!pedidoEm || v.fim > pedidoEm);
+    const rodando = v.rodando || (pedidoEm && !fimOk);
+    b.classList.remove("amarelo", "verde", "contorno");
+    if (rodando) { b.classList.add("amarelo"); b.textContent = v.rodando ? "⏳ Conferindo retornos…" : "⏳ Robô chamado, já começa…"; b.disabled = true; }
+    else if (v.fim && Date.now() - Date.parse(v.fim) < 6 * 3600e3) { b.classList.add("verde"); b.textContent = `✓ Conferido às ${new Date(v.fim).toLocaleTimeString("pt-BR", { timeStyle: "short" })} · conferir de novo`; b.disabled = false; b.title = v.resumo || ""; }
+    else { b.classList.add("contorno"); b.textContent = "Conferir retornos agora"; b.disabled = false; }
+  }
+  async function lerEstado() {
+    try { const { data } = await sb().from("robo_estado").select("valor").eq("nome", "andamento:faltas").limit(1); const antes = estado; estado = (data && data[0] && data[0].valor) || null;
+      if (antes && antes.rodando && estado && !estado.rodando) { pedidoEm = null; carregar(); toast("Robô terminou de conferir os retornos."); }
+      if (estado && estado.fim && pedidoEm && estado.fim > pedidoEm) pedidoEm = null;
+    } catch (_) {}
+    pintarBotao();
+  }
   $("fv-conferir").addEventListener("click", async () => {
-    try { const { error } = await sb().rpc("rodar_robo_faltas"); if (error) throw error; toast("Robô chamado: ele vai abrir cada ticket no 360 e a NF no portal (leva uns minutos). A tela atualiza sozinha."); }
+    try { const { error } = await sb().rpc("rodar_robo_faltas"); if (error) throw error; pedidoEm = new Date().toISOString(); pintarBotao(); toast("Robô chamado: ele vai abrir cada ticket no 360 e a NF no portal (leva uns minutos). A tela atualiza sozinha."); }
     catch (e) { toast(/rodar_robo_faltas|function/i.test(e.message || "") ? "Rode a parte 50 no Supabase." : e.message || String(e), true); }
   });
+  setInterval(() => { if (!$("rp-faltas").hidden && !document.hidden) lerEstado(); }, 10000);
   $("fv-arq").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
     try {
@@ -155,7 +173,7 @@
     } catch (err) { toast(/importar_faltas|function/i.test(err.message || "") ? "Rode a parte 50 no Supabase antes de enviar a planilha." : err.message || String(err), true); }
   });
   // carrega quando a aba aparece; enquanto aberta, relê a cada 30 s (o robô vai preenchendo)
-  new MutationObserver(() => { if (!$("rp-faltas").hidden) carregar(); }).observe($("rp-faltas"), { attributes: true, attributeFilter: ["hidden"] });
+  new MutationObserver(() => { if (!$("rp-faltas").hidden) { carregar(); lerEstado(); } }).observe($("rp-faltas"), { attributes: true, attributeFilter: ["hidden"] });
   setInterval(() => { if (!$("rp-faltas").hidden && $("rp-faltas").offsetParent && !document.hidden && !document.activeElement.closest("#rp-faltas textarea")) carregar(); }, 30000);
-  if (!$("rp-faltas").hidden) carregar();
+  if (!$("rp-faltas").hidden) { carregar(); lerEstado(); }
 })();
