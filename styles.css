@@ -1238,3 +1238,12 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 button.kpi > i { top: 6px; right: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 15px; color: #7c8596; cursor: pointer; transition: background .15s, color .15s; }
 button.kpi > i:hover { background: rgba(13,34,64,.1); color: var(--marinho); }
 button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
+/* Barrar › Erro: verificar › quadro de anotações do portal */
+.br-an-q { border: 1px solid #cfe0f5; background: #f5f9ff; border-radius: 10px; padding: 10px 12px; margin: 10px 0 14px; display: flex; flex-direction: column; gap: 6px; }
+.br-an-q .br-et-cab { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.br-an-q .br-an-xls { margin-left: auto; }
+.br-an-lista { max-height: 420px; overflow: auto; }
+.br-an-lista thead th { position: sticky; top: 0; z-index: 1; }
+.br-an-lista .br-anot { max-width: 520px; padding: 3px 0; border-bottom: 1px dashed #e3e8f0; }
+.br-an-lista .br-anot:last-of-type { border-bottom: 0; }
+.chip.mini { font-size: 10px; padding: 1px 6px; }

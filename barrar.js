@@ -99,8 +99,13 @@
     return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar. Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
       + xs.map((x) => { const d = diasDesde(x.ticket_criado); return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · ${ultStatus(x)}`; }).join("\n");
   }
-  const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || ""]; });
-  const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô"];
+  const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || "", anotTexto(x)]; });
+  const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô", "Anotações no portal"];
+  // anotações do portal (Barrar Entrega › Anotações), mais recente primeiro
+  const anotsDe = (x) => { const p = x.portal || {}; const A = (p.anotacoes || []).filter((a) => a && a.texto);
+    const dk = (q) => { const m = String(q || "").match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2})/); return m ? `${m[3]}${m[2]}${m[1]}${m[4]}${m[5]}` : ""; };
+    return A.length ? A.map((a, i) => [a, i]).sort((u, v) => dk(v[0].quando).localeCompare(dk(u[0].quando)) || v[1] - u[1]).map(([a]) => a) : p.anotacao ? [{ quando: "", texto: String(p.anotacao).replace(/\s*Close\s*$/i, "") }] : []; };
+  const anotTexto = (x) => anotsDe(x).map((a) => `${a.quando ? a.quando + ": " : ""}${a.texto}`).join(" | ");
   function baixarErro(grupos, nome) {
     const wb = XLSX.utils.book_new(); const usados = new Set();
     if (grupos.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(grupos.flatMap(([, xs]) => linhasXls(xs)))), "Todas");
@@ -111,20 +116,29 @@
     let box = $("br-erro-transp");
     if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
     box.hidden = card !== "manual"; if (box.hidden) return;
-    const G = gruposErro();
-    box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem anotação no portal: a transportadora ainda não atuou. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
+    const G = gruposErro(), C = G.flatMap(([t, xs]) => xs.filter((x) => anotsDe(x).length).map((x) => [t, x]));
+    const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button>` : ""}</div>
+      ${C.length ? `<p class="s">A transportadora escreveu algo no portal, mas o robô não achou devolução no rastreio nem "não recebeu" na anotação. Leia e decida.</p>
+      <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th></tr></thead><tbody>${C.map(([t, x]) => `<tr>
+        <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}</td>
+        <td>${esc(t)}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td>
+        <td>${anotsDe(x).map((a) => `<div class="br-anot">${a.quando ? `<span class="s">${esc(a.quando)}</span> ` : ""}${esc(a.texto)}</div>`).join("")}${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}</td>
+        <td class="s">${esc(ultStatus(x))}</td></tr>`).join("")}</tbody></table></div>` : `<p class="s">Nenhuma nota em "Erro: verificar" tem anotação no portal.</p>`}</div>`;
+    box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem "não recebeu" no portal. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
       ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
+      ${quadroAnot}
       <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
         return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
-          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Último status</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${esc(ultStatus(x))}</td></tr>`).join("")}</tbody></table></div>
+          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Último status</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${esc(ultStatus(x))}${anotsDe(x).length ? ` <span class="chip azul mini" title="${esc(anotTexto(x))}">📝 anotação</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}">${esc(msgTransp(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
-    box._G = G;
+    box._G = G; box._C = C;
   }
   document.addEventListener("click", async (e) => {
     const box = $("br-erro-transp"); if (!box || !box.contains(e.target)) return;
     const G = box._G || [], i = Number((e.target.closest("[data-i]") || {}).dataset?.i);
     if (e.target.closest(".br-et-todas")) return baixarErro(G, "todas");
+    if (e.target.closest(".br-an-xls")) { const C = box._C || [], wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(linhasXls(C.map(([, x]) => x)))), "Com anotação"); return XLSX.writeFile(wb, `barrar_com_anotacao_${new Date().toISOString().slice(0, 10)}.xlsx`); }
     if (e.target.closest(".br-et-xls")) return baixarErro([G[i]], G[i][0].normalize("NFD").replace(/[^\w]+/g, "_").slice(0, 30));
     const txt = () => (box.querySelector(`.br-et-msg[data-i="${i}"]`) || {}).value || "";
     if (e.target.closest(".br-et-copiar")) { try { await navigator.clipboard.writeText(txt()); toast("Mensagem copiada. Cole no WhatsApp da transportadora."); } catch { const t = box.querySelector(`.br-et-msg[data-i="${i}"]`); t.select(); document.execCommand("copy"); toast("Mensagem copiada."); } return; }
@@ -183,8 +197,8 @@
     marcadas.clear(); desenhar(); toast(`${comSug.length} aprovada(s).`);
   });
   $("br-desfazer").addEventListener("click", async () => { await salvarDecisao([...marcadas], null); marcadas.clear(); desenhar(); });
-  $("br-linhas").addEventListener("click", async (e) => {
-    const a = e.target.closest(".br-print"); if (!a) return; e.preventDefault();
+  document.addEventListener("click", async (e) => {
+    const a = e.target.closest(".br-print"); if (!a || !(e.target.closest("#br-linhas") || e.target.closest("#br-erro-transp"))) return; e.preventDefault();
     try { let u = urls.get(a.dataset.p); if (!u) { const { data, error } = await sb().storage.from("barrar").createSignedUrl(a.dataset.p, 3600); if (error) throw error; u = data.signedUrl; urls.set(a.dataset.p, u); } window.open(u, "_blank", "noopener"); }
     catch (err) { toast("Não consegui abrir o print: " + (err.message || err), true); }
   });

@@ -129,7 +129,7 @@
       "Clique em <b>Conferir agora</b>: o robô olha o rastreio e as anotações do portal e tira print da anotação.",
       "Confira a <b>Sugestão do robô</b>, marque as notas e clique em <b>Aprovar sugestão</b> (ou escolha a decisão na linha).",
       "Clique em <b>Mandar para o portal</b>: o robô aperta o ✓ (barrado) ou o ✗ (não barrado, com opção e motivo) só nas aprovadas.",
-      "Card <b>Erro: verificar</b>: mostra um quadrinho por transportadora com as notas que ela ainda não atuou (dias pendentes e último status). Use <b>Copiar mensagem</b> ou <b>WhatsApp</b> para cobrar e <b>Excel</b> para mandar a lista.",
+      "Card <b>Erro: verificar</b>: mostra um quadrinho por transportadora com as notas que ela ainda não atuou (dias pendentes e último status). Use <b>Copiar mensagem</b> ou <b>WhatsApp</b> para cobrar e <b>Excel</b> para mandar a lista. Acima dos quadrinhos, o quadro <b>Com anotação da transportadora no portal</b> mostra as notas em que a transportadora escreveu algo no portal (todas as anotações, mais recente primeiro, com o print) para você ler e decidir.",
     ], "Transportadora diferente entre o pedido e o portal aparece no card <b>Transportadora diferente</b>. Os entregues no rastreio o robô aprova e aplica sozinho; o resto só com a sua aprovação. O quadro <b>Envios ao portal</b> mostra cada envio por horário, separando o que você aprovou e o que o robô fez sozinho."],
 
     ["sac", "Consulta SAC", "Consulta para o SAC: pedidos vencidos ou que vencem hoje/amanhã, com a nova data e a observação da Logística.", "Quando o cliente pergunta do pedido.", [
