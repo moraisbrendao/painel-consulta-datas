@@ -1197,3 +1197,12 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 .topo-logo { height: 20px; width: auto; }
 @media (max-width: 760px) { .topo-logo { height: 15px; } }
 .topo-titulo { border-left-color: var(--borda); }
+/* Atrasos por transportadora e faixa: colunas a vencer (23/11) */
+.tabela-faixa tr.fx-grupo th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 0; padding-bottom: 0; }
+.tabela-faixa .fx-g-atr { color: var(--vermelho); text-align: center; }
+.tabela-faixa .fx-g-av { color: #b45309; text-align: center; }
+.tabela-faixa td.num.av { color: #b45309; }
+.tabela-faixa td.num.av.vazio-c { color: #c4c9d2; }
+.tabela-faixa .fx-sep { border-left: 2px solid var(--borda); }
+.tabela-faixa td.av-tot { color: var(--texto); }
+.login-logo { display: block; margin: 0 auto 10px; }

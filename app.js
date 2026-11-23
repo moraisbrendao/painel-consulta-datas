@@ -1441,7 +1441,7 @@ ${extra}
     gAtr = { fato: deFato, ocrep: comOcRep, sairam, semexp: semExp };
 
     desenharProdutividade(L, hoje);
-    desenharFaixas(atr);
+    desenharFaixas(atr, L);
     // distribuição por situação
     const porSit = new Map(SIT.map(([k]) => [k, 0])); L.forEach((r) => porSit.set(r._sit, porSit.get(r._sit) + 1));
     const maxS = Math.max(1, ...porSit.values());
@@ -1563,16 +1563,24 @@ ${extra}
   }
   let gProd = {};
 
-  function desenharFaixas(atr) {
+  // a vencer (em aberto, ainda no prazo), pela data prometida: Brenda 23/11 pediu junto do quadro de atrasos
+  const G_VENCER = [["Hoje", 0, 0], ["Amanhã", 1, 1], ["2 dias", 2, 2], ["3 a 5 dias", 3, 5], ["6 a 10 dias", 6, 10]];
+  const vencerDe = (r) => (r._fechado || r._atraso || r._d === null || r._d === undefined ? -1 : G_VENCER.findIndex(([, a, b]) => r._d >= a && r._d <= b));
+  function desenharFaixas(atr, base = gFiltradosCache) {
     const dim = $("g-faixa-dim").value, [nomeDim, fd] = G_DIM[dim];
     $("g-faixa-dim-nome").textContent = nomeDim;
-    const porL = new Map();
-    atr.forEach((r) => { const k = fd(r); const x = porL.get(k) || new Array(FAIXAS.length).fill(0); const i = faixaDe(r); if (i >= 0) x[i]++; porL.set(k, x); });
-    const tot = FAIXAS.map((_, i) => [...porL.values()].reduce((s, x) => s + x[i], 0));
-    $("g-faixa-cab").innerHTML = `<tr><th>Rótulos de linha</th>${FAIXAS.map(([n], i) => `<th class="num clic" data-fx="${i}">${n}</th>`).join("")}<th class="num">Total</th></tr>`;
-    $("g-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, x.reduce((a, b) => a + b, 0)]).sort((a, b) => b[2] - a[2])
-      .map(([k, x, t]) => `<tr><td class="clic" data-lin="${esc(k)}">${esc(k)}</td>${x.map((n, i) => `<td class="num ${n ? "clic" : "vazio-c"}" ${n ? `data-lin="${esc(k)}" data-fx="${i}"` : ""}>${n ? fmt(n) : "·"}</td>`).join("")}<td class="num tot">${fmt(t)}</td></tr>`).join("")
-      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${tot.map((n) => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(atr.length)}</td></tr>` : "");
+    const av = (base || []).filter((r) => vencerDe(r) >= 0);
+    const porL = new Map(), novo = () => ({ a: new Array(FAIXAS.length).fill(0), v: new Array(G_VENCER.length).fill(0) });
+    atr.forEach((r) => { const k = fd(r); const x = porL.get(k) || novo(); const i = faixaDe(r); if (i >= 0) x.a[i]++; porL.set(k, x); });
+    av.forEach((r) => { const k = fd(r); const x = porL.get(k) || novo(); x.v[vencerDe(r)]++; porL.set(k, x); });
+    const soma = (xs) => xs.reduce((a, b) => a + b, 0);
+    const totA = FAIXAS.map((_, i) => [...porL.values()].reduce((s, x) => s + x.a[i], 0)), totV = G_VENCER.map((_, i) => [...porL.values()].reduce((s, x) => s + x.v[i], 0));
+    $("g-faixa-cab").innerHTML = `<tr class="fx-grupo"><th></th><th colspan="${FAIXAS.length + 1}" class="fx-g-atr">Atrasados</th><th colspan="${G_VENCER.length + 1}" class="fx-g-av">A vencer (no prazo)</th></tr>
+      <tr><th>Rótulos de linha</th>${FAIXAS.map(([n], i) => `<th class="num clic" data-fx="${i}">${n}</th>`).join("")}<th class="num">Total</th>${G_VENCER.map(([n], i) => `<th class="num clic av${i ? "" : " fx-sep"}" data-fv="${i}">${n}</th>`).join("")}<th class="num">Total</th></tr>`;
+    const cel = (n, k, attr, cls) => `<td class="num ${cls} ${n ? "clic" : "vazio-c"}" ${n ? `data-lin="${esc(k)}" ${attr}` : ""}>${n ? fmt(n) : "·"}</td>`;
+    $("g-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, soma(x.a), soma(x.v)]).sort((a, b) => b[2] - a[2] || b[3] - a[3])
+      .map(([k, x, ta, tv]) => `<tr><td class="clic" data-lin="${esc(k)}">${esc(k)}</td>${x.a.map((n, i) => cel(n, k, `data-fx="${i}"`, "")).join("")}<td class="num tot">${ta ? fmt(ta) : "·"}</td>${x.v.map((n, i) => cel(n, k, `data-fv="${i}"`, `av${i ? "" : " fx-sep"}`)).join("")}<td class="num tot av-tot">${tv ? fmt(tv) : "·"}</td></tr>`).join("")
+      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${totA.map((n) => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(atr.length)}</td>${totV.map((n, i) => `<td class="num${i ? "" : " fx-sep"}">${fmt(n)}</td>`).join("")}<td class="num">${fmt(av.length)}</td></tr>` : "");
     $("g-faixa-todos").textContent = `Extrair todos (${fmt(atr.length)})`;
   }
 
@@ -1681,6 +1689,8 @@ ${extra}
   $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));
   document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx]"); if (!c) return;
     const fd = G_DIM[$("g-faixa-dim").value][1], lin = c.dataset.lin, fx = c.dataset.fx !== undefined ? +c.dataset.fx : null;
+    if (c.dataset.fv !== undefined || (!c.dataset.fx && c.closest("td") && c.closest("td").classList.contains("av"))) { const fv = c.dataset.fv !== undefined ? +c.dataset.fv : null;
+      return selecionar(`A vencer${lin ? " · " + lin : ""}${fv !== null ? " · " + (fv < 2 ? "vence " + G_VENCER[fv][0].toLowerCase() : "em " + G_VENCER[fv][0]) : ""}`, (L) => L.filter((r) => vencerDe(r) >= 0 && (!lin || fd(r) === lin) && (fv === null || vencerDe(r) === fv))); }
     selecionar(`Atrasados${lin ? " · " + lin : ""}${fx !== null ? " · " + FAIXAS[fx][0] : ""}`, (L) => L.filter((r) => r._atraso && (!lin || fd(r) === lin) && (fx === null || faixaDe(r) === fx))); });
   $("g-faixa-todos").addEventListener("click", () => { selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados)); baixarGLista(); });
   $("g-situacao").addEventListener("click", (e) => { const b = e.target.closest("[data-sit]"); if (!b) return; const k = b.dataset.sit;
