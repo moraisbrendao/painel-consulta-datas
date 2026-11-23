@@ -2940,9 +2940,11 @@ ${extra}
       if (iso > limite) return problemas.push({ linha: i + 1, pedido, motivo: `data ${br(iso)} está a mais de 6 meses (confira o ano)` });
       const x = porPedido.get(pedido) || { pedido, datas: new Set(), linhas: [] }; x.datas.add(iso); x.linhas.push(i + 1); porPedido.set(pedido, x);
     });
-    const prontos = [];
+    const prontos = [], feitos = new Map(apFila.filter((r) => r.status === "alterado" && r.nova_data && String(r.nova_data).slice(0, 10) >= hoje).map((r) => [r.pedido, String(r.nova_data).slice(0, 10)]));
     porPedido.forEach((x) => {
-      if (x.datas.size > 1) problemas.push({ linha: x.linhas.join(", "), pedido: x.pedido, motivo: `o mesmo pedido com ${x.datas.size} datas diferentes (${[...x.datas].map(br).join(" e ")})` });
+      // regra da Brenda (23/11): já alterado na Intelipost e a nova data ainda não venceu → não altera de novo
+      if (feitos.has(x.pedido)) problemas.push({ linha: x.linhas.join(", "), pedido: x.pedido, motivo: `já foi alterado na Intelipost para ${br(feitos.get(x.pedido))}, que ainda não venceu` });
+      else if (x.datas.size > 1) problemas.push({ linha: x.linhas.join(", "), pedido: x.pedido, motivo: `o mesmo pedido com ${x.datas.size} datas diferentes (${[...x.datas].map(br).join(" e ")})` });
       else prontos.push({ pedido: x.pedido, nova_data: [...x.datas][0] });
     });
     return { prontos, problemas };
@@ -3027,13 +3029,14 @@ ${extra}
         if (d < hoje) { cont.vencida++; continue; }
         if (prom && prom >= d) { cont.antes++; continue; }   // a data prometida ao cliente já é igual ou depois da nova data
         const f = naFila.get(p.pedido); if (f && String(f.nova_data).slice(0, 10) === d && f.status !== "erro") { cont.jaFeito++; continue; }
+        if (f && f.status === "alterado" && f.nova_data && String(f.nova_data).slice(0, 10) >= hoje) { cont.jaFeito++; continue; }   // já alterado e a data não venceu
         if (String(p.prev_atual || "").slice(0, 10) === d) { cont.igual++; continue; }
         linhas.push(`${p.pedido} ${br(d)}`);
       }
       const atual = $("ap-texto").value.trim(), ja = new Set(atual.split(/\r?\n/).map((l) => l.trim().split(/[\s;,]+/)[0]).filter(Boolean));
       const novas = linhas.filter((l) => !ja.has(l.split(" ")[0]));
       $("ap-texto").value = (atual ? atual + "\n" : "") + novas.join("\n"); mostrarConferencia();
-      toast(`${fmt(novas.length)} pedido(s) trazidos do Preventivo e SSW. Fora: ${fmt(cont.vencida)} com data vencida · ${fmt(cont.antes)} com a data prometida igual ou depois da nova · ${fmt(cont.jaFeito)} já mandados com essa data · ${fmt(cont.igual)} já com essa data na Intelipost. Confira e clique em Colocar na fila.`);
+      toast(`${fmt(novas.length)} pedido(s) trazidos do Preventivo e SSW. Fora: ${fmt(cont.vencida)} com data vencida · ${fmt(cont.antes)} com a data prometida igual ou depois da nova · ${fmt(cont.jaFeito)} já mandados ou já alterados com data que não venceu · ${fmt(cont.igual)} já com essa data na Intelipost. Confira e clique em Colocar na fila.`);
     } catch (err) { toast("Não consegui trazer: " + (err.message || err), true); }
     finally { bt.disabled = false; }
   });
@@ -3045,7 +3048,7 @@ ${extra}
     if (!forcar && Date.now() - apCarregadoEm < 20000) return desenharAlterar();
     try {
       const [lista, est] = await Promise.all([buscarTudo("fila_intelipost", "pedido"), sb.from("robo_estado").select("*").eq("nome", "intelipost").limit(1)]);
-      apFila = lista; apCarregadoEm = Date.now();
+      apFila = lista; apCarregadoEm = Date.now(); if ($("ap-texto").value.trim()) mostrarConferencia();
       const e = est && est.data && est.data[0] && est.data[0].valor;
       $("ap-robo-alerta").hidden = !(e && (e.tipo === "erro" || e.tipo === "aviso"));
       if (e && (e.tipo === "erro" || e.tipo === "aviso")) { $("ap-robo-titulo").textContent = e.titulo || "O robô da Intelipost parou."; $("ap-robo-texto").textContent = (e.msg || "") + (est.data[0].atualizado_em ? ` (${new Date(est.data[0].atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })})` : ""); }
