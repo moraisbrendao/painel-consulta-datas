@@ -2984,3 +2984,8 @@ begin
 end $$;
 revoke all on function public.importar_desmembrados(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_desmembrados(jsonb, boolean, text, integer) to authenticated;
+
+
+-- ============ PARTE 61: Falta de volumes · dias sem retorno contam da nossa última cobrança no 360 (Externo) ============
+alter table public.falta_volumes add column if not exists cobrado_em timestamptz;   -- última mensagem "Externo" da nossa equipe no ticket (ex.: Eduardo)
+notify pgrst, 'reload schema';
