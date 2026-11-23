@@ -46,12 +46,16 @@
       : `<p class="s">Nenhuma nota enviada ao portal ainda.</p>`;
   }
 
-  async function carregar() {
+  let assinatura = "";
+  async function carregar(auto) {
     try {
       const out = []; for (let de = 0; ; de += 1000) { const { data, error } = await sb().from("barrar_entrega").select("*").eq("na_planilha", true).order("ticket_criado", { ascending: true }).range(de, de + 999); if (error) throw error; out.push(...data); if (data.length < 1000) break; }
       const hs = await (async () => { try { return await sb().from("barrar_entrega").select("nf,ticket,decisao,decisao_opcao,decisao_por,portal_status,portal_msg,portal_em,ticket_status,ticket_msg").not("portal_status", "is", null).order("portal_em", { ascending: false }).limit(2000); } catch (_) { return { error: true }; } })();
       H = hs.error ? [] : hs.data || [];
       const inf = await sb().from("barrar_info").select("*").limit(1);
+      // atualização automática (a cada 30 s): se nada mudou, não redesenha (não mexe na rolagem de quem está lendo)
+      const sig = JSON.stringify([out, H, (inf.data || [])[0] || null]);
+      if (auto && sig === assinatura && ok) return; assinatura = sig;
       L = out; info = (inf.data || [])[0] || null; ok = true;
     } catch (e) { ok = false; L = []; $("br-info").textContent = /barrar_entrega|does not exist|schema cache/i.test(e.message || "") ? "Para usar esta aba, rode a parte 49 no Supabase." : "Não consegui carregar: " + (e.message || e); }
     carregou = true; desenhar();
@@ -116,6 +120,9 @@
     let box = $("br-erro-transp");
     if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
     box.hidden = card !== "manual"; if (box.hidden) return;
+    const rolT = [...box.querySelectorAll(".br-et-lista, .tabela-wrap")].map((el) => el.scrollTop);
+    const msgs = new Map([...box.querySelectorAll(".br-et-msg")].filter((t) => t.dataset.editada).map((t) => [t.dataset.t, t.value]));
+    const yAntes = window.scrollY;
     const G = gruposErro();
     const C = L.filter((x) => x.portal_status !== "feito" && sit({ ...x, decisao: null, portal_status: null }) === "manual" && anotsDe(x).length)
       .map((x) => [alvoTransp(x), x]).sort((a, b) => (diasDesde(b[1].ticket_criado) ?? -1) - (diasDesde(a[1].ticket_criado) ?? -1) || String(a[1].nf).localeCompare(String(b[1].nf)));
@@ -132,9 +139,12 @@
       <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
         return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
           <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Último status</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${esc(ultStatus(x))}${anotsDe(x).length ? ` <span class="chip azul mini" title="${esc(anotTexto(x))}">📝 anotação</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
-          <textarea class="br-et-msg" rows="6" data-i="${i}">${esc(msgTransp(t, xs))}</textarea>
+          <textarea class="br-et-msg" rows="6" data-i="${i}" data-t="${esc(t)}">${esc(msgTransp(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
     box._G = G; box._C = C; contarAnot();
+    box.querySelectorAll(".br-et-lista, .tabela-wrap").forEach((el, k) => { if (rolT[k]) el.scrollTop = rolT[k]; });
+    box.querySelectorAll(".br-et-msg").forEach((t) => { if (msgs.has(t.dataset.t)) { t.value = msgs.get(t.dataset.t); t.dataset.editada = "1"; } });
+    if (Math.abs(window.scrollY - yAntes) > 2) window.scrollTo(0, yAntes);
   }
   document.addEventListener("click", async (e) => {
     const box = $("br-erro-transp"); if (!box || !box.contains(e.target)) return;
@@ -239,7 +249,8 @@
     toast(txt);
   };
   $("br-conferir").addEventListener("click", () => robo("barrar", "Robô chamado: ele confere o rastreio e o portal de cada nota. Acompanhe pelo aviso no canto da tela."));
-  document.addEventListener("input", (e) => { const t = e.target.closest("#br-erro-transp .br-an-mot"); if (!t) return;
+  document.addEventListener("input", (e) => { const m = e.target.closest("#br-erro-transp .br-et-msg"); if (m) m.dataset.editada = "1";
+    const t = e.target.closest("#br-erro-transp .br-an-mot"); if (!t) return;
     const x = L.find((y) => y.nf === t.dataset.nf); const r = rasc.get(t.dataset.nf) || { v: valDec(x) }; r.mot = t.value; rasc.set(t.dataset.nf, r); contarAnot(); });
   async function enviarAnot(box) {
     const C = (box._C || []).map(([, x]) => x).filter((x) => x.portal_status !== "feito");
@@ -298,6 +309,6 @@
   });
   // carrega quando a página aparece; enquanto aberta, relê a cada 30 s (o robô vai preenchendo)
   new MutationObserver(() => { if (!$("pagina-barrar").hidden) carregar(); }).observe($("pagina-barrar"), { attributes: true, attributeFilter: ["hidden"] });
-  setInterval(() => { if (!$("pagina-barrar").hidden && $("pagina-barrar").offsetParent && !document.hidden && !document.activeElement.closest("#pagina-barrar textarea, #pagina-barrar select")) carregar(); }, 30000);
+  setInterval(() => { if (!$("pagina-barrar").hidden && $("pagina-barrar").offsetParent && !document.hidden && !document.activeElement.closest("#pagina-barrar textarea, #pagina-barrar select")) carregar(true); }, 30000);
   if (!$("pagina-barrar").hidden) carregar();
 })();
