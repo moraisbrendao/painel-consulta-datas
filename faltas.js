@@ -115,17 +115,13 @@
   // Sem retorno: quadrinhos por transportadora, separados por motivo, com dias parados, mensagem e Excel
   function grupos() {
     const m = new Map(); L.filter((x) => sit(x) === "sem").filter((x) => (!$("fv-transp").value || transpDe(x) === $("fv-transp").value) && (!$("fv-motivo").value || motivoDe(x) === $("fv-motivo").value))
-      .forEach((x) => { const t = transpDe(x); m.set(t, (m.get(t) || []).concat(x)); });
+      .forEach((x) => { const t = (window.__nomeTranspBase ? window.__nomeTranspBase(transpDe(x)) : "") || transpDe(x); m.set(t, (m.get(t) || []).concat(x)); });   // uma por transportadora, só o nome (igual ao Barrar)
     return [...m.entries()].map(([t, xs]) => [t, xs.sort((a, b) => (dias(abertoEm(b)) ?? -1) - (dias(abertoEm(a)) ?? -1))]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR"));
   }
   const porMotivo = (xs) => { const m = new Map(); xs.forEach((x) => m.set(motivoDe(x), (m.get(motivoDe(x)) || []).concat(x))); return [...m.entries()].sort((a, b) => b[1].length - a[1].length); };
-  function mensagem(t, xs) {
-    const pd = new Map(); xs.forEach((x) => { const d = dias(abertoEm(x)); pd.set(d, (pd.get(d) || 0) + 1); });
-    const partes = [...pd.entries()].sort((a, b) => (b[0] ?? -1) - (a[0] ?? -1)).map(([d, n]) => d === null ? `${n} sem data` : `${n} há ${plural(d, "dia", "dias")}`);
-    const fim = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0];
-    const mot = porMotivo(xs).map(([m, ys]) => `${m} (${ys.length})`).join(", ");
-    const venc = xs.filter(prazoVencido).length;
-    return `Olá, ${t}! Estamos com ${plural(xs.length, "caso", "casos")} de ${mot} parados sem retorno de vocês: ${fim}.${venc ? ` ${venc === 1 ? "Um deles já passou" : venc + " já passaram"} do prazo limite no portal.` : ""} Precisamos do retorno de vocês para seguir com as tratativas. Conseguem verificar?\n\n`
+  function mensagem(t, xs) {   // texto limpo (Brenda 23/11)
+    const mot = porMotivo(xs).map(([m]) => m).join(" e ");
+    return `Olá, ${t}! Estamos com ${plural(xs.length, "caso", "casos")} de ${mot}. Precisamos do retorno de vocês para seguir com as tratativas. Conseguem verificar?\n\n`
       + xs.map((x) => { const d = dias(abertoEm(x)), pv = prazoVencido(x); return `• NF ${x.nf || "—"} · ${motivoDe(x)}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""}${pv ? ` · prazo limite ${br(pv)} vencido` : ""}`; }).join("\n");
   }
   const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Dias parado", "Prazo limite (portal)", "Prazo vencido", "Data prometida pela transportadora", "Promessa vencida", "Anotações", "Com retorno", "Último retorno em", "Onde", "Quem retornou", "Texto do último retorno", "Todos os retornos"];
@@ -145,7 +141,7 @@
       ${G.length ? `<button type="button" class="btn contorno fv-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
       <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => dias(abertoEm(x)) ?? 0)), venc = xs.filter(prazoVencido).length;
         return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 10 ? "vermelho" : mx >= 5 ? "ambar" : ""}">${plural(xs.length, "caso", "casos")} · mais antigo há ${plural(mx, "dia", "dias")}</span>${venc ? `<span class="chip vermelho">${fmt(venc)} com prazo vencido</span>` : ""}</div>
-          <div class="br-et-lista">${porMotivo(xs).map(([m, ys]) => `<div class="fv-mot">${esc(m)} · ${fmt(ys.length)}</div><table><tbody>${ys.map((x) => `<tr><td>${esc(x.nf || "—")} <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></td><td class="num">${dias(abertoEm(x)) ?? "—"} dias</td><td class="s">${prazoVencido(x) ? "prazo vencido" : (x.portal || {}).prazo ? "prazo " + esc(x.portal.prazo) : ""}</td></tr>`).join("")}</tbody></table>`).join("")}</div>
+          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Motivo</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf || "—")} <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></td><td class="num">${dias(abertoEm(x)) ?? "—"}</td><td class="s">${esc(motivoDe(x))}${prazoVencido(x) ? ` · <span class="txt-vermelho">prazo vencido</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}">${esc(mensagem(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini fv-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini fv-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini fv-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhum caso sem retorno.</p>`}</div>`;
   }

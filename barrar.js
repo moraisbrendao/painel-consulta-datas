@@ -86,6 +86,7 @@
     n = n.replace(/\b(standard|express[oa]?|econ[oô]mic[oa]|filial\s+\w+|ltda|eireli|s\.?\/?a\.?|me|transportes?|log[ií]sticas?|opera[cç][oõ]es|transportadora|solu[cç][oõ]es)\b\.?/gi, " ").replace(/\s+/g, " ").trim().replace(/(\s+e)+$/i, "");
     return n || t;
   }
+  window.__nomeTranspBase = nomeBase;   // faltas.js usa o mesmo agrupamento
   const alvoTransp = (x) => { const r = x.rastreio || {}; return nomeBase(r.redesp_ticket || r.transp_ticket || x.transp_pedido) || "(sem transportadora no ticket)"; };
   const diasDesde = (d) => (d ? Math.max(0, Math.floor((Date.now() - Date.parse(String(d).replace(" ", "T"))) / 864e5)) : null);
   const ultStatus = (x) => { const r = x.rastreio || {}; return r.evento ? `${r.evento}${r.data_evento ? " em " + br(r.data_evento) : ""}` : r.situacao && !/^erro/i.test(r.situacao) ? r.situacao : "sem informação no rastreio"; };
