@@ -462,6 +462,10 @@ if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão
   tabela("DIAS SEM MOVIMENTO NO RASTREIO", (b) => fx(b.ultima_atualizacao ? dd(String(b.ultima_atualizacao).slice(0, 10), hoje) : null, [[2, "0-2"], [6, "3-6"], [14, "7-14"], [29, "15-29"], [1e9, "30+"]]));
   tabela("DIAS DESDE A EXPEDIÇÃO", (b) => fx(b.data_expedicao ? dd(String(b.data_expedicao).slice(0, 10), hoje) : null, [[5, "0-5"], [10, "6-10"], [20, "11-20"], [40, "21-40"], [1e9, "41+"]]));
   tabela("DIAS DE ATRASO", (b) => fx(b.prev_original ? dd(String(b.prev_original).slice(0, 10), hoje) : null, [[0, "no prazo"], [3, "1-3"], [9, "4-9"], [19, "10-19"], [1e9, "20+"]]));
+  const ZONA = { "01": "Centro", "02": "Zona Norte", "03": "Zona Leste", "04": "Zona Sul", "05": "Zona Oeste", "08": "Zona Leste (extremo)" };
+  const zona = (b) => { const c = String((b.extra && b.extra.cep) || "").replace(/\D/g, "").padStart(8, "0"); if (c === "00000000") return "sem CEP"; const z = ZONA[c.slice(0, 2)]; return z ? `SP capital · ${z}` : `fora da capital (CEP ${c.slice(0, 2)}xxx)`; };
+  tabela("POR REGIÃO DO CEP", zona, 12);
+  tabela("REGIÃO x MICRO STATUS (atrasados)", (b) => `${zona(b)} · ${nrm(b.micro_status) || "?"}`, 15);
   tabela("UF x MICRO STATUS (atrasados)", (b) => `${nrm(b.uf) || "?"} · ${nrm(b.micro_status) || "?"}`, 15);
 }
 if (MODO === "parar-tudo") {   // pausa o "Conferir tudo agora" em andamento (pedido da Brenda, 17/11): só marca como terminado
