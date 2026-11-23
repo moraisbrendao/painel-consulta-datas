@@ -118,7 +118,7 @@
     ], "Transportadora diferente entre o pedido e o portal aparece no card <b>Transportadora diferente</b>. Os entregues no rastreio o robô aprova e aplica sozinho; o resto só com a sua aprovação. O quadro <b>Envios ao portal</b> mostra cada envio por horário, separando o que você aprovou e o que o robô fez sozinho."],
 
     ["nl", "Nota não localizada (em Piloto Automático)", "Trata a fila Nota não localizada (Sem Emissão) do Multi360: o robô olha o rastreio e devolve para o barrar ou segue para cancelamento.", "Quando chega a planilha de tickets da fila.", [
-      "Clique em <b>↓ Modelo</b> se precisar do formato e em <b>Enviar planilha</b> com o relatório de tickets da fila.",
+      "Clique em <b>Enviar planilha</b> com o relatório de tickets da fila.",
       "Clique em <b>Rodar o robô</b>: no rastreio → voltar para o barrar; entregue → voltar para o barrar e não barrado (Entregue) no Barrar entrega; fora do rastreio e fora do prazo → seguir para cancelamento com \"Pedido não localizado em rastreio\".",
       "Prazo: série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis; séries 7, 31 e 4 = 5 dias úteis, contados da criação do ticket. Antes disso a nota fica em <b>Aguardando prazo</b>.",
       "Use <b>Ver rastreio</b> em cada nota para conferir. Marque <b>segurar</b> nas notas em que o robô não deve mexer.",
