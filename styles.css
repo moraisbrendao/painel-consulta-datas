@@ -1182,4 +1182,13 @@ body.rep-claro .fo-lista a { color: #0369a1; }
   .topo-arquivos .arq .selo { display: none; }   /* "compartilhada" fica no título (passar o mouse) */
 }
 @media (max-width: 1560px) and (min-width: 761px) { .topo-arquivos .arq { display: none; } }
-@media (max-width: 1300px) and (min-width: 761px) { .topo-arquivos { display: none; } }
+@media (max-width: 1450px) and (min-width: 761px) { .topo-arquivos { display: none; } }
+/* filtros organizados (23/11): título numa linha, campos do mesmo tamanho em grade, Limpar no canto */
+@media (min-width: 761px) {
+  .filtros-cartao.filtros-ger { position: relative; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px 12px; align-items: end; padding-top: 12px; }
+  .filtros-cartao.filtros-ger .filtros-rot { grid-column: 1 / -1; padding: 0 0 2px; }
+  .filtros-cartao.filtros-ger .g-nf { grid-column: span 2; }
+  .filtros-cartao.filtros-ger .g-dica { position: absolute; top: 12px; right: 16px; padding: 0; grid-column: auto; }
+  .filtros-cartao.filtros-ger > .multi, .filtros-cartao.filtros-ger > label { min-width: 0; }
+  .filtros-cartao.filtros-ger .multi-botao, .filtros-cartao.filtros-ger > label > input { width: 100%; box-sizing: border-box; }
+}
