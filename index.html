@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=230">
+  <link rel="stylesheet" href="styles.css?v=231">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -770,6 +770,7 @@
         <div class="acoes-robo">
           <label class="btn amarelo" title="Planilha TABELA DE ACOMPANHAMENTO do BI (aba Export)">⇪ Subir tabela de acompanhamento<input id="arquivo-rep" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
           <button id="rep-exportar" class="btn contorno">Baixar Excel</button>
+          <button class="btn contorno btn-lua" type="button" data-rep-lua title="Fundo preto ou branco">☾</button>
         </div>
       </div>
 
@@ -957,12 +958,12 @@
             <label class="btn amarelo" id="fo-arq-tab-l" for="arquivo-rep" title="Planilha TABELA DE ACOMPANHAMENTO do BI (aba Export): atualiza as filas e as reposições">⇪ Subir tabela de acompanhamento</label>
             <label class="btn amarelo" id="fo-arq-oc-l" hidden title="Detalhamento de tickets (aba Ocorrências) ou a planilha de ocorrências">⇪ Carregar ocorrências<input id="fo-arq-oc" type="file" accept=".xlsx,.xlsm,.xls" hidden></label>
             <button id="fo-excel" class="btn contorno" type="button">Baixar Excel</button>
+            <button class="btn contorno btn-lua" type="button" data-rep-lua title="Fundo preto ou branco">☾</button>
           </div>
         </div>
         <div class="acoes-titulo rp-abas" id="fo-vis">
           <button class="btn amarelo" type="button" data-vis="filas">Filas</button>
           <button class="btn contorno" type="button" data-vis="oc">Ocorrências</button>
-          <span class="rep-tema" title="Cor do fundo"><button class="btn mini amarelo" type="button" data-rep-tema="escuro">● Preto</button><button class="btn mini contorno" type="button" data-rep-tema="claro">○ Branco</button></span>
         </div>
         <section class="fo-quadro">
           <div class="fo-filtros" id="fo-filtros"></div>
@@ -1534,18 +1535,18 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=230"></script>
-  <script src="mapa-brasil.js?v=230"></script>
-  <script src="troca-notas.js?v=230"></script>
-  <script src="app.js?v=230"></script>
-  <script src="ordenar.js?v=230"></script>
-  <script src="menu.js?v=230"></script>
-  <script src="ajuda.js?v=230"></script>
-  <script src="documentos.js?v=230"></script>
-  <script src="barrar.js?v=230"></script>
-  <script src="faltas.js?v=230"></script>
-  <script src="motor.js?v=230"></script>
-  <script src="filas.js?v=230"></script>
-  <script src="filtros.js?v=230"></script>
+  <script src="config.js?v=231"></script>
+  <script src="mapa-brasil.js?v=231"></script>
+  <script src="troca-notas.js?v=231"></script>
+  <script src="app.js?v=231"></script>
+  <script src="ordenar.js?v=231"></script>
+  <script src="menu.js?v=231"></script>
+  <script src="ajuda.js?v=231"></script>
+  <script src="documentos.js?v=231"></script>
+  <script src="barrar.js?v=231"></script>
+  <script src="faltas.js?v=231"></script>
+  <script src="motor.js?v=231"></script>
+  <script src="filas.js?v=231"></script>
+  <script src="filtros.js?v=231"></script>
 </body>
 </html>

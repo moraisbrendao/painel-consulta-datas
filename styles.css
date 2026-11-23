@@ -1137,3 +1137,5 @@ body.rep-claro .fo-lista th { color: var(--texto-2); border-bottom-color: var(--
 body.rep-claro .fo-lista td { color: var(--texto); border-bottom-color: var(--borda); }
 body.rep-claro .fo-lista .s { color: var(--texto-2); }
 body.rep-claro .fo-lista a { color: #0369a1; }
+.btn-lua { font-size: 18px; line-height: 1; padding: 6px 11px; min-width: 40px; }
+.btn-lua.noite { background: #0d1117 !important; color: #f5c84b !important; border-color: #3d4a5c !important; }

@@ -5099,8 +5099,8 @@ ${extra}
     try { localStorage.setItem("painel.rep.tema", claro ? "claro" : "escuro"); } catch (_) {}
     const naRep = paginaAtual === "reposicao";
     document.body.classList.toggle("fundo-escuro", naRep && !claro); document.body.classList.toggle("rep-claro", naRep && claro);
-    document.querySelectorAll("[data-rep-tema]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.repTema === (claro ? "claro" : "escuro")); b.classList.toggle("contorno", b.dataset.repTema !== (claro ? "claro" : "escuro")); });
+    document.querySelectorAll("[data-rep-lua]").forEach((b) => { b.classList.toggle("noite", !claro); b.title = claro ? "Fundo branco · clique para o fundo preto" : "Fundo preto · clique para o fundo branco"; });
   }
-  document.addEventListener("click", (e) => { const b = e.target.closest("[data-rep-tema]"); if (b) repTema(b.dataset.repTema === "claro"); });
+  document.addEventListener("click", (e) => { if (!e.target.closest("[data-rep-lua]")) return; let claro = false; try { claro = localStorage.getItem("painel.rep.tema") === "claro"; } catch (_) {} repTema(!claro); });
   try { repTema(localStorage.getItem("painel.rep.tema") === "claro"); } catch (_) {}
 })();
