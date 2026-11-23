@@ -441,6 +441,18 @@ if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem n
   log(`hoje ${hoje} · em aberto ${B.length} · regras ${R.length || "fábrica"} · TOTAL atrasados sem nova data ${tot.atr} · vencem hoje/amanhã sem nova data ${tot.vence} · em reposição ${tot.rep} (sem nova data ${tot.repSem})`);
   Object.entries(por).filter(([, x]) => x.atr + x.vence + x.rep).sort((a, b) => (b[1].atr + b[1].vence) - (a[1].atr + a[1].vence)).forEach(([k, x]) => log(`  ${k} · atrasados s/ data ${x.atr} · vencem s/ data ${x.vence} · reposição ${x.rep} (s/ data ${x.repSem})`));
 }
+if (MODO === "diag-cf") {   // Conferência SSW: quando foi a última importação e quantos "falta atualizar" já estão fechados na Intelipost (só contagens)
+  await entrarSupabase();
+  const C = []; for (let de = 0; ; de += 1000) { const x = await chamar(`conferencia_ssw?select=pedido,situacao,status_intelipost,importado_em&order=pedido&limit=1000&offset=${de}`); C.push(...x); if (x.length < 1000) break; }
+  const F = new Map(); for (let de = 0; ; de += 1000) { const x = await chamar(`intelipost_fechados?select=pedido,status&order=pedido&limit=1000&offset=${de}`); x.forEach((f) => F.set(f.pedido, f.status)); if (x.length < 1000) break; }
+  const info = await chamar("fechados_info?select=arquivo,total_linhas,fechados,enviado_em").catch(() => []);
+  const imp = {}; C.forEach((c) => { const k = String(c.importado_em || "").slice(0, 16); imp[k] = (imp[k] || 0) + 1; });
+  const ent = C.filter((c) => c.situacao === "entregue" && !/^entregue/i.test(c.status_intelipost || ""));
+  const jaFech = ent.filter((c) => F.has(c.pedido));
+  log(`conferência ${C.length} pedidos · importado_em ${JSON.stringify(imp)}`);
+  log(`último Enviar Intelipost: ${info[0] ? info[0].enviado_em + " · linhas " + info[0].total_linhas + " · fechados " + info[0].fechados : "?"} · intelipost_fechados ${F.size}`);
+  log(`falta atualizar ${ent.length} · desses já Entregue/Cancelado na Intelipost (intelipost_fechados) ${jaFech.length} · sobram ${ent.length - jaFech.length}`);
+}
 if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão VM/Tempo Justo) tem mais atraso hoje: só contagens agregadas
   await entrarSupabase();
   const nrm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
