@@ -11,8 +11,9 @@ import * as B from "./barrar.mjs";
 
 const LIBERADO = false;   // até a Brenda aprovar o teste: o robô abre a ação, preenche e clica em Cancelar
 const MSG = { voltar_barrar: "Pedido localizado em rastreio", entregue: "Pedido entregue conforme rastreio", cancelar: "Pedido não localizado em rastreio" };
-// texto da opção/ação no Multi360 (confirmado no modo diag-naoloc)
-const OPCAO = { voltar_barrar: /voltar.*barr|barrar/i, entregue: /voltar.*barr|barrar/i, cancelar: /cancel/i };
+// botões da caixinha "Executar ação no ticket" desta fila (diag-naoloc 23/11): Cancelar / Voltar para barrar / Seguir cancelamento.
+// A caixinha não tem campo de texto: "Envie seu comentário antes de executar a ação" → o comentário vai antes, como Comentário Interno.
+const OPCAO = { voltar_barrar: /^\s*voltar para barrar\s*$/i, entregue: /^\s*voltar para barrar\s*$/i, cancelar: /^\s*seguir cancelamento\s*$/i };
 const FORA = /^(sem cte|sem nf|sem permissao)$/;
 
 const diaISO = (d) => d.toISOString().slice(0, 10);
@@ -38,34 +39,25 @@ export function sugerir(x, r) {
   return { sugestao: "aguardar", motivo: `Fora do rastreio; espera até ${ate.split("-").reverse().join("/")}`, prazo_ate: ate };
 }
 
-// abre "Executar ação no ticket", escolhe a opção da ação e escreve a mensagem (+ print). No teste clica em Cancelar.
+// 1) comentário interno (mensagem + print do rastreio); 2) "Executar ação no ticket" → botão da ação. No teste: não comenta e clica em Cancelar.
+const filaDe = (p) => p.evaluate(() => (document.body.innerText.match(/Atribu[ií]do Fila:\s*([^\n]+)/i) || [])[1] || "").then((x) => x.trim());
 async function executar(M, p, ticket, acao, print, real) {
   await M.abrirTicket(p, ticket);
+  const antes = await filaDe(p);
+  if (!/n[aã]o localizada/i.test(antes)) throw new Error(`o ticket não está mais na fila Nota não localizada (está em "${antes.replace(/\d/g, "#")}")`);
+  if (real) await M.comentarioInterno(p, ticket, MSG[acao], print ? [{ name: "rastreio.png", mimeType: "image/png", buffer: print }] : []);
+  await M.abrirTicket(p, ticket);
   await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().click();
-  await p.waitForTimeout(2500);
-  const raiz = p.locator("[role=dialog]").last();
-  const temDialogo = await raiz.count();
-  const zona = temDialogo ? raiz : p.locator("body");
-  // a opção pode ser botão, rádio ou select
-  const re = OPCAO[acao];
-  const sel = zona.locator("select").first();
-  let escolheu = false;
-  if (await sel.count()) { const ops = await sel.locator("option").allTextContents(); const o = ops.find((t) => re.test(t)); if (o) { await sel.selectOption({ label: o }); escolheu = true; } }
-  if (!escolheu) { const r = zona.getByRole("radio", { name: re }).first(); if (await r.count()) { await r.check().catch(() => r.click()); escolheu = true; } }
-  if (!escolheu) { const b = zona.getByRole("button", { name: re }).first(); if (await b.count()) { await b.click(); escolheu = true; await p.waitForTimeout(1500); } }
-  if (!escolheu) {
-    const c = p.getByRole("button", { name: /^\s*cancelar\s*$/i }).last(); if (await c.count()) await c.click().catch(() => {}); else await p.keyboard.press("Escape").catch(() => {});
-    throw new Error("não achei a opção da ação no ticket (rode o diag-naoloc)");
-  }
-  const z2 = p.locator("[role=dialog]").last();
-  const caixa = (await z2.count()) ? z2 : p.locator("body");
-  if (print && await caixa.locator("input[type=file]").count()) { await caixa.locator("input[type=file]").first().setInputFiles({ name: "rastreio.png", mimeType: "image/png", buffer: print }); await p.waitForTimeout(2500); }
-  const ta = caixa.locator("textarea").first(); if (await ta.count()) await ta.fill(MSG[acao]);
-  if (!real) { await caixa.getByRole("button", { name: /^\s*cancelar\s*$/i }).last().click().catch(() => p.keyboard.press("Escape")); return "teste"; }
-  const ok = caixa.getByRole("button", { name: /^\s*(sim|confirmar|salvar|enviar|executar)\s*$/i }).last();
-  if (!(await ok.count())) throw new Error("não achei o botão de confirmar da ação");
-  await ok.click(); await p.waitForTimeout(6000);
-  return "feito";
+  const bt = p.getByRole("button", { name: OPCAO[acao] }).last();
+  try { await bt.waitFor({ timeout: 15000 }); }
+  catch { const c = p.getByRole("button", { name: /^\s*cancelar\s*$/i }).last(); if (await c.count()) await c.click().catch(() => {}); else await p.keyboard.press("Escape").catch(() => {});
+    throw new Error("a caixinha da ação não tem o botão esperado (Voltar para barrar / Seguir cancelamento)"); }
+  if (!real) { await p.getByRole("button", { name: /^\s*cancelar\s*$/i }).last().click().catch(() => p.keyboard.press("Escape")); return "teste"; }
+  await bt.click(); await p.waitForTimeout(2500);
+  // se aparecer uma confirmação, confirma
+  const conf = p.getByRole("button", { name: /^\s*(sim|confirmar|ok)\s*$/i }).last(); if (await conf.count()) { await conf.click().catch(() => {}); await p.waitForTimeout(2000); }
+  for (let i = 0; i < 5; i++) { await p.waitForTimeout(4000); await M.abrirTicket(p, ticket).catch(() => {}); const f = await filaDe(p).catch(() => ""); if (f && !/n[aã]o localizada/i.test(f)) return "feito"; }
+  throw new Error("cliquei na ação, mas o ticket continua na fila Nota não localizada");
 }
 
 export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, limite = 200 }) {
