@@ -12,7 +12,7 @@
       "Abra a <b>Cobrança do dia</b>: ela já diz o que cobrar de cada transportadora, na ordem de prioridade (cards 1 a 6). Baixe a <b>⤓ Cobrança</b> ou copie a <b>⧉ Mensagem</b> de cada transportadora e mande.",
       "Quando a transportadora responder, suba a planilha no <b>Preventivo › Enviar retornos</b> (ou preencha <b>Nova data</b> e <b>Observação</b> direto na lista). O pedido sai da cobrança sozinho.",
       "Em <b>Alterar pedidos</b>, rode as filas <b>Aguardando entrega</b> e <b>Aguardando entrega AT</b> (subir o relatório do Multi360) e confira as <b>Ocorrências</b>.",
-      "Em <b>Alterar pedidos › Nova previsão de entrega</b>, clique em <b>↓ Trazer do Preventivo e SSW</b>, confira e clique em <b>Alterar na Intelipost</b>.",
+      "Em <b>Alterar pedidos › Nova previsão de entrega</b>, clique em <b>↓ Trazer do Preventivo e SSW</b>, confira, clique em <b>➕ Colocar na fila</b> e depois em <b>▶ Enviar para o robô</b>.",
       "Na <b>Conferência SSW</b>, veja o card <b>Falta atualizar a Intelipost</b> e dê baixa na Intelipost nos pedidos que já foram entregues.",
     ], "No topo aparece a data da planilha carregada. Se estiver amarelo (planilha antiga), carregue de novo. Tudo que alguém salva aparece para toda a Logística na hora."],
 
@@ -101,7 +101,7 @@
     ], "Tipo \"Reposição\" = pré-entrega; \"Reposição Pós Entrega\" = pós-entrega. Transportadora = redespacho (coluna R) se tiver, senão a coluna Q. Status Resolvido ou Encerrado = finalizado. Ticket na fila Recuperação de crédito = pendente de solução da Recuperação de crédito (não conta como em aberto)."],
 
     ["alterar", "Alterar pedidos", "Onde a Logística manda os robôs alterarem a Intelipost e o Multi360. Tem 6 botões no alto; cada um abre uma tela.", "Todo dia.", [
-      "<b>📅 Nova previsão de entrega</b>: escreva uma linha por pedido (<i>PEDIDO dd/mm/aaaa</i>) ou suba a planilha, ou clique em <b>↓ Trazer do Preventivo e SSW</b>. Confira a lista e clique em <b>➤ Alterar na Intelipost</b>. Em \"O que o robô fez\" aparece o resultado (Alterado / Não alterou e o motivo). Datas vencidas, iguais à prometida ou antes dela ficam de fora.",
+      "<b>📅 Nova previsão de entrega</b>: escreva uma linha por pedido (<i>PEDIDO dd/mm/aaaa</i>) ou suba a planilha, ou clique em <b>↓ Trazer do Preventivo e SSW</b>. Confira a lista, clique em <b>➕ Colocar na fila</b> e, quando quiser que o robô altere, em <b>▶ Enviar para o robô</b>. Em \"O que o robô fez\" aparece o resultado (Alterado / Não alterou e o motivo). Datas vencidas, iguais à prometida ou antes dela ficam de fora.",
       "<b>⇄ Ajuste Intelipost</b> (troca de notas): <b>⇪ Subir detalhamento_tickets</b> (aba Reposições). Clique no ticket para ver nova NF, série, chave, data e método; marque as etapas e quem pegou. Parcial não mexe nos volumes; Total altera todos; série 4 só ação no ticket.",
       "<b>🚚 Fila Aguardando entrega</b> e <b>🔧 Aguardando entrega AT</b>: extraia o relatório da fila no Multi360 e clique em <b>⇪ Subir relatório</b>. O robô abre cada ticket, pega a nova NF no chat, confere o rastreio e, se entregue, dá baixa \"Nota entregue?\" → Sim com o print. Trate os cards <b>Não entregues</b> e <b>Conferir à mão</b> e escreva a observação.",
       "<b>⇄ Transportadora divergente</b>: compara a transportadora da Intelipost com a do Promob. Trate os <b>Divergentes</b> e cadastre transportadora nova em <b>Transportadoras e apelidos</b>. O Excel tem a aba de resumo e a aba <b>Pedidos</b> com a lista completa.",

@@ -1206,3 +1206,4 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 .tabela-faixa .fx-sep { border-left: 2px solid var(--borda); }
 .tabela-faixa td.av-tot { color: var(--texto); }
 .login-logo { display: block; margin: 0 auto 10px; }
+.ap-topo-dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }

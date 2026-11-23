@@ -1,13 +1,13 @@
 # Robô da Intelipost (aba "Alterar pedidos" do painel): muda a previsão de entrega dos pedidos da fila.
-# Agendado de 30 em 30 min, em dia útil, das 6h às 20h (horário de Brasília) — só roda de verdade
+# Roda quando o painel chama (botão Enviar para o robô) — só roda de verdade
 # depois que a variável INTELIPOST_ATIVO = sim existir (Settings > Secrets and variables > Actions > Variables).
 # Segredos: INTELIPOST_EMAIL, INTELIPOST_SENHA (login da Intelipost) e ROBO_EMAIL, ROBO_SENHA (login do robô no painel).
 # Disparo manual: modo diag (só olha as telas), dryrun (preenche sem salvar) ou real.
 name: Robô da Intelipost
 
 on:
-  schedule:
-    - cron: "*/30 9-23 * * 1-5"
+  # sem horário fixo (Brenda 23/11): roda quando alguém clica em "Enviar para o robô" no painel (parte 62),
+  # na troca de notas e no "manter" (pg_cron)
   workflow_dispatch:
     inputs:
       modo:

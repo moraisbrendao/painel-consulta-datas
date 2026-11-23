@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=247">
+  <link rel="stylesheet" href="styles.css?v=248">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1334,7 +1334,7 @@
           <textarea id="ap-texto" rows="5" spellcheck="false" placeholder="MAGAZINE_LUIZA1234567890123456 27/11/2026&#10;SHOPEE260911ABCDEF 29/11/2026"></textarea>
           <div id="ap-conf" class="ap-conf" hidden></div>
           <div class="ap-acoes">
-            <button id="ap-enviar" class="btn amarelo" disabled>➤ Alterar na Intelipost</button>
+            <button id="ap-enviar" class="btn amarelo" disabled title="Coloca os pedidos na fila; o robô só começa quando você clicar em Enviar para o robô">➕ Colocar na fila</button>
             <span class="s">ou</span>
             <label class="btn contorno">⇪ Subir planilha<input id="ap-arquivo" type="file" accept=".xlsx,.xls,.xlsm,.csv" hidden></label>
             <span class="s">ou</span>
@@ -1347,9 +1347,9 @@
           <div class="cartao-topo">
             <div>
               <h2>🤖 O que o robô fez</h2>
-              <p class="sub">Ele passa de meia em meia hora, em dia útil, das 6h às 20h. O resultado aparece aqui sozinho.</p>
+              <p class="sub">O robô só altera as datas quando alguém clicar em <b>Enviar para o robô</b>. O resultado aparece aqui sozinho.</p>
             </div>
-            <div class="ap-resumo" id="ap-resumo"></div>
+            <div class="ap-topo-dir"><div class="ap-resumo" id="ap-resumo"></div><button id="ap-rodar" class="btn amarelo" type="button" disabled>▶ Enviar para o robô</button></div>
           </div>
           <div class="ap-filtro-linha">
             <input id="ap-busca" type="search" placeholder="Procurar pedido">
@@ -1564,19 +1564,19 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=247"></script>
-  <script src="mapa-brasil.js?v=247"></script>
-  <script src="troca-notas.js?v=247"></script>
-  <script src="app.js?v=247"></script>
-  <script src="ordenar.js?v=247"></script>
-  <script src="menu.js?v=247"></script>
-  <script src="ajuda.js?v=247"></script>
-  <script src="documentos.js?v=247"></script>
-  <script src="barrar.js?v=247"></script>
-  <script src="faltas.js?v=247"></script>
-  <script src="motor.js?v=247"></script>
-  <script src="retornos-semana.js?v=247"></script>
-  <script src="filas.js?v=247"></script>
-  <script src="filtros.js?v=247"></script>
+  <script src="config.js?v=248"></script>
+  <script src="mapa-brasil.js?v=248"></script>
+  <script src="troca-notas.js?v=248"></script>
+  <script src="app.js?v=248"></script>
+  <script src="ordenar.js?v=248"></script>
+  <script src="menu.js?v=248"></script>
+  <script src="ajuda.js?v=248"></script>
+  <script src="documentos.js?v=248"></script>
+  <script src="barrar.js?v=248"></script>
+  <script src="faltas.js?v=248"></script>
+  <script src="motor.js?v=248"></script>
+  <script src="retornos-semana.js?v=248"></script>
+  <script src="filas.js?v=248"></script>
+  <script src="filtros.js?v=248"></script>
 </body>
 </html>

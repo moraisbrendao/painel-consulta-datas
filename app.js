@@ -2959,20 +2959,28 @@ ${extra}
     $("ap-enviar").disabled = !prontos.length;
   }
   let esperaAp; $("ap-texto").addEventListener("input", () => { clearTimeout(esperaAp); esperaAp = setTimeout(mostrarConferencia, 250); });
+  $("ap-rodar").addEventListener("click", async () => {
+    const n = apFila.filter((r) => r.status === "pendente").length; if (!n) return;
+    if (!confirm(`O robô vai alterar agora a previsão de entrega de ${fmt(n)} pedido(s) na Intelipost.\n\nConfirmar?`)) return;
+    const rb = $("ap-rodar"); rb.dataset.enviando = "1"; rb.disabled = true; rb.textContent = "Chamando o robô…";
+    try { const { error } = await sb.rpc("rodar_robo_intelipost"); if (error) throw error; toast("Robô chamado: ele começa em 1 ou 2 minutos e o resultado aparece aqui."); }
+    catch (err) { toast(/rodar_robo_intelipost|function/i.test(err.message || "") ? "Rode a parte 62 no Supabase." : "Não consegui chamar o robô: " + (err.message || err), true); }
+    finally { setTimeout(() => { delete rb.dataset.enviando; desenharAlterar(); }, 60000); }
+  });
   $("ap-enviar").addEventListener("click", async () => {
     if (!apProntos.length) return;
-    if (!confirm(`${fmt(apProntos.length)} pedido${apProntos.length === 1 ? "" : "s"} vão para o robô alterar a previsão de entrega na Intelipost (hora 23:59).\n\nConfirmar?`)) return;
+    if (!confirm(`${fmt(apProntos.length)} pedido${apProntos.length === 1 ? "" : "s"} vão para a fila do robô alterar a previsão de entrega na Intelipost (hora 23:59). O robô começa quando você clicar em Enviar para o robô.\n\nConfirmar?`)) return;
     const bt = $("ap-enviar"); bt.disabled = true; bt.textContent = "Mandando…";
     try {
       for (let i = 0; i < apProntos.length; i += 500) {
         const { error } = await sb.rpc("enfileirar_intelipost", { linhas: apProntos.slice(i, i + 500) });
         if (error) throw error;
       }
-      toast(`${fmt(apProntos.length)} pedido(s) na fila do robô.`);
+      toast(`${fmt(apProntos.length)} pedido(s) na fila. Quando quiser, clique em ▶ Enviar para o robô.`);
       $("ap-texto").value = ""; mostrarConferencia(); await carregarAlterar(true);
     } catch (err) {
       toast("Não consegui mandar: " + (err.message || err) + (/fila_intelipost|enfileirar/i.test(err.message || "") ? " (rode de novo o supabase/schema.sql)" : ""), true);
-    } finally { bt.textContent = "➤ Alterar na Intelipost"; bt.disabled = !apProntos.length; }
+    } finally { bt.textContent = "➕ Colocar na fila"; bt.disabled = !apProntos.length; }
   });
   // planilha: colunas "Pedido" e "Nova data" (ou as duas primeiras). Vira texto na caixa para passar pela mesma conferência.
   $("ap-arquivo").addEventListener("change", async (e) => {
@@ -2996,7 +3004,7 @@ ${extra}
       }).filter(Boolean).join("\n");
       $("ap-texto").value = ($("ap-texto").value.trim() ? $("ap-texto").value.trim() + "\n" : "") + txt;
       mostrarConferencia();
-      toast(`${arq.name}: ${fmt(txt.split("\n").filter(Boolean).length)} linha(s) lidas. Confira e clique em Alterar na Intelipost.`);
+      toast(`${arq.name}: ${fmt(txt.split("\n").filter(Boolean).length)} linha(s) lidas. Confira e clique em Colocar na fila.`);
     } catch (err) { toast("Não consegui ler a planilha: " + (err.message || err), true); }
   });
   // Preventivo + SSW: Nova data da Logística (vale primeiro) ou previsão do SSW depois da prometida. Data vencida não vai (pedido da Brenda).
@@ -3025,7 +3033,7 @@ ${extra}
       const atual = $("ap-texto").value.trim(), ja = new Set(atual.split(/\r?\n/).map((l) => l.trim().split(/[\s;,]+/)[0]).filter(Boolean));
       const novas = linhas.filter((l) => !ja.has(l.split(" ")[0]));
       $("ap-texto").value = (atual ? atual + "\n" : "") + novas.join("\n"); mostrarConferencia();
-      toast(`${fmt(novas.length)} pedido(s) trazidos do Preventivo e SSW. Fora: ${fmt(cont.vencida)} com data vencida · ${fmt(cont.antes)} com a data prometida igual ou depois da nova · ${fmt(cont.jaFeito)} já mandados com essa data · ${fmt(cont.igual)} já com essa data na Intelipost. Confira e clique em Alterar na Intelipost.`);
+      toast(`${fmt(novas.length)} pedido(s) trazidos do Preventivo e SSW. Fora: ${fmt(cont.vencida)} com data vencida · ${fmt(cont.antes)} com a data prometida igual ou depois da nova · ${fmt(cont.jaFeito)} já mandados com essa data · ${fmt(cont.igual)} já com essa data na Intelipost. Confira e clique em Colocar na fila.`);
     } catch (err) { toast("Não consegui trazer: " + (err.message || err), true); }
     finally { bt.disabled = false; }
   });
@@ -3052,6 +3060,7 @@ ${extra}
     const q = norm($("ap-busca").value);
     const L = apFila.filter((r) => !q || norm(r.pedido).includes(q)).sort((a, b) => String(b.feito_em || b.pedido_em).localeCompare(String(a.feito_em || a.pedido_em)));
     const cont = {}; apFila.forEach((r) => (cont[r.status] = (cont[r.status] || 0) + 1));
+    const rb = $("ap-rodar"); if (rb && !rb.dataset.enviando) { rb.disabled = !cont.pendente; rb.textContent = cont.pendente ? `▶ Enviar para o robô (${fmt(cont.pendente)})` : "▶ Enviar para o robô"; }
     $("ap-resumo").innerHTML = Object.keys(AP_ST).filter((k) => cont[k]).map((k) => `<span class="chip ${AP_ST[k][1]}">${fmt(cont[k])} · ${AP_ST[k][0]}</span>`).join(" ");
     const quando = (t) => (t ? new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "");
     $("ap-linhas").innerHTML = L.slice(0, apMostrar).map((r) => { const [n, c] = AP_ST[r.status] || [r.status, "cinza"];
@@ -3226,6 +3235,7 @@ ${extra}
       if (!confirm(`O robô vai mudar a Entrega prev. do pedido ${t.pedido} para ${br(iso)} 23:59 na Intelipost.\n\nFaça isso depois de trocar a transportadora. Confirmar?`)) return;
       const { error } = await sb.rpc("enfileirar_intelipost", { linhas: [{ pedido: t.pedido, nova_data: iso }] });
       if (error) return toast("Não consegui mandar: " + error.message, true);
+      await sb.rpc("rodar_robo_intelipost").then(() => {}, () => {});   // este é um pedido só, já confirmado: chama o robô na hora
       toast("Mandado para o robô. Acompanhe em Nova previsão de entrega."); return; }
     if (e.target.closest(".tn-detalhe")) return;
     const tr = e.target.closest("tr[data-tn-abrir]"); if (!tr) return;

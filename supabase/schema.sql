@@ -2989,3 +2989,25 @@ grant execute on function public.importar_desmembrados(jsonb, boolean, text, int
 -- ============ PARTE 61: Falta de volumes · dias sem retorno contam da nossa última cobrança no 360 (Externo) ============
 alter table public.falta_volumes add column if not exists cobrado_em timestamptz;   -- última mensagem "Externo" da nossa equipe no ticket
 notify pgrst, 'reload schema';
+
+
+-- ============ PARTE 62: Alterar pedidos · o robô da Intelipost só roda quando alguém clica em "Enviar para o robô" ============
+-- Colocar pedidos na fila não chama mais o robô sozinho (a troca de notas continua chamando na hora).
+drop trigger if exists chamar_robo_datas on public.fila_intelipost;
+
+create or replace function public.rodar_robo_intelipost()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-intelipost.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := '{"ref":"main","inputs":{"modo":"real"}}'::jsonb);
+end $$;
+revoke all on function public.rodar_robo_intelipost() from public, anon;
+grant execute on function public.rodar_robo_intelipost() to authenticated;
