@@ -3698,6 +3698,7 @@ ${extra}
   function abrirRespPrev() { const d = $("prev-resp"); d.open = true; setTimeout(() => d.scrollIntoView({ behavior: "smooth", block: "start" }), 50); }
   $("btn-prev-resp").addEventListener("click", abrirRespPrev);
   function irPara(pag) {
+    if (pag === "retornos") pag = "preventivo";   // Cobrança do dia saiu do menu (Brenda 23/11)
     if (pag === "responsaveis") { pag = "preventivo"; setTimeout(abrirRespPrev, 100); }
     if (pag === "barrar") { pag = "alterar"; try { localStorage.setItem("painel.ap", "barrar"); } catch (_) {} setTimeout(() => { const b = document.querySelector('#ap-abas [data-ap="barrar"]'); if (b) b.click(); }, 300); }   // Barrar entrega agora fica dentro de Alterar pedidos   // Responsáveis agora fica dentro do Preventivo
     if (perfil !== "sac" && !podePag(pag)) { toast("Você não tem acesso a essa aba. Fale com a administradora do painel.", true); pag = primeiraPag(); }

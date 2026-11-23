@@ -9,7 +9,6 @@
       "No topo, clique em <b>Carregar planilha</b> e escolha a planilha da base (BI, aba <b>Export</b>). Ela é a fonte de tudo: Visão Gerencial, Preventivo, canais, UF etc. Espere a mensagem de que terminou.",
       "Clique em <b>Enviar Intelipost</b> e escolha o arquivo <b>transactions</b> exportado da Intelipost. Ele tira do painel o que já foi entregue ou cancelado.",
       "Clique em <b>Carregar tickets</b> e escolha o <b>detalhamento_tickets360</b> (recebido por e-mail). Ele mostra a fila do ticket de cada pedido.",
-      "Abra a <b>Cobrança do dia</b>: ela já diz o que cobrar de cada transportadora, na ordem de prioridade (cards 1 a 6). Baixe a <b>⤓ Cobrança</b> ou copie a <b>⧉ Mensagem</b> de cada transportadora e mande.",
       "Quando a transportadora responder, suba a planilha no <b>Preventivo › Enviar retornos</b> (ou preencha <b>Nova data</b> e <b>Observação</b> direto na lista). O pedido sai da cobrança sozinho.",
       "Em <b>Alterar pedidos</b>, rode as filas <b>Aguardando entrega</b> e <b>Aguardando entrega AT</b> (subir o relatório do Multi360) e confira as <b>Ocorrências</b>.",
       "Em <b>Alterar pedidos › Nova previsão de entrega</b>, clique em <b>↓ Trazer do Preventivo e SSW</b>, confira, clique em <b>➕ Colocar na fila</b> e depois em <b>▶ Enviar para o robô</b>.",
@@ -68,20 +67,6 @@
       "Para muitos pedidos: <b>Modelo de retornos</b> → preencha no Excel → <b>Enviar retornos</b>.",
       "<b>Exportar (Excel)</b> baixa a lista que está na tela.",
     ], "A nova data passa a valer como vencimento do pedido. \"🤖 data do SSW\" quer dizer que o robô preencheu pela previsão do SSW; se você mudar à mão, ele não mexe mais."],
-
-    ["retornos", "Cobrança do dia", "O controle dos retornos das transportadoras: diz todo dia quais pedidos cobrar, de quem e por quê, para nenhuma nota ficar para trás.", "Todo dia, logo cedo e depois do almoço.", [
-      "Os cards estão em ordem de prioridade: <b>1 · Atrasado sem retorno</b> (sem data nem observação), <b>2 · Promessa quebrada</b> (a nova data passou e não entregou), <b>3 · Atrasado só com observação</b> (falta a data), <b>4 · Vence hoje sem retorno</b>, <b>5 · Vence amanhã sem retorno</b>, <b>6 · Nova data vence hoje/amanhã</b> (confirmar). <b>Em dia</b> = já tem nova data válida.",
-      "Comece pelos cards 1 e 2. O número vermelho no menu é a soma deles.",
-      "Na tabela <b>Por transportadora</b>, clique no nome para ver só os pedidos dela. <b>⤓ Cobrança</b> baixa o Excel (mesmo modelo do Enviar retornos) e <b>⧉ Mensagem</b> copia um texto pronto para e-mail ou WhatsApp.",
-      "<b>Cobertura</b> = quanto dos atrasados e vencendo já tem retorno válido (abaixo de 70% fica vermelho). <b>Promessas quebradas</b> = quantas vezes a data informada passou sem entregar nos últimos 60 dias.",
-      "Dá para marcar <b>vários cards</b> ao mesmo tempo (ex.: 1 + 4). <b>Tudo para cobrar</b> limpa a seleção.",
-      "<b>Retornos padronizados</b> mostra o retorno (observação) de cada pedido já padronizado (Entrega agendada, Em rota de entrega, Pendência transportadora, Ocorrência - pendência SAC…) com o <b>responsável</b>. Clique para ver os pedidos. Use o filtro <b>Responsável</b> para cada um ver só os seus.",
-      "Em <b>Como padronizar o retorno</b>: escreva a categoria e as palavras (separadas por vírgula) e clique em <b>Guardar regra</b>. Vale a 1ª regra da lista que bater. Escolha o responsável de cada categoria no seletor ao lado do nome. O que cair em <b>Não padronizado</b> precisa de uma regra nova.",
-      "Na lista dá para preencher <b>Nova data</b> e <b>Observação</b> direto. Clique no pedido para ver o <b>Histórico de retornos</b> dele.",
-      "<b>Resumo por retorno</b>: para os cards marcados, quantos pedidos há em cada retorno padronizado, o responsável, a média de dias de atraso e quantos ainda estão sem nova data válida.",
-      "<b>Transportadoras sem nova data e em reposição</b>: por transportadora, os atrasados e os que vencem hoje/amanhã sem nova data válida, e os que estão em reposição. <b>⤓ Excel</b> baixa a lista.",
-      "<b>⧉ Copiar resumo do dia</b> copia os números do dia para mandar no grupo.",
-    ], "Pedido que já aparece entregue no arquivo da Intelipost sai da cobrança. Um retorno só vale se a nova data for de hoje em diante."],
 
     ["responsaveis", "Responsáveis (dentro do Preventivo)", "Define quem cuida de cada micro status.", "Quando entra um micro status novo ou muda alguém da equipe.", [
       "Fica no fim da aba <b>Preventivo</b>: clique no botão <b>👤 Responsáveis</b> ao lado do título (ou no quadro \"Responsáveis por micro status\" lá embaixo) para abrir.",
