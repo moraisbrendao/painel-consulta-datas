@@ -43,18 +43,17 @@ async function lerTicket(p, ticket) {
     // O painel conta os dias sem retorno a partir da última delas (Brenda, 23/11). Só a data é guardada.
     let cobrado = null;
     ls.forEach((l, i) => {
-      if (!cab(l)) return;
-      const viz = ls.slice(i, i + 3).join(" | ");
-      if (!/\bExterno\b/i.test(viz) || /Enviado pelo portal do transportador/i.test(ls.slice(i, i + 4).join(" "))) return;
-      const d = l.match(DATA); const q = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`;
+      if (!/^Externo$/i.test(l)) return;
+      let q = null; for (let k = i; k >= Math.max(0, i - 3); k--) { const d = ls[k].match(DATA); if (d) { q = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; break; } }
+      if (!q || /Enviado pelo portal do transportador/i.test(ls.slice(i + 1, i + 3).join(" "))) return;   // mensagem da transportadora, não nossa
       if (!cobrado || q > cobrado) cobrado = q;
     });
     // motivo do ticket: rótulo "Motivo" seguido do valor
     let motivo = null; const i = ls.findIndex((l) => /^Motivo:?$/i.test(l)); if (i >= 0 && ls[i + 1]) motivo = ls[i + 1].slice(0, 120);
     if (!motivo) { const m = ls.map((l) => l.match(/^Motivo:\s*(.+)$/i)).find(Boolean); if (m) motivo = m[1].slice(0, 120); }
     const fila = (document.body.innerText.match(/Atribu[ií]do Fila:\s*([^\n]+)/i) || [])[1] || null;
-    // estrutura (sem texto) em volta de cada cabeçalho, para o registro: E=Externo I=Interno P=Enviado pelo portal H=cabeçalho
-    const est = ls.map((l, i) => (cab(l) ? i : -1)).filter((i) => i >= 0).slice(-6).map((i) => [-3, -2, -1, 0, 1, 2, 3, 4].map((o) => { const x = ls[i + o] || ""; return /Enviado pelo portal/i.test(x) ? "P" : /\bExterno\b/i.test(x) ? "E" : /\bInterno\b/i.test(x) ? "I" : cab(x) ? "H" : x ? "." : "_"; }).join(""));
+    // estrutura (sem texto) em volta de cada "Externo", para o registro: D=linha com data P=Enviado pelo portal E=Externo
+    const est = ls.map((l, i) => (/^Externo$/i.test(l) ? i : -1)).filter((i) => i >= 0).slice(-6).map((i) => [-3, -2, -1, 0, 1, 2, 3].map((o) => { const x = ls[i + o] || ""; return /Enviado pelo portal/i.test(x) ? "P" : /^Externo$/i.test(x) ? "E" : DATA.test(x) ? "D" : x ? "." : "_"; }).join(""));
     const extTot = ls.filter((l) => /\bExterno\b/i.test(l)).length;
     return { msgs, motivo, fila: fila && fila.trim().slice(0, 80), cobrado, est, extTot };
   });
