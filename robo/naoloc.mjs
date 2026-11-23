@@ -81,7 +81,7 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1); let entreguesFeitos = 0;
   // mesma lógica da Conferência SSW (Brenda, 23/11):
   //  · TSL série 35 (dropshipping): a TSL só faz a first mile → fora do RJ vale o rastreio do redespacho da base; sem redespacho = verificar à mão
-  //  · Dominalog / Tempo Justo / Trans Sua / Transvanio nas séries 25, 34 e 35: vale o rastreio da Dominalog; outro emissor (Rajlog, first mile) não é entrega
+  //  · Dominalog / Tempo Justo / Trans Sua / Transvanio nas séries 25, 34 e 35: vale o rastreio da própria transportadora; CT-e da Rajlog (milk run) não conta
   const REGRA_RAJ = (t, serie) => /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(t || "") && ["25", "34", "35"].includes(String(serie));
   const daBase = async (nf) => (await chamar(`base_pedidos?select=uf,rd:extra->>redespacho&nf=eq.${encodeURIComponent(nf)}&limit=1`).catch(() => []))[0] || {};
   const alvoDe = async (x) => {
@@ -95,13 +95,12 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
         if (!rd) { soma("TSL 35 sem redespacho"); return { semAlvo: "TSL série 35 fora do RJ sem redespacho na base: verificar à mão" }; }
         alvo = rd; soma("TSL 35 pelo redespacho"); }
     }
-    if (REGRA_RAJ(alvo, serie)) { alvo = "Dominalog"; }
     return alvo;
   };
-  // Dominalog (séries 25/34/35): só vale o que a Dominalog emitiu; CT-e de outra (Rajlog, first mile) = ainda não chegou na Dominalog
+  // séries 25/34/35 dessas transportadoras: CT-e da Rajlog (milk run) não vale como rastreio (Brenda, 23/11)
   const ajustaRaj = (r, alvo, serie) => {
     if (!REGRA_RAJ(alvo, serie) || !r || !r.situacao || /^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return r;
-    if (r.transp && !/dominalog/i.test(r.transp)) return { ...r, situacao: "sem cte", evento: `SÓ CT-E DE ${String(r.transp).toUpperCase()} (NÃO É A DOMINALOG)`.slice(0, 60) };
+    if (/rajlog/i.test(r.transp || "") || /rajlog|milk\s*run/i.test(r.evento || "")) return { ...r, situacao: "sem cte", evento: "SÓ CT-E DA RAJLOG (MILK RUN)" };
     return r;
   };
 
