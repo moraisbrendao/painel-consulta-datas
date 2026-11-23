@@ -79,16 +79,36 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   const M = await import("./multi360.mjs");
   let m = null; try { m = await M.entrarMulti360(ctx, log); } catch (e) { log("naoloc: não entrei no 360:", String(e.message).slice(0, 100)); }
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1); let entreguesFeitos = 0;
+  // mesma lógica da Conferência SSW (Brenda, 23/11):
+  //  · TSL série 35 (dropshipping): a TSL só faz a first mile → fora do RJ vale o rastreio do redespacho da base; sem redespacho = verificar à mão
+  //  · Dominalog / Tempo Justo / Trans Sua / Transvanio nas séries 25, 34 e 35: vale o rastreio da Dominalog; outro emissor (Rajlog, first mile) não é entrega
+  const REGRA_RAJ = (t, serie) => /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(t || "") && ["25", "34", "35"].includes(String(serie));
+  const daBase = async (nf) => (await chamar(`base_pedidos?select=uf,rd:extra->>redespacho&nf=eq.${encodeURIComponent(nf)}&limit=1`).catch(() => []))[0] || {};
   const alvoDe = async (x) => {
     let tk = { transp: null, redesp: null };
     if (m && x.ticket) { try { tk = await M.lerTranspTicket(m, x.ticket); } catch (_) { soma("ticket não abriu"); } }
-    return tk.redesp || tk.transp || x.transp_ticket || x.transp_pedido || null;
+    let alvo = tk.redesp || tk.transp || x.transp_ticket || x.transp_pedido || null;
+    const serie = String(x.serie || x.nf.split("-")[1] || "").replace(/^0+/, "");
+    if (serie === "35" && /\btsl\b/i.test(alvo || "")) {
+      const b = await daBase(x.nf);
+      if (String(b.uf || "").trim().toUpperCase() !== "RJ") { const rd = String(b.rd || "").trim() || (x.transp_pedido && !/\btsl\b/i.test(x.transp_pedido) ? x.transp_pedido : "");
+        if (!rd) { soma("TSL 35 sem redespacho"); return { semAlvo: "TSL série 35 fora do RJ sem redespacho na base: verificar à mão" }; }
+        alvo = rd; soma("TSL 35 pelo redespacho"); }
+    }
+    if (REGRA_RAJ(alvo, serie)) { alvo = "Dominalog"; }
+    return alvo;
+  };
+  // Dominalog (séries 25/34/35): só vale o que a Dominalog emitiu; CT-e de outra (Rajlog, first mile) = ainda não chegou na Dominalog
+  const ajustaRaj = (r, alvo, serie) => {
+    if (!REGRA_RAJ(alvo, serie) || !r || !r.situacao || /^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return r;
+    if (r.transp && !/dominalog/i.test(r.transp)) return { ...r, situacao: "sem cte", evento: `SÓ CT-E DE ${String(r.transp).toUpperCase()} (NÃO É A DOMINALOG)`.slice(0, 60) };
+    return r;
   };
 
   for (const x of vigiar) {
     try {
-      const alvo = await alvoDe(x); if (!alvo) continue;
-      const r = await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R); r.alvo = alvo;
+      const alvo = await alvoDe(x); if (!alvo || alvo.semAlvo) continue;
+      const r = ajustaRaj(await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R), alvo, x.serie); r.alvo = alvo;
       const campos = { conferido_em: new Date().toISOString() };
       if (r.situacao && !FORA.test(r.situacao)) { campos.cte_depois = { ...r }; campos.cte_alerta_em = new Date().toISOString(); soma("CT-e depois do cancelamento"); }
       await chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", campos);
@@ -97,10 +117,10 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
 
   for (const x of fila) {
     try {
-      const alvo = await alvoDe(x);
-      const r = alvo ? await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R) : { situacao: null, fonte: null };
+      const a0 = await alvoDe(x), alvo = a0 && a0.semAlvo ? null : a0;
+      const r = alvo ? ajustaRaj(await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R), alvo, x.serie) : { situacao: null, fonte: null };
       r.alvo = alvo;
-      const s = alvo ? sugerir(x, r) : { sugestao: "manual", motivo: "Sem transportadora no ticket nem na planilha" };
+      const s = alvo ? sugerir(x, r) : { sugestao: "manual", motivo: (a0 && a0.semAlvo) || "Sem transportadora no ticket nem na planilha" };
       let print_rastreio = x.print_rastreio || null, png = null;
       if (r.fonte && s.sugestao !== "aguardar") { try { png = await B.printRastreio(ctx, x.nf, r); print_rastreio = await subirArquivo("barrar", `naoloc-${encodeURIComponent(x.nf)}-rastreio.png`, png); } catch (_) { soma("print falhou"); } }
       const campos = { rastreio: r, sugestao: s.sugestao, sugestao_motivo: s.motivo, prazo_ate: s.prazo_ate ?? prazoAte(x.serie, x.ticket_criado), conferido_em: new Date().toISOString(), print_rastreio };
