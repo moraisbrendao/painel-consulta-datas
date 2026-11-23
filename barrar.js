@@ -116,14 +116,17 @@
     let box = $("br-erro-transp");
     if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
     box.hidden = card !== "manual"; if (box.hidden) return;
-    const G = gruposErro(), C = G.flatMap(([t, xs]) => xs.filter((x) => anotsDe(x).length).map((x) => [t, x]));
-    const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button>` : ""}</div>
-      ${C.length ? `<p class="s">A transportadora escreveu algo no portal, mas o robô não achou devolução no rastreio nem "não recebeu" na anotação. Leia e decida.</p>
-      <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th></tr></thead><tbody>${C.map(([t, x]) => `<tr>
+    const G = gruposErro();
+    const C = L.filter((x) => x.portal_status !== "feito" && sit({ ...x, decisao: null, portal_status: null }) === "manual" && anotsDe(x).length)
+      .map((x) => [alvoTransp(x), x]).sort((a, b) => (a[1].decisao ? 1 : 0) - (b[1].decisao ? 1 : 0) || (diasDesde(b[1].ticket_criado) ?? -1) - (diasDesde(a[1].ticket_criado) ?? -1));
+    const nDec = C.filter(([, x]) => x.decisao).length;
+    const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${nDec ? `<span class="chip verde">${plural(nDec, "decidida", "decididas")}</span>` : ""}${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button>` : ""}${nDec ? `<button type="button" class="btn lilas mini br-an-portal" title="O robô só clica nas notas com decisão">Mandar para o portal</button>` : ""}</div>
+      ${C.length ? `<p class="s">A transportadora escreveu algo no portal, mas o robô não achou devolução no rastreio nem "não recebeu" na anotação. Leia e escolha a decisão na última coluna (✗ já vem com a anotação mais recente como motivo; dá para editar). Depois clique em <b>Mandar para o portal</b>: o robô só faz as notas decididas.</p>
+      <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th><th>Decisão (vai para o robô)</th></tr></thead><tbody>${C.map(([t, x]) => `<tr>
         <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}</td>
         <td>${esc(t)}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td>
         <td>${anotsDe(x).map((a) => `<div class="br-anot">${a.quando ? `<span class="s">${esc(a.quando)}</span> ` : ""}${esc(a.texto)}</div>`).join("")}${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}</td>
-        <td class="s">${esc(ultStatus(x))}</td></tr>`).join("")}</tbody></table></div>` : `<p class="s">Nenhuma nota em "Erro: verificar" tem anotação no portal.</p>`}</div>`;
+        <td class="s">${esc(ultStatus(x))}</td><td class="br-an-dec">${celDec(x)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="s">Nenhuma nota em "Erro: verificar" tem anotação no portal.</p>`}</div>`;
     box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem "não recebeu" no portal. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
       ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
       ${quadroAnot}
@@ -138,6 +141,7 @@
     const box = $("br-erro-transp"); if (!box || !box.contains(e.target)) return;
     const G = box._G || [], i = Number((e.target.closest("[data-i]") || {}).dataset?.i);
     if (e.target.closest(".br-et-todas")) return baixarErro(G, "todas");
+    if (e.target.closest(".br-an-portal")) return $("br-portal").click();
     if (e.target.closest(".br-an-xls")) { const C = box._C || [], wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(linhasXls(C.map(([, x]) => x)))), "Com anotação"); return XLSX.writeFile(wb, `barrar_com_anotacao_${new Date().toISOString().slice(0, 10)}.xlsx`); }
     if (e.target.closest(".br-et-xls")) return baixarErro([G[i]], G[i][0].normalize("NFD").replace(/[^\w]+/g, "_").slice(0, 30));
     const txt = () => (box.querySelector(`.br-et-msg[data-i="${i}"]`) || {}).value || "";
@@ -145,6 +149,13 @@
     const wa = e.target.closest(".br-et-wa"); if (wa) { e.preventDefault(); window.open("https://wa.me/?text=" + encodeURIComponent(txt()), "_blank", "noopener"); }
   });
 
+  // célula de decisão (lista principal e quadro de anotações): o que o robô vai fazer no portal
+  function celDec(x) {
+    const travado = x.portal_status === "feito";
+    return travado ? `<span class="chip ${x.decisao === "barrar" ? "verde" : "vermelho"}">${SUG[x.decisao] || ""}</span>`
+      : `<select class="br-dec" data-nf="${esc(x.nf)}"><option value="">—</option><option value="barrar"${x.decisao === "barrar" ? " selected" : ""}>Barrar ✓</option>${OP.map((o) => `<option value="nao_barrar|${esc(o)}"${x.decisao === "nao_barrar" && x.decisao_opcao === o ? " selected" : ""}>✗ ${esc(o)}</option>`).join("")}</select>
+        ${x.decisao === "nao_barrar" ? `<textarea class="br-mot" data-nf="${esc(x.nf)}" rows="2" placeholder="Motivo (vai no portal)">${esc(x.decisao_motivo || "")}</textarea>` : ""}${x.decisao_por ? `<div class="s">${esc(x.decisao_por.split("@")[0])} · ${hora(x.decisao_em)}</div>` : ""}`;;
+  }
   function linha(x) {
     const r = x.rastreio || {}, p = x.portal || {};
     const rast = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>`
@@ -153,9 +164,7 @@
     const an = p.anotacao ? `<div class="br-anot">${esc(p.anotacao)}</div>${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}` : `<span class="s">${x.conferido_em ? "sem anotação" : ""}</span>`;
     const sug = x.sugestao ? `<span class="chip ${x.sugestao === "barrar" ? "verde" : x.sugestao === "nao_barrar" ? "vermelho" : "ambar"}">${SUG[x.sugestao]}</span>${x.sugestao_opcao ? `<div class="s">${esc(x.sugestao_opcao)}</div>` : ""}${x.sugestao_motivo ? `<div class="s">${esc(x.sugestao_motivo)}</div>` : ""}` : "";
     const travado = !!x.portal_status && x.portal_status === "feito";
-    const dec = travado ? `<span class="chip ${x.decisao === "barrar" ? "verde" : "vermelho"}">${SUG[x.decisao] || ""}</span>`
-      : `<select class="br-dec" data-nf="${esc(x.nf)}"><option value="">—</option><option value="barrar"${x.decisao === "barrar" ? " selected" : ""}>Barrar ✓</option>${OP.map((o) => `<option value="nao_barrar|${esc(o)}"${x.decisao === "nao_barrar" && x.decisao_opcao === o ? " selected" : ""}>✗ ${esc(o)}</option>`).join("")}</select>
-        ${x.decisao === "nao_barrar" ? `<textarea class="br-mot" data-nf="${esc(x.nf)}" rows="2" placeholder="Motivo (vai no portal)">${esc(x.decisao_motivo || "")}</textarea>` : ""}${x.decisao_por ? `<div class="s">${esc(x.decisao_por.split("@")[0])} · ${hora(x.decisao_em)}</div>` : ""}`;
+    const dec = celDec(x);
     const port = x.portal_status === "feito" ? `<span class="chip verde">✓ Feito</span><div class="s">${esc(x.portal_msg || "")} ${hora(x.portal_em)}</div>` : x.portal_status === "erro" ? `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>` : x.decisao ? `<span class="s">na próxima ida ao portal</span>` : "";
     return `<tr><td><input type="checkbox" class="br-sel" data-nf="${esc(x.nf)}"${marcadas.has(x.nf) ? " checked" : ""}${travado ? " disabled" : ""}></td>
       <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}${x.status_intelipost ? `<div class="s">${esc(x.status_intelipost)}</div>` : ""}</td>
@@ -178,11 +187,12 @@
   $("br-cards").addEventListener("click", (e) => { const b = e.target.closest("[data-br]"); if (!b) return; card = b.dataset.br === card ? "todos" : b.dataset.br; desenhar(); });
   $("br-busca").addEventListener("input", desenhar); $("br-transp").addEventListener("change", desenhar);
   $("br-limpar").addEventListener("click", () => { $("br-busca").value = ""; $("br-transp").value = ""; card = "todos"; desenhar(); });
-  $("br-linhas").addEventListener("change", async (e) => {
+  document.addEventListener("change", async (e) => {
+    const dentro = e.target.closest("#br-linhas") ? "lista" : e.target.closest("#br-erro-transp") ? "anot" : ""; if (!dentro) return;
     const c = e.target.closest(".br-sel"); if (c) { c.checked ? marcadas.add(c.dataset.nf) : marcadas.delete(c.dataset.nf); desenhar(); return; }
     const d = e.target.closest(".br-dec");
     if (d) { const [dec, op] = d.value.split("|"); const x = L.find((y) => y.nf === d.dataset.nf);
-      const mot = dec === "nao_barrar" ? (x.decisao_motivo || (x.sugestao === "nao_barrar" ? x.sugestao_motivo : "") || "") : null;
+      const mot = dec === "nao_barrar" ? (x.decisao_motivo || (x.sugestao === "nao_barrar" ? x.sugestao_motivo : "") || (anotsDe(x)[0] || {}).texto || "") : null;
       await salvarDecisao([d.dataset.nf], dec || null, op || null, mot); return; }
     const m = e.target.closest(".br-mot");
     if (m) { const x = L.find((y) => y.nf === m.dataset.nf); await salvarDecisao([m.dataset.nf], "nao_barrar", x.decisao_opcao, m.value.trim()); }

@@ -1247,3 +1247,5 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .br-an-lista .br-anot { max-width: 520px; padding: 3px 0; border-bottom: 1px dashed #e3e8f0; }
 .br-an-lista .br-anot:last-of-type { border-bottom: 0; }
 .chip.mini { font-size: 10px; padding: 1px 6px; }
+.br-an-dec select { max-width: 230px; }
+.br-an-dec textarea { width: 230px; margin-top: 4px; font-size: 12px; }
