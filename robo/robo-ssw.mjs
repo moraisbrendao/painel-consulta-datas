@@ -405,6 +405,10 @@ if (MODO === "diag-serie2") {   // a 1ª célula das NFs achadas (CNPJ da série
 }
 if (MODO === "diag-sac") {   // Consulta SAC: quanto tempo a consultar_sac leva e quantas linhas volta (só contagens)
   await entrarSupabase();
+  for (const q of ["base_pedidos?select=pedido&limit=1000", "base_pedidos?select=pedido,nf,prev_original&prev_original=lte.2026-12-31&limit=1000", "tratativas?select=pedido,nova_data&limit=1000",
+    "intelipost_fechados?select=pedido&limit=1000", "detalhe_nf?select=nf&limit=1000", "base_aberta_bi?select=pedido&limit=1000"]) { const t0 = Date.now();
+    try { const x = await chamar(q); log(`${q.split("?")[0]} (${q.includes("prev_original=") ? "filtro data" : "simples"}): ${x.length} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s`); }
+    catch (e) { log(`${q.split("?")[0]}: erro em ${((Date.now() - t0) / 1000).toFixed(1)} s ${String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 120)}`); } }
   { const t0 = Date.now(); try { const x = await chamar("rpc/consultar_sac_json", "POST", {}); log(`consultar_sac_json: ${Array.isArray(x) ? x.length : "?"} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s`); }
     catch (e) { log(`consultar_sac_json: erro em ${((Date.now() - t0) / 1000).toFixed(1)} s ${String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160)}`); } }
   for (let de = 0; de < 8000; de += 1000) { const t0 = Date.now(); let n = -1, erro = "";
