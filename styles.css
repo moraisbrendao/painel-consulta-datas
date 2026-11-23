@@ -1234,3 +1234,7 @@ body.rep-claro .fo-lista a { color: #0369a1; }
   #c-lista-cartao .tabela-wrap { max-height: 560px; overflow: auto; border-radius: 8px; }
   #c-lista-cartao .tabela-wrap thead th { position: sticky; top: 0; z-index: 2; }
 }
+/* cards: só o ↗ do canto abre a lista (Brenda 23/11) */
+button.kpi > i { top: 6px; right: 6px; width: 28px; height: 28px; display: flex; align-items: center; justify-content: center; border-radius: 8px; font-size: 15px; color: #7c8596; cursor: pointer; transition: background .15s, color .15s; }
+button.kpi > i:hover { background: rgba(13,34,64,.1); color: var(--marinho); }
+button.kpi > i::after { content: ""; position: absolute; inset: -6px; }

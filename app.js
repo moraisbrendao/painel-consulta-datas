@@ -1661,7 +1661,7 @@ ${extra}
   }
 
   // cliques
-  $("g-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-g]"); if (!b) return; gCard = b.dataset.g; gSelecao = null; gPagina = 1; desenharGLista(true); });
+  $("g-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-g]"); if (!b) return; gCard = b.dataset.g; gSelecao = null; gPagina = 1; desenharGLista(!!e.target.closest(".kpi > i")); });   // só o ↗ abre a lista
   $("g-atr").addEventListener("click", (e) => { const b = e.target.closest("[data-atr]"); if (!b) return;
     const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", ocrep: "Atrasados com ocorrência ou reposição (fora da cobrança)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };
     const ids = new Set(gAtr[b.dataset.atr].map((r) => r.pedido)); selecionar(nomes[b.dataset.atr], (L) => L.filter((r) => ids.has(r.pedido))); });
@@ -5150,7 +5150,7 @@ ${extra}
    ["c-cards", ".kpi[data-c]", () => cLista, "c-lista-titulo", "c-exportar"], ["c-m-cards", ".kpi[data-r]", () => cLista, "c-lista-titulo", "c-exportar"], ["d-cards", ".kpi[data-d]", () => dLista, "d-lista-titulo", "d-exportar"],
    ["rt-cards", ".kpi[data-rt]", () => rtLista, "rt-titulo", "rt-excel"]].forEach(([id, sel, lista, tit, xl]) => {
     const el = $(id); if (!el) return;
-    el.addEventListener("click", (e) => { if (!e.target.closest(sel)) return; setTimeout(() => abrirListaCard($(tit) ? $(tit).textContent : "Pedidos", lista(), xl), 0); });
+    el.addEventListener("click", (e) => { if (!e.target.closest(sel) || !e.target.closest(".kpi > i")) return; setTimeout(() => abrirListaCard($(tit) ? $(tit).textContent : "Pedidos", lista(), xl), 0); });
   });
 
   // Reposição: botão Preto / Branco (Brenda 23/11) — guarda a escolha neste navegador
