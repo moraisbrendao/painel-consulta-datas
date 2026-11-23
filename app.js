@@ -4820,6 +4820,9 @@ ${extra}
     $("sac-info").textContent = "Carregando…";
     let lista = [];
     try {
+      const j = await sb.rpc("consultar_sac_json");   // parte 56: tudo numa chamada, sem estourar o tempo
+      if (!j.error && Array.isArray(j.data)) { sacCarregadoEm = Date.now(); montarSac(j.data); return; }
+      if (j.error && !/consultar_sac_json|function|schema cache/i.test(j.error.message || "")) throw j.error;
       for (let de = 0; ; de += 1000) {
         const { data, error } = await sb.rpc("consultar_sac").range(de, de + 999);
         if (error) throw error;
@@ -4827,7 +4830,7 @@ ${extra}
         if (data.length < 1000) break;
       }
     } catch (err) {
-      $("sac-info").textContent = "";
+      $("sac-info").textContent = "Não consegui carregar os pedidos: " + (/timeout/i.test(err.message || "") ? "a consulta demorou demais. Atualize a página em instantes." : err.message);
       toast("Erro ao carregar: " + err.message, true);
       return;
     }

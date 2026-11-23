@@ -2783,3 +2783,33 @@ begin
 end $$;
 revoke all on function public.rodar_robo_aguardando() from public, anon;
 grant execute on function public.rodar_robo_aguardando() to authenticated;
+
+-- ============================================================
+-- PARTE 56) Consulta SAC mais rápida: a consulta antiga passava do tempo (statement timeout) e a tela ficava em "Carregando…".
+--   Filtra primeiro (vencidos, hoje e amanhã), calcula a chave da nota só desses e devolve tudo numa chamada só.
+create or replace function public.consultar_sac_json()
+returns jsonb language sql stable security definer set search_path = public
+as $$
+  with lim as (select (now() at time zone 'America/Sao_Paulo')::date + 1 as d),
+  x as materialized (
+    select b.pedido, b.nf, b.canal, b.transportadora, b.micro_status, coalesce(b.prev_original, b.prev_atual) as prometido,
+           t.nova_data, t.observacao, t.atualizado_em, b.link_rastreio
+    from public.base_pedidos b
+    left join public.tratativas t on t.pedido = b.pedido
+    cross join lim
+    where auth.uid() is not null
+      and (coalesce(b.prev_original, b.prev_atual) <= lim.d or t.nova_data <= lim.d)
+  ),
+  y as materialized (
+    select x.*, public.chave_nf(x.nf) as k from x
+    where not exists (select 1 from public.intelipost_fechados f where f.pedido = x.pedido)
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido', y.pedido, 'nf', y.nf, 'canal', y.canal, 'transportadora', y.transportadora, 'micro_status', y.micro_status,
+           'prometido', y.prometido, 'nova_data', y.nova_data, 'observacao', y.observacao, 'atualizado_em', y.atualizado_em, 'link_rastreio', y.link_rastreio,
+           'tem_ocorr', d.tem_ocorr, 'ocorr_status', d.ocorr_status, 'ocorr_msg', d.ocorr_msg, 'ocorr_em', d.ocorr_em,
+           'tem_repo', d.tem_repo, 'repo_ticket', d.repo_ticket, 'repo_fila', d.repo_fila, 'repo_nf', d.repo_nf) order by y.pedido), '[]'::jsonb)
+  from y left join public.detalhe_nf d on d.nf = y.k
+$$;
+revoke all on function public.consultar_sac_json() from public, anon;
+grant execute on function public.consultar_sac_json() to authenticated;
