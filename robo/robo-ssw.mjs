@@ -409,6 +409,10 @@ if (MODO === "diag-sac") {   // Consulta SAC: quanto tempo a consultar_sac leva 
     "intelipost_fechados?select=pedido&limit=1000", "detalhe_nf?select=nf&limit=1000", "base_aberta_bi?select=pedido&limit=1000"]) { const t0 = Date.now();
     try { const x = await chamar(q); log(`${q.split("?")[0]} (${q.includes("prev_original=") ? "filtro data" : "simples"}): ${x.length} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s`); }
     catch (e) { log(`${q.split("?")[0]}: erro em ${((Date.now() - t0) / 1000).toFixed(1)} s ${String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 120)}`); } }
+  { let depois = "", tot = 0; for (let v = 0; v < 30; v++) { const t0 = Date.now();
+      try { const x = await chamar("rpc/consultar_sac_pag", "POST", { p_depois: depois }); tot += x.length; log(`consultar_sac_pag parte ${v + 1}: ${x.length} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s`); if (x.length < 1000) break; depois = x[x.length - 1].pedido; }
+      catch (e) { log(`consultar_sac_pag parte ${v + 1}: erro em ${((Date.now() - t0) / 1000).toFixed(1)} s ${String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160)}`); break; } }
+    log(`consultar_sac_pag total: ${tot} linhas`); }
   { const t0 = Date.now(); try { const x = await chamar("rpc/consultar_sac_json", "POST", {}); log(`consultar_sac_json: ${Array.isArray(x) ? x.length : "?"} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s`); }
     catch (e) { log(`consultar_sac_json: erro em ${((Date.now() - t0) / 1000).toFixed(1)} s ${String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160)}`); } }
   for (let de = 0; de < 8000; de += 1000) { const t0 = Date.now(); let n = -1, erro = "";

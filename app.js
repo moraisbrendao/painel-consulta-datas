@@ -4820,7 +4820,19 @@ ${extra}
     $("sac-info").textContent = "Carregando…";
     let lista = [];
     try {
-      const j = await sb.rpc("consultar_sac_json");   // parte 56: tudo numa chamada, sem estourar o tempo
+      // parte 58: em partes de 1000 pela ordem do pedido (cada chamada é curta e não estoura o tempo do Supabase)
+      let depois = "", usouPag = true;
+      for (let volta = 0; volta < 60; volta++) {
+        let r = await sb.rpc("consultar_sac_pag", { p_depois: depois });
+        if (r.error && /timeout|503|504/i.test(r.error.message || "")) r = await sb.rpc("consultar_sac_pag", { p_depois: depois });   // tenta de novo uma vez
+        if (r.error) { if (/consultar_sac_pag|function|schema cache/i.test(r.error.message || "") && !lista.length) { usouPag = false; break; } throw r.error; }
+        lista = lista.concat(r.data || []);
+        $("sac-info").textContent = `Carregando… ${fmt(lista.length)} pedidos`;
+        if (!r.data || r.data.length < 1000) break;
+        depois = r.data[r.data.length - 1].pedido;
+      }
+      if (usouPag) { sacCarregadoEm = Date.now(); montarSac(lista); return; }
+      const j = await sb.rpc("consultar_sac_json");   // parte 56: tudo numa chamada
       if (!j.error && Array.isArray(j.data)) { sacCarregadoEm = Date.now(); montarSac(j.data); return; }
       if (j.error && !/consultar_sac_json|function|schema cache/i.test(j.error.message || "")) throw j.error;
       for (let de = 0; ; de += 1000) {

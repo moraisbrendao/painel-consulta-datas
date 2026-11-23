@@ -2866,3 +2866,34 @@ as $$
 $$;
 revoke all on function public.consultar_sac() from public, anon;
 grant execute on function public.consultar_sac() to authenticated;
+
+-- ============================================================
+-- PARTE 58) Consulta SAC em partes de 1000 pedidos (pela ordem do número do pedido, usando o índice).
+--   Cada chamada é curta e não passa do tempo limite, mesmo com o banco ocupado pelos robôs.
+create or replace function public.consultar_sac_pag(p_depois text default '')
+returns table (pedido text, nf text, canal text, transportadora text, micro_status text,
+               prometido date, nova_data date, observacao text, atualizado_em timestamptz, link_rastreio text,
+               tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em text, tem_repo boolean, repo_ticket text, repo_fila text, repo_nf text)
+language sql stable security definer set search_path = public
+as $$
+  with x as materialized (
+    select b.pedido, b.nf, b.canal, b.transportadora, b.micro_status, coalesce(b.prev_original, b.prev_atual) as prometido,
+           t.nova_data, t.observacao, t.atualizado_em, b.link_rastreio
+    from public.base_pedidos b
+    left join public.tratativas t on t.pedido = b.pedido
+    where auth.uid() is not null
+      and b.pedido > coalesce(p_depois, '')
+      and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+      and (coalesce(b.prev_original, b.prev_atual) <= (now() at time zone 'America/Sao_Paulo')::date + 1
+           or t.nova_data <= (now() at time zone 'America/Sao_Paulo')::date + 1)
+      and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+    order by b.pedido
+    limit 1000
+  )
+  select x.pedido, x.nf, x.canal, x.transportadora, x.micro_status, x.prometido, x.nova_data, x.observacao, x.atualizado_em, x.link_rastreio,
+         d.tem_ocorr, d.ocorr_status, d.ocorr_msg, d.ocorr_em, d.tem_repo, d.repo_ticket, d.repo_fila, d.repo_nf
+  from x left join public.detalhe_nf d on d.nf = public.chave_nf(x.nf)
+  order by x.pedido
+$$;
+revoke all on function public.consultar_sac_pag(text) from public, anon;
+grant execute on function public.consultar_sac_pag(text) to authenticated;
