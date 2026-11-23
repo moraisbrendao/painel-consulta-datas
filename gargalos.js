@@ -88,6 +88,18 @@
       return;
     }
     const r = e.target.closest("tr.gx-reg"); if (r) { aberto[r.dataset.gr] = !aberto[r.dataset.gr]; desenhar(); return; }
+    if (e.target.closest("#gx-atrasos")) {
+      const A = X.filter(atrasado).sort((a, b) => String(a.prev_original || "").localeCompare(String(b.prev_original || "")));
+      if (!A.length) return alert("Nenhum pedido atrasado nesse filtro.");
+      const h = hoje(), dias = (d) => (d ? Math.round((Date.parse(h) - Date.parse(String(d).slice(0, 10))) / 864e5) : "");
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Pedido", "NF", "Canal", "Transportadora", "Região", "Cidade", "UF", "CEP", "Micro status", "Prometido ao cliente", "Dias de atraso", "Nova data", "Observação", "Expedição", "Última atualização", "Dias sem movimento"]]
+        .concat(A.map((p) => [p.pedido, p.nf, p.canal, nomeT(p.transportadora), regiao(p), p.cidade, p.uf, cepDe(p), p.micro_status, String(p.prev_original || "").slice(0, 10).split("-").reverse().join("/"), dias(p.prev_original),
+          p._t && p._t.nova_data ? String(p._t.nova_data).slice(0, 10).split("-").reverse().join("/") : "", (p._t && p._t.observacao) || "", String(p.data_expedicao || "").slice(0, 10).split("-").reverse().join("/"),
+          String(p.ultima_atualizacao || "").slice(0, 10).split("-").reverse().join("/"), p._parado ?? ""]))), "Atrasados");
+      XLSX.writeFile(wb, `atrasados_${quem().replace(/[^\wÀ-ú]+/g, "_")}_${h}.xlsx`);
+      return;
+    }
     if (e.target.closest("#gx-excel")) {
       if (!G.length) return;
       const wb = XLSX.utils.book_new();
