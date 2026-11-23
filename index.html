@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=255">
+  <link rel="stylesheet" href="styles.css?v=256">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -502,14 +502,14 @@
           <p class="sub">Trate primeiro o card 1, depois o 2 e o 3. A nova data e a observação são salvas aqui mesmo e valem em todas as abas.</p>
           <p id="d-info" class="info-base">Carregando…</p>
         </div>
-        <div class="acoes-robo"><label class="btn amarelo" title="Relatório paralelo com a Ordem de Compra (= Pedido Anymarket) e as notas: mostra a 2ª nota dos pedidos desmembrados">⇪ Subir pedidos desmembrados<input id="d-arq-desm" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label><button id="d-exportar" class="btn contorno">Baixar Excel</button></div>
+        <div class="acoes-robo"><label class="btn amarelo" title="Relatório Consulta do Promob (Pedido, Item, Descrição, Qtde, Ordem de compra, Data de emissão): mostra as outras partes dos pedidos desmembrados">⇪ Subir pedidos desmembrados<input id="d-arq-desm" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label><button id="d-exportar" class="btn contorno">Baixar Excel</button></div>
       </div>
       <section class="kpis c-kpis-acao" id="d-cards">
         <button class="kpi vermelho" data-d="agir"><span class="kpi-rot">1 · Atrasados sem nova data</span><b class="kpi-num"></b><small>cobrar a transportadora e informar a nova data</small><i>↗</i></button>
         <button class="kpi vermelho" data-d="extravio"><span class="kpi-rot">2 · Possível extravio</span><b class="kpi-num"></b><small>atrasado e parado há 15+ dias no rastreio</small><i>↗</i></button>
         <button class="kpi laranja" data-d="coleta"><span class="kpi-rot">3 · Atrasado sem coleta</span><b class="kpi-num"></b><small>a transportadora ainda não pegou o pedido</small><i>↗</i></button>
         <button class="kpi roxo" data-d="repocorr"><span class="kpi-rot">Com reposição ou ocorrência</span><b class="kpi-num"></b><small>já tem ticket aberto</small><i>↗</i></button>
-        <button class="kpi azul" data-d="desm"><span class="kpi-rot">Desmembrados</span><b class="kpi-num"></b><small>pedido com 2 notas (relatório de desmembrados)</small><i>↗</i></button>
+        <button class="kpi azul" data-d="desm"><span class="kpi-rot">Desmembrados</span><b class="kpi-num"></b><small>mesmo Pedido Anymarket com mais de uma nota</small><i>↗</i></button>
         <button class="kpi" data-d="abertos"><span class="kpi-rot">Todos em aberto</span><b class="kpi-num"></b><small id="d-abertos-sub">dropshipping não entregue</small><i>↗</i></button>
       </section>
       <div id="d-sel" class="g-cruz-sel" hidden></div>
@@ -1580,20 +1580,20 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=255"></script>
-  <script src="mapa-brasil.js?v=255"></script>
-  <script src="troca-notas.js?v=255"></script>
-  <script src="app.js?v=255"></script>
-  <script src="ordenar.js?v=255"></script>
-  <script src="menu.js?v=255"></script>
-  <script src="ajuda.js?v=255"></script>
-  <script src="documentos.js?v=255"></script>
-  <script src="barrar.js?v=255"></script>
-  <script src="faltas.js?v=255"></script>
-  <script src="motor.js?v=255"></script>
-  <script src="retornos-semana.js?v=255"></script>
-  <script src="gargalos.js?v=255"></script>
-  <script src="filas.js?v=255"></script>
-  <script src="filtros.js?v=255"></script>
+  <script src="config.js?v=256"></script>
+  <script src="mapa-brasil.js?v=256"></script>
+  <script src="troca-notas.js?v=256"></script>
+  <script src="app.js?v=256"></script>
+  <script src="ordenar.js?v=256"></script>
+  <script src="menu.js?v=256"></script>
+  <script src="ajuda.js?v=256"></script>
+  <script src="documentos.js?v=256"></script>
+  <script src="barrar.js?v=256"></script>
+  <script src="faltas.js?v=256"></script>
+  <script src="motor.js?v=256"></script>
+  <script src="retornos-semana.js?v=256"></script>
+  <script src="gargalos.js?v=256"></script>
+  <script src="filas.js?v=256"></script>
+  <script src="filtros.js?v=256"></script>
 </body>
 </html>

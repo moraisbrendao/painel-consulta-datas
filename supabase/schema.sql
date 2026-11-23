@@ -3011,3 +3011,30 @@ begin
 end $$;
 revoke all on function public.rodar_robo_intelipost() from public, anon;
 grant execute on function public.rodar_robo_intelipost() to authenticated;
+
+
+-- ============ PARTE 63: Dropshipping · desmembrados no formato do relatório Consulta do Promob ============
+-- Colunas novas: Pedido (Promob), Item, Descrição e Qtde. A nota passa a ser opcional (vem da base pelo Pedido Promob).
+alter table public.drop_desmembrados add column if not exists pedido text;
+alter table public.drop_desmembrados add column if not exists item text;
+alter table public.drop_desmembrados add column if not exists descricao text;
+alter table public.drop_desmembrados add column if not exists qtde numeric;
+
+create or replace function public.importar_desmembrados(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if limpar then
+    delete from public.drop_desmembrados where true;
+    insert into public.drop_desmembrados_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  end if;
+  insert into public.drop_desmembrados (ordem_compra, chave, nf, transportadora, status, emissao, pedido, item, descricao, qtde)
+  select r.ordem_compra, r.chave, r.nf, r.transportadora, r.status, r.emissao, r.pedido, r.item, r.descricao, r.qtde
+  from jsonb_to_recordset(linhas) as r(ordem_compra text, chave text, nf text, transportadora text, status text, emissao date, pedido text, item text, descricao text, qtde numeric)
+  where coalesce(r.chave, '') <> '';
+  return (select count(*) from public.drop_desmembrados);
+end $$;
+revoke all on function public.importar_desmembrados(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_desmembrados(jsonb, boolean, text, integer) to authenticated;
+notify pgrst, 'reload schema';
