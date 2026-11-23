@@ -9,7 +9,7 @@
 
 import * as B from "./barrar.mjs";
 
-const LIBERADO = false;   // até a Brenda aprovar o teste: o robô abre a ação, preenche e clica em Cancelar
+const LIBERADO = true;   // Brenda liberou em 23/11 ("faça isso para o restante dos tickets") depois do teste em 3 tickets
 const MSG = { voltar_barrar: "Pedido localizado em rastreio", entregue: "Pedido entregue conforme rastreio", cancelar: "Pedido não localizado em rastreio" };
 // botões da caixinha "Executar ação no ticket" desta fila (diag-naoloc 23/11): Cancelar / Voltar para barrar / Seguir cancelamento.
 // A caixinha não tem campo de texto: "Envie seu comentário antes de executar a ação" → o comentário vai antes, como Comentário Interno.
@@ -41,11 +41,11 @@ export function sugerir(x, r) {
 
 // 1) comentário interno (mensagem + print do rastreio); 2) "Executar ação no ticket" → botão da ação. No teste: não comenta e clica em Cancelar.
 const filaDe = (p) => p.evaluate(() => (document.body.innerText.match(/Atribu[ií]do Fila:\s*([^\n]+)/i) || [])[1] || "").then((x) => x.trim());
-async function executar(M, p, ticket, acao, print, real) {
+async function executar(M, p, ticket, acao, print, real, jaComentou, marcarComentado) {
   await M.abrirTicket(p, ticket);
   const antes = await filaDe(p);
-  if (!/n[aã]o localizada/i.test(antes)) throw new Error(`o ticket não está mais na fila Nota não localizada (está em "${antes.replace(/\d/g, "#")}")`);
-  if (real) await M.comentarioInterno(p, ticket, MSG[acao], print ? [{ name: "rastreio.png", mimeType: "image/png", buffer: print }] : []);
+  if (antes && !/n[aã]o localizada/i.test(antes)) return real && jaComentou ? "feito" : "saiu";   // já saiu da fila (alguém ou uma rodada anterior fez)
+  if (real && !jaComentou) { await M.comentarioInterno(p, ticket, MSG[acao], print ? [{ name: "rastreio.png", mimeType: "image/png", buffer: print }] : []); await marcarComentado(); }
   await M.abrirTicket(p, ticket);
   await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().click();
   const bt = p.getByRole("button", { name: OPCAO[acao] }).last();
@@ -66,9 +66,10 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   // só alguns tickets (pedido da Brenda): TRANSP = "h:" + hashes sha256 (10 letras) dos tickets, para não expor o número no registro público
   const { createHash } = await import("node:crypto");
   const hs = /^h:/.test(process.env.TRANSP || "") ? new Set(process.env.TRANSP.slice(2).split(",").map((t) => t.trim()).filter(Boolean)) : null;
+  const xs = /^x:/.test(process.env.TRANSP || "") ? new Set(process.env.TRANSP.slice(2).split(",").map((t) => t.trim()).filter(Boolean)) : null;   // tickets para deixar de fora
   const hsh = (t) => createHash("sha256").update(String(t)).digest("hex").slice(0, 10);
   const real = (LIBERADO || !!hs) && !teste;
-  const fila = L.filter((x) => x.na_planilha && x.acao_status !== "feito" && !x.segurar && (!hs || hs.has(hsh(x.ticket)))).slice(0, limite);
+  const fila = L.filter((x) => x.na_planilha && x.acao_status !== "feito" && !x.segurar && (!hs || hs.has(hsh(x.ticket))) && (!xs || !xs.has(hsh(x.ticket)))).slice(0, limite);
   // depois do cancelamento: reconfere o rastreio a cada 20 h, por até 90 dias, para avisar se aparecer CT-e
   const vigiar = hs ? [] : L.filter((x) => x.acao === "cancelar" && x.acao_status === "feito" && !x.cte_alerta_em && x.acao_em && Date.now() - Date.parse(x.acao_em) < 90 * 864e5
     && (!x.conferido_em || Date.now() - Date.parse(x.conferido_em) > 20 * 3600e3));
@@ -106,7 +107,10 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
       soma(`sugestão ${s.sugestao}`);
       if (["voltar_barrar", "entregue", "cancelar"].includes(s.sugestao) && m && x.ticket) {
         try {
-          const st = await executar(M, m, x.ticket, s.sugestao, s.sugestao === "cancelar" ? null : png, real);
+          const jaComentou = x.acao_status === "comentado" || /^coment/i.test(x.acao_msg || "");
+          const marcarComentado = () => chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { acao: s.sugestao, acao_status: "erro", acao_msg: "comentado; falta clicar na ação", acao_em: new Date().toISOString() }).catch(() => {});
+          let st = await executar(M, m, x.ticket, s.sugestao, s.sugestao === "cancelar" ? null : png, real, jaComentou, marcarComentado);
+          if (st === "saiu") { soma("já tinha saído da fila"); campos.acao_status = "erro"; campos.acao_msg = "o ticket já não estava na fila Nota não localizada: conferir no Multi360"; campos.acao = s.sugestao; campos.acao_em = new Date().toISOString(); await chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", campos); continue; }
           Object.assign(campos, { acao: s.sugestao, acao_status: st, acao_msg: st === "teste" ? "teste: preenchido e cancelado" : MSG[s.sugestao], acao_em: new Date().toISOString() });
           soma(st === "teste" ? "ação testada" : "ação feita");
           // entregue: entra no Barrar entrega já como "não barrado (Entregue)"; o robô do Barrar aplica no portal e põe os prints
