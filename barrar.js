@@ -75,7 +75,18 @@
   }
   // "Erro: verificar" = rastreio sem devolução/entrega e sem anotação: a transportadora não atuou.
   // Quadrinhos por transportadora (a do ticket 360: redespacho, senão a transportadora; senão a do pedido) com Excel e mensagem para o WhatsApp.
-  const alvoTransp = (x) => { const r = x.rastreio || {}; return (r.redesp_ticket || r.transp_ticket || x.transp_pedido || "").trim() || "(sem transportadora no ticket)"; };
+  // um quadrinho por transportadora (Brenda 23/11): junta os métodos (Dominalog - Filial SP, Dominalog Express…) e deixa só o nome
+  const NOME_BASE = [[/dominalog/i, "Dominalog"], [/\btsl\b/i, "TSL"], [/tempo\s*justo|^\s*vm\b|vm\s+transportes/i, "Tempo Justo"], [/zelog/i, "Zelog"], [/jadlog/i, "Jadlog"],
+    [/transiga/i, "Transiga"], [/trans\s*sua/i, "Trans Sua"], [/aceville/i, "Aceville"], [/atual\s*cargas/i, "Atual Cargas"], [/bento\s*brasil/i, "Bento Brasil"], [/formato/i, "Formato"],
+    [/tr[aâ]nsito\s*brasil/i, "Trânsito Brasil"], [/petrymar/i, "Petrymar"], [/transcai/i, "Transcai"], [/flog\b/i, "Flog"], [/zafer/i, "Zafer"], [/prolog/i, "Prolog"], [/r[aá]pido\s*al[eé]m/i, "Rápido Além Paraíba"]];
+  function nomeBase(t) {
+    t = String(t || "").trim(); if (!t) return "";
+    const k = NOME_BASE.find(([re]) => re.test(t)); if (k) return k[1];
+    let n = t.split(/\s+-\s+|\(|\//)[0].trim();
+    n = n.replace(/\b(standard|express[oa]?|econ[oô]mic[oa]|filial\s+\w+|ltda|eireli|s\.?\/?a\.?|me|transportes?|log[ií]sticas?|opera[cç][oõ]es|transportadora|solu[cç][oõ]es)\b\.?/gi, " ").replace(/\s+/g, " ").trim().replace(/(\s+e)+$/i, "");
+    return n || t;
+  }
+  const alvoTransp = (x) => { const r = x.rastreio || {}; return nomeBase(r.redesp_ticket || r.transp_ticket || x.transp_pedido) || "(sem transportadora no ticket)"; };
   const diasDesde = (d) => (d ? Math.max(0, Math.floor((Date.now() - Date.parse(String(d).replace(" ", "T"))) / 864e5)) : null);
   const ultStatus = (x) => { const r = x.rastreio || {}; return r.evento ? `${r.evento}${r.data_evento ? " em " + br(r.data_evento) : ""}` : r.situacao && !/^erro/i.test(r.situacao) ? r.situacao : "sem informação no rastreio"; };
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
@@ -83,15 +94,9 @@
     const m = new Map(); L.filter((x) => sit(x) === "manual").forEach((x) => { const t = alvoTransp(x); m.set(t, (m.get(t) || []).concat(x)); });
     return [...m.entries()].map(([t, xs]) => [t, xs.sort((a, b) => (diasDesde(b.ticket_criado) ?? -1) - (diasDesde(a.ticket_criado) ?? -1))]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR"));
   }
-  function msgTransp(t, xs) {
-    const pd = new Map(); xs.forEach((x) => { const d = diasDesde(x.ticket_criado); pd.set(d, (pd.get(d) || 0) + 1); });
-    const partes = [...pd.entries()].sort((a, b) => (b[0] ?? -1) - (a[0] ?? -1)).map(([d, n]) => d === null ? `${n} sem data de abertura` : `${n} há ${plural(d, "dia", "dias")}`);
-    const sts = [...new Set(xs.map(ultStatus))];
-    const fim = partes.length > 1 ? partes.slice(0, -1).join(", ") + " e " + partes[partes.length - 1] : partes[0];
-    return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar: ${fim}.`
-      + (sts.length === 1 ? (sts[0] === "sem informação no rastreio" ? " No rastreio ainda não aparece nenhuma informação." : ` O último status no rastreio é: ${sts[0]}.`) : "")
-      + ` Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
-      + xs.map((x) => { const d = diasDesde(x.ticket_criado); return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""}${sts.length > 1 ? ` · ${ultStatus(x)}` : ""}`; }).join("\n");
+  function msgTransp(t, xs) {   // texto limpo (Brenda 23/11): cabeçalho curto + uma linha por nota com dias e último status
+    return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar. Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
+      + xs.map((x) => { const d = diasDesde(x.ticket_criado); return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · ${ultStatus(x)}`; }).join("\n");
   }
   const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || ""]; });
   const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô"];
