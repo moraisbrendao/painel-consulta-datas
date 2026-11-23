@@ -2229,7 +2229,7 @@ create policy "logistica grava" on public.repo_itens_tk for all to authenticated
 create policy "logistica le" on public.repo_itens for select to authenticated using ((select not public.e_sac()));
 create policy "logistica grava" on public.repo_itens for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
 
--- robô lê os tickets em Aguardando entrega (disparado pelo painel depois do envio da planilha)
+-- robô lê os tickets em Aguardando entrega 2x por dia (08:00 e 14:00 de Brasília)
 create or replace function public._robo_repo_itens()
 returns void language plpgsql security definer set search_path = public as $$
 declare tk text;
@@ -2246,7 +2246,7 @@ begin
 end $$;
 revoke all on function public._robo_repo_itens() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-repo-itens';
--- (parte 56: sem horário fixo; o painel chama rodar_robo_repo_itens() quando chega planilha nova)
+select cron.schedule('robo-repo-itens', '0 11,17 * * *', 'select public._robo_repo_itens()');
 
 -- ============================================================
 -- PARTE 49) Barrar entrega: planilha de tickets "Barrar entrega" + conferência do robô (rastreio e portal) + decisão da Logística
@@ -2783,17 +2783,3 @@ begin
 end $$;
 revoke all on function public.rodar_robo_aguardando() from public, anon;
 grant execute on function public.rodar_robo_aguardando() to authenticated;
-
--- ============================================================
--- PARTE 56) Robô de itens da reposição: sem horário fixo. Só roda quando chega planilha nova
---   (tabela de acompanhamento ou detalhamento com a aba Reposições) — o painel chama rodar_robo_repo_itens() depois do envio.
-select cron.unschedule(jobid) from cron.job where jobname = 'robo-repo-itens';
-
-create or replace function public.rodar_robo_repo_itens()
-returns void language plpgsql security definer set search_path = public as $$
-begin
-  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
-  perform public._robo_repo_itens();
-end $$;
-revoke all on function public.rodar_robo_repo_itens() from public, anon;
-grant execute on function public.rodar_robo_repo_itens() to authenticated;

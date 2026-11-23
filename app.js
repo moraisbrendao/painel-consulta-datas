@@ -4685,7 +4685,6 @@ ${extra}
     }
     await carregarReposicoes();
     carregando("");
-    roboItensRepo();
     toast(`Reposições atualizadas: ${fmt(reps.length)} tickets${avisoFilas}.`, /falta|filas: /.test(avisoFilas));
   });
 
@@ -4714,8 +4713,6 @@ ${extra}
     });
     return { linhas: [...m.values()], lidas };
   }
-  // robô de itens da reposição: só roda quando chega planilha nova (Brenda 23/11; antes rodava 08h e 14h sozinho)
-  function roboItensRepo() { sb.rpc("rodar_robo_repo_itens").then(({ error }) => { if (error) console.warn("robô de itens:", error.message); }); }
   async function guardarHistRepo(arq, wb) {
     const { linhas, lidas } = lerHistRepo(wb);
     if (!linhas.length) return "";
@@ -4735,7 +4732,6 @@ ${extra}
     if (ab.error) return /já está no histórico/i.test(ab.error.message) ? " · histórico: esse detalhamento já estava guardado" : /abrir_envio_repo|function/i.test(ab.error.message) ? " · histórico: falta rodar a parte 36 do schema.sql" : " · histórico: " + ab.error.message;
     try { await enviarLotes("gravar_hist_repo", linhas, 500, (lote) => ({ p_envio: ab.data, linhas: lote }), 0); }
     catch (err) { return " · histórico: erro ao gravar (" + err.message + ")"; }
-    roboItensRepo();
     return ` · histórico de reposições: ${fmt(tickets)} tickets guardados`;
   }
 
