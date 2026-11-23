@@ -1139,3 +1139,8 @@ body.rep-claro .fo-lista .s { color: var(--texto-2); }
 body.rep-claro .fo-lista a { color: #0369a1; }
 .btn-lua { font-size: 18px; line-height: 1; padding: 6px 11px; min-width: 40px; }
 .btn-lua.noite { background: #0d1117 !important; color: #f5c84b !important; border-color: #3d4a5c !important; }
+/* Falta de volumes: aviso do que fazer por motivo (pisca) */
+.fv-aviso { margin-top: 6px; font-size: 12px; font-weight: 600; line-height: 1.35; color: #92400e; background: #fef3c7; border: 1px solid #f5b800; border-radius: 6px; padding: 4px 7px; min-width: 190px; max-width: 260px; animation: fv-pisca 1.6s ease-in-out infinite; }
+.fv-aviso.forte { color: #fff; background: #dc2626; border-color: #b91c1c; animation-duration: 1s; }
+@keyframes fv-pisca { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+@media (prefers-reduced-motion: reduce) { .fv-aviso { animation: none; } }

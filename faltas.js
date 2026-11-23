@@ -64,6 +64,16 @@
   const quem = (r) => (r.por ? ` <b class="fv-por">${esc(r.por)}</b>` : "");
   // só a conversa: tira o texto dos botões e do rodapé do 360 que entrou junto na última mensagem
   const limpaTexto = (t) => String(t || "").replace(/\s*Executar a[cç][aã]o no ticket[\s\S]*$/i, "").replace(/\s*(Coment[aá]rio Interno\s+Macros|Admin\s+\d{4}\s*©|©\s*Multim[oó]veis|Desenvolvido pela Equipe)[\s\S]*$/i, "").trim();
+  // o que fazer por motivo (regras da Brenda, 23/11) — aviso piscando ao lado do motivo
+  const NAO_TEM = /n[aã]o\s+(tem|temos|possui|possu[ií]mos|consta|constam|localiz|encontr|est[aá]\s+em\s+(nossa\s+)?posse|h[aá]\s+volume)|sem\s+(o\s+)?volume|volume\s+n[aã]o\s+(est[aá]|consta|foi\s+localizado)/i;
+  function avisoMotivo(x, R) {
+    const m = norm(motivoDe(x)), txt = R.map((r) => limpaTexto(r.texto)).join(" ");
+    if (/INVERS/.test(m)) return `<div class="fv-aviso" title="Regra da Inversão">⚠ Deixar a transportadora fazer a troca. Se ela não fizer, seguir com o envio.</div>`;
+    if (/FALTA/.test(m)) return NAO_TEM.test(txt)
+      ? `<div class="fv-aviso forte" title="A transportadora respondeu que não tem o volume">⚠ Transportadora diz que não tem o volume: se o comprovante de entrega não tem ressalva, seguir com o envio por nossa conta.</div>`
+      : `<div class="fv-aviso" title="Regra da Falta de volumes">⚠ Se a transportadora disser que não tem o volume em posse e o comprovante de entrega não tiver ressalva, seguir com o envio por nossa conta.</div>`;
+    return "";
+  }
   function linha(x) {
     const p = x.portal || {}, R = retornos(x), d = dias(abertoEm(x)), pv = prazoVencido(x);
     // todas as mensagens da transportadora, da 1ª resposta até a última (rola dentro da caixa)
@@ -72,7 +82,7 @@
       : `<span class="txt-vermelho">Sem retorno da transportadora</span>${p.achou === false ? `<div class="s">NF não está na aba Faltas / Inversões do portal</div>` : ""}`;
     const ed = x.editado_em ? `<div class="s">gravado${x.editado_por ? " por " + esc(String(x.editado_por).split("@")[0]) : ""} em ${hora(x.editado_em)}</div>` : "";
     return `<tr><td><b>${esc(x.nf || "—")}</b><div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>${x.fila ? `<div class="s">${esc(x.fila)}</div>` : ""}</td>
-      <td>${esc(transpDe(x))}</td><td>${esc(motivoDe(x))}</td>
+      <td>${esc(transpDe(x))}</td><td>${esc(motivoDe(x))}${avisoMotivo(x, R)}</td>
       <td class="num">${d ?? "—"}${abertoEm(x) ? `<div class="s">desde ${br(abertoEm(x))}</div>` : ""}</td>
       <td>${p.prazo ? `${esc(p.prazo)}${pv ? ` <span class="chip vermelho">vencido</span>` : ""}` : "—"}</td>
       <td class="fv-prom"><input type="date" class="fv-data" data-tk="${esc(x.ticket)}" value="${esc(x.data_prometida || "")}" title="Data que a transportadora informou para finalizar">${promVencida(x) ? ` <span class="chip vermelho">promessa vencida</span>` : ""}</td>
