@@ -3594,7 +3594,9 @@ ${extra}
   async function carregarConferencia() {
     carregarSenhas().catch(() => {});
     sb.from("conferencia_pedido").select("*").limit(1).then(({ data, error }) => { cfTudo = error ? null : (data && data[0]) || null; desenharTudo(); });
-    try { cfLista = await buscarTudo("conferencia_ssw", "pedido"); cfOk = true;
+    try { const [cl, fech] = await Promise.all([buscarTudo("conferencia_ssw", "pedido"), buscarTudo("intelipost_fechados", "pedido", "pedido").catch(() => [])]);
+      // o que já está Entregue/Cancelado no último "Enviar Intelipost" sai da conferência (mesmo se a lista foi importada antes)
+      const fch = new Set(fech.map((f) => f.pedido)); cfLista = fch.size ? cl.filter((x) => !fch.has(x.pedido)) : cl; cfOk = true;
       // carta de correção: outra transportadora emitiu o CT-e no SSW → o pedido passa a contar para ela (regra da Brenda)
       cfLista.forEach((x) => { const em = x.detalhe && x.detalhe.emissor; if (em) { x.transp_original = x.transportadora; x.transportadora = em; } }); }
     catch (err) { cfOk = false; cfLista = []; }
