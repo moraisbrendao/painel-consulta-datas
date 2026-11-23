@@ -441,6 +441,29 @@ if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem n
   log(`hoje ${hoje} · em aberto ${B.length} · regras ${R.length || "fábrica"} · TOTAL atrasados sem nova data ${tot.atr} · vencem hoje/amanhã sem nova data ${tot.vence} · em reposição ${tot.rep} (sem nova data ${tot.repSem})`);
   Object.entries(por).filter(([, x]) => x.atr + x.vence + x.rep).sort((a, b) => (b[1].atr + b[1].vence) - (a[1].atr + a[1].vence)).forEach(([k, x]) => log(`  ${k} · atrasados s/ data ${x.atr} · vencem s/ data ${x.vence} · reposição ${x.rep} (s/ data ${x.repSem})`));
 }
+if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão VM/Tempo Justo) tem mais atraso hoje: só contagens agregadas
+  await entrarSupabase();
+  const nrm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+  const alvo = new RegExp(process.env.TRANSP || "TEMPO\\s*JUSTO|^VM\\b|VM TRANSP", "i");
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), dd = (a, b) => Math.round((Date.parse(b) - Date.parse(a)) / 864e5);
+  const B = []; for (let de = 0; ; de += 1000) { const x = await chamar(`base_aberta_bi?select=transportadora,uf,cidade,micro_status,prev_original,range_atrasos,data_expedicao,ultima_atualizacao,entregue_ip,extra&order=pedido&limit=1000&offset=${de}`); B.push(...x); if (x.length < 1000) break; }
+  const ef = (b) => { const rd = b.extra && b.extra.redespacho; return nrm(rd && !/^SEM\b|^-$/i.test(rd) ? rd : b.transportadora); };
+  const V = B.filter((b) => !b.entregue_ip && alvo.test(ef(b)));
+  const atr = (b) => /^VENCIDO/i.test(nrm(b.range_atrasos)) || (!b.range_atrasos && b.prev_original && String(b.prev_original).slice(0, 10) < hoje);
+  const A = V.filter(atr);
+  const conta = (L, f) => { const m = new Map(); L.forEach((b) => { const k = f(b); m.set(k, (m.get(k) || 0) + 1); }); return m; };
+  const tabela = (titulo, f, n = 15) => { const a = conta(A, f), t = conta(V, f);
+    log(titulo); [...a.entries()].sort((x, y) => y[1] - x[1]).slice(0, n).forEach(([k, q]) => log(`  ${k} · atrasados ${q} de ${t.get(k)} em aberto (${Math.round(100 * q / t.get(k))}%)`)); };
+  log(`hoje ${hoje} · em aberto ${V.length} · atrasados ${A.length}`);
+  tabela("POR UF", (b) => nrm(b.uf) || "?");
+  tabela("POR CIDADE (UF)", (b) => `${nrm(b.cidade) || "?"}/${nrm(b.uf) || "?"}`, 20);
+  tabela("POR MICRO STATUS", (b) => nrm(b.micro_status) || "?", 12);
+  const fx = (n, cs) => (n === null ? "sem data" : cs.find(([lim]) => n <= lim)[1]);
+  tabela("DIAS SEM MOVIMENTO NO RASTREIO", (b) => fx(b.ultima_atualizacao ? dd(String(b.ultima_atualizacao).slice(0, 10), hoje) : null, [[2, "0-2"], [6, "3-6"], [14, "7-14"], [29, "15-29"], [1e9, "30+"]]));
+  tabela("DIAS DESDE A EXPEDIÇÃO", (b) => fx(b.data_expedicao ? dd(String(b.data_expedicao).slice(0, 10), hoje) : null, [[5, "0-5"], [10, "6-10"], [20, "11-20"], [40, "21-40"], [1e9, "41+"]]));
+  tabela("DIAS DE ATRASO", (b) => fx(b.prev_original ? dd(String(b.prev_original).slice(0, 10), hoje) : null, [[0, "no prazo"], [3, "1-3"], [9, "4-9"], [19, "10-19"], [1e9, "20+"]]));
+  tabela("UF x MICRO STATUS (atrasados)", (b) => `${nrm(b.uf) || "?"} · ${nrm(b.micro_status) || "?"}`, 15);
+}
 if (MODO === "parar-tudo") {   // pausa o "Conferir tudo agora" em andamento (pedido da Brenda, 17/11): só marca como terminado
   await entrarSupabase(); await chamar("rpc/fim_conferencia_tudo", "POST", {}); log("Conferir tudo: pausado.");
 }
