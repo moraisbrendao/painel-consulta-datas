@@ -2846,6 +2846,7 @@ revoke all on function public.consultar_sac_json() from public, anon;
 grant execute on function public.consultar_sac_json() to authenticated;
 
 -- versão antiga (o painel usa se a nova faltar), com o mesmo filtro
+drop function if exists public.consultar_sac();
 create or replace function public.consultar_sac()
 returns table (pedido text, nf text, canal text, transportadora text, micro_status text,
                prometido date, nova_data date, observacao text, atualizado_em timestamptz, link_rastreio text)
@@ -2863,3 +2864,5 @@ as $$
          or t.nova_data <= (now() at time zone 'America/Sao_Paulo')::date + 1)
   order by b.pedido
 $$;
+revoke all on function public.consultar_sac() from public, anon;
+grant execute on function public.consultar_sac() to authenticated;
