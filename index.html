@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=271">
+  <link rel="stylesheet" href="styles.css?v=272">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -44,7 +44,7 @@
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
       <button class="menu-item so-log" data-pagina="retornos" hidden style="display:none"><span class="menu-icone">📣</span>Cobrança do dia <span id="menu-rt" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
-      <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Alterar pedidos</button>
+      <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Piloto Automático</button>
       <button class="menu-item so-log" data-pagina="conferencia"><span class="menu-icone">☑</span>Conferência SSW</button>
       <button class="menu-item so-log" data-pagina="documentos"><span class="menu-icone">🗎</span>Gerar XML</button>
       <button class="menu-item" data-pagina="sac"><span class="menu-icone">☎</span>Consulta SAC</button>
@@ -908,7 +908,7 @@
               <tbody id="rpf-tempos"></tbody></table></div>
           </section>
           <section class="cartao">
-            <div class="cartao-topo"><div><h2>Transportadora da reposição (Promob)</h2><p class="sub">Transp. nota reposição (Promob), só dos tickets que estão no detalhamento. Nome pela lista de apelidos (Alterar pedidos › Transportadora divergente).</p></div></div>
+            <div class="cartao-topo"><div><h2>Transportadora da reposição (Promob)</h2><p class="sub">Transp. nota reposição (Promob), só dos tickets que estão no detalhamento. Nome pela lista de apelidos (Piloto Automático › Transportadora divergente).</p></div></div>
             <div class="tabela-wrap tabela-alta"><table class="tabela-pedidos rp-tab">
               <thead><tr><th>Transportadora (Promob)</th><th class="num">Tickets</th><th class="num">Com nova NF</th><th class="num">Com saída</th></tr></thead>
               <tbody id="rpf-promob"></tbody></table></div>
@@ -1226,7 +1226,7 @@
     <main class="conteudo" id="pagina-alterar" hidden>
       <div class="titulo-pagina com-acoes">
         <div>
-          <h1>Alterar pedidos</h1>
+          <h1>Piloto Automático</h1>
           <p class="sub">Diga o pedido e a nova data. O robô altera na Intelipost e avisa aqui.</p>
         </div>
         <div class="acoes-titulo" id="ap-abas">
@@ -1612,21 +1612,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=271"></script>
-  <script src="mapa-brasil.js?v=271"></script>
-  <script src="troca-notas.js?v=271"></script>
-  <script src="app.js?v=271"></script>
-  <script src="ordenar.js?v=271"></script>
-  <script src="menu.js?v=271"></script>
-  <script src="ajuda.js?v=271"></script>
-  <script src="documentos.js?v=271"></script>
-  <script src="barrar.js?v=271"></script>
-  <script src="naoloc.js?v=271"></script>
-  <script src="faltas.js?v=271"></script>
-  <script src="motor.js?v=271"></script>
-  <script src="retornos-semana.js?v=271"></script>
-  <script src="gargalos.js?v=271"></script>
-  <script src="filas.js?v=271"></script>
-  <script src="filtros.js?v=271"></script>
+  <script src="config.js?v=272"></script>
+  <script src="mapa-brasil.js?v=272"></script>
+  <script src="troca-notas.js?v=272"></script>
+  <script src="app.js?v=272"></script>
+  <script src="ordenar.js?v=272"></script>
+  <script src="menu.js?v=272"></script>
+  <script src="ajuda.js?v=272"></script>
+  <script src="documentos.js?v=272"></script>
+  <script src="barrar.js?v=272"></script>
+  <script src="naoloc.js?v=272"></script>
+  <script src="faltas.js?v=272"></script>
+  <script src="motor.js?v=272"></script>
+  <script src="retornos-semana.js?v=272"></script>
+  <script src="gargalos.js?v=272"></script>
+  <script src="filas.js?v=272"></script>
+  <script src="filtros.js?v=272"></script>
 </body>
 </html>

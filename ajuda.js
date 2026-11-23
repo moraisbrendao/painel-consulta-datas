@@ -10,8 +10,8 @@
       "Clique em <b>Enviar Intelipost</b> e escolha o arquivo <b>transactions</b> exportado da Intelipost. Ele tira do painel o que já foi entregue ou cancelado.",
       "Clique em <b>Carregar tickets</b> e escolha o <b>detalhamento_tickets360</b> (recebido por e-mail). Ele mostra a fila do ticket de cada pedido.",
       "Quando a transportadora responder, suba a planilha no <b>Preventivo › Enviar retornos</b> (ou preencha <b>Nova data</b> e <b>Observação</b> direto na lista). O pedido sai da cobrança sozinho.",
-      "Em <b>Alterar pedidos</b>, rode as filas <b>Aguardando entrega</b> e <b>Aguardando entrega AT</b> (subir o relatório do Multi360) e confira as <b>Ocorrências</b>.",
-      "Em <b>Alterar pedidos › Nova previsão de entrega</b>, clique em <b>↓ Trazer do Preventivo e SSW</b>, confira, clique em <b>➕ Colocar na fila</b> e depois em <b>▶ Enviar para o robô</b>.",
+      "Em <b>Piloto Automático</b>, rode as filas <b>Aguardando entrega</b> e <b>Aguardando entrega AT</b> (subir o relatório do Multi360) e confira as <b>Ocorrências</b>.",
+      "Em <b>Piloto Automático › Nova previsão de entrega</b>, clique em <b>↓ Trazer do Preventivo e SSW</b>, confira, clique em <b>➕ Colocar na fila</b> e depois em <b>▶ Enviar para o robô</b>.",
       "Na <b>Conferência SSW</b>, veja o card <b>Falta atualizar a Intelipost</b> e dê baixa na Intelipost nos pedidos que já foram entregues.",
     ], "No topo aparece a data da planilha carregada. Se estiver amarelo (planilha antiga), carregue de novo. Tudo que alguém salva aparece para toda a Logística na hora."],
 
@@ -76,7 +76,7 @@
 
     ["reposicao", "Reposição", "Indicadores de reposição pré e pós-entrega, por mês, transportadora e motivo.", "Para o acompanhamento mensal de reposições.", [
       "Clique em <b>⇪ Subir tabela de acompanhamento</b> e escolha a TABELA DE ACOMPANHAMENTO (BI, aba Export).",
-      "Para os dados da nova NF e transportadora da reposição, suba também o detalhamento de tickets (Alterar pedidos › Ajuste Intelipost).",
+      "Para os dados da nova NF e transportadora da reposição, suba também o detalhamento de tickets (Piloto Automático › Ajuste Intelipost).",
       "Use as abas <b>Visão geral</b>, <b>Pré-entrega</b>, <b>Pós-entrega</b> e <b>Detalhamento operacional</b>, e os filtros de mês, transportadora, tipo e motivo.",
       "Clique em qualquer card (Em aberto, Finalizados, Recuperação de crédito, Totais...) para ver os tickets dele no Detalhamento; <b>Baixar Excel</b> leva essa lista.",
       "Clique no card <b>Em aberto</b> (Visão geral, Pré ou Pós) para abrir o quadro <b>Em aberto por fila · dias parados na fila</b>: por responsável e fila, há quantos dias os casos estão parados, separado por <b>Grupo</b> (Logística, Sac, Faturamento, Projetos) e fila, com filtros próprios de <b>Grupo</b> e <b>Fila atual</b> (a <b>Série da NF</b> fica nos filtros do topo); clique num número para ver os tickets. Clique no card de novo para fechar. O card <b>Gargalos por fila</b> abre o ranking das filas com mais dias parados (casos, média de dias, mais antigo, +10 dias), com filtros de Grupo e Fila e <b>Baixar Excel</b> (ranking + casos).",
@@ -86,7 +86,7 @@
       "Aba <b>Filas atualizadas e ocorrências</b>: em <b>Filas</b>, os tickets em aberto da tabela de acompanhamento por responsável › fila e dias (vermelho = 20 dias ou mais); clique em <b>Editar responsáveis</b> para escrever quem cuida de cada fila. Em <b>Ocorrências</b>, a aba Ocorrências do detalhamento de tickets por transportador, com os filtros da Planilha1. Clique em qualquer número para ver os casos com o link e exportar.",
     ], "Tipo \"Reposição\" = pré-entrega; \"Reposição Pós Entrega\" = pós-entrega. Transportadora = redespacho (coluna R) se tiver, senão a coluna Q. Status Resolvido ou Encerrado = finalizado. Ticket na fila Recuperação de crédito = pendente de solução da Recuperação de crédito (não conta como em aberto)."],
 
-    ["alterar", "Alterar pedidos", "Onde a Logística manda os robôs alterarem a Intelipost e o Multi360. Tem 6 botões no alto; cada um abre uma tela.", "Todo dia.", [
+    ["alterar", "Piloto Automático", "Onde a Logística manda os robôs alterarem a Intelipost e o Multi360. Tem 6 botões no alto; cada um abre uma tela.", "Todo dia.", [
       "<b>📅 Nova previsão de entrega</b>: escreva uma linha por pedido (<i>PEDIDO dd/mm/aaaa</i>) ou suba a planilha, ou clique em <b>↓ Trazer do Preventivo e SSW</b>. Confira a lista, clique em <b>➕ Colocar na fila</b> e, quando quiser que o robô altere, em <b>▶ Enviar para o robô</b>. Em \"O que o robô fez\" aparece o resultado (Alterado / Não alterou e o motivo). Datas vencidas, iguais à prometida ou antes dela ficam de fora.",
       "<b>⇄ Ajuste Intelipost</b> (troca de notas): <b>⇪ Subir detalhamento_tickets</b> (aba Reposições). Clique no ticket para ver nova NF, série, chave, data e método; marque as etapas e quem pegou. Parcial não mexe nos volumes; Total altera todos; série 4 só ação no ticket.",
       "<b>🚚 Fila Aguardando entrega</b> e <b>🔧 Aguardando entrega AT</b>: extraia o relatório da fila no Multi360 e clique em <b>⇪ Subir relatório</b>. O robô abre cada ticket, pega a nova NF no chat, confere o rastreio e, se entregue, dá baixa \"Nota entregue?\" → Sim com o print. Trate os cards <b>Não entregues</b> e <b>Conferir à mão</b> e escreva a observação.",
@@ -109,7 +109,7 @@
       "Em <b>Por transportadora</b>, clique em <b>Baixar .zip</b> (XML + PDF de cada nota) e mande para a transportadora.",
     ], "Os XMLs ficam só no seu computador; nada vai para o banco."],
 
-    ["barrar", "Barrar entrega (em Alterar pedidos)", "Confere as notas que o Multi pediu para barrar: rastreio (status atual em devolução) e anotações da transportadora no portal.", "Quando chega a planilha de tickets Barrar entrega.", [
+    ["barrar", "Barrar entrega (em Piloto Automático)", "Confere as notas que o Multi pediu para barrar: rastreio (status atual em devolução) e anotações da transportadora no portal.", "Quando chega a planilha de tickets Barrar entrega.", [
       "Clique em <b>Enviar planilha</b> e escolha a planilha de tickets <b>Barrar entrega</b>.",
       "Clique em <b>Conferir agora</b>: o robô olha o rastreio e as anotações do portal e tira print da anotação.",
       "Confira a <b>Sugestão do robô</b>, marque as notas e clique em <b>Aprovar sugestão</b> (ou escolha a decisão na linha).",
@@ -117,7 +117,7 @@
       "Card <b>Erro: verificar</b>: mostra um quadrinho por transportadora com as notas que ela ainda não atuou (dias pendentes e último status). Use <b>Copiar mensagem</b> ou <b>WhatsApp</b> para cobrar e <b>Excel</b> para mandar a lista. Acima dos quadrinhos, o quadro <b>Com anotação da transportadora no portal</b> mostra as notas em que a transportadora escreveu algo no portal (todas as anotações, mais recente primeiro, com o print) para você ler e escolher a <b>Decisão</b> de cada uma (fica em rascunho; ✗ já vem com a anotação como motivo). No fim, clique em <b>Aprovar decisões</b>: elas vão para o card <b>Aprovadas</b> e saem dos quadrinhos de cobrança; depois use <b>Mandar para o portal</b>. As que você não decidir continuam nos quadrinhos para cobrar.",
     ], "Transportadora diferente entre o pedido e o portal aparece no card <b>Transportadora diferente</b>. Os entregues no rastreio o robô aprova e aplica sozinho; o resto só com a sua aprovação. O quadro <b>Envios ao portal</b> mostra cada envio por horário, separando o que você aprovou e o que o robô fez sozinho."],
 
-    ["nl", "Nota não localizada (em Alterar pedidos)", "Trata a fila Nota não localizada (Sem Emissão) do Multi360: o robô olha o rastreio e devolve para o barrar ou segue para cancelamento.", "Quando chega a planilha de tickets da fila.", [
+    ["nl", "Nota não localizada (em Piloto Automático)", "Trata a fila Nota não localizada (Sem Emissão) do Multi360: o robô olha o rastreio e devolve para o barrar ou segue para cancelamento.", "Quando chega a planilha de tickets da fila.", [
       "Clique em <b>↓ Modelo</b> se precisar do formato e em <b>Enviar planilha</b> com o relatório de tickets da fila.",
       "Clique em <b>Rodar o robô</b>: no rastreio → voltar para o barrar; entregue → voltar para o barrar e não barrado (Entregue) no Barrar entrega; fora do rastreio e fora do prazo → seguir para cancelamento com \"Pedido não localizado em rastreio\".",
       "Prazo: série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis; séries 7, 31 e 4 = 5 dias úteis, contados da criação do ticket. Antes disso a nota fica em <b>Aguardando prazo</b>.",
