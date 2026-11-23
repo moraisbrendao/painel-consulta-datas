@@ -1229,3 +1229,8 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 .gx-mini td.num { color: var(--texto); }
 .gx-mini td.num.clic { color: var(--vermelho); }
 .gx-mini td.num.vazio-c { color: #c4c9d2; }
+/* Análise de canais: lista de pedidos com altura fixa e rolagem própria (Brenda 23/11) */
+@media (min-width: 761px) {
+  #c-lista-cartao .tabela-wrap { max-height: 560px; overflow: auto; border-radius: 8px; }
+  #c-lista-cartao .tabela-wrap thead th { position: sticky; top: 0; z-index: 2; }
+}
