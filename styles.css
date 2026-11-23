@@ -1254,3 +1254,10 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .br-et-an + .br-et-an { margin-top: 3px; }
 .br-et-rast { margin-top: 3px; color: #333; }
 .br-et-lista { max-height: 320px; }
+/* Alterar pedidos › Nota não localizada */
+.nl-tab tr.nl-fora td { opacity: .65; }
+.nl-bts { margin-top: 4px; display: flex; gap: 6px; align-items: center; }
+.nl-cte { margin-top: 6px; background: #fde8e8; color: #8a1c1c; border-radius: 6px; padding: 4px 8px; font-size: 12px; }
+.nl-seg { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
+#nl-alerta { display: flex; align-items: center; gap: 10px; }
+#nl-alerta[hidden] { display: none; }

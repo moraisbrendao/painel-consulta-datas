@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=269">
+  <link rel="stylesheet" href="styles.css?v=270">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1237,6 +1237,7 @@
           <button class="btn contorno" data-ap="dv">⇄ Transportadora divergente</button>
           <button class="btn contorno" data-ap="oc">⚑ Ocorrências <span id="menu-oc" class="menu-cont" hidden></span></button>
           <button class="btn contorno" data-ap="barrar">⛔ Barrar entrega</button>
+          <button class="btn contorno" data-ap="nl">🔎 Nota não localizada</button>
         </div>
       </div>
 
@@ -1252,6 +1253,37 @@
       </section>
 
       <div id="ap-sec-oc" hidden></div>
+      <div id="ap-sec-nl" hidden>
+        <section id="nl-alerta" class="alerta alerta-erro" hidden><span class="alerta-ic">⚠</span><div><b>CT-e emitido depois do cancelamento</b><p id="nl-alerta-txt"></p></div><button id="nl-alerta-ver" type="button" class="btn contorno mini">Ver notas</button></section>
+        <section class="filtros-cartao" aria-label="Filtros">
+          <span class="filtros-rot">⛉ Filtros</span>
+          <label>Nota, ticket ou transportadora<input id="nl-busca" type="search" placeholder="# nota, ticket ou transportadora"></label>
+        </section>
+        <div class="titulo-pagina com-acoes">
+          <div>
+            <h1>Nota não localizada</h1>
+            <p class="sub">Fila <b>Nota não localizada (Sem Emissão)</b> do Multi360. 1) Envie a planilha de tickets da fila (use o <b>modelo</b>). 2) O robô olha o rastreio de cada nota (transportadora do ticket: redespacho, se tiver) e executa a ação no ticket:
+              <b>no rastreio</b> → voltar para o barrar · <b>entregue</b> → voltar para o barrar e entra no Barrar entrega como não barrado (Entregue) ·
+              <b>fora do rastreio</b> e passou do prazo → seguir para cancelamento com o comentário "Pedido não localizado em rastreio" (série 35: 30 dias; séries 34 e 25: 7 dias úteis, contados da criação do ticket).
+              Depois do cancelamento o robô continua olhando o rastreio e avisa aqui se aparecer CT-e.</p>
+            <p id="nl-info" class="info-base">Nenhuma planilha enviada ainda.</p>
+          </div>
+          <div class="acoes-robo">
+            <label class="btn amarelo" title="Relatório de tickets da fila Nota não localizada (Sem Emissão), no formato do modelo">Enviar planilha<input id="nl-arq" type="file" accept=".xlsx,.xls" hidden></label>
+            <button id="nl-modelo" class="btn contorno" type="button">↓ Modelo</button>
+            <button id="nl-teste" class="btn contorno" type="button" title="Confere tudo e abre a ação no ticket, mas clica em Cancelar">Testar sem mexer</button>
+            <button id="nl-rodar" class="btn lilas" type="button">Rodar o robô</button>
+            <button id="nl-excel" class="btn contorno" type="button">Baixar Excel</button>
+          </div>
+        </div>
+        <section class="kpis" id="nl-cards"></section>
+        <section class="cartao">
+          <div class="cartao-topo"><div><h2 id="nl-titulo">Notas</h2><p class="sub">Marque "segurar" nas notas em que o robô não deve mexer. Notas que saíram da fila continuam no Histórico.</p></div></div>
+          <div class="tabela-wrap"><table class="tabela-pedidos nl-tab">
+            <thead><tr><th>Nota / ticket</th><th>Série</th><th>Transportadora</th><th class="num">Dias do ticket</th><th>Prazo</th><th>Rastreio</th><th>Sugestão do robô</th><th>Ação no ticket</th></tr></thead>
+            <tbody id="nl-linhas"></tbody></table></div>
+        </section>
+      </div>
     <div id="pagina-barrar" hidden>
       <section class="filtros-cartao" aria-label="Filtros">
         <span class="filtros-rot">⛉ Filtros</span>
@@ -1580,20 +1612,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=269"></script>
-  <script src="mapa-brasil.js?v=269"></script>
-  <script src="troca-notas.js?v=269"></script>
-  <script src="app.js?v=269"></script>
-  <script src="ordenar.js?v=269"></script>
-  <script src="menu.js?v=269"></script>
-  <script src="ajuda.js?v=269"></script>
-  <script src="documentos.js?v=269"></script>
-  <script src="barrar.js?v=269"></script>
-  <script src="faltas.js?v=269"></script>
-  <script src="motor.js?v=269"></script>
-  <script src="retornos-semana.js?v=269"></script>
-  <script src="gargalos.js?v=269"></script>
-  <script src="filas.js?v=269"></script>
-  <script src="filtros.js?v=269"></script>
+  <script src="config.js?v=270"></script>
+  <script src="mapa-brasil.js?v=270"></script>
+  <script src="troca-notas.js?v=270"></script>
+  <script src="app.js?v=270"></script>
+  <script src="ordenar.js?v=270"></script>
+  <script src="menu.js?v=270"></script>
+  <script src="ajuda.js?v=270"></script>
+  <script src="documentos.js?v=270"></script>
+  <script src="barrar.js?v=270"></script>
+  <script src="naoloc.js?v=270"></script>
+  <script src="faltas.js?v=270"></script>
+  <script src="motor.js?v=270"></script>
+  <script src="retornos-semana.js?v=270"></script>
+  <script src="gargalos.js?v=270"></script>
+  <script src="filas.js?v=270"></script>
+  <script src="filtros.js?v=270"></script>
 </body>
 </html>

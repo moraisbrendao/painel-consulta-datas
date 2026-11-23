@@ -108,7 +108,7 @@ export function mesmaTransp(a, b) {
   return y.some((w) => x.has(w) || [...x].some((v) => v.length >= 4 && w.length >= 4 && (v.startsWith(w) || w.startsWith(v))));
 }
 
-async function rastrear(it, R) {
+export async function rastrear(it, R) {
   const { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } = R;
   const tp = it.transp_pedido || "";
   const ordem = [EH_JADLOG.test(tp) ? "jadlog" : EH_BENTO.test(tp) ? "bento" : EH_TRANSITO.test(tp) ? "transito" : EH_FORMATO.test(tp) ? "formato" : /transiga/i.test(tp) ? "transiga" : "ssw"];
@@ -196,7 +196,7 @@ function sugerir(x) {
 
 // print do rastreio: a página do SSW (detalhe) como ela é; nas outras fontes, um quadro com o que o rastreio respondeu
 const escH = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
-async function printRastreio(ctx, nf, r) {
+export async function printRastreio(ctx, nf, r) {
   const pg = await ctx.newPage();
   try {
     await pg.setViewportSize({ width: 1100, height: 700 });

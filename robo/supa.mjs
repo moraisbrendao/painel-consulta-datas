@@ -45,10 +45,10 @@ async function pedir(url, opcoes) {
   }
 }
 
-async function chamar(caminho, metodo = "GET", corpo) {
+async function chamar(caminho, metodo = "GET", corpo, extra) {
   const r = await pedir(`${URL_SB}/rest/v1/${caminho}`, {
     method: metodo,
-    headers: { "Content-Type": "application/json", Prefer: "return=representation" },
+    headers: { "Content-Type": "application/json", Prefer: "return=representation", ...(extra || {}) },
     body: corpo === undefined ? undefined : JSON.stringify(corpo),
   });
   const txt = await r.text();

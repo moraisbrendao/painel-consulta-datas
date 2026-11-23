@@ -3038,3 +3038,96 @@ end $$;
 revoke all on function public.importar_desmembrados(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_desmembrados(jsonb, boolean, text, integer) to authenticated;
 notify pgrst, 'reload schema';
+
+
+-- ============ PARTE 64: Alterar pedidos › Nota não localizada (fila "Nota não localizada (Sem Emissão)" do Multi360) ============
+-- Planilha de tickets da fila → robô olha o rastreio de cada nota e executa a ação no ticket:
+--   em rastreio → "voltar para o barrar"; entregue → voltar para o barrar + não barrado (Entregue);
+--   fora do rastreio e passou do prazo (série 35: 30 dias; 34 e 25: 7 dias úteis desde a criação do ticket) → "seguir para cancelamento".
+-- Histórico: as notas nunca são apagadas (na_planilha = false quando saem da planilha). Depois do cancelamento o robô
+-- continua olhando o rastreio e avisa se aparecer CT-e.
+create table if not exists public.nao_localizada (
+  nf               text primary key,        -- "1070-35"
+  ticket           text,
+  serie            text,
+  transp_pedido    text,                    -- redespacho Promob, senão transportador Promob
+  transp_ticket    text,                    -- "Transportadora do Ticket" da planilha (se vier)
+  status_intelipost text,
+  canal            text,
+  motivo           text,
+  ticket_criado    timestamp,
+  na_planilha      boolean not null default true,
+  primeira_vez     timestamptz default now(),
+  ultima_planilha  timestamptz default now(),
+  rastreio         jsonb,                   -- {situacao, fonte, evento, data_evento, transp, alvo}
+  conferido_em     timestamptz,
+  sugestao         text,                    -- voltar_barrar / entregue / cancelar / aguardar / manual
+  sugestao_motivo  text,
+  prazo_ate        date,                    -- até quando espera aparecer no rastreio
+  segurar          boolean default false,   -- a Logística pediu para o robô não mexer
+  acao             text,                    -- ação executada no ticket: voltar_barrar / entregue / cancelar
+  acao_status      text,                    -- feito / erro / teste
+  acao_msg         text,
+  acao_em          timestamptz,
+  print_rastreio   text,                    -- print do rastreio (bucket "barrar")
+  cte_depois       jsonb,                   -- rastreio que apareceu DEPOIS do cancelamento
+  cte_alerta_em    timestamptz,
+  cte_visto_por    text,
+  cte_visto_em     timestamptz
+);
+create index if not exists nao_localizada_planilha on public.nao_localizada (na_planilha);
+create table if not exists public.nao_localizada_info (
+  id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.nao_localizada enable row level security;
+alter table public.nao_localizada_info enable row level security;
+revoke all on public.nao_localizada, public.nao_localizada_info from anon;
+grant select, insert, update, delete on public.nao_localizada, public.nao_localizada_info to authenticated;
+drop policy if exists "logistica cuida" on public.nao_localizada;
+drop policy if exists "logistica cuida" on public.nao_localizada_info;
+create policy "logistica cuida" on public.nao_localizada for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create policy "logistica cuida" on public.nao_localizada_info for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+create or replace function public.importar_nao_localizada(linhas jsonb, arquivo text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.nao_localizada set na_planilha = false where na_planilha is true;
+  insert into public.nao_localizada (nf, ticket, serie, transp_pedido, transp_ticket, status_intelipost, canal, motivo, ticket_criado, na_planilha, ultima_planilha)
+  select x->>'nf', x->>'ticket', x->>'serie', x->>'transp_pedido', nullif(x->>'transp_ticket',''), x->>'status_intelipost', x->>'canal', x->>'motivo',
+         nullif(x->>'ticket_criado','')::timestamp, true, now()
+  from jsonb_array_elements(linhas) x where coalesce(x->>'nf','') <> ''
+  on conflict (nf) do update set ticket = excluded.ticket, serie = excluded.serie, transp_pedido = excluded.transp_pedido, transp_ticket = excluded.transp_ticket,
+    status_intelipost = excluded.status_intelipost, canal = excluded.canal, motivo = excluded.motivo, ticket_criado = excluded.ticket_criado,
+    na_planilha = true, ultima_planilha = now(),
+    -- ticket que voltou para a fila depois de uma ação: o robô olha de novo
+    acao = case when public.nao_localizada.acao_status = 'feito' and public.nao_localizada.ticket is distinct from excluded.ticket then null else public.nao_localizada.acao end,
+    acao_status = case when public.nao_localizada.acao_status = 'feito' and public.nao_localizada.ticket is distinct from excluded.ticket then null else public.nao_localizada.acao_status end;
+  get diagnostics n = row_count;
+  insert into public.nao_localizada_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, n, auth.jwt() ->> 'email', now())
+  on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  return n;
+end $$;
+revoke all on function public.importar_nao_localizada(jsonb, text) from public, anon;
+grant execute on function public.importar_nao_localizada(jsonb, text) to authenticated;
+
+-- botão "Rodar o robô" (modo naoloc) e "Teste sem salvar" (naoloc-teste)
+create or replace function public.rodar_robo_naoloc(modo text)
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if modo not in ('naoloc', 'naoloc-teste') then raise exception 'Modo inválido.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', modo)));
+end $$;
+revoke all on function public.rodar_robo_naoloc(text) from public, anon;
+grant execute on function public.rodar_robo_naoloc(text) to authenticated;
+notify pgrst, 'reload schema';

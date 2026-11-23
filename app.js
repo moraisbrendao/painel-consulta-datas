@@ -3084,7 +3084,7 @@ ${extra}
   $("ap-abas").addEventListener("click", (e) => { const b = e.target.closest("button[data-ap]"); if (!b) return;
     try { localStorage.setItem("painel.ap", b.dataset.ap); } catch (_) {}
     $("ap-abas").querySelectorAll("button").forEach((x) => { const at = x === b; x.classList.toggle("amarelo", at); x.classList.toggle("contorno", !at); });
-    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv"; $("ap-sec-oc").hidden = b.dataset.ap !== "oc"; $("pagina-barrar").hidden = b.dataset.ap !== "barrar";
+    $("ap-sec-data").hidden = b.dataset.ap !== "data"; $("ap-sec-troca").hidden = b.dataset.ap !== "troca"; $("ap-sec-ag").hidden = !["ag", "at"].includes(b.dataset.ap); $("ap-sec-dv").hidden = b.dataset.ap !== "dv"; $("ap-sec-oc").hidden = b.dataset.ap !== "oc"; $("pagina-barrar").hidden = b.dataset.ap !== "barrar"; $("ap-sec-nl").hidden = b.dataset.ap !== "nl";
     if (b.dataset.ap === "oc") { const de = $("pagina-ocorrencias"), para = $("ap-sec-oc"); while (de.firstChild) para.appendChild(de.firstChild); desenharOcorrencias(); }
     if (b.dataset.ap === "dv") desenharDivTP();
     if (b.dataset.ap === "troca") carregarTrocas();

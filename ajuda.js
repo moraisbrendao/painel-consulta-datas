@@ -117,6 +117,13 @@
       "Card <b>Erro: verificar</b>: mostra um quadrinho por transportadora com as notas que ela ainda não atuou (dias pendentes e último status). Use <b>Copiar mensagem</b> ou <b>WhatsApp</b> para cobrar e <b>Excel</b> para mandar a lista. Acima dos quadrinhos, o quadro <b>Com anotação da transportadora no portal</b> mostra as notas em que a transportadora escreveu algo no portal (todas as anotações, mais recente primeiro, com o print) para você ler e escolher a <b>Decisão</b> de cada uma (fica em rascunho; ✗ já vem com a anotação como motivo). No fim, clique em <b>Aprovar decisões</b>: elas vão para o card <b>Aprovadas</b> e saem dos quadrinhos de cobrança; depois use <b>Mandar para o portal</b>. As que você não decidir continuam nos quadrinhos para cobrar.",
     ], "Transportadora diferente entre o pedido e o portal aparece no card <b>Transportadora diferente</b>. Os entregues no rastreio o robô aprova e aplica sozinho; o resto só com a sua aprovação. O quadro <b>Envios ao portal</b> mostra cada envio por horário, separando o que você aprovou e o que o robô fez sozinho."],
 
+    ["nl", "Nota não localizada (em Alterar pedidos)", "Trata a fila Nota não localizada (Sem Emissão) do Multi360: o robô olha o rastreio e devolve para o barrar ou segue para cancelamento.", "Quando chega a planilha de tickets da fila.", [
+      "Clique em <b>↓ Modelo</b> se precisar do formato e em <b>Enviar planilha</b> com o relatório de tickets da fila.",
+      "Clique em <b>Rodar o robô</b>: no rastreio → voltar para o barrar; entregue → voltar para o barrar e não barrado (Entregue) no Barrar entrega; fora do rastreio e fora do prazo → seguir para cancelamento com \"Pedido não localizado em rastreio\".",
+      "Prazo: série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis, contados da criação do ticket. Antes disso a nota fica em <b>Aguardando prazo</b>.",
+      "Use <b>Ver rastreio</b> em cada nota para conferir. Marque <b>segurar</b> nas notas em que o robô não deve mexer.",
+      "O card <b>Histórico</b> guarda todas as notas que passaram pela fila. Se aparecer CT-e depois do cancelamento, sobe um aviso vermelho: tome as providências e clique em <b>Marcar como visto</b>.",
+    ], "Outras séries (por exemplo 7) ficam em Verificar à mão até termos a regra."],
     ["sac", "Consulta SAC", "Consulta para o SAC: pedidos vencidos ou que vencem hoje/amanhã, com a nova data e a observação da Logística.", "Quando o cliente pergunta do pedido.", [
       "Busque pelo pedido ou NF, ou use os cards <b>Já vencidos</b>, <b>Vencem hoje</b>, <b>Vencem amanhã</b>.",
       "Leia a <b>Nova data</b> e a <b>Observação</b> que a Logística informou.",
