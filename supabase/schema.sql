@@ -2897,3 +2897,46 @@ as $$
 $$;
 revoke all on function public.consultar_sac_pag(text) from public, anon;
 grant execute on function public.consultar_sac_pag(text) to authenticated;
+
+-- ============================================================
+-- PARTE 59) Consulta SAC rápida de verdade. O diagnóstico mostrou que o banco percorria ~50 mil pedidos já entregues
+--   para achar os em aberto. Agora há um índice só dos pedidos em aberto pela data prometida, e a consulta parte dele
+--   (e das tratativas com nova data), sem varrer a base inteira.
+create index if not exists base_pedidos_sac_abertos on public.base_pedidos ((coalesce(prev_original, prev_atual)))
+  where coalesce(status_intelipost, '') not ilike 'entregue%' and coalesce(status_intelipost, '') not ilike 'cancelado%';
+create index if not exists tratativas_nova_data on public.tratativas (nova_data);
+
+create or replace function public.consultar_sac_pag(p_depois text default '')
+returns table (pedido text, nf text, canal text, transportadora text, micro_status text,
+               prometido date, nova_data date, observacao text, atualizado_em timestamptz, link_rastreio text,
+               tem_ocorr boolean, ocorr_status text, ocorr_msg text, ocorr_em text, tem_repo boolean, repo_ticket text, repo_fila text, repo_nf text)
+language sql stable security definer set search_path = public
+as $$
+  with lim as (select (now() at time zone 'America/Sao_Paulo')::date + 1 as d),
+  cand as (
+    select b.pedido from public.base_pedidos b, lim
+    where coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+      and coalesce(b.prev_original, b.prev_atual) <= lim.d
+    union
+    select t.pedido from public.tratativas t, lim where t.nova_data <= lim.d
+  ),
+  x as materialized (
+    select b.pedido, b.nf, b.canal, b.transportadora, b.micro_status, coalesce(b.prev_original, b.prev_atual) as prometido,
+           t.nova_data, t.observacao, t.atualizado_em, b.link_rastreio
+    from cand c
+    join public.base_pedidos b on b.pedido = c.pedido
+    left join public.tratativas t on t.pedido = b.pedido
+    where auth.uid() is not null
+      and c.pedido > coalesce(p_depois, '')
+      and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+      and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+    order by b.pedido
+    limit 1000
+  )
+  select x.pedido, x.nf, x.canal, x.transportadora, x.micro_status, x.prometido, x.nova_data, x.observacao, x.atualizado_em, x.link_rastreio,
+         d.tem_ocorr, d.ocorr_status, d.ocorr_msg, d.ocorr_em, d.tem_repo, d.repo_ticket, d.repo_fila, d.repo_nf
+  from x left join public.detalhe_nf d on d.nf = public.chave_nf(x.nf)
+  order by x.pedido
+$$;
+revoke all on function public.consultar_sac_pag(text) from public, anon;
+grant execute on function public.consultar_sac_pag(text) to authenticated;
