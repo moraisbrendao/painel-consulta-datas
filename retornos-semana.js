@@ -211,7 +211,8 @@
   }
 
   $("rs-box").addEventListener("click", (e) => {
-    const c = e.target.closest("[data-rs]"); if (c && !e.target.closest(".kpi > i")) return; if (c) { const d = CARDS.find((x) => x[0] === c.dataset.rs); return abrir(`${d[1]} · semana de ${br(semana)}`, L.filter(d[4])); }
+    const c = e.target.closest("[data-rs]"); if (c)   // aqui o card não filtra nada: clicar em qualquer parte abre a lista
+      { const d = CARDS.find((x) => x[0] === c.dataset.rs); return abrir(`${d[1]} · semana de ${br(semana)}`, L.filter(d[4])); }
     const mb = e.target.closest("[data-rsm]"); if (mb) return mensagem(mb.dataset.rsm);
     const t = e.target.closest("[data-rst]"); if (t) return abrir(`${t.dataset.rst} · retornos da semana`, L.filter((x) => nomeT(x.p) === t.dataset.rst));
     if (e.target.closest("#rs-atualizar")) return carregar();
