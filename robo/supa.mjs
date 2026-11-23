@@ -56,6 +56,12 @@ async function chamar(caminho, metodo = "GET", corpo) {
   return txt ? JSON.parse(txt) : null;
 }
 
+export async function chamarFaixa(caminho, de, ate) {   // RPC com paginação pelo cabeçalho Range (igual ao painel)
+  const r = await pedir(`${URL_SB}/rest/v1/${caminho}`, { method: "POST", headers: { "Content-Type": "application/json", Range: `${de}-${ate}`, "Range-Unit": "items" }, body: "{}" });
+  const txt = await r.text();
+  if (!r.ok) throw new Error(`Supabase ${caminho}: ${r.status} ${txt.slice(0, 200)}`);
+  return txt ? JSON.parse(txt) : [];
+}
 export const temPedido = async () => (await chamar("fila_portal?select=id&status=in.(pendente,processando)&limit=1")).length > 0;
 export const pegarPedido = async () => (await chamar("rpc/pegar_fila_portal", "POST", {}))[0] || null;
 export const atualizarPedido = (id, campos) => chamar(`fila_portal?id=eq.${id}`, "PATCH", campos);

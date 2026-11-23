@@ -1,7 +1,7 @@
 // Robô da conferência SSW: lê a previsão de entrega no rastreio público do SSW (ssw.inf.br)
 // pela NF (sem a série) + CNPJ do remetente (escolhido pela série da NF).
 // Registro público (Actions): só contagens, nomes de campos e datas — nunca nome, endereço ou NF.
-import { entrarSupabase, chamar, gravarEstado } from "./supa.mjs";
+import { entrarSupabase, chamar, chamarFaixa, gravarEstado } from "./supa.mjs";
 const MODO = process.env.MODO || "diag";
 let ultimaLinha = "";
 const log = (...a) => { const t = a.map((x) => String(x).replace(/\d{5,}/g, "#####")).join(" "); ultimaLinha = t; console.log(t); };
@@ -402,6 +402,12 @@ if (MODO === "diag-serie2") {   // a 1ª célula das NFs achadas (CNPJ da série
       Ls.forEach((y) => { if (!y.serie) cont.sem_serie++; else if (y.serie === x.se) cont.com_serie_igual++; else cont.com_serie_diferente++; }); });
     await new Promise((ok) => setTimeout(ok, 1500)); }
   log("linhas achadas no SSW (CNPJ da série):", JSON.stringify(cont));
+}
+if (MODO === "diag-sac") {   // Consulta SAC: quanto tempo a consultar_sac leva e quantas linhas volta (só contagens)
+  await entrarSupabase();
+  for (let de = 0; de < 8000; de += 1000) { const t0 = Date.now(); let n = -1, erro = "";
+    try { const x = await chamarFaixa("rpc/consultar_sac", de, de + 999); n = x.length; } catch (e) { erro = String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160); }
+    log(`consultar_sac linhas ${de}-${de + 999}: ${n} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s ${erro}`); if (n < 1000) break; }
 }
 if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem nova data válida e em reposição (só contagens)
   await entrarSupabase();
