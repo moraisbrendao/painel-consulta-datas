@@ -96,9 +96,9 @@
   const ultStatus = (x) => { const r = x.rastreio || {}; return r.evento ? `${r.evento}${r.data_evento ? " em " + br(r.data_evento) : ""}` : r.situacao && !/^erro/i.test(r.situacao) ? r.situacao : "sem informação no rastreio"; };
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
   function gruposErro() {
-    // só as que ainda não têm decisão (nem em rascunho no quadro de anotações); cada nota uma vez só
+    // só as que ainda não têm decisão aprovada; cada nota uma vez só
     const m = new Map(), vistas = new Set();
-    L.filter((x) => sit(x) === "manual" && !(rasc.has(x.nf) && rasc.get(x.nf).v)).forEach((x) => { if (vistas.has(x.nf)) return; vistas.add(x.nf); const t = alvoTransp(x); m.set(t, (m.get(t) || []).concat(x)); });
+    L.filter((x) => sit(x) === "manual").forEach((x) => { if (vistas.has(x.nf)) return; vistas.add(x.nf); const t = alvoTransp(x); m.set(t, (m.get(t) || []).concat(x)); });
     return [...m.entries()].map(([t, xs]) => [t, xs.sort((a, b) => (diasDesde(b.ticket_criado) ?? -1) - (diasDesde(a.ticket_criado) ?? -1))]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR"));
   }
   function msgTransp(t, xs) {   // texto limpo (Brenda 23/11): cabeçalho curto + uma linha por nota com dias e último status
@@ -126,10 +126,10 @@
     const msgs = new Map([...box.querySelectorAll(".br-et-msg")].filter((t) => t.dataset.editada).map((t) => [t.dataset.t, t.value]));
     const yAntes = window.scrollY;
     const G = gruposErro();
-    const C = L.filter((x) => x.portal_status !== "feito" && sit({ ...x, decisao: null, portal_status: null }) === "manual" && anotsDe(x).length)
+    const C = L.filter((x) => sit(x) === "manual" && anotsDe(x).length)
       .map((x) => [alvoTransp(x), x]).sort((a, b) => (diasDesde(b[1].ticket_criado) ?? -1) - (diasDesde(a[1].ticket_criado) ?? -1) || String(a[1].nf).localeCompare(String(b[1].nf)));
-    const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button><button type="button" class="btn lilas mini br-an-enviar" title="Salva as decisões escolhidas e chama o robô para marcar no portal">Enviar decisões para o robô</button>` : ""}</div>
-      ${C.length ? `<p class="s">A transportadora escreveu algo no portal, mas o robô não achou devolução no rastreio nem "não recebeu" na anotação. Escolha a decisão de cada nota na última coluna (fica em rascunho; o ✗ já vem com a anotação mais recente como motivo, dá para editar). No fim, clique em <b>Enviar decisões para o robô</b>: salva tudo e o robô marca no portal só as notas decididas.</p>
+    const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button><button type="button" class="btn lilas mini br-an-enviar" title="Salva as decisões escolhidas: as notas vão para o card Aprovadas">Aprovar decisões</button>` : ""}</div>
+      ${C.length ? `<p class="s">A transportadora escreveu algo no portal, mas o robô não achou devolução no rastreio nem "não recebeu" na anotação. Escolha a decisão de cada nota na última coluna (fica em rascunho; o ✗ já vem com a anotação mais recente como motivo, dá para editar). No fim, clique em <b>Aprovar decisões</b>: elas vão para o card <b>Aprovadas</b> e você manda para o portal quando quiser. As que você não decidir continuam nos quadrinhos de cobrança abaixo.</p>
       <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th><th>Decisão (vai para o robô)</th></tr></thead><tbody>${C.map(([t, x]) => `<tr>
         <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}</td>
         <td>${esc(t)}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td>
@@ -181,7 +181,7 @@
   function contarAnot() {
     const box = $("br-erro-transp"); if (!box) return; const C = box._C || [];
     const n = C.filter(([, x]) => x.portal_status !== "feito" && (rasc.has(x.nf) ? rasc.get(x.nf).v : x.decisao)).length;
-    const b = box.querySelector(".br-an-enviar"); if (b) { b.textContent = `Enviar decisões para o robô (${n})`; b.disabled = !n; }
+    const b = box.querySelector(".br-an-enviar"); if (b) { b.textContent = `Aprovar decisões (${n})`; b.disabled = !n; }
   }
   function linha(x) {
     const r = x.rastreio || {}, p = x.portal || {};
@@ -220,7 +220,7 @@
     if (an) { const x = L.find((y) => y.nf === an.dataset.nf); const r = rasc.get(an.dataset.nf) || { mot: null }; r.v = an.value; rasc.set(an.dataset.nf, r);
       const t = an.parentElement.querySelector(".br-an-mot"); if (t) { t.hidden = !an.value.startsWith("nao_barrar"); if (!t.value) t.value = motDec(x); }
       const st = an.parentElement.querySelector(".s"); if (st) { st.className = "s txt-ambar"; st.textContent = "rascunho · ainda não enviado"; } else an.parentElement.insertAdjacentHTML("beforeend", `<div class="s txt-ambar">rascunho · ainda não enviado</div>`);
-      contarAnot(); desenharErroTransp(); return; }
+      contarAnot(); return; }
     if (e.target.closest(".br-an-mot")) return;
     const c = e.target.closest(".br-sel"); if (c) { c.checked ? marcadas.add(c.dataset.nf) : marcadas.delete(c.dataset.nf); desenhar(); return; }
     const d = e.target.closest(".br-dec");
@@ -255,26 +255,20 @@
     const t = e.target.closest("#br-erro-transp .br-an-mot"); if (!t) return;
     const x = L.find((y) => y.nf === t.dataset.nf); const r = rasc.get(t.dataset.nf) || { v: valDec(x) }; r.mot = t.value; rasc.set(t.dataset.nf, r); contarAnot(); });
   async function enviarAnot(box) {
-    const C = (box._C || []).map(([, x]) => x).filter((x) => x.portal_status !== "feito");
-    const muda = C.filter((x) => rasc.has(x.nf));
+    const muda = (box._C || []).map(([, x]) => x).filter((x) => x.portal_status !== "feito" && rasc.has(x.nf) && rasc.get(x.nf).v);
+    if (!muda.length) return toast("Escolha a decisão de pelo menos uma nota.", true);
     const semMot = muda.filter((x) => rasc.get(x.nf).v.startsWith("nao_barrar") && !String(motDec(x)).trim());
     if (semMot.length) return toast(`Falta o motivo em ${plural(semMot.length, "nota", "notas")} com ✗: ${semMot.map((x) => x.nf).join(", ")}.`, true);
-    const fim = C.filter((x) => (rasc.has(x.nf) ? rasc.get(x.nf).v : x.decisao));
-    const tot = L.filter((x) => !x.portal_status && (rasc.has(x.nf) ? rasc.get(x.nf).v : x.decisao)).length;
-    if (!fim.length) return toast("Escolha a decisão de pelo menos uma nota.", true);
-    const b = fim.filter((x) => (rasc.has(x.nf) ? rasc.get(x.nf).v : x.decisao) === "barrar").length;
-    if (!confirm(`Enviar ${fim.length} decisão(ões) deste quadro para o robô?\n\n${b} como BARRADAS (✓) e ${fim.length - b} como NÃO BARRADAS (✗) com a opção e o motivo escolhidos.${tot > fim.length ? `\nO robô também vai fazer as outras ${tot - fim.length} nota(s) já aprovadas na lista.` : ""}\nIsso fica gravado no portal da transportadora.`)) return;
     const email = (((await sb().auth.getSession()).data.session || {}).user || {}).email || null;
     for (const x of muda) {
-      const r = rasc.get(x.nf), [dec, op] = String(r.v || "").split("|");
-      const campos = dec ? { decisao: dec, decisao_opcao: dec === "nao_barrar" ? op : null, decisao_motivo: dec === "nao_barrar" ? String(motDec(x)).trim() : null, decisao_por: email, decisao_em: new Date().toISOString(), portal_status: null, portal_msg: null }
-        : { decisao: null, decisao_opcao: null, decisao_motivo: null, decisao_por: null, decisao_em: null };
+      const [dec, op] = String(rasc.get(x.nf).v).split("|");
+      const campos = { decisao: dec, decisao_opcao: dec === "nao_barrar" ? op : null, decisao_motivo: dec === "nao_barrar" ? String(motDec(x)).trim() : null, decisao_por: email, decisao_em: new Date().toISOString(), portal_status: null, portal_msg: null };
       const { error } = await sb().from("barrar_entrega").update(campos).eq("nf", x.nf);
       if (error) { desenhar(); return toast(`Não consegui salvar a NF ${x.nf}: ${error.message}`, true); }
       Object.assign(x, campos); rasc.delete(x.nf);
     }
     desenhar();
-    robo("barrar-portal", "Decisões salvas. Robô chamado: ele vai marcar no portal só as notas decididas.");
+    toast(`${plural(muda.length, "nota aprovada", "notas aprovadas")}: estão no card Aprovadas. Clique em "Mandar para o portal" quando quiser enviar ao robô.`);
   }
   $("br-portal").addEventListener("click", () => {
     const ap = L.filter((x) => x.decisao && !x.portal_status), b = ap.filter((x) => x.decisao === "barrar").length;
