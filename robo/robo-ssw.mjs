@@ -405,6 +405,8 @@ if (MODO === "diag-serie2") {   // a 1ª célula das NFs achadas (CNPJ da série
 }
 if (MODO === "diag-sac") {   // Consulta SAC: quanto tempo a consultar_sac leva e quantas linhas volta (só contagens)
   await entrarSupabase();
+  { const t0 = Date.now(); try { const x = await chamar("rpc/consultar_sac_json", "POST", {}); log(`consultar_sac_json: ${Array.isArray(x) ? x.length : "?"} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s`); }
+    catch (e) { log(`consultar_sac_json: erro em ${((Date.now() - t0) / 1000).toFixed(1)} s ${String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160)}`); } }
   for (let de = 0; de < 8000; de += 1000) { const t0 = Date.now(); let n = -1, erro = "";
     try { const x = await chamarFaixa("rpc/consultar_sac", de, de + 999); n = x.length; } catch (e) { erro = String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160); }
     log(`consultar_sac linhas ${de}-${de + 999}: ${n} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s ${erro}`); if (n < 1000) break; }
