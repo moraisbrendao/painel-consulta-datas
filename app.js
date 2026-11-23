@@ -2267,12 +2267,22 @@ ${extra}
     "Pedido Promob", "SKU", "Status Prazo", "Situação", "Transportadora de redespacho", "Trocas da data prometida", "Prazo da transportadora (dias úteis)", "Dias sem movimento",
     "Prazo médio da transportadora (dias)", "Previsão estimada", "Dias além da previsão estimada", "Observação (sistema)", "Tem reposição", "Tem ocorrência", "Tem assistência técnica"];
   const G_SIT_NOME = { ent_prazo: "Entregue (no prazo)", ent_atraso: "Entregue (com atraso)", ab_prazo: "Em aberto (no prazo)", ab_risco: "Em aberto (em risco)", ab_atraso: "Em aberto (atrasado)", cancelado: "Cancelado" };
+  // fila e status do ticket em aberto pela tabela de acompanhamento (filas_tk, parte 52): completa a fila do detalhamento de tickets
+  async function filasPorNF() {
+    const m = new Map();
+    try {
+      (await buscarTudo("filas_tk", "ticket", "nf,fila,status,atualizado_em")).forEach((f) => { const k = chaveNF(f.nf); if (!k) return;
+        const a = m.get(k); if (!a || String(f.atualizado_em || "") > String(a.atualizado_em || "")) m.set(k, f); });
+    } catch (err) { console.warn("filas_tk:", err.message || err); }
+    return m;
+  }
   async function baixarGLista() {
     if (!gLista.length) return toast("Nada para exportar.", true);
     const lista = gLista.slice(), hoje = hojeISO();
     carregando("Montando o Excel…");
     let ex, det;
-    try { [ex, det] = await Promise.all([extrasDe(lista.map((r) => r.pedido)), carregarDetNF()]); }
+    let filasNF = new Map();
+    try { [ex, det, filasNF] = await Promise.all([extrasDe(lista.map((r) => r.pedido)), carregarDetNF(), filasPorNF()]); }
     catch (err) { carregando(""); return toast("Não consegui montar o Excel: " + (err.message || err), true); }
     // prazo médio de cada transportadora = média de dias entre expedição e entrega dos já entregues da base
     const pm = new Map();
@@ -2285,9 +2295,10 @@ ${extra}
     let linhas;
     try { linhas = [G_XLS_COLS].concat(lista.map((r) => {
       const e = ex.get(r.pedido) || {}, x = e.extra || {}, nfs = r.serie ? `${r.nf}-${r.serie}` : r.nf, d = det.get(chaveNF(nfs)) || {}, tk = tickets.get(chaveNF(nfs)) || {}, t = trat.get(r.pedido) || {};
+      const ft = filasNF.get(chaveNF(nfs)) || {};
       const pmT = media(r.transp), base = r.despacho || r.criado, prevEst = pmT !== null && /^\d{4}-\d{2}-\d{2}/.test(base || "") ? somaSeg(base.slice(0, 10), pmT) : null;
       return [r.pedido, x.id_any || "", x.pedido_any || "", nfs, r.nf, r.serie, d.repo_nf || "", br(e.prev_360), br(t.nova_data), "",
-        tk.fila || "", "", d.ocorr_status || "", d.ocorr_msg || "", r.canal || "", r.origem || "", r.transp || "", r.status || "", r.micro || "",
+        tk.fila || ft.fila || "", ft.status || "", d.ocorr_status || "", d.ocorr_msg || "", r.canal || "", r.origem || "", r.transp || "", r.status || "", r.micro || "",
         r.range || "", r.diasAtr ?? (r._atraso || 0), quem(r), br(r.ult), br(r.criado), br(x.faturamento), br(r.despacho), br(x.emissao_cte), br(r.prevOrig),
         br(r.prev), br(r.entrega), r.uf || "", r.cidade || "", x.cep || "", x.chave || "", e.link_rastreio || "", x.valor_nf ?? "", x.valor_cte ?? "", x.num_cte || "", tk.id_ticket || "", tk.qtd || "",
         x.promob || "", x.sku || "", r.sprazo || "", G_SIT_NOME[r._sit] || "", x.redespacho || "", x.trocas ?? 0, x.prazo_transp ?? "", r._fechado ? "" : r._parado ?? "",
