@@ -1249,3 +1249,5 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .br-an-dec select { max-width: 230px; }
 .br-an-dec textarea { width: 230px; margin-top: 4px; font-size: 12px; }
 .txt-ambar { color: #b26a00; }
+.br-et-an { color: #1f3b70; background: #eef4ff; border-radius: 6px; padding: 2px 6px; margin-bottom: 2px; }
+.br-et-lista { max-height: 260px; }

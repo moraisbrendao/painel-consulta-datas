@@ -103,7 +103,7 @@
   }
   function msgTransp(t, xs) {   // texto limpo (Brenda 23/11): cabeçalho curto + uma linha por nota com dias e último status
     return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar. Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
-      + xs.map((x) => { const d = diasDesde(x.ticket_criado); return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · ${ultStatus(x)}`; }).join("\n");
+      + xs.map((x) => { const d = diasDesde(x.ticket_criado); const a = anotsDe(x)[0]; return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · rastreio: ${ultStatus(x)}${a ? ` · anotação${a.quando ? " de " + String(a.quando).split(",")[0] : ""}: ${a.texto}` : ""}`; }).join("\n");
   }
   const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || "", anotTexto(x)]; });
   const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô", "Anotações no portal"];
@@ -140,7 +140,7 @@
       ${quadroAnot}
       <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
         return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
-          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Último status</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${esc(ultStatus(x))}${anotsDe(x).length ? ` <span class="chip azul mini" title="${esc(anotTexto(x))}">📝 anotação</span>` : ""}</td></tr>`).join("")}</tbody></table></div>
+          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotação / rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${((a) => (a ? `<div class="br-et-an" title="${esc(anotTexto(x))}">📝 ${a.quando ? `<span class="s">${esc(a.quando)}</span> ` : ""}${esc(a.texto)}</div>` : ""))(anotsDe(x)[0])}<div>🚚 ${esc(ultStatus(x))}</div></td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}" data-t="${esc(t)}">${esc(msgTransp(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
     box._G = G; box._C = C; contarAnot();
