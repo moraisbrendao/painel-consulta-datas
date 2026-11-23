@@ -97,11 +97,11 @@
     const du = exp && exp <= hoje ? diasUteis(exp, hoje) : null, par = p._parado ?? null, ms = norm(p.micro_status);
     const motivos = []; let fora = false, impossivel = false, longe = false;
     if (ref && du !== null && du > ref.p90) { fora = true; motivos.push(`${du} dias úteis desde a expedição (90% das entregas ${ref.nivel === "cidade" ? "nesta cidade" : ref.nivel === "UF" ? "neste estado" : "dela"} chegam em até ${Math.round(ref.p90)})`); }
-    if (par !== null && par >= 7) motivos.push(`rastreio parado há ${par} dias`);
-    if (trocas.length >= 2) motivos.push(`data trocada ${trocas.length} vezes${empurrou ? ` (empurrou ${empurrou} dias)` : ""}`);
-    if (quebradas) motivos.push(vencida ? `data prometida ${br(cur)} já venceu${quebHist ? ` (+${quebHist} antes)` : ""}` : `${quebHist} promessa(s) não cumprida(s)`);
+    if (par !== null && par >= 7) motivos.push(`sem atualização no rastreio há ${par} dias`);
+    if (trocas.length >= 2) motivos.push(`data remarcada ${trocas.length} vezes${empurrou ? ` (+${empurrou} dias no total)` : ""}`);
+    if (quebradas) motivos.push(vencida ? `data prometida ${br(cur)} já venceu${quebHist ? ` (+${quebHist} previsão anterior)` : ""}` : `${quebHist} previsão(ões) anterior(es) não realizada(s)`);
     if (cur && cur >= hoje && diasUteis(hoje, cur) <= 2 && par !== null && par >= 5 && !PERTO.test(ms)) { impossivel = true; motivos.push(`promete ${dm(cur)}, mas está parado e ainda não chegou na unidade de destino`); }
-    if (ref && cur && exp && cur > hoje && diasUteis(exp, cur) > ref.p90 + 5) { longe = true; motivos.push(`nova data = ${diasUteis(exp, cur)} dias úteis desde a expedição (normal até ${Math.round(ref.p90)})`); }
+    if (ref && cur && exp && cur > hoje && diasUteis(exp, cur) > ref.p90 + 5) { longe = true; motivos.push(`nova data = ${diasUteis(exp, cur)} dias úteis desde a expedição (prazo usual até ${Math.round(ref.p90)})`); }
     const reinc = trocas.length >= 2 || quebradas >= 1;
     let ver;
     if ((reinc && ((par !== null && par >= 7) || fora || impossivel)) || (impossivel && trocas.length >= 1)) ver = "enrola";
@@ -118,11 +118,11 @@
     ["mudou", "Mudou na semana", "data diferente da do começo da semana", "laranja", (x) => x.sit === "mudou"],
     ["mantido", "Mesmo retorno", "a mesma data do começo da semana", "", (x) => x.sit === "mantido"],
     ["vezes", "Mudou 2+ vezes", "data trocada mais de uma vez", "laranja", (x) => x.trocas >= 2],
-    ["vencida", "Promessa vencida", "a nova data passou e não entregou", "vermelho", (x) => x.vencida],
-    ["fora", "Fora do padrão do CEP", "já passou do tempo de 90% das entregas", "roxo", (x) => x.fora],
-    ["enrola", "Provável enrolação", "reincidente + parado / fora do padrão", "vermelho", (x) => x.ver === "enrola"],
+    ["vencida", "Previsão vencida", "a nova data passou e não entregou", "vermelho", (x) => x.vencida],
+    ["fora", "Acima do prazo usual da região", "já passou do tempo de 90% das entregas", "roxo", (x) => x.fora],
+    ["enrola", "Crítico · prioridade máxima", "data já remarcada + parado / acima do prazo usual", "vermelho", (x) => x.ver === "enrola"],
   ];
-  const VER = { enrola: ["vermelho", "Provável enrolação"], atencao: ["ambar", "Atenção"], ok: ["verde", "Dentro do padrão"], inconc: ["cinza", "Sem histórico do CEP"] };
+  const VER = { enrola: ["vermelho", "Crítico · prioridade máxima"], atencao: ["ambar", "Atenção"], ok: ["verde", "Dentro do prazo usual"], inconc: ["cinza", "Sem referência para a região"] };
 
   function desenhar() {
     const B = baseAberta(); if (!B || !carregado) return;
@@ -200,12 +200,12 @@
     if (!lista.length) return toast("Nada para exportar.", true);
     const SIT = { sem: "Sem retorno", novo: "Retorno novo na semana", mudou: "Mudou na semana", mantido: "Mesmo retorno" };
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Pedido", "NF", "Transportadora", "Transportadora (base)", "Cidade", "UF", "Canal", "Micro status", "Prometida ao cliente", `Retorno em ${br(semana)}`, "Retorno atual", "Situação na semana", "O que mudou", "Observação mudou na semana", "Trocas de data na semana", "Trocas de data no total", "Dias empurrados", "Promessas não cumpridas", "Dias parado", "Expedição", "Dias úteis desde a expedição", "Mediana do CEP (dias úteis)", "P90 do CEP (dias úteis)", "Nível da referência", "Auditoria", "Motivos", "Observação atual"]]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Pedido", "NF", "Transportadora", "Transportadora (base)", "Cidade", "UF", "Canal", "Micro status", "Prometida ao cliente", `Retorno em ${br(semana)}`, "Retorno atual", "Situação na semana", "O que mudou", "Observação mudou na semana", "Trocas de data na semana", "Trocas de data no total", "Dias empurrados", "Previsões anteriores não realizadas", "Dias parado", "Expedição", "Dias úteis desde a expedição", "Mediana do CEP (dias úteis)", "P90 do CEP (dias úteis)", "Nível da referência", "Auditoria", "Motivos", "Observação atual"]]
       .concat(lista.map((x) => { const p = x.p; return [p.pedido, p.nf, nomeT(p), p.transportadora, p.cidade, p.uf, p.canal, p.micro_status, br(p.prev_original || p.prev_atual), br(x.inicio), br(x.cur), SIT[x.sit] || "", x.dePara, x.obsSem ? "Sim" : "", x.trocasSem, x.trocas, x.empurrou || "", x.quebradas || "", x.par ?? "", br(p.data_expedicao), x.du ?? "",
         x.ref ? Number(x.ref.p50) : "", x.ref ? Number(x.ref.p90) : "", x.ref ? x.ref.nivel : "", VER[x.ver][1], x.motivos.join(" · "), (p._t && p._t.observacao) || ""]; }))), "Retornos da semana");
     const hist = []; lista.forEach((x) => x.rows.forEach((r) => hist.push([x.p.pedido, x.p.nf, nomeT(x.p), new Date(r.feito_em).toLocaleString("pt-BR"), r.feito_por || "", r.fonte || "", br(r.nova_data_antes), br(r.nova_data), r.observacao || ""])));
     XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Pedido", "NF", "Transportadora", "Quando", "Quem", "Origem", "Data antes", "Nova data", "Observação"]].concat(hist)), "Histórico");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Transportadora", "Em aberto", "Sem retorno", "Retorno novo", "Mudou na semana", "Mesmo retorno", "Mudou 2+ vezes", "Promessa vencida", "Parado (média dias)", "Fora do padrão do CEP", "Provável enrolação"]]
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Transportadora", "Em aberto", "Sem retorno", "Retorno novo", "Mudou na semana", "Mesmo retorno", "Mudou 2+ vezes", "Promessa vencida", "Parado (média dias)", "Acima do prazo usual da região", "Crítico · prioridade máxima"]]
       .concat(porT.map((g) => [g.k, g.n, g.sem, g.novo, g.mudou, g.mantido, g.vezes, g.vencida, g.cp ? Math.round((g.sp / g.cp) * 10) / 10 : "", g.fora, g.enrola]))), "Por transportadora");
     XLSX.writeFile(wb, `retornos_semana_${(titulo || "todos").replace(/[^\wÀ-ú]+/g, "_").slice(0, 40)}_${hojeISO()}.xlsx`);
   }

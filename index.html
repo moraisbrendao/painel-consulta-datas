@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=240">
+  <link rel="stylesheet" href="styles.css?v=241">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -656,11 +656,11 @@
         <div class="kpis rs-cards" id="rs-cards"></div>
         <div class="tabela-wrap">
           <table class="tabela-range rs-tab">
-            <thead><tr><th>Transportadora</th><th class="num" title="Pedidos em aberto acompanhados nesta seção">Em aberto</th><th class="num">Sem retorno</th><th class="num">Retorno novo</th><th class="num">Mudou na semana</th><th class="num">Mesmo retorno</th><th class="num">Mudou 2+ vezes</th><th class="num">Promessa vencida</th><th class="num">Parado (média dias)</th><th class="num">Fora do padrão do CEP</th><th class="num">Provável enrolação</th><th></th></tr></thead>
+            <thead><tr><th>Transportadora</th><th class="num" title="Pedidos em aberto acompanhados nesta seção">Em aberto</th><th class="num">Sem retorno</th><th class="num">Retorno novo</th><th class="num">Mudou na semana</th><th class="num">Mesmo retorno</th><th class="num">Mudou 2+ vezes</th><th class="num">Previsão vencida</th><th class="num">Parado (média dias)</th><th class="num">Acima do prazo usual</th><th class="num">Crítico</th><th></th></tr></thead>
             <tbody id="rs-linhas"></tbody>
           </table>
         </div>
-        <p class="dica">Compara o retorno que cada pedido em aberto tinha no começo da semana com o de agora (histórico de toda nova data gravada: tela, Enviar retornos e robô do SSW). A <b>auditoria</b> cruza o retorno com os <b>Tempos reais de entrega</b> (dias úteis da expedição até a entrega, mesma transportadora para a mesma cidade, senão UF, com 30+ entregas) e com os dias parados no rastreio. <b>Provável enrolação</b> = data já trocada 2+ vezes ou promessa vencida, com rastreio parado, pedido fora do padrão do CEP ou nova data impossível. Clique num card ou numa transportadora para ver os pedidos.</p>
+        <p class="dica">Compara o retorno que cada pedido em aberto tinha no começo da semana com o de agora (histórico de toda nova data gravada: tela, Enviar retornos e robô do SSW). A <b>auditoria</b> cruza o retorno com os <b>Tempos reais de entrega</b> (dias úteis da expedição até a entrega, mesma transportadora para a mesma cidade, senão UF, com 30+ entregas) e com os dias parados no rastreio. <b>Crítico · prioridade máxima</b> = data já remarcada 2+ vezes ou previsão vencida, com rastreio parado, pedido acima do prazo usual da região ou nova data difícil de cumprir. Clique num card ou numa transportadora para ver os pedidos.</p>
       </section>
 
       <!-- lista -->
@@ -1559,19 +1559,19 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=240"></script>
-  <script src="mapa-brasil.js?v=240"></script>
-  <script src="troca-notas.js?v=240"></script>
-  <script src="app.js?v=240"></script>
-  <script src="ordenar.js?v=240"></script>
-  <script src="menu.js?v=240"></script>
-  <script src="ajuda.js?v=240"></script>
-  <script src="documentos.js?v=240"></script>
-  <script src="barrar.js?v=240"></script>
-  <script src="faltas.js?v=240"></script>
-  <script src="motor.js?v=240"></script>
-  <script src="retornos-semana.js?v=240"></script>
-  <script src="filas.js?v=240"></script>
-  <script src="filtros.js?v=240"></script>
+  <script src="config.js?v=241"></script>
+  <script src="mapa-brasil.js?v=241"></script>
+  <script src="troca-notas.js?v=241"></script>
+  <script src="app.js?v=241"></script>
+  <script src="ordenar.js?v=241"></script>
+  <script src="menu.js?v=241"></script>
+  <script src="ajuda.js?v=241"></script>
+  <script src="documentos.js?v=241"></script>
+  <script src="barrar.js?v=241"></script>
+  <script src="faltas.js?v=241"></script>
+  <script src="motor.js?v=241"></script>
+  <script src="retornos-semana.js?v=241"></script>
+  <script src="filas.js?v=241"></script>
+  <script src="filtros.js?v=241"></script>
 </body>
 </html>

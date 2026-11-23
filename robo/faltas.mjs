@@ -53,7 +53,10 @@ async function lerTicket(p, ticket) {
     let motivo = null; const i = ls.findIndex((l) => /^Motivo:?$/i.test(l)); if (i >= 0 && ls[i + 1]) motivo = ls[i + 1].slice(0, 120);
     if (!motivo) { const m = ls.map((l) => l.match(/^Motivo:\s*(.+)$/i)).find(Boolean); if (m) motivo = m[1].slice(0, 120); }
     const fila = (document.body.innerText.match(/Atribu[ií]do Fila:\s*([^\n]+)/i) || [])[1] || null;
-    return { msgs, motivo, fila: fila && fila.trim().slice(0, 80), cobrado };
+    // estrutura (sem texto) em volta de cada cabeçalho, para o registro: E=Externo I=Interno P=Enviado pelo portal H=cabeçalho
+    const est = ls.map((l, i) => (cab(l) ? i : -1)).filter((i) => i >= 0).slice(-6).map((i) => [-3, -2, -1, 0, 1, 2, 3, 4].map((o) => { const x = ls[i + o] || ""; return /Enviado pelo portal/i.test(x) ? "P" : /\bExterno\b/i.test(x) ? "E" : /\bInterno\b/i.test(x) ? "I" : cab(x) ? "H" : x ? "." : "_"; }).join(""));
+    const extTot = ls.filter((l) => /\bExterno\b/i.test(l)).length;
+    return { msgs, motivo, fila: fila && fila.trim().slice(0, 80), cobrado, est, extTot };
   });
 }
 
@@ -103,7 +106,7 @@ export async function conferirFaltas({ chamar, log, ctx, limite = 300 }) {
   log(`faltas: ${L.length} ticket(s) para olhar`);
   if (!L.length) return;
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
-  const temCobrado = await chamar("falta_volumes?select=cobrado_em&limit=1").then(() => true, () => { log("faltas: coluna cobrado_em não existe (parte 61): sigo sem a data da nossa cobrança"); return false; });
+  let diagN = 0; const temCobrado = await chamar("falta_volumes?select=cobrado_em&limit=1").then(() => true, () => { log("faltas: coluna cobrado_em não existe (parte 61): sigo sem a data da nossa cobrança"); return false; });
   const p360 = await entrarMulti360(ctx, log);
   let pp = null; try { pp = await entrarPortal(ctx, log); await abrirFaltasPortal(pp, log); } catch (e) { log("faltas: portal indisponível (" + mascara(e.message) + ") — sigo só com o 360"); pp = null; }
   for (const x of L) {
@@ -116,7 +119,7 @@ export async function conferirFaltas({ chamar, log, ctx, limite = 300 }) {
       await chamar(`falta_volumes?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", {
         retorno_360: t.msgs, portal: pt, motivo_ticket: t.motivo, ...(t.fila ? { fila: t.fila } : {}), tem_retorno: tem, ...(temCobrado ? { cobrado_em: t.cobrado } : {}),
         ultimo_retorno_em: datas.length ? datas[datas.length - 1] : null, conferido_em: new Date().toISOString(), erro: null });
-      soma(tem ? "com retorno" : "sem retorno"); if (t.msgs.length) soma("retorno no 360"); if (t.cobrado) soma("com cobrança nossa"); if (pt && pt.anotacoes && pt.anotacoes.length) soma("anotação no portal"); if (pt && pt.achou === false) soma("NF fora da lista do portal");
+      soma(tem ? "com retorno" : "sem retorno"); if (t.msgs.length) soma("retorno no 360"); if (t.cobrado) soma("com cobrança nossa"); if (diagN++ < 4) log(`  estrutura: externo=${t.extTot} · ${t.est.join(" ")}`); if (pt && pt.anotacoes && pt.anotacoes.length) soma("anotação no portal"); if (pt && pt.achou === false) soma("NF fora da lista do portal");
     } catch (e) {
       soma("erro"); log("  erro:", mascara(String(e.message).split("\n")[0]));
       await chamar(`falta_volumes?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { erro: String(e.message).split("\n")[0].slice(0, 200), conferido_em: new Date().toISOString() }).catch(() => {});
