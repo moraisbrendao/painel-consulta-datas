@@ -103,7 +103,7 @@
   }
   function msgTransp(t, xs) {   // texto limpo (Brenda 23/11): cabeçalho curto + uma linha por nota com dias e último status
     return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar. Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
-      + xs.map((x) => { const d = diasDesde(x.ticket_criado); const a = anotsDe(x)[0]; return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · rastreio: ${ultStatus(x)}${a ? ` · última anotação${a.por ? " de " + a.por : ""}${a.quando ? " em " + String(a.quando).split(",")[0] : ""}: ${a.texto}` : ""}`; }).join("\n");
+      + xs.map((x) => { const d = diasDesde(x.ticket_criado); const a = anotsDe(x)[0]; return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · rastreio: ${ultStatus(x)}${a ? ` · última anotação${a.por ? " de " + a.por : ""}${a.quando ? " em " + String(a.quando).split(",")[0] : ""}: ${a.texto}` : ""}`; }).join("\n\n");   // linha em branco entre as notas (Brenda 23/11)
   }
   const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || "", anotTexto(x)]; });
   const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô", "Anotações no portal"];
