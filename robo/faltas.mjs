@@ -33,7 +33,8 @@ async function lerTicket(p, ticket) {
     ls.forEach((l, i) => {
       if (!/^Enviado pelo portal do transportador/i.test(l)) return;
       let quando = null; for (let k = i - 1; k >= Math.max(0, i - 4); k--) { const d = ls[k].match(DATA); if (d) { quando = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; break; } }
-      const corpo = []; for (let k = i + 1; k < ls.length && k < i + 15; k++) { if (cab(ls[k]) || /^Enviado pelo portal do transportador/i.test(ls[k]) || /^(Externo|Interno)$/i.test(ls[k])) break; corpo.push(ls[k]); }
+      const corpo = []; for (let k = i + 1; k < ls.length && k < i + 15; k++) { if (cab(ls[k]) || /^Enviado pelo portal do transportador/i.test(ls[k]) || /^(Externo|Interno)$/i.test(ls[k])
+        || /^(Executar a[cç][aã]o|Coment[aá]rio Interno|Macros|Ticket Paralelo|Tickets Do Pedido|A[cç][oõ]es|Admin\b|Digite sua mensagem)|©|Desenvolvido pela/i.test(ls[k])) break; corpo.push(ls[k]); }   // para no fim da conversa: botões e rodapé da tela
       const texto = corpo.join(" ").replace(/\s+/g, " ").trim().slice(0, 1000);
       const por = ((l.match(/transportador\s+por\s+(.+)$/i) || [])[1] || "").trim().slice(0, 80) || null;   // quem respondeu pela transportadora
       if (texto) msgs.push({ quando, texto, por });

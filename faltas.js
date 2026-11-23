@@ -62,11 +62,13 @@
   const hojeISO = () => { const d = new Date(), z = (n) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
   const promVencida = (x) => x.data_prometida && x.data_prometida < hojeISO();
   const quem = (r) => (r.por ? ` <b class="fv-por">${esc(r.por)}</b>` : "");
+  // só a conversa: tira o texto dos botões e do rodapé do 360 que entrou junto na última mensagem
+  const limpaTexto = (t) => String(t || "").replace(/\s*Executar a[cç][aã]o no ticket[\s\S]*$/i, "").replace(/\s*(Coment[aá]rio Interno\s+Macros|Admin\s+\d{4}\s*©|©\s*Multim[oó]veis|Desenvolvido pela Equipe)[\s\S]*$/i, "").trim();
   function linha(x) {
     const p = x.portal || {}, R = retornos(x), d = dias(abertoEm(x)), pv = prazoVencido(x);
     // todas as mensagens da transportadora, da 1ª resposta até a última (rola dentro da caixa)
     const ret = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>` : R.length
-      ? `<div class="fv-conversa">${R.slice().reverse().map((r) => `<div class="fv-ret"><span class="chip ${r.onde === "360" ? "azul" : "lilas"}">${r.onde === "360" ? "360 · externo" : "portal · anotação"}</span>${quem(r)}${r.quando ? ` <span class="s">${hora(r.quando)}</span>` : ""}<div>${esc(r.texto)}</div></div>`).join("")}</div>${R.length > 1 ? `<div class="s">${fmt(R.length)} mensagens · a mais nova embaixo</div>` : ""}`
+      ? `<div class="fv-conversa">${R.slice().reverse().map((r) => `<div class="fv-ret"><span class="chip ${r.onde === "360" ? "azul" : "lilas"}">${r.onde === "360" ? "360 · externo" : "portal · anotação"}</span>${quem(r)}${r.quando ? ` <span class="s">${hora(r.quando)}</span>` : ""}<div>${esc(limpaTexto(r.texto))}</div></div>`).join("")}</div>${R.length > 1 ? `<div class="s">${fmt(R.length)} mensagens · a mais nova embaixo</div>` : ""}`
       : `<span class="txt-vermelho">Sem retorno da transportadora</span>${p.achou === false ? `<div class="s">NF não está na aba Faltas / Inversões do portal</div>` : ""}`;
     const ed = x.editado_em ? `<div class="s">gravado${x.editado_por ? " por " + esc(String(x.editado_por).split("@")[0]) : ""} em ${hora(x.editado_em)}</div>` : "";
     return `<tr><td><b>${esc(x.nf || "—")}</b><div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>${x.fila ? `<div class="s">${esc(x.fila)}</div>` : ""}</td>
@@ -119,7 +121,7 @@
   const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Dias parado", "Prazo limite (portal)", "Prazo vencido", "Data prometida pela transportadora", "Promessa vencida", "Anotações", "Com retorno", "Último retorno em", "Onde", "Quem retornou", "Texto do último retorno", "Todos os retornos"];
   const linhasXls = (xs) => xs.map((x) => { const R = retornos(x), u = R[0] || {}, pv = prazoVencido(x);
     return [transpDe(x), x.nf || "", x.ticket, motivoDe(x), x.fila || "", br(abertoEm(x)), dias(abertoEm(x)) ?? "", (x.portal || {}).prazo || "", pv ? "Sim" : "", br(x.data_prometida), promVencida(x) ? "Sim" : "", x.anotacao || "", !x.conferido_em ? "Não conferido" : x.tem_retorno ? "Sim" : "Não",
-      u.quando ? hora(u.quando) : "", u.onde === "360" ? "Ticket 360 (externo)" : u.onde === "portal" ? "Portal (anotação)" : "", u.por || "", u.texto || "", R.slice().reverse().map((r) => `${r.quando ? hora(r.quando) + " " : ""}[${r.onde}${r.por ? " · " + r.por : ""}] ${r.texto}`).join(" | ")]; });
+      u.quando ? hora(u.quando) : "", u.onde === "360" ? "Ticket 360 (externo)" : u.onde === "portal" ? "Portal (anotação)" : "", u.por || "", limpaTexto(u.texto), R.slice().reverse().map((r) => `${r.quando ? hora(r.quando) + " " : ""}[${r.onde}${r.por ? " · " + r.por : ""}] ${limpaTexto(r.texto)}`).join(" | ")]; });
   function baixar(G, nome) {
     const wb = XLSX.utils.book_new(), usados = new Set();
     if (G.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB].concat(G.flatMap(([, xs]) => linhasXls(xs)))), "Todas");
