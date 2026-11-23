@@ -77,7 +77,7 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   await R.carregarSenhasDB();
   const M = await import("./multi360.mjs");
   let m = null; try { m = await M.entrarMulti360(ctx, log); } catch (e) { log("naoloc: não entrei no 360:", String(e.message).slice(0, 100)); }
-  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
+  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1); let entreguesFeitos = 0;
   const alvoDe = async (x) => {
     let tk = { transp: null, redesp: null };
     if (m && x.ticket) { try { tk = await M.lerTranspTicket(m, x.ticket); } catch (_) { soma("ticket não abriu"); } }
@@ -110,17 +110,19 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
           Object.assign(campos, { acao: s.sugestao, acao_status: st, acao_msg: st === "teste" ? "teste: preenchido e cancelado" : MSG[s.sugestao], acao_em: new Date().toISOString() });
           soma(st === "teste" ? "ação testada" : "ação feita");
           // entregue: entra no Barrar entrega já como "não barrado (Entregue)"; o robô do Barrar aplica no portal e põe os prints
-          if (st === "feito" && s.sugestao === "entregue") {
+          if (st === "feito" && s.sugestao === "entregue") { entreguesFeitos++;
             await chamar("barrar_entrega?on_conflict=nf", "POST", [{ nf: x.nf, ticket: x.ticket, transp_pedido: alvo, status_intelipost: x.status_intelipost, ticket_criado: x.ticket_criado, na_planilha: true,
               rastreio: r, sugestao: "nao_barrar", sugestao_opcao: "Entregue", sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_rastreio,
               decisao: "nao_barrar", decisao_opcao: "Entregue", decisao_motivo: s.motivo, decisao_por: "robô (entregue · nota não localizada)", decisao_em: new Date().toISOString() }], { Prefer: "resolution=merge-duplicates,return=representation" }).catch(() => soma("não entrou no Barrar"));
           }
-        } catch (e) { Object.assign(campos, { acao: s.sugestao, acao_status: "erro", acao_msg: String(e.message).split("\n")[0].slice(0, 200), acao_em: new Date().toISOString() }); soma("ação com erro"); }
+        } catch (e) { Object.assign(campos, { acao: s.sugestao, acao_status: "erro", acao_msg: String(e.message).split("\n")[0].slice(0, 200), acao_em: new Date().toISOString() }); soma("ação com erro"); log("  ação com erro:", String(e.message).split("\n")[0].replace(/\d{3,}/g, "#").slice(0, 140)); }
       }
       await chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", campos);
     } catch (e) { soma("erro"); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
   }
   log("naoloc: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
+  // entregues que voltaram para o barrar: já marca no portal "não barrado · Entregue" (X vermelho) + prints no ticket (Brenda, 23/11)
+  if (entreguesFeitos) { log(`naoloc: ${entreguesFeitos} entregue(s) de volta no barrar → portal`); await new Promise((ok) => setTimeout(ok, 20000)); await B.aplicarBarrar({ chamar, log, ctx, soAuto: true }).catch((e) => log("naoloc: portal erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120))); }
 }
 
 // só olha a ação de 1 ticket da fila (sem clicar em nada além de Cancelar)
