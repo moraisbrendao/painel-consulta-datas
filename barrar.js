@@ -32,7 +32,7 @@
     const G = []; for (const x of F) { const g = G[G.length - 1]; if (g && Date.parse(g.ini) - Date.parse(x.portal_em) < 15 * 60e3) { g.L.push(x); g.ini = x.portal_em; } else G.push({ fim: x.portal_em, ini: x.portal_em, L: [x] }); }
     const qd = (d) => new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
     const tab = (rs) => `<div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Decisão</th><th>Quem aprovou</th><th>Portal</th><th>Ticket 360</th><th>Horário</th></tr></thead><tbody>${rs.map((x) => `<tr>
-      <td><b>${esc(x.nf)}</b>${x.ticket ? `<div class="s">#${esc(x.ticket)}</div>` : ""}</td>
+      <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(x.ticket)}</a></div>` : ""}</td>
       <td><span class="chip ${x.decisao === "barrar" ? "verde" : "vermelho"}">${SUG[x.decisao] || ""}</span>${x.decisao_opcao ? `<div class="s">${esc(x.decisao_opcao)}</div>` : ""}</td>
       <td>${ehAuto(x) ? `<span class="chip azul">robô · entregue automático</span>` : esc((x.decisao_por || "").split("@")[0])}</td>
       <td>${x.portal_status === "feito" ? "✓ feito" : `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>`}</td>
