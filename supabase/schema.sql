@@ -2940,3 +2940,47 @@ as $$
 $$;
 revoke all on function public.consultar_sac_pag(text) from public, anon;
 grant execute on function public.consultar_sac_pag(text) to authenticated;
+
+-- ============================================================
+-- PARTE 60) Dropshipping › pedidos desmembrados (um pedido com 2 notas).
+--   Relatório paralelo (botão "Subir pedidos desmembrados" no Dropshipping): Ordem de Compra = Pedido Anymarket da base.
+--   Cada envio substitui o anterior.
+create table if not exists public.drop_desmembrados (
+  id            bigserial primary key,
+  ordem_compra  text not null,
+  chave         text not null,      -- ordem de compra só com letras e números, em maiúsculas (para ligar com o Pedido Anymarket)
+  nf            text,
+  transportadora text,
+  status        text,
+  emissao       date
+);
+create index if not exists drop_desmembrados_chave on public.drop_desmembrados (chave);
+create table if not exists public.drop_desmembrados_info (
+  id integer primary key default 1 check (id = 1), arquivo text, linhas integer, enviado_por text, enviado_em timestamptz default now()
+);
+alter table public.drop_desmembrados enable row level security;
+alter table public.drop_desmembrados_info enable row level security;
+revoke all on public.drop_desmembrados, public.drop_desmembrados_info from anon;
+grant select on public.drop_desmembrados, public.drop_desmembrados_info to authenticated;
+drop policy if exists "logistica le" on public.drop_desmembrados;
+drop policy if exists "logistica le" on public.drop_desmembrados_info;
+create policy "logistica le" on public.drop_desmembrados for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.drop_desmembrados_info for select to authenticated using ((select not public.e_sac()));
+
+create or replace function public.importar_desmembrados(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer language plpgsql security definer set search_path = public as $$
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if limpar then
+    delete from public.drop_desmembrados where true;
+    insert into public.drop_desmembrados_info (id, arquivo, linhas, enviado_por, enviado_em) values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas, enviado_por = excluded.enviado_por, enviado_em = now();
+  end if;
+  insert into public.drop_desmembrados (ordem_compra, chave, nf, transportadora, status, emissao)
+  select r.ordem_compra, r.chave, r.nf, r.transportadora, r.status, r.emissao
+  from jsonb_to_recordset(linhas) as r(ordem_compra text, chave text, nf text, transportadora text, status text, emissao date)
+  where coalesce(r.chave, '') <> '';
+  return (select count(*) from public.drop_desmembrados);
+end $$;
+revoke all on function public.importar_desmembrados(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_desmembrados(jsonb, boolean, text, integer) to authenticated;

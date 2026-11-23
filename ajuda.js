@@ -56,6 +56,7 @@
       "A coluna <b>Diagnóstico</b> diz o que provavelmente aconteceu: já coletado, atrasado e 15 dias ou mais sem movimento = provável extravio; mais de 7 dias = parado. Ainda \"Despachado\" (sem movimento da transportadora) e atrasado = atrasado sem coleta.",
       "Use <b>Ver rastreio</b> para conferir na transportadora; grave a nova data e a observação na própria linha (valem em todas as abas).",
       "Baixar Excel leva a lista filtrada com diagnóstico, ocorrência, reposição e a nova data.",
+      "Pedidos desmembrados (um pedido com 2 notas): clique em <b>Subir pedidos desmembrados</b> e envie o relatório paralelo. O painel liga a coluna <b>Ordem de Compra</b> ao <b>Pedido Anymarket</b> da base e mostra a 2ª nota embaixo da situação; o card <b>Desmembrados</b> lista só esses pedidos.",
     ], "Reposição e ocorrência vêm do último detalhamento de tickets enviado. O fornecedor aparece depois do próximo envio da base."],
 
     ["preventivo", "Preventivo", "A lista de trabalho da Logística: pedidos em aberto pela data prometida ao cliente, para agir antes de atrasar.", "Todo dia, várias vezes.", [

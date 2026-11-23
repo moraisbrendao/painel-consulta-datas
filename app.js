@@ -3713,6 +3713,23 @@ ${extra}
   const D_NOME = Object.fromEntries(D_DIAG.map(([k, n]) => [k, n])), D_COR = Object.fromEntries(D_DIAG.map(([k, , c]) => [k, c]));
   const dSel = { card: "agir", diag: "", transp: "" };
   let dLista = [], dPagina = 1, dDetTentou = false;
+  // pedidos desmembrados (parte 60): relatório paralelo com a Ordem de Compra (= Pedido Anymarket da base) e as notas de cada pedido
+  let dsMapa = new Map(), dsInfo = null, dsTentou = false;
+  const dsChave = (v) => String(v ?? "").normalize("NFD").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+  async function carregarDesmembrados() {
+    try {
+      const [L, i] = await Promise.all([buscarTudo("drop_desmembrados", "id", "ordem_compra,chave,nf,transportadora,status,emissao"), sb.from("drop_desmembrados_info").select("*").limit(1)]);
+      const m = new Map(); L.forEach((x) => m.set(x.chave, (m.get(x.chave) || []).concat(x)));
+      dsMapa = m; dsInfo = (i.data || [])[0] || null;
+    } catch (_) { dsMapa = new Map(); dsInfo = null; }
+  }
+  // notas do relatório para o pedido; desmembrado = alguma nota diferente da nota da base
+  function dDesm(p) {
+    const x = p.extra || {}, k = dsChave(x.pedido_any); if (!k) return null;
+    const L = dsMapa.get(k); if (!L) return null;
+    const nfBase = chaveNF(p.nf), vistas = new Set(), outras = L.filter((y) => { const c = chaveNF(y.nf); if (!c || c === nfBase || vistas.has(c)) return false; vistas.add(c); return true; });
+    return outras.length ? { outras, todas: L } : null;
+  }
   const ehDrop = (p) => norm(p.origem).includes("DROP");
   // Scallia (webhook "retorno dos pedidos", parte 45): último marco por NF e por número de pedido
   let scMapa = null, scTentou = false, scInfo = "", scTodos = new Map();
@@ -3783,7 +3800,7 @@ ${extra}
   const dSemNova = (p) => { const n = p._t && p._t.nova_data; return !n || n < hojeISO(); };
   const D_CARD = { agir: (p) => p._atrasoG && dSemNova(p) && !["entregue", "repo", "ocorr"].includes(p._dd),
     extravio: (p) => ["extravio", "sinistro"].includes(p._dd), coleta: (p) => p._dd === "naocoletado",
-    repocorr: (p) => ["repo", "ocorr"].includes(p._dd), abertos: () => true };
+    repocorr: (p) => ["repo", "ocorr"].includes(p._dd), desm: (p) => !!dDesm(p), abertos: () => true };
   const D_ORDEM = ["sinistro", "extravio", "naocoletado", "falha", "repo", "ocorr", "parado", "semcte", "semexp", "atraso", "aguardando", "entregue", "prazo"];
   // filtros do topo (mesmo modelo da Visão Gerencial: várias opções em cada um)
   const D_CAMPOS = { canal: (p) => p.canal || "", uf: (p) => p.uf || "", transp: (p) => gProdK(p.transportadora) || "", serie: (p) => String(p.nf || "").split("-")[1]?.trim() || "",
@@ -3829,6 +3846,7 @@ ${extra}
     if (soSeAberta && paginaAtual !== "drop") return;
     if (!detNF && !dDetTentou) { dDetTentou = true; carregarDetNF().then((m) => { if (m.size) desenharDrop(true); }); }
     if (!scTentou) { scTentou = true; carregarScallia().then(() => desenharDrop(true)); }
+    if (!dsTentou) { dsTentou = true; carregarDesmembrados().then(() => desenharDrop(true)); }
     // opções dos filtros
     const opc = (id, f, todos) => { const el = $(id), v = el.value, c = new Map(); D.forEach((p) => { const k = f(p); if (k) c.set(k, (c.get(k) || 0) + 1); });
       el.innerHTML = `<option value="">${todos}</option>` + [...c].sort((a, b) => a[0].localeCompare(b[0], "pt-BR")).map(([k, n]) => `<option value="${esc(k)}">${esc(k)} (${fmt(n)})</option>`).join(""); el.value = c.has(v) ? v : ""; };
@@ -3858,13 +3876,13 @@ ${extra}
     // lista
     const ord = (p) => D_ORDEM.indexOf(p._dd);
     dLista = D.filter((p) => passa(p)).sort((a, b) => ord(a) - ord(b) || (b._parado || 0) - (a._parado || 0) || String(a._venc || "9").localeCompare(String(b._venc || "9")));
-    const card = { agir: "Atrasados sem nova data", extravio: "Possível extravio", coleta: "Atrasado sem coleta", repocorr: "Com reposição ou ocorrência", abertos: "Todos em aberto" }[dSel.card];
+    const card = { agir: "Atrasados sem nova data", extravio: "Possível extravio", coleta: "Atrasado sem coleta", repocorr: "Com reposição ou ocorrência", desm: "Desmembrados (2 notas)", abertos: "Todos em aberto" }[dSel.card];
     $("d-sel").hidden = !(dSel.diag || dSel.transp);
     $("d-sel").innerHTML = [dSel.diag && `<span class="chip-sel">${esc(D_NOME[dSel.diag])} <button class="link" data-dx="diag" title="Tirar">✕</button></span>`, dSel.transp && `<span class="chip-sel">${esc(dSel.transp)} <button class="link" data-dx="transp" title="Tirar">✕</button></span>`].filter(Boolean).join("");
     const cont = (k) => D.filter((p) => passa(p, "card") && p._dd === k).length;
     $("d-abertos-sub").textContent = `${fmt(cont("aguardando"))} aguardando coleta no prazo · ${fmt(cont("prazo"))} em trânsito no prazo`;
     $("d-lista-titulo").textContent = `${[card, dSel.diag && D_NOME[dSel.diag], dSel.transp, forn].filter(Boolean).join(" · ")} (${fmt(dLista.length)})`;
-    $("d-info").textContent = D.length ? `${fmt(D.length)} pedidos de dropshipping em aberto · ${fmt(D.filter((p) => p._atrasoG).length)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}${scInfo ? " · " + scInfo : ""}${detNF ? "" : " · carregando ocorrências e reposições…"}`
+    $("d-info").textContent = D.length ? `${fmt(D.length)} pedidos de dropshipping em aberto · ${fmt(D.filter((p) => p._atrasoG).length)} atrasados · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}${scInfo ? " · " + scInfo : ""}${dsInfo ? ` · desmembrados: ${dsInfo.arquivo || "relatório"} de ${new Date(dsInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })} (${fmt(D.filter((p) => dDesm(p)).length)} pedidos com 2 notas)` : ""}${detNF ? "" : " · carregando ocorrências e reposições…"}`
       : base.length ? "Nenhum pedido com origem Dropshipping na base em aberto." : "Carregando…";
     desenharDLista();
   }
@@ -3874,6 +3892,7 @@ ${extra}
       + (p._parado !== null ? `<div class="s">${fmt(p._parado)} dia${p._parado === 1 ? "" : "s"} sem movimento</div>` : "")
       + (d.ocorr_status ? `<div class="s" title="${esc(d.ocorr_msg || "")}">Ocorrência: ${esc(d.ocorr_status)}</div>` : "")
       + (ids.length ? `<div class="s tk-links">Reposição ${ids.map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer">#${esc(id)}</a>`).join(" ")}${d.repo_fila ? " · " + esc(d.repo_fila) : ""}</div>` : "")
+      + ((ds) => (ds ? `<div class="s d-desm" title="Pedido desmembrado: o mesmo pedido tem mais de uma nota (relatório de desmembrados)">📦 Desmembrado · 2ª nota: ${ds.outras.map((y) => `<b>${esc(y.nf)}</b>${y.transportadora ? " · " + esc(y.transportadora) : ""}${y.status ? " · " + esc(y.status) : ""}`).join("; ")}</div>` : ""))(dDesm(p))
       + (dForn(p) ? `<div class="s">Fornecedor: ${esc(dForn(p))}</div>` : "")
       + ((s) => (s ? `<div class="s sc"><a href="#" class="sc-abrir" data-p="${esc(p.pedido)}" title="Ver a jornada no Scallia">Scallia</a>: <span class="chip ${(SC_ETAPA[s.marco] || [, "cinza"])[1]}">${esc((SC_ETAPA[s.marco] || [s.marco])[0])}</span>${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}</div>` : ""))(dScallia(p));
   }
@@ -3902,10 +3921,10 @@ ${extra}
   $("d-exportar").addEventListener("click", () => {
     if (!dLista.length) return toast("Nada para exportar.", true);
     const linhas = [["Pedido Intelipost", "NF", "Canal", "Fornecedor", "Transportadora", "UF", "Cidade", "Micro status", "Expedição", "Prometido ao cliente", "Atrasado", "Dias sem movimento", "Diagnóstico",
-      "Tem ticket", "Fila do ticket", "Ticket(s)", "Tipo / motivo do ticket", "Tem ocorrência", "Ocorrência", "Reposição (tickets)", "Fila da reposição", "Previsão SSW", "Scallia (último aviso)", "Nova data", "Observação", "Atualizado por", "Link de rastreio"]]
+      "Tem ticket", "Fila do ticket", "Ticket(s)", "Tipo / motivo do ticket", "Tem ocorrência", "Ocorrência", "Reposição (tickets)", "Fila da reposição", "Previsão SSW", "Scallia (último aviso)", "Nova data", "Observação", "Atualizado por", "Link de rastreio", "Desmembrado", "Outras notas do pedido"]]
       .concat(dLista.map((p) => { const d = dDet(p) || {}, t = p._t || {}, tk = ticketDe(p) || {};
         return [p.pedido, p.nf, p.canal, dForn(p), p.transportadora, p.uf, p.cidade, p.micro_status, br(p.data_expedicao), br(p._venc), p._atrasoG ? "Sim" : "Não", p._parado ?? "", D_NOME[p._dd],
-          tk.fila || tk.id_ticket ? "Sim" : "Não", tk.fila || "", tk.id_ticket || "", [tk.tipo, tk.motivo].filter(Boolean).join(" · "), d.ocorr_status ? "Sim" : "Não", d.ocorr_status || "", d.repo_ticket || "", d.repo_fila || "", br((ssw.get(p.pedido) || {}).previsao), ((s) => (s ? `${s.marco}${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + s.transportadora : ""}` : ""))(dScallia(p)), br(t.nova_data), t.observacao || "", t.atualizado_por || "", p.link_rastreio || ""]; }));
+          tk.fila || tk.id_ticket ? "Sim" : "Não", tk.fila || "", tk.id_ticket || "", [tk.tipo, tk.motivo].filter(Boolean).join(" · "), d.ocorr_status ? "Sim" : "Não", d.ocorr_status || "", d.repo_ticket || "", d.repo_fila || "", br((ssw.get(p.pedido) || {}).previsao), ((s) => (s ? `${s.marco}${s.data_evento ? " " + br(String(s.data_evento).slice(0, 10)) : ""}${s.transportadora ? " · " + s.transportadora : ""}` : ""))(dScallia(p)), br(t.nova_data), t.observacao || "", t.atualizado_por || "", p.link_rastreio || "", ...((ds) => [ds ? "Sim" : "", ds ? ds.outras.map((y) => [y.nf, y.transportadora, y.status].filter(Boolean).join(" · ")).join("; ") : ""])(dDesm(p))]; }));
     const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(linhas), "Dropshipping");
     XLSX.writeFile(wb, `dropshipping_${hojeISO()}.xlsx`);
   });
@@ -5118,4 +5137,41 @@ ${extra}
   }
   document.addEventListener("click", (e) => { if (!e.target.closest("[data-rep-lua]")) return; let claro = false; try { claro = localStorage.getItem("painel.rep.tema") === "claro"; } catch (_) {} repTema(!claro); });
   try { repTema(localStorage.getItem("painel.rep.tema") === "claro"); } catch (_) {}
+
+  // Dropshipping › subir o relatório de pedidos desmembrados (parte 60). Coluna "Ordem de Compra" = Pedido Anymarket da base.
+  $("d-arq-desm").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+    carregando("Lendo o relatório de desmembrados…");
+    let linhas = [];
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", ...LEITURA_RAPIDA });
+      let achou = null;
+      for (const n of wb.SheetNames) { const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null });
+        const i = rows.slice(0, 30).findIndex((r) => r && r.some((c) => /ORDEM DE COMPRA/.test(norm(c)))); if (i >= 0) { achou = { rows, i }; break; } }
+      if (!achou) throw new Error('Não achei a coluna "Ordem de Compra" no relatório.');
+      const cab = achou.rows[achou.i].map(norm), col = (re, nao) => cab.findIndex((c) => re.test(c) && !(nao && nao.test(c)));
+      const cOc = col(/ORDEM DE COMPRA/), cNf = col(/^(NF|NF-?E|NOTA|NOTA FISCAL|N\W*NOTA|NUM(ERO)?\W*(DA )?(NF|NOTA)( FISCAL)?|NOTA FISCAL \(NF\))\b/, /SERIE|CHAVE|DATA|EMISS|VALOR|STATUS/),
+        cSe = col(/SERIE/), cTr = col(/TRANSP/), cSt = col(/STATUS|SITUA/), cEm = col(/EMISS/);
+      if (cNf < 0) throw new Error('Não achei a coluna da nota fiscal no relatório (NF, Nota ou Nota Fiscal).');
+      achou.rows.slice(achou.i + 1).forEach((r) => {
+        if (!r || r[cOc] == null || r[cOc] === "") return;
+        let nf = r[cNf] == null ? "" : String(r[cNf]).trim().replace(/\.0+$/, ""); const se = cSe >= 0 && r[cSe] != null ? String(r[cSe]).trim().replace(/\.0+$/, "") : "";
+        if (se && nf && !nf.includes("-")) nf = `${nf}-${se}`;
+        const em = cEm >= 0 ? dataCelula(r[cEm]) : null;
+        linhas.push({ ordem_compra: String(r[cOc]).trim(), chave: dsChave(r[cOc]), nf: nf ? chaveNF(nf) : null, transportadora: cTr >= 0 && r[cTr] != null ? String(r[cTr]).trim() : null,
+          status: cSt >= 0 && r[cSt] != null ? String(r[cSt]).trim() : null, emissao: em && /^\d{4}-\d{2}-\d{2}/.test(em) ? em.slice(0, 10) : null });
+      });
+      linhas = linhas.filter((x) => x.chave);
+    } catch (err) { carregando(""); return toast(err.message || String(err), true); }
+    carregando("");
+    if (!linhas.length) return toast("O relatório não tem nenhum pedido (Ordem de Compra) preenchido. Nada foi enviado.", true);
+    const ordens = new Set(linhas.map((x) => x.chave)).size;
+    if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} linhas · ${fmt(ordens)} ordens de compra.\nSubstitui o relatório de desmembrados anterior.\n\nEnviar?`)) return;
+    try { await enviarLotes("importar_desmembrados", linhas, 2000, (lote, primeiro) => ({ linhas: lote, limpar: primeiro, arquivo: arq.name, total: linhas.length })); }
+    catch (err) { carregando(""); return toast(/importar_desmembrados|function|schema cache/i.test(err.message || "") ? "Rode a parte 60 no Supabase." : "Erro ao enviar: " + err.message, true); }
+    carregando("");
+    await carregarDesmembrados(); desenharDrop();
+    const D = base.filter(ehDrop), n = D.filter((p) => dDesm(p)).length;
+    toast(`Desmembrados atualizados: ${fmt(ordens)} ordens de compra no relatório · ${fmt(n)} pedidos do Dropshipping com 2 notas.`);
+  });
 })();
