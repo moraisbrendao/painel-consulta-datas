@@ -63,10 +63,14 @@ async function executar(M, p, ticket, acao, print, real) {
 export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, limite = 200 }) {
   const L = [];
   for (let de = 0; ; de += 1000) { const P = await chamar(`nao_localizada?select=*&or=(na_planilha.eq.true,and(acao.eq.cancelar,acao_status.eq.feito))&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
-  const real = LIBERADO && !teste;
-  const fila = L.filter((x) => x.na_planilha && x.acao_status !== "feito" && !x.segurar).slice(0, limite);
+  // só alguns tickets (pedido da Brenda): TRANSP = "h:" + hashes sha256 (10 letras) dos tickets, para não expor o número no registro público
+  const { createHash } = await import("node:crypto");
+  const hs = /^h:/.test(process.env.TRANSP || "") ? new Set(process.env.TRANSP.slice(2).split(",").map((t) => t.trim()).filter(Boolean)) : null;
+  const hsh = (t) => createHash("sha256").update(String(t)).digest("hex").slice(0, 10);
+  const real = (LIBERADO || !!hs) && !teste;
+  const fila = L.filter((x) => x.na_planilha && x.acao_status !== "feito" && !x.segurar && (!hs || hs.has(hsh(x.ticket)))).slice(0, limite);
   // depois do cancelamento: reconfere o rastreio a cada 20 h, por até 90 dias, para avisar se aparecer CT-e
-  const vigiar = L.filter((x) => x.acao === "cancelar" && x.acao_status === "feito" && !x.cte_alerta_em && x.acao_em && Date.now() - Date.parse(x.acao_em) < 90 * 864e5
+  const vigiar = hs ? [] : L.filter((x) => x.acao === "cancelar" && x.acao_status === "feito" && !x.cte_alerta_em && x.acao_em && Date.now() - Date.parse(x.acao_em) < 90 * 864e5
     && (!x.conferido_em || Date.now() - Date.parse(x.conferido_em) > 20 * 3600e3));
   log(`naoloc: ${fila.length} nota(s) na fila · ${vigiar.length} cancelada(s) para vigiar CT-e · ${real ? "REAL" : "TESTE (cancela no fim)"}`);
   if (!fila.length && !vigiar.length) return;
