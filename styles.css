@@ -1249,3 +1249,4 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .chip.mini { font-size: 10px; padding: 1px 6px; }
 .br-an-dec select { max-width: 230px; }
 .br-an-dec textarea { width: 230px; margin-top: 4px; font-size: 12px; }
+.txt-ambar { color: #b26a00; }
