@@ -23,7 +23,7 @@
   const transpDe = (x) => ((x.portal || {}).transp || x.transp || "").trim() || "(sem transportadora)";
   const motivoDe = (x) => (x.motivo || x.motivo_ticket || "").trim() || "(sem motivo)";
   const abertoEm = (x) => dPortal((x.portal || {}).solicitado) || x.ticket_criado;   // data da solicitação no portal, senão a criação do ticket
-  // dias sem retorno: desde a nossa última mensagem "Externo" no ticket (ex.: Eduardo cobrando), senão a solicitação no portal / abertura
+  // dias sem retorno: desde a nossa última mensagem "Externo" no ticket, senão a solicitação no portal / abertura
   const desdeEm = (x) => (x.cobrado_em ? diaBR(x.cobrado_em) : null) || abertoEm(x);
   const diaBR = (ts) => new Date(ts).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
   const prazoVencido = (x) => { const d = dPortal((x.portal || {}).prazo); return d && d < new Date().toISOString().slice(0, 10) ? d : null; };

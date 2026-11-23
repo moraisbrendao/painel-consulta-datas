@@ -39,7 +39,7 @@ async function lerTicket(p, ticket) {
       const por = ((l.match(/transportador\s+por\s+(.+)$/i) || [])[1] || "").trim().slice(0, 80) || null;   // quem respondeu pela transportadora
       if (texto) msgs.push({ quando, texto, por });
     });
-    // nossas mensagens "Externo" (ex.: Eduardo cobrando a transportadora): cabeçalho "Nome - data" + selo Externo, sem "Enviado pelo portal do transportador".
+    // nossas mensagens "Externo" (a equipe cobrando a transportadora): cabeçalho "Nome - data" + selo Externo, sem "Enviado pelo portal do transportador".
     // O painel conta os dias sem retorno a partir da última delas (Brenda, 23/11). Só a data é guardada.
     let cobrado = null;
     ls.forEach((l, i) => {
