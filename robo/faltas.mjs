@@ -45,7 +45,8 @@ async function lerTicket(p, ticket) {
     ls.forEach((l, i) => {
       if (!/^Externo$/i.test(l)) return;
       let q = null; for (let k = i; k >= Math.max(0, i - 3); k--) { const d = ls[k].match(DATA); if (d) { q = `${d[3]}-${d[2]}-${d[1]}T${d[4]}:${d[5]}:${d[6] || "00"}-03:00`; break; } }
-      if (!q || /Enviado pelo portal do transportador/i.test(ls.slice(i + 1, i + 3).join(" "))) return;   // mensagem da transportadora, não nossa
+      let fim = i + 1; while (fim < ls.length && fim < i + 20 && !DATA.test(ls[fim])) fim++;
+      if (!q || /Enviado pelo portal do transportador/i.test(ls.slice(Math.max(0, i - 3), fim).join(" "))) return;   // mensagem da transportadora, não nossa
       if (!cobrado || q > cobrado) cobrado = q;
     });
     // motivo do ticket: rótulo "Motivo" seguido do valor
@@ -118,7 +119,7 @@ export async function conferirFaltas({ chamar, log, ctx, limite = 300 }) {
       await chamar(`falta_volumes?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", {
         retorno_360: t.msgs, portal: pt, motivo_ticket: t.motivo, ...(t.fila ? { fila: t.fila } : {}), tem_retorno: tem, ...(temCobrado ? { cobrado_em: t.cobrado } : {}),
         ultimo_retorno_em: datas.length ? datas[datas.length - 1] : null, conferido_em: new Date().toISOString(), erro: null });
-      soma(tem ? "com retorno" : "sem retorno"); if (t.msgs.length) soma("retorno no 360"); if (t.cobrado) soma("com cobrança nossa"); if (diagN++ < 4) log(`  estrutura: externo=${t.extTot} · ${t.est.join(" ")}`); if (pt && pt.anotacoes && pt.anotacoes.length) soma("anotação no portal"); if (pt && pt.achou === false) soma("NF fora da lista do portal");
+      soma(tem ? "com retorno" : "sem retorno"); if (t.msgs.length) soma("retorno no 360"); if (t.cobrado) { soma("com cobrança nossa"); if (t.cobrado.slice(0, 10) === new Date().toISOString().slice(0, 10)) soma("cobrança de hoje"); } if (pt && pt.anotacoes && pt.anotacoes.length) soma("anotação no portal"); if (pt && pt.achou === false) soma("NF fora da lista do portal");
     } catch (e) {
       soma("erro"); log("  erro:", mascara(String(e.message).split("\n")[0]));
       await chamar(`falta_volumes?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { erro: String(e.message).split("\n")[0].slice(0, 200), conferido_em: new Date().toISOString() }).catch(() => {});
