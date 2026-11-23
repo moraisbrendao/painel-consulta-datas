@@ -1251,3 +1251,6 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .txt-ambar { color: #b26a00; }
 .br-et-an { color: #1f3b70; background: #eef4ff; border-radius: 6px; padding: 2px 6px; margin-bottom: 2px; }
 .br-et-lista { max-height: 260px; }
+.br-et-an + .br-et-an { margin-top: 3px; }
+.br-et-rast { margin-top: 3px; color: #333; }
+.br-et-lista { max-height: 320px; }

@@ -161,11 +161,11 @@ async function lerPortal(p, nf, R) {
   const bt = alvo.locator("button[title='Ver Anotações']");
   if (await bt.count()) {
     await bt.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(800);
-    // cada anotação: inicial, nome, "dd/mm/aaaa, hh:mm", texto. "Close" é o texto escondido do botão X (não faz parte da anotação)
+    // cada anotação: inicial, nome, "dd/mm/aaaa, hh:mm", texto. O nome de quem escreveu vai só para o banco (nunca no log). "Close" é o texto escondido do botão X (não faz parte da anotação)
     const ls = (await d.innerText()).split("\n").map((l) => l.trim()).filter((l) => l && !/^(close|fechar|×|x)$/i.test(l) && !/^Anota[cç][oõ]es$/i.test(l) && !/^Aqui voc[eê] pode ver/i.test(l) && !/^Adicione aqui/i.test(l));
     const ehData = (l) => /^\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}$/.test(l);
     const idx = ls.map((l, i) => (ehData(l) ? i : -1)).filter((i) => i >= 0);
-    out.anotacoes = idx.map((i, k) => { const fim = k + 1 < idx.length ? idx[k + 1] - 2 : ls.length; return { quando: ls[i], texto: ls.slice(i + 1, Math.max(i + 1, fim)).join(" ").slice(0, 300) }; }).filter((a) => a.texto);
+    out.anotacoes = idx.map((i, k) => { const fim = k + 1 < idx.length ? idx[k + 1] - 2 : ls.length; const por = i > 0 && !ehData(ls[i - 1]) && ls[i - 1].length > 1 ? ls[i - 1].slice(0, 80) : ""; return { quando: ls[i], por, texto: ls.slice(i + 1, Math.max(i + 1, fim)).join(" ").slice(0, 300) }; }).filter((a) => a.texto);
     out.anotacao = out.anotacoes.map((a) => `${a.quando}: ${a.texto}`).join(" | ").slice(0, 600);
     // print da tela inteira: nota filtrada na lista + janela de anotações aberta
     try { out.print = await p.screenshot(); } catch (_) {}

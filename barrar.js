@@ -103,7 +103,7 @@
   }
   function msgTransp(t, xs) {   // texto limpo (Brenda 23/11): cabeçalho curto + uma linha por nota com dias e último status
     return `Olá, ${t}! Estamos com ${plural(xs.length, "nota pendente", "notas pendentes")} de barrar. Conseguimos seguir com a barragem ${xs.length === 1 ? "dela" : "delas"}?\n\n`
-      + xs.map((x) => { const d = diasDesde(x.ticket_criado); const a = anotsDe(x)[0]; return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · rastreio: ${ultStatus(x)}${a ? ` · anotação${a.quando ? " de " + String(a.quando).split(",")[0] : ""}: ${a.texto}` : ""}`; }).join("\n");
+      + xs.map((x) => { const d = diasDesde(x.ticket_criado); const a = anotsDe(x)[0]; return `• NF ${x.nf}${d !== null ? ` · há ${plural(d, "dia", "dias")}` : ""} · rastreio: ${ultStatus(x)}${a ? ` · última anotação${a.por ? " de " + a.por : ""}${a.quando ? " em " + String(a.quando).split(",")[0] : ""}: ${a.texto}` : ""}`; }).join("\n");
   }
   const linhasXls = (xs) => xs.map((x) => { const r = x.rastreio || {}; return [alvoTransp(x), x.nf, x.ticket || "", x.ticket_criado ? br(x.ticket_criado) : "", diasDesde(x.ticket_criado) ?? "", ultStatus(x), r.fonte || "", x.sugestao_motivo || "", anotTexto(x)]; });
   const CAB_ERRO = ["Transportadora", "Nota", "Ticket", "Ticket aberto em", "Dias pendente", "Último status no rastreio", "Fonte do rastreio", "Observação do robô", "Anotações no portal"];
@@ -111,7 +111,8 @@
   const anotsDe = (x) => { const p = x.portal || {}; const A = (p.anotacoes || []).filter((a) => a && a.texto);
     const dk = (q) => { const m = String(q || "").match(/(\d{2})\/(\d{2})\/(\d{4}),?\s*(\d{2}):(\d{2})/); return m ? `${m[3]}${m[2]}${m[1]}${m[4]}${m[5]}` : ""; };
     return A.length ? A.map((a, i) => [a, i]).sort((u, v) => dk(v[0].quando).localeCompare(dk(u[0].quando)) || v[1] - u[1]).map(([a]) => a) : p.anotacao ? [{ quando: "", texto: String(p.anotacao).replace(/\s*Close\s*$/i, "") }] : []; };
-  const anotTexto = (x) => anotsDe(x).map((a) => `${a.quando ? a.quando + ": " : ""}${a.texto}`).join(" | ");
+  const anotTexto = (x) => anotsDe(x).map((a) => `${a.por ? a.por + " · " : ""}${a.quando ? a.quando + ": " : ""}${a.texto}`).join(" | ");
+  const anotHtml = (a) => `<div class="br-anot">${a.por ? `<b>${esc(a.por)}</b> ` : ""}${a.quando ? `<span class="s">${esc(a.quando)}</span>` : ""}${a.por || a.quando ? "<br>" : ""}${esc(a.texto)}</div>`;
   function baixarErro(grupos, nome) {
     const wb = XLSX.utils.book_new(); const usados = new Set();
     if (grupos.length > 1) XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(grupos.flatMap(([, xs]) => linhasXls(xs)))), "Todas");
@@ -133,14 +134,14 @@
       <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th><th>Decisão (vai para o robô)</th></tr></thead><tbody>${C.map(([t, x]) => `<tr>
         <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}</td>
         <td>${esc(t)}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td>
-        <td>${anotsDe(x).map((a) => `<div class="br-anot">${a.quando ? `<span class="s">${esc(a.quando)}</span> ` : ""}${esc(a.texto)}</div>`).join("")}${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}</td>
+        <td>${anotsDe(x).map(anotHtml).join("")}${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}</td>
         <td class="s">${esc(ultStatus(x))}</td><td class="br-an-dec">${celDecAnot(x)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="s">Nenhuma nota em "Erro: verificar" tem anotação no portal.</p>`}</div>`;
     box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem "não recebeu" no portal. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
       ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
       ${quadroAnot}
       <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
         return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
-          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotação / rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${((a) => (a ? `<div class="br-et-an" title="${esc(anotTexto(x))}">📝 ${a.quando ? `<span class="s">${esc(a.quando)}</span> ` : ""}${esc(a.texto)}</div>` : ""))(anotsDe(x)[0])}<div>🚚 ${esc(ultStatus(x))}</div></td></tr>`).join("")}</tbody></table></div>
+          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotações e rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${anotsDe(x).map((a) => `<div class="br-et-an">${a.por ? `<b>${esc(a.por)}</b> · ` : ""}${a.quando ? `<span class="s">${esc(a.quando)}</span>` : ""}${a.por || a.quando ? "<br>" : ""}${esc(a.texto)}</div>`).join("")}<div class="br-et-rast"><b>Status atual do rastreio:</b> ${esc(ultStatus(x))}</div></td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}" data-t="${esc(t)}">${esc(msgTransp(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
     box._G = G; box._C = C; contarAnot();
@@ -188,7 +189,7 @@
     const rast = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>`
       : `<b>${esc(r.situacao || "—")}</b>${r.fonte ? ` <span class="s">(${esc(r.fonte)})</span>` : ""}${r.evento ? `<div class="s">${esc(r.evento)}${r.data_evento ? " · " + br(r.data_evento) : ""}</div>` : ""}${r.achou_palavra ? `<div><span class="chip verde">${esc(r.achou_palavra.toLowerCase())}</span></div>` : ""}${r.transp ? `<div class="s">transp. no rastreio: ${esc(r.transp)}</div>` : ""}`;
     const tp = `${esc(x.transp_pedido || "—")}${r.transp_ticket || r.redesp_ticket ? `<div class="s">ticket 360: ${esc(r.transp_ticket || "—")}${r.redesp_ticket ? ` · redespacho <b>${esc(r.redesp_ticket)}</b>` : ""}</div>` : ""}${p.transp ? `<div class="s">portal: ${esc(p.transp)}</div>` : x.conferido_em && p.achou === false ? `<div class="s txt-vermelho">não está na lista do portal</div>` : ""}${x.mesma_transp === false ? `<div><span class="chip roxo">transportadora diferente</span></div>` : ""}`;
-    const an = p.anotacao ? `<div class="br-anot">${esc(p.anotacao)}</div>${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}` : `<span class="s">${x.conferido_em ? "sem anotação" : ""}</span>`;
+    const an = p.anotacao ? `${anotsDe(x).map(anotHtml).join("")}${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}` : `<span class="s">${x.conferido_em ? "sem anotação" : ""}</span>`;
     const sug = x.sugestao ? `<span class="chip ${x.sugestao === "barrar" ? "verde" : x.sugestao === "nao_barrar" ? "vermelho" : "ambar"}">${SUG[x.sugestao]}</span>${x.sugestao_opcao ? `<div class="s">${esc(x.sugestao_opcao)}</div>` : ""}${x.sugestao_motivo ? `<div class="s">${esc(x.sugestao_motivo)}</div>` : ""}` : "";
     const travado = !!x.portal_status && x.portal_status === "feito";
     const dec = celDec(x);
