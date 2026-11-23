@@ -96,7 +96,9 @@
   const ultStatus = (x) => { const r = x.rastreio || {}; return r.evento ? `${r.evento}${r.data_evento ? " em " + br(r.data_evento) : ""}` : r.situacao && !/^erro/i.test(r.situacao) ? r.situacao : "sem informação no rastreio"; };
   const plural = (n, um, varios) => `${n} ${n === 1 ? um : varios}`;
   function gruposErro() {
-    const m = new Map(); L.filter((x) => sit(x) === "manual").forEach((x) => { const t = alvoTransp(x); m.set(t, (m.get(t) || []).concat(x)); });
+    // só as que ainda não têm decisão (nem em rascunho no quadro de anotações); cada nota uma vez só
+    const m = new Map(), vistas = new Set();
+    L.filter((x) => sit(x) === "manual" && !(rasc.has(x.nf) && rasc.get(x.nf).v)).forEach((x) => { if (vistas.has(x.nf)) return; vistas.add(x.nf); const t = alvoTransp(x); m.set(t, (m.get(t) || []).concat(x)); });
     return [...m.entries()].map(([t, xs]) => [t, xs.sort((a, b) => (diasDesde(b.ticket_criado) ?? -1) - (diasDesde(a.ticket_criado) ?? -1))]).sort((a, b) => b[1].length - a[1].length || a[0].localeCompare(b[0], "pt-BR"));
   }
   function msgTransp(t, xs) {   // texto limpo (Brenda 23/11): cabeçalho curto + uma linha por nota com dias e último status
@@ -218,7 +220,7 @@
     if (an) { const x = L.find((y) => y.nf === an.dataset.nf); const r = rasc.get(an.dataset.nf) || { mot: null }; r.v = an.value; rasc.set(an.dataset.nf, r);
       const t = an.parentElement.querySelector(".br-an-mot"); if (t) { t.hidden = !an.value.startsWith("nao_barrar"); if (!t.value) t.value = motDec(x); }
       const st = an.parentElement.querySelector(".s"); if (st) { st.className = "s txt-ambar"; st.textContent = "rascunho · ainda não enviado"; } else an.parentElement.insertAdjacentHTML("beforeend", `<div class="s txt-ambar">rascunho · ainda não enviado</div>`);
-      contarAnot(); return; }
+      contarAnot(); desenharErroTransp(); return; }
     if (e.target.closest(".br-an-mot")) return;
     const c = e.target.closest(".br-sel"); if (c) { c.checked ? marcadas.add(c.dataset.nf) : marcadas.delete(c.dataset.nf); desenhar(); return; }
     const d = e.target.closest(".br-dec");
