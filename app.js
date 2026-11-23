@@ -107,6 +107,7 @@
     }
   });
   $("btn-sair").addEventListener("click", () => { cacheLimpar(); sb.auth.signOut(); });
+  document.addEventListener("click", (e) => { const c = $("topo-conta"); if (c && c.open && (!c.contains(e.target) || e.target.closest(".conta-item"))) c.open = false; });
 
   function abrirSessao(sessao) {
     if (usuarioId === sessao.user.id) return;
@@ -377,7 +378,7 @@
   }
   function desenharTopoArquivos() {
     const quando = (x) => `${new Date(x.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${x.enviado_por ? " por " + x.enviado_por : ""}`;
-    const chip = (x, cls) => `<span class="arq ${cls}" title="Enviada em ${esc(quando(x))} · todos os logins veem esta mesma planilha">▤ ${esc(x.arquivo || "planilha")} <b class="selo">compartilhada</b></span>`;
+    const chip = (x, cls) => `<span class="arq ${cls}" title="${esc(x.arquivo || "planilha")} · enviada em ${esc(quando(x))} · compartilhada: todos os logins veem esta mesma planilha">▤ ${cls ? "Tickets" : "Base"} <b class="selo">compartilhada</b></span>`;   // nome do arquivo só no título (topo limpo, Brenda 23/11)
     let h = (info ? chip(info, "") : "") + (ticketsInfo ? chip(ticketsInfo, "tk") : "");
     if (info) {
       const du = diasUteisDesde(diaLocal(info.enviado_em)), dt = new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });

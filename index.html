@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=242">
+  <link rel="stylesheet" href="styles.css?v=243">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -69,11 +69,16 @@
         <label class="btn lilas so-log" title="Planilha detalhamento_tickets360 (aba Tickets): mostra a fila do ticket de cada pedido">
           <span class="ic-up">⇪</span><span id="rot-tickets">Carregar tickets</span><input id="arquivo-tickets" type="file" accept=".xlsx,.xls" hidden>
         </label>
-        <span id="usuario" class="usuario"></span>
-        <button id="btn-voltar" class="btn contorno" type="button" disabled title="Volta para como a tela estava antes do último clique (Ctrl+Z)">↶ Voltar</button>
-        <button id="btn-ajuda" class="btn contorno so-log" title="Como usar esta aba">❔ Ajuda</button>
-        <button id="btn-trocar-senha" class="btn contorno">Trocar senha</button>
-        <button id="btn-sair" class="btn contorno">Sair</button>
+        <span class="topo-sep" aria-hidden="true"></span>
+        <button id="btn-voltar" class="btn contorno btn-ic" type="button" disabled title="Voltar: volta para como a tela estava antes do último clique (Ctrl+Z)" aria-label="Voltar">↶</button>
+        <button id="btn-ajuda" class="btn contorno btn-ic so-log" title="Ajuda: como usar esta aba" aria-label="Ajuda">?</button>
+        <details class="topo-conta" id="topo-conta">
+          <summary title="Minha conta"><span class="conta-av">👤</span><span id="usuario" class="usuario"></span><span class="conta-seta">▾</span></summary>
+          <div class="conta-menu">
+            <button id="btn-trocar-senha" class="conta-item" type="button">🔑 Trocar senha</button>
+            <button id="btn-sair" class="conta-item" type="button">⎋ Sair</button>
+          </div>
+        </details>
       </div>
     </header>
 
@@ -1559,19 +1564,19 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=242"></script>
-  <script src="mapa-brasil.js?v=242"></script>
-  <script src="troca-notas.js?v=242"></script>
-  <script src="app.js?v=242"></script>
-  <script src="ordenar.js?v=242"></script>
-  <script src="menu.js?v=242"></script>
-  <script src="ajuda.js?v=242"></script>
-  <script src="documentos.js?v=242"></script>
-  <script src="barrar.js?v=242"></script>
-  <script src="faltas.js?v=242"></script>
-  <script src="motor.js?v=242"></script>
-  <script src="retornos-semana.js?v=242"></script>
-  <script src="filas.js?v=242"></script>
-  <script src="filtros.js?v=242"></script>
+  <script src="config.js?v=243"></script>
+  <script src="mapa-brasil.js?v=243"></script>
+  <script src="troca-notas.js?v=243"></script>
+  <script src="app.js?v=243"></script>
+  <script src="ordenar.js?v=243"></script>
+  <script src="menu.js?v=243"></script>
+  <script src="ajuda.js?v=243"></script>
+  <script src="documentos.js?v=243"></script>
+  <script src="barrar.js?v=243"></script>
+  <script src="faltas.js?v=243"></script>
+  <script src="motor.js?v=243"></script>
+  <script src="retornos-semana.js?v=243"></script>
+  <script src="filas.js?v=243"></script>
+  <script src="filtros.js?v=243"></script>
 </body>
 </html>

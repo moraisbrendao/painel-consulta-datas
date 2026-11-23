@@ -1157,3 +1157,29 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 .rs-tab td.num { color: var(--texto); font-weight: 400; }
 .rs-tab td.num.ruim-t { color: var(--vermelho); font-weight: 600; }
 .rs-mtab td.rs-aud { min-width: 220px; max-width: 340px; }
+/* topo organizado (23/11): uma linha só, conta num menu */
+@media (min-width: 761px) {
+  .topo { flex-wrap: nowrap; }
+  .topo-direita { flex-wrap: nowrap; gap: 8px; min-width: 0; }
+  .topo-arquivos { flex-wrap: nowrap; gap: 8px; min-width: 0; }
+}
+.topo-sep { width: 1px; height: 26px; background: var(--borda); margin: 0 2px; }
+.btn.btn-ic { width: 36px; min-width: 36px; padding: 0; justify-content: center; font-size: 16px; font-weight: 700; }
+.topo-conta { position: relative; }
+.topo-conta > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; cursor: pointer; padding: 6px 10px; border: 1px solid var(--borda); border-radius: 8px; background: #fff; max-width: 230px; }
+.topo-conta > summary::-webkit-details-marker { display: none; }
+.topo-conta > summary .usuario { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.topo-conta .conta-seta { font-size: 10px; color: var(--texto-2); }
+.topo-conta .conta-menu { position: absolute; right: 0; top: calc(100% + 6px); background: #fff; border: 1px solid var(--borda); border-radius: 8px; box-shadow: 0 10px 24px rgba(13,34,64,.15); padding: 6px; display: flex; flex-direction: column; min-width: 170px; z-index: 30; }
+.conta-item { background: none; border: 0; text-align: left; padding: 9px 10px; border-radius: 6px; cursor: pointer; font: inherit; font-size: 13px; color: var(--texto); }
+.conta-item:hover { background: var(--cinza-bg); }
+@media (max-width: 1250px) and (min-width: 761px) { .topo-conta > summary .usuario { display: none; } .topo-arquivos .arq .selo { display: none; } }
+@media (max-width: 760px) { .topo-sep { display: none; } .topo-conta > summary { max-width: none; width: 100%; justify-content: center; } .topo-conta .conta-menu { position: static; box-shadow: none; } }
+@media (min-width: 761px) {
+  .topo-titulo { white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; flex: 0 1 auto; }
+  .topo-logo { flex-shrink: 0; }
+  .topo-direita > * { flex-shrink: 0; }
+  .topo-arquivos .arq .selo { display: none; }   /* "compartilhada" fica no título (passar o mouse) */
+}
+@media (max-width: 1560px) and (min-width: 761px) { .topo-arquivos .arq { display: none; } }
+@media (max-width: 1300px) and (min-width: 761px) { .topo-arquivos { display: none; } }
