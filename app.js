@@ -3681,7 +3681,9 @@ ${extra}
     $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", drop: "Dropshipping", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Alterar pedidos", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Gerar XML", barrar: "Barrar entrega", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
-    document.body.classList.toggle("fundo-escuro", pag === "reposicao");   // Reposição com fundo azul-escuro (pedido da Brenda)
+    let repClaro = false; try { repClaro = localStorage.getItem("painel.rep.tema") === "claro"; } catch (_) {}
+    document.body.classList.toggle("fundo-escuro", pag === "reposicao" && !repClaro);   // Reposição com fundo azul-escuro (pedido da Brenda); botão Preto/Branco troca
+    document.body.classList.toggle("rep-claro", pag === "reposicao" && repClaro);
     if (G_PAGINAS.includes(pag)) { const pg = $("pagina-" + pag), f = $("g-filtros"); if (f.parentElement !== pg) pg.prepend(f); }
     window.scrollTo(0, 0);
   }
@@ -5091,4 +5093,14 @@ ${extra}
     const el = $(id); if (!el) return;
     el.addEventListener("click", (e) => { if (!e.target.closest(sel)) return; setTimeout(() => abrirListaCard($(tit) ? $(tit).textContent : "Pedidos", lista(), xl), 0); });
   });
+
+  // Reposição: botão Preto / Branco (Brenda 23/11) — guarda a escolha neste navegador
+  function repTema(claro) {
+    try { localStorage.setItem("painel.rep.tema", claro ? "claro" : "escuro"); } catch (_) {}
+    const naRep = paginaAtual === "reposicao";
+    document.body.classList.toggle("fundo-escuro", naRep && !claro); document.body.classList.toggle("rep-claro", naRep && claro);
+    document.querySelectorAll("[data-rep-tema]").forEach((b) => { b.classList.toggle("amarelo", b.dataset.repTema === (claro ? "claro" : "escuro")); b.classList.toggle("contorno", b.dataset.repTema !== (claro ? "claro" : "escuro")); });
+  }
+  document.addEventListener("click", (e) => { const b = e.target.closest("[data-rep-tema]"); if (b) repTema(b.dataset.repTema === "claro"); });
+  try { repTema(localStorage.getItem("painel.rep.tema") === "claro"); } catch (_) {}
 })();

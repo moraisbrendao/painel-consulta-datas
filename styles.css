@@ -1111,3 +1111,29 @@ body.lm-aberto { overflow: hidden; }
 .lm-rodape { background: #fffbea; border-top: 1px solid var(--borda); padding: 8px 16px; font-size: 12px; text-align: center; color: var(--texto-2); }
 @media (max-width: 640px) { .lm-fundo { padding: 0; } .lm-caixa { border-radius: 0; max-height: 100vh; height: 100vh; } }
 body.lm-aberto .modal { z-index: 80; } body.lm-aberto .carregando { z-index: 85; } body.lm-aberto .toast { z-index: 90; }
+/* Reposição: tema branco (botão Preto / Branco, Brenda 23/11) */
+.rep-tema { margin-left: auto; display: inline-flex; gap: 6px; align-items: center; }
+#fo-vis { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+body.rep-claro .fo-quadro { background: #fff; color: var(--texto); box-shadow: 0 1px 4px rgba(13,34,64,.12); border: 1px solid var(--borda); }
+body.rep-claro .fo-multi-rot, body.rep-claro .fo-sel, body.rep-claro .fo-sub { color: var(--texto-2); }
+body.rep-claro .fo-sel select, body.rep-claro .fo-multi summary, body.rep-claro .fo-multi-lista { background: #fff; color: var(--texto); border-color: #cbd5e1; }
+body.rep-claro .fo-multi summary::after, body.rep-claro .fo-multi-lista .fo-todos, body.rep-claro .fo-filtros .link.limpar { color: #b45309; }
+body.rep-claro .fo-multi-lista label { color: var(--texto); }
+body.rep-claro .fo-multi-lista label:hover { background: #fff3c4; }
+body.rep-claro .fo-multi-lista .fo-todos { border-color: #e2e8f0; }
+body.rep-claro .fo-filtros .btn.contorno, body.rep-claro .fo-casos .btn.contorno { color: var(--marinho); border-color: #cbd5e1; }
+body.rep-claro .fo-pivo th { color: var(--texto-2); border-bottom: 2px solid var(--texto-2); }
+body.rep-claro .fo-pivo th.red, body.rep-claro .fo-pivo td.red a, body.rep-claro .fo-pivo tr.fo-t td.red a, body.rep-claro .fo-pivo tr.fo-g td.red a { color: #dc2626; }
+body.rep-claro .fo-pivo td { color: var(--texto); border-bottom: 1px solid var(--borda); }
+body.rep-claro .fo-pivo td.vz { color: #c4c9d2; }
+body.rep-claro .fo-pivo td a:hover { color: var(--marinho); }
+body.rep-claro .fo-pivo tr.fo-g td { background: #eef2f8; color: var(--marinho); }
+body.rep-claro .fo-pivo tr:hover td { background: #fffbea; }
+body.rep-claro .fo-pivo td.tot { color: var(--marinho); }
+body.rep-claro .fo-pivo tr.fo-t td { background: #fafbfc; color: var(--marinho); border-top: 2px solid var(--texto-2); }
+body.rep-claro .fo-resp { background: #fff; color: var(--marinho); border-color: #f5b800; }
+body.rep-claro .fo-casos-topo h3 { color: var(--marinho); }
+body.rep-claro .fo-lista th { color: var(--texto-2); border-bottom-color: var(--texto-2); }
+body.rep-claro .fo-lista td { color: var(--texto); border-bottom-color: var(--borda); }
+body.rep-claro .fo-lista .s { color: var(--texto-2); }
+body.rep-claro .fo-lista a { color: #0369a1; }
