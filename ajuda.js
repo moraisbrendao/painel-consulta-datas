@@ -120,10 +120,10 @@
     ["nl", "Nota não localizada (em Alterar pedidos)", "Trata a fila Nota não localizada (Sem Emissão) do Multi360: o robô olha o rastreio e devolve para o barrar ou segue para cancelamento.", "Quando chega a planilha de tickets da fila.", [
       "Clique em <b>↓ Modelo</b> se precisar do formato e em <b>Enviar planilha</b> com o relatório de tickets da fila.",
       "Clique em <b>Rodar o robô</b>: no rastreio → voltar para o barrar; entregue → voltar para o barrar e não barrado (Entregue) no Barrar entrega; fora do rastreio e fora do prazo → seguir para cancelamento com \"Pedido não localizado em rastreio\".",
-      "Prazo: série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis, contados da criação do ticket. Antes disso a nota fica em <b>Aguardando prazo</b>.",
+      "Prazo: série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis; séries 7, 31 e 4 = 5 dias úteis, contados da criação do ticket. Antes disso a nota fica em <b>Aguardando prazo</b>.",
       "Use <b>Ver rastreio</b> em cada nota para conferir. Marque <b>segurar</b> nas notas em que o robô não deve mexer.",
       "O card <b>Histórico</b> guarda todas as notas que passaram pela fila. Se aparecer CT-e depois do cancelamento, sobe um aviso vermelho: tome as providências e clique em <b>Marcar como visto</b>.",
-    ], "Outras séries (por exemplo 7) ficam em Verificar à mão até termos a regra."],
+    ], "Outras séries ficam em Verificar à mão até termos a regra."],
     ["sac", "Consulta SAC", "Consulta para o SAC: pedidos vencidos ou que vencem hoje/amanhã, com a nova data e a observação da Logística.", "Quando o cliente pergunta do pedido.", [
       "Busque pelo pedido ou NF, ou use os cards <b>Já vencidos</b>, <b>Vencem hoje</b>, <b>Vencem amanhã</b>.",
       "Leia a <b>Nova data</b> e a <b>Observação</b> que a Logística informou.",

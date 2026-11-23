@@ -3,7 +3,7 @@
 //   · ENTREGUE no rastreio → volta para o barrar + entra no Barrar entrega como "não barrado (Entregue)" (o robô do Barrar aplica no portal)
 //   · está no rastreio      → volta para o barrar
 //   · fora do rastreio e passou do prazo → seguir para cancelamento, comentário "Pedido não localizado em rastreio"
-//       prazo (Brenda, 23/11): série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis, contados da criação do ticket
+//       prazo (Brenda, 23/11): série 35 = 30 dias corridos; séries 34 e 25 = 7 dias úteis; séries 7, 31 e 4 = 5 dias úteis (da criação do ticket)
 // Depois do cancelamento o robô continua olhando o rastreio (até 90 dias) e avisa no painel se aparecer CT-e.
 // Registro público (GitHub): só contagens. Nada de nota, ticket ou nome no log.
 
@@ -22,7 +22,8 @@ export function prazoAte(serie, criado) {
   if (isNaN(d)) return null;
   const s = String(serie || "").replace(/^0+/, "");
   if (s === "35") { const x = new Date(d); x.setDate(x.getDate() + 30); return diaISO(x); }
-  if (s === "34" || s === "25") { const x = new Date(d); let n = 0; while (n < 7) { x.setDate(x.getDate() + 1); const w = x.getDay(); if (w !== 0 && w !== 6) n++; } return diaISO(x); }
+  const du = { "34": 7, "25": 7, "7": 5, "31": 5, "4": 5 }[s];   // dias úteis (Brenda 23/11: 34 e 25 = 7; 7, 31 e 4 = 5)
+  if (du) { const x = new Date(d); let n = 0; while (n < du) { x.setDate(x.getDate() + 1); const w = x.getDay(); if (w !== 0 && w !== 6) n++; } return diaISO(x); }
   return null;
 }
 const hojeBR = () => new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
