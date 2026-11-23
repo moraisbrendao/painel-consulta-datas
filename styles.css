@@ -1181,7 +1181,7 @@ body.rep-claro .fo-lista a { color: #0369a1; }
   .topo-direita > * { flex-shrink: 0; }
   .topo-arquivos .arq .selo { display: none; }   /* "compartilhada" fica no título (passar o mouse) */
 }
-@media (max-width: 1560px) and (min-width: 761px) { .topo-arquivos .arq { display: none; } }
+@media (max-width: 1720px) and (min-width: 761px) { .topo-arquivos .arq { display: none; } }
 @media (max-width: 1450px) and (min-width: 761px) { .topo-arquivos { display: none; } }
 /* filtros organizados (23/11): título numa linha, campos do mesmo tamanho em grade, Limpar no canto */
 @media (min-width: 761px) {
@@ -1192,3 +1192,8 @@ body.rep-claro .fo-lista a { color: #0369a1; }
   .filtros-cartao.filtros-ger > .multi, .filtros-cartao.filtros-ger > label { min-width: 0; }
   .filtros-cartao.filtros-ger .multi-botao, .filtros-cartao.filtros-ger > label > input { width: 100%; box-sizing: border-box; }
 }
+/* logo Multimóveis horizontal em vetor (23/11) */
+.login-logo { width: 240px; height: auto; }
+.topo-logo { height: 20px; width: auto; }
+@media (max-width: 760px) { .topo-logo { height: 15px; } }
+.topo-titulo { border-left-color: var(--borda); }
