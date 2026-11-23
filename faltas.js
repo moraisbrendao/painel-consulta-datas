@@ -86,7 +86,7 @@
     const ed = x.editado_em ? `<div class="s">gravado${x.editado_por ? " por " + esc(String(x.editado_por).split("@")[0]) : ""} em ${hora(x.editado_em)}</div>` : "";
     return `<tr><td><b>${esc(x.nf || "—")}</b><div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>${x.fila ? `<div class="s">${esc(x.fila)}</div>` : ""}</td>
       <td>${esc(transpDe(x))}</td><td>${esc(motivoDe(x))}${avisoMotivo(x, R)}</td>
-      <td class="num">${d ?? "—"}${desdeEm(x) ? `<div class="s">${x.cobrado_em ? "cobrado em" : "desde"} ${br(desdeEm(x))}</div>` : ""}</td>
+      <td class="num">${d ?? "—"}${desdeEm(x) ? `<div class="s">desde ${br(desdeEm(x))}</div>` : ""}</td>
       <td>${p.prazo ? `${esc(p.prazo)}${pv ? ` <span class="chip vermelho">vencido</span>` : ""}` : "—"}</td>
       <td class="fv-prom"><input type="date" class="fv-data" data-tk="${esc(x.ticket)}" value="${esc(x.data_prometida || "")}" title="Data que a transportadora informou para finalizar">${promVencida(x) ? ` <span class="chip vermelho">promessa vencida</span>` : ""}</td>
       <td class="fv-col-ret">${ret}${x.erro && !x.tem_retorno ? `<div class="s txt-vermelho">⚠ ${esc(x.erro)}</div>` : ""}</td>
@@ -125,7 +125,7 @@
   function mensagem(t, xs) {   // texto limpo (Brenda 23/11)
     const mot = porMotivo(xs).map(([m]) => m).join(" e ");
     return `Olá, ${t}! Estamos com ${plural(xs.length, "caso", "casos")} de ${mot}. Precisamos do retorno de vocês para seguir com as tratativas. Conseguem verificar?\n\n`
-      + xs.map((x) => { const d = dias(desdeEm(x)), pv = prazoVencido(x); return `• NF ${x.nf || "—"} · ${motivoDe(x)}${d === null ? "" : x.cobrado_em && d === 0 ? " · cobrado hoje" : x.cobrado_em ? ` · cobrado há ${plural(d, "dia", "dias")}` : ` · há ${plural(d, "dia", "dias")}`}${pv ? ` · prazo limite ${br(pv)} vencido` : ""}`; }).join("\n");
+      + xs.map((x) => { const d = dias(desdeEm(x)), pv = prazoVencido(x); return `• NF ${x.nf || "—"} · ${motivoDe(x)}${d === null ? "" : d === 0 ? " · hoje" : ` · há ${plural(d, "dia", "dias")}`}${pv ? ` · prazo limite ${br(pv)} vencido` : ""}`; }).join("\n");
   }
   const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Nossa última cobrança (360 externo)", "Dias sem retorno", "Prazo limite (portal)", "Prazo vencido", "Data prometida pela transportadora", "Promessa vencida", "Anotações", "Com retorno", "Último retorno em", "Onde", "Quem retornou", "Texto do último retorno", "Todos os retornos"];
   const linhasXls = (xs) => xs.map((x) => { const R = retornos(x), u = R[0] || {}, pv = prazoVencido(x);
