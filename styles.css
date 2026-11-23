@@ -1207,3 +1207,25 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 .tabela-faixa td.av-tot { color: var(--texto); }
 .login-logo { display: block; margin: 0 auto 10px; }
 .ap-topo-dir { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
+/* Gargalos por transportadora (Análise de canais) */
+.gx-resumo { background: #fffbea; border: 1px solid #f6e3a1; border-radius: 10px; padding: 10px 14px; margin: 6px 0 12px; font-size: 13.5px; }
+.gx-resumo p { margin: 4px 0; }
+.gx-tab tr.gx-reg td:first-child { cursor: pointer; color: var(--texto); font-weight: 600; }
+.gx-tab tr.gx-reg.aberta td { background: #fffbea; }
+.gx-tab td.num.clic { cursor: pointer; }
+.gx-tab td.num.clic:hover { background: #fff3c4; }
+.gx-tab td.num.tot { color: var(--texto); }
+.gx-tab td.s { color: var(--texto-2); font-size: 12.5px; }
+.gx-det > td { background: #fafbfd; padding: 10px 14px !important; }
+.gx-det-grade { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.gx-det-grade h4 { margin: 0 0 6px; font-size: 13px; color: var(--marinho); }
+.gx-mini { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.gx-mini th { text-align: left; color: var(--texto-2); font-weight: 600; padding: 4px 6px; border-bottom: 1px solid var(--borda); }
+.gx-mini td { padding: 4px 6px; border-bottom: 1px solid #eef1f5; color: var(--texto); }
+.gx-mini th.num, .gx-mini td.num { text-align: right; }
+.gx-mini td.clic { cursor: pointer; color: var(--vermelho); font-weight: 600; }
+.gx-mini td.vazio-c { color: #c4c9d2; }
+@media (max-width: 760px) { .gx-det-grade { grid-template-columns: 1fr; } }
+.gx-mini td.num { color: var(--texto); }
+.gx-mini td.num.clic { color: var(--vermelho); }
+.gx-mini td.num.vazio-c { color: #c4c9d2; }

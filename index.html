@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=249">
+  <link rel="stylesheet" href="styles.css?v=250">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -414,6 +414,22 @@
           <p id="c-vazio" class="vazio" hidden>Nenhum pedido aqui. 🎉</p>
         </div>
         <div id="c-paginacao" class="paginacao"></div>
+      </section>
+
+      <!-- ============ GARGALOS POR TRANSPORTADORA (gargalos.js) ============ -->
+      <section class="cartao" id="gx-box">
+        <div class="cartao-topo">
+          <div><h2>🧭 Gargalos por transportadora · onde ela tem mais dificuldade de entregar</h2>
+            <p class="sub">Pedidos em aberto do canal escolhido acima, por região de entrega. Capital de SP separada por zona (pelo CEP), Grande SP, litoral e interior; nos outros estados, capital e interior. Clique na região para ver as cidades e onde o pedido trava; clique num número para ver os pedidos.</p></div>
+          <div class="acoes-robo"><label class="c-canal-rot">Transportadora: <select id="gx-transp"></select></label><button id="gx-excel" class="btn contorno" type="button">Baixar Excel</button></div>
+        </div>
+        <div id="gx-resumo" class="gx-resumo"></div>
+        <div class="tabela-wrap">
+          <table class="tabela-range tabela-cruz gx-tab">
+            <thead><tr><th>Região</th><th class="num">Em aberto</th><th class="num">Atrasados</th><th class="num">% de atraso</th><th class="num">Sem nova data</th><th class="num">Parados 7+ dias</th><th>Onde mais trava (atrasados)</th></tr></thead>
+            <tbody id="gx-linhas"></tbody>
+          </table>
+        </div>
       </section>
 
       <details class="cartao c-mais" id="c-mais">
@@ -1564,19 +1580,20 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=249"></script>
-  <script src="mapa-brasil.js?v=249"></script>
-  <script src="troca-notas.js?v=249"></script>
-  <script src="app.js?v=249"></script>
-  <script src="ordenar.js?v=249"></script>
-  <script src="menu.js?v=249"></script>
-  <script src="ajuda.js?v=249"></script>
-  <script src="documentos.js?v=249"></script>
-  <script src="barrar.js?v=249"></script>
-  <script src="faltas.js?v=249"></script>
-  <script src="motor.js?v=249"></script>
-  <script src="retornos-semana.js?v=249"></script>
-  <script src="filas.js?v=249"></script>
-  <script src="filtros.js?v=249"></script>
+  <script src="config.js?v=250"></script>
+  <script src="mapa-brasil.js?v=250"></script>
+  <script src="troca-notas.js?v=250"></script>
+  <script src="app.js?v=250"></script>
+  <script src="ordenar.js?v=250"></script>
+  <script src="menu.js?v=250"></script>
+  <script src="ajuda.js?v=250"></script>
+  <script src="documentos.js?v=250"></script>
+  <script src="barrar.js?v=250"></script>
+  <script src="faltas.js?v=250"></script>
+  <script src="motor.js?v=250"></script>
+  <script src="retornos-semana.js?v=250"></script>
+  <script src="gargalos.js?v=250"></script>
+  <script src="filas.js?v=250"></script>
+  <script src="filtros.js?v=250"></script>
 </body>
 </html>

@@ -19,7 +19,7 @@
   let perfil = "";              // "sac" ou "logistica"
   let paginaAtual = "preventivo";
   let base = [];               // pedidos da planilha
-  window.__basePainel = () => base;   // motor.js (Tempos reais) usa a mesma base já carregada, sem ler tudo de novo
+  window.__basePainel = (prep) => { if (prep) base.forEach(preparar); return base; };   // motor.js (Tempos reais) usa a mesma base já carregada, sem ler tudo de novo
   let trat = new Map();        // pedido -> tratativa
   let info = null;
   let infoFech = null;         // último arquivo da Intelipost enviado
@@ -3548,7 +3548,8 @@ ${extra}
     if (error) return toast("Não salvei: " + error.message, true);
     toast(sn ? "Senha salva." : "Senha apagada."); await carregarSenhas(); janelaSenhas();
   });
-  window.__abrirSSW = (...a) => abrirSSW(...a);   // filas.js (Ocorrências) usa o mesmo "Ver rastreio"
+  window.__abrirSSW = (...a) => abrirSSW(...a);
+  window.__abrirListaCard = (...a) => abrirListaCard(...a);   // gargalos.js usa a mesma janela de lista   // filas.js (Ocorrências) usa o mesmo "Ver rastreio"
   async function abrirSSW(nf, transp, pedido, dados) {   // abre o rastreio numa aba nova (consulta feita pelo navegador de quem clicou)
     const [num, ser] = String(nf || "").split("-").map((x) => x.trim());
     let x = dados || (pedido && cfLista.find((y) => y.pedido === pedido));

@@ -44,6 +44,7 @@
     ], ""],
 
     ["canais", "Análise de canais", "Mostra, por canal de venda, os pedidos que precisam de ação primeiro. Amazon e Mercado Livre têm o índice de reclamações (meta abaixo de 1%) e o risco de cada pedido.", "Todo dia, principalmente para Amazon e Mercado Livre.", [
+      "Quadro <b>🧭 Gargalos por transportadora</b>: escolha a transportadora e veja onde ela mais atrasa (capital de SP por zona pelo CEP, Grande SP, litoral, interior; outros estados capital e interior). Clique na região para ver as cidades e em qual micro status os atrasados travam; clique num número para a lista.",
       "Escolha o <b>Canal</b> no alto à direita.",
       "Trate na ordem: card <b>1 · Atrasados sem nova data</b>, depois <b>2 · Vencem hoje ou amanhã</b>, depois <b>3 · Risco alto no canal</b> (vale para todos os canais; em Amazon e Mercado Livre também conta a transportadora com mais reclamações).",
       "Na lista, preencha a <b>Nova data</b> e a <b>Observação</b> ali mesmo (vale também no Preventivo). Clique na linha para ver o detalhe do pedido.",
