@@ -1144,3 +1144,16 @@ body.rep-claro .fo-lista a { color: #0369a1; }
 .fv-aviso.forte { color: #fff; background: #dc2626; border-color: #b91c1c; animation-duration: 1s; }
 @keyframes fv-pisca { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
 @media (prefers-reduced-motion: reduce) { .fv-aviso { animation: none; } }
+/* Retornos da semana (Preventivo) */
+.rs-semana { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--texto-2); }
+.rs-semana input { padding: 4px 6px; border: 1px solid var(--borda); border-radius: 6px; }
+.rs-cards { margin: 8px 0 14px; }
+.rs-tab tr.clicavel { cursor: pointer; }
+.rs-caixa { width: min(1400px, 100%); }
+.rs-mtab td.rs-aud { white-space: normal; min-width: 260px; }
+.rs-mtab td.rs-aud .s { font-size: 11px; color: var(--texto-2); margin-top: 2px; }
+.rs-msg { padding: 14px 8px; display: flex; flex-direction: column; gap: 10px; align-items: flex-start; }
+.rs-msg textarea { width: 100%; font: 13px/1.45 inherit; padding: 10px; border: 1px solid var(--borda); border-radius: 8px; resize: vertical; }
+.rs-tab td.num { color: var(--texto); font-weight: 400; }
+.rs-tab td.num.ruim-t { color: var(--vermelho); font-weight: 600; }
+.rs-mtab td.rs-aud { min-width: 220px; max-width: 340px; }
