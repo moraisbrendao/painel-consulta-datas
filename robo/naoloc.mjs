@@ -126,9 +126,11 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
       const campos = { rastreio: r, sugestao: s.sugestao, sugestao_motivo: s.motivo, prazo_ate: s.prazo_ate ?? prazoAte(x.serie, x.ticket_criado), conferido_em: new Date().toISOString(), print_rastreio };
       soma(`sugestão ${s.sugestao}`);
       if (["voltar_barrar", "entregue", "cancelar"].includes(s.sugestao) && m && x.ticket) {
+        let comentou = false;
         try {
-          const jaComentou = x.acao_status === "comentado" || /^coment/i.test(x.acao_msg || "");
-          const marcarComentado = () => chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { acao: s.sugestao, acao_status: "erro", acao_msg: "comentado; falta clicar na ação", acao_em: new Date().toISOString() }).catch(() => {});
+          const jaComentou = x.acao_status === "comentado" || /^coment|cliquei na a[cç][aã]o/i.test(x.acao_msg || "");   // nunca comenta duas vezes
+          comentou = jaComentou;
+          const marcarComentado = () => (comentou = true, chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { acao: s.sugestao, acao_status: "erro", acao_msg: "comentado; falta clicar na ação", acao_em: new Date().toISOString() }).catch(() => {}));
           let st = await executar(M, m, x.ticket, s.sugestao, s.sugestao === "cancelar" ? null : png, real, jaComentou, marcarComentado);
           if (st === "saiu") { soma("já tinha saído da fila"); campos.acao_status = "erro"; campos.acao_msg = "o ticket já não estava na fila Nota não localizada: conferir no Multi360"; campos.acao = s.sugestao; campos.acao_em = new Date().toISOString(); await chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", campos); continue; }
           Object.assign(campos, { acao: s.sugestao, acao_status: st, acao_msg: st === "teste" ? "teste: preenchido e cancelado" : MSG[s.sugestao], acao_em: new Date().toISOString() });
@@ -139,7 +141,7 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
               rastreio: r, sugestao: "nao_barrar", sugestao_opcao: "Entregue", sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_rastreio,
               decisao: "nao_barrar", decisao_opcao: "Entregue", decisao_motivo: s.motivo, decisao_por: "robô (entregue · nota não localizada)", decisao_em: new Date().toISOString() }], { Prefer: "resolution=merge-duplicates,return=representation" }).catch(() => soma("não entrou no Barrar"));
           }
-        } catch (e) { Object.assign(campos, { acao: s.sugestao, acao_status: "erro", acao_msg: String(e.message).split("\n")[0].slice(0, 200), acao_em: new Date().toISOString() }); soma("ação com erro"); log("  ação com erro:", String(e.message).split("\n")[0].replace(/\d{3,}/g, "#").slice(0, 140)); }
+        } catch (e) { Object.assign(campos, { acao: s.sugestao, acao_status: "erro", acao_msg: (comentou ? "comentado · " : "") + String(e.message).split("\n")[0].slice(0, 200), acao_em: new Date().toISOString() }); soma("ação com erro"); log("  ação com erro:", String(e.message).split("\n")[0].replace(/\d{3,}/g, "#").slice(0, 140)); }
       }
       await chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", campos);
     } catch (e) { soma("erro"); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
