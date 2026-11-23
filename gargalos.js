@@ -30,31 +30,35 @@
   const semNova = (p) => { const nv = p._t && p._t.nova_data; return !nv || String(nv).slice(0, 10) < hoje(); };
   const parado7 = (p) => p._parado !== null && p._parado !== undefined && p._parado >= 7;
 
-  let aberto = {}, sel = "", G = [], X = [];
+  let aberto = {}, sel = null, selCanal = null, G = [], X = [];   // sel "" = todas as transportadoras; selCanal "" = todos os canais
   function base() {
     const B = (window.__basePainel && window.__basePainel(true)) || [];   // true = calcula atraso, nova data e dias parados
-    const canal = ($("c-canal") || {}).value || "";
-    return B.filter((p) => !p.entregue_ip && (!canal || (p.canal || "(sem canal)") === canal));
+    if (selCanal === null) selCanal = ($("c-canal") || {}).value || "";
+    const T = B.filter((p) => !p.entregue_ip), canais = [...new Set(T.map((p) => p.canal || "(sem canal)"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+    $("gx-canal").innerHTML = `<option value="">Todos os canais</option>` + canais.map((c) => `<option ${c === selCanal ? "selected" : ""}>${esc(c)}</option>`).join("");
+    return T.filter((p) => !selCanal || (p.canal || "(sem canal)") === selCanal);
   }
   const top = (L, f, n) => { const m = new Map(); L.forEach((p) => { const k = f(p); m.set(k, (m.get(k) || 0) + 1); }); return [...m.entries()].sort((a, b) => b[1] - a[1]).slice(0, n); };
 
+  const quem = () => `${sel || "Todas as transportadoras"}${selCanal ? " · " + selCanal : ""}`;
   function desenhar() {
     const B = base();
     if (!B.length) { $("gx-resumo").textContent = "Carregando os pedidos…"; $("gx-linhas").innerHTML = ""; return; }
     // transportadoras com mais atrasos primeiro
     const porT = new Map(); B.forEach((p) => { const k = nomeT(p.transportadora), x = porT.get(k) || porT.set(k, { k, n: 0, a: 0 }).get(k); x.n++; if (atrasado(p)) x.a++; });
     const ts = [...porT.values()].sort((a, b) => b.a - a.a || b.n - a.n);
-    if (!sel || !porT.has(sel)) sel = (ts[0] || {}).k || "";
-    $("gx-transp").innerHTML = ts.map((t) => `<option value="${esc(t.k)}" ${t.k === sel ? "selected" : ""}>${esc(t.k)} · ${fmt(t.a)} atrasados</option>`).join("");
-    X = B.filter((p) => nomeT(p.transportadora) === sel);
+    if (sel === null || (sel && !porT.has(sel))) sel = "";
+    const totA = B.filter(atrasado).length;
+    $("gx-transp").innerHTML = `<option value="" ${sel ? "" : "selected"}>Todas as transportadoras · ${fmt(totA)} atrasados</option>` + ts.map((t) => `<option value="${esc(t.k)}" ${t.k === sel ? "selected" : ""}>${esc(t.k)} · ${fmt(t.a)} atrasados</option>`).join("");
+    X = sel ? B.filter((p) => nomeT(p.transportadora) === sel) : B;
     const m = new Map(); X.forEach((p) => { const r = regiao(p); (m.get(r) || m.set(r, []).get(r)).push(p); });
     G = [...m.entries()].map(([r, L]) => { const A = L.filter(atrasado); return { r, L, A, sn: A.filter(semNova).length, pa: A.filter(parado7).length }; })
       .sort((a, b) => b.A.length - a.A.length || b.L.length - a.L.length);
     const A = X.filter(atrasado);
     // resumo em texto
     const g1 = G[0], ms = top(A, (p) => p.micro_status || "(sem micro status)", 3), pa = A.filter(parado7).length;
-    $("gx-resumo").innerHTML = !A.length ? `<p><b>${esc(sel)}</b> não tem pedido atrasado ${$("c-canal").value ? "neste canal" : ""} agora (${fmt(X.length)} em aberto).</p>`
-      : `<p><b>${esc(sel)}</b>: ${fmt(A.length)} atrasados de ${fmt(X.length)} em aberto (${pct(A.length, X.length)}).${g1 && g1.A.length ? ` O maior gargalo é <b>${esc(g1.r)}</b>, com ${fmt(g1.A.length)} atrasados (${pct(g1.A.length, A.length)} dos atrasos dela; ${pct(g1.A.length, g1.L.length)} do que ela tem em aberto lá).` : ""}</p>
+    $("gx-resumo").innerHTML = !A.length ? `<p><b>${esc(quem())}</b> não tem pedido atrasado ${selCanal ? "neste canal" : ""} agora (${fmt(X.length)} em aberto).</p>`
+      : `<p><b>${esc(quem())}</b>: ${fmt(A.length)} atrasados de ${fmt(X.length)} em aberto (${pct(A.length, X.length)}).${g1 && g1.A.length ? ` O maior gargalo é <b>${esc(g1.r)}</b>, com ${fmt(g1.A.length)} atrasados (${pct(g1.A.length, A.length)} dos atrasos; ${pct(g1.A.length, g1.L.length)} do que está em aberto lá).` : ""}</p>
          <p>Onde trava: ${ms.map(([k, n]) => `<b>${esc(titulo(k))}</b> ${fmt(n)}`).join(" · ")}. ${fmt(pa)} atrasado(s) sem movimento no rastreio há 7 dias ou mais.</p>`;
     const cel = (n, i, q, cls = "") => `<td class="num ${cls} ${n ? "clic" : "vazio-c"}" ${n ? `data-gi="${i}" data-q="${q}"` : ""}>${n ? fmt(n) : "·"}</td>`;
     $("gx-linhas").innerHTML = G.map((g, i) => {
@@ -80,7 +84,7 @@
       const L = q === "todos" ? g.L : q === "atr" ? g.A : q === "sn" ? g.A.filter(semNova) : q === "pa" ? g.A.filter(parado7)
         : q === "cid" ? g.A.filter((p) => nomeCid(p) === v) : g.A.filter((p) => (p.micro_status || "(sem micro status)") === v);
       const rot = { todos: "em aberto", atr: "atrasados", sn: "atrasados sem nova data", pa: "atrasados parados 7+ dias", cid: `atrasados · ${v}`, ms: `atrasados · ${titulo(v)}` }[q];
-      if (window.__abrirListaCard) window.__abrirListaCard(`${sel} · ${g.r} · ${rot}`, L);
+      if (window.__abrirListaCard) window.__abrirListaCard(`${quem()} · ${g.r} · ${rot}`, L);
       return;
     }
     const r = e.target.closest("tr.gx-reg"); if (r) { aberto[r.dataset.gr] = !aberto[r.dataset.gr]; desenhar(); return; }
@@ -93,11 +97,11 @@
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Região", "Cidade", "Em aberto", "Atrasados"]].concat(cid)), "Cidades");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Pedido", "NF", "Região", "Cidade", "UF", "CEP", "Micro status", "Atrasado", "Prometido", "Nova data", "Dias sem movimento"]]
         .concat(X.map((p) => [p.pedido, p.nf, regiao(p), p.cidade, p.uf, cepDe(p), p.micro_status, atrasado(p) ? "Sim" : "", String(p.prev_original || "").slice(0, 10), (p._t && p._t.nova_data) || "", p._parado ?? ""]))), "Pedidos");
-      XLSX.writeFile(wb, `gargalos_${sel.replace(/[^\wÀ-ú]+/g, "_")}_${hoje()}.xlsx`);
+      XLSX.writeFile(wb, `gargalos_${quem().replace(/[^\wÀ-ú]+/g, "_")}_${hoje()}.xlsx`);
     }
   });
   $("gx-transp").addEventListener("change", (e) => { sel = e.target.value; aberto = {}; desenhar(); });
-  if ($("c-canal")) $("c-canal").addEventListener("change", () => setTimeout(desenhar, 0));
+  $("gx-canal").addEventListener("change", (e) => { selCanal = e.target.value; aberto = {}; desenhar(); });
 
   // desenha quando a página aparece e a base estiver pronta; redesenha se a base mudar
   const pag = $("pagina-canais"); let ultB = null, ultN = -1;
