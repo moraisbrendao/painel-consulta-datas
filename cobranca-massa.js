@@ -21,54 +21,52 @@
   const RUIDO = /\b(LTDA|ME|EPP|EIRELI|S\/?A|TRANSPORTES?|TRANSPORTADORA|LOGISTICA|STANDARD|EXPRESS)\b/g;
   const chaveT = (n) => { const t = norm(n); if (!t) return "(SEM TRANSPORTADORA)"; if (/TEMPO JUSTO|^VM\b|VM TRANSPORTES/.test(t)) return "VM / TEMPO JUSTO"; return t.replace(/[.,\-/]/g, " ").replace(RUIDO, " ").replace(/\s+/g, " ").trim() || t; };
 
-  let R = [], O = [], contatos = new Map(), carregado = false, ok = true, msgErro = "", transpSel = "", tipoSel = "", busca = "";
-  const opt = { repoFora: true, ocorrFora: false };
-  try { Object.assign(opt, JSON.parse(localStorage.getItem("painel.cm.opt") || "{}")); } catch (_) {}
+  let R = [], O = [], U = 0, contatos = new Map(), carregado = false, ok = true, msgErro = "", transpSel = "", tipoSel = "", busca = "", fora = {};
   let enviados = new Set();
   try { const e = JSON.parse(localStorage.getItem("painel.cm.env") || "{}"); if (e.dia === hojeISO()) enviados = new Set(e.lista || []); } catch (_) {}
   const salvaEnv = () => { try { localStorage.setItem("painel.cm.env", JSON.stringify({ dia: hojeISO(), lista: [...enviados] })); } catch (_) {} };
+  const baseAberta = () => { const b = window.__basePainel && window.__basePainel(true); return b && b.length ? b : null; };
 
+  // Universo (Brenda 24/11): pedidos em aberto vencidos, que vencem hoje ou amanhã — pela nova data quando a transportadora já
+  // deu uma (igual ao Preventivo: nova data vencida volta para a cobrança). Desses, só: reposição com nova NF no detalhamento
+  // ou ocorrência em andamento; e status Intelipost diferente de Despachado / Pré-lista / Falha ao criar pedido.
   async function carregar() {
-    $("cm-info").textContent = "Carregando reposições, ocorrências e o arquivo da Intelipost…";
+    $("cm-info").textContent = "Carregando a base, as reposições e as ocorrências…";
     try {
-      const [rp, tk, oc, cf, ct] = await Promise.all([
-        tudo("repo_atual", "ticket,nota_ticket,nfs_novas,fila_atual,tipo_reposicao,transp_promob,transp_redesp_promob,data_emissao_nf,data_criacao_ticket", "ticket"),
+      for (let i = 0; i < 120 && !baseAberta(); i++) await new Promise((r) => setTimeout(r, 500));
+      const B = baseAberta(); if (!B) throw new Error("a base ainda não carregou: atualize a página");
+      const [rp, tk, oc, ct] = await Promise.all([
+        tudo("repo_atual", "ticket,nota_ticket,nfs_novas,fila_atual,tipo_reposicao,transp_promob,transp_redesp_promob,data_emissao_nf", "ticket"),
         tudo("reposicoes_tk", "ticket,status", "ticket"),
-        tudo("ocorrencias_tk", "id,nf,transportador,criado_em,motivo,status,solicitante,mensagem_em", "id"),
-        tudo("conferencia_ssw", "pedido,nf,status_intelipost", "pedido"),
+        tudo("ocorrencias_tk", "id,nf,transportador,criado_em,motivo,status,mensagem_em", "id"),
         sb().from("transp_contatos").select("transportadora,emails,cc").then((r) => r.data || []).catch(() => []),
       ]);
-      const ST = new Map(); cf.forEach((c) => { if (c.nf) ST.set(nfK(c.nf), c.status_intelipost || ""); });
       const TK = new Map(tk.map((t) => [String(t.ticket), t.status || ""]));
       contatos = new Map(); ct.forEach((c) => contatos.set(chaveT(c.transportadora), c));
-      R = rp.filter((r) => r.nfs_novas).map((r) => {
-        const novas = String(r.nfs_novas).split(",").map((t) => t.trim()).filter(Boolean);
-        const stNova = novas.map((n) => ST.get(nfK(n))).find((s) => s != null);
-        const st = stNova != null ? stNova : ST.get(nfK(r.nota_ticket));
-        const transp = r.transp_redesp_promob || r.transp_promob || "";
-        return { tipo: "rep", ticket: r.ticket, nf: r.nota_ticket, nova: novas.join(", "), emissao: r.data_emissao_nf, criado: r.data_criacao_ticket, tipoRep: r.tipo_reposicao, fila: r.fila_atual,
-          statusTk: TK.get(String(r.ticket)) || "", st: st ?? null, transp, k: chaveT(transp) };
-      });
-      O = oc.map((o) => ({ tipo: "oc", nf: o.nf, motivo: o.motivo, status: o.status, criado: o.criado_em, msgEm: o.mensagem_em, solicitante: o.solicitante, st: ST.has(nfK(o.nf)) ? ST.get(nfK(o.nf)) : null, transp: o.transportador || "", k: chaveT(o.transportador) }));
+      const RP = new Map(); rp.forEach((r) => { if (!r.nfs_novas || !r.nota_ticket) return; const st = TK.get(String(r.ticket)) || "";
+        if (/RESOLVID|ENCERRAD/.test(norm(st)) || /RECUPERACAO DE CREDITO/.test(norm(r.fila_atual))) return;
+        const k = nfK(r.nota_ticket); (RP.get(k) || RP.set(k, []).get(k)).push(r); });
+      const OC = new Map(); oc.forEach((o) => { if (!/EM ANDAMENTO/.test(norm(o.status)) || !o.nf) return; const k = nfK(o.nf); (OC.get(k) || OC.set(k, []).get(k)).push(o); });
+      R = []; O = []; U = 0; fora = {};
+      const conta = (m) => (fora[m] = (fora[m] || 0) + 1);
+      for (const p of B) {
+        if (p.entregue_ip || p._diasEf == null || p._diasEf > 1) continue;
+        U++;
+        const k = nfK(p.nf), rs = RP.get(k), os = OC.get(k);
+        if (!rs && !os) { conta("sem reposição nem ocorrência"); continue; }
+        if (FORA_IP.test(norm(p.status_intelipost))) { conta("status Intelipost " + p.status_intelipost); continue; }
+        const base = { pedido: p.pedido, nf: p.nf, micro: p.micro_status || "", st: p.status_intelipost || "", prom: p._venc, nova: (p._t && p._t.nova_data) || "", obs: (p._t && p._t.observacao) || "", diasEf: p._diasEf };
+        (rs || []).forEach((r) => { const transp = r.transp_redesp_promob || r.transp_promob || p.transportadora || "";
+          R.push({ ...base, tipo: "rep", ticket: r.ticket, nfNova: String(r.nfs_novas), emissao: r.data_emissao_nf, tipoRep: r.tipo_reposicao, fila: r.fila_atual, transp, k: chaveT(transp) }); });
+        (os || []).forEach((o) => { const transp = o.transportador || p.transportadora || "";
+          O.push({ ...base, tipo: "oc", motivo: o.motivo, criado: o.criado_em, msgEm: o.mensagem_em, transp, k: chaveT(transp) }); });
+      }
       ok = true; carregado = true;
     } catch (e) { ok = false; msgErro = e.message || String(e); }
     desenhar();
   }
-
-  // regras
-  const motivoFora = (x) => {
-    if (x.tipo === "rep") {
-      if (/RESOLVID|ENCERRAD/.test(norm(x.statusTk))) return "ticket resolvido/encerrado";
-      if (/RECUPERACAO DE CREDITO/.test(norm(x.fila))) return "fila Recuperação de crédito";
-    } else {
-      if (!/EM ANDAMENTO/.test(norm(x.status))) return "ocorrência não está em andamento";
-      if (x.st == null && !opt.ocorrFora) return "fora do arquivo da Intelipost";
-    }
-    if (x.st != null && FORA_IP.test(norm(x.st))) return "status Intelipost " + x.st;
-    if (x.st != null && /^(ENTREGUE|CANCELADO)/.test(norm(x.st))) return "já " + x.st.toLowerCase();
-    return "";
-  };
-  const cobraveis = () => [...R, ...O].filter((x) => !motivoFora(x));
+  const venceTxt = (d) => (d < 0 ? `vencido há ${-d} dia${d < -1 ? "s" : ""}` : d === 0 ? "vence hoje" : "vence amanhã");
+  const cobraveis = () => [...R, ...O];
   const nomeDe = (k, L) => { if (k === "VM / TEMPO JUSTO") return "VM Transportes / Tempo Justo"; const c = {}; L.forEach((x) => { if (x.k === k && x.transp) c[x.transp] = (c[x.transp] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || k; };
   function grupos() {
     const L = cobraveis(), G = new Map();
@@ -78,14 +76,15 @@
   }
 
   function texto(g) {
-    const linhas = [`Olá, equipe ${g.nome}!`, "", "Precisamos do retorno de vocês nos casos abaixo (lista completa na planilha em anexo):"];
+    const linhas = [`Olá, equipe ${g.nome}!`, "", "Seguem os pedidos vencidos ou que vencem até amanhã que precisam do retorno de vocês (lista completa na planilha em anexo):"];
     if (g.rep.length) linhas.push(`• Reposições com nova NF emitida: ${g.rep.length}`);
     if (g.oc.length) linhas.push(`• Ocorrências em andamento: ${g.oc.length}`);
     linhas.push("", "Por favor, nos informem o status atualizado e a previsão de entrega de cada nota ainda hoje.", "", "Obrigada!");
     return linhas.join("\n");
   }
-  const LIN_REP = (x) => ({ "Ticket": x.ticket, "NF original": x.nf, "NF de reposição": x.nova, "Emissão da NF nova": br(x.emissao), "Dias desde a emissão": dias(x.emissao), "Tipo de reposição": x.tipoRep || "", "Status Intelipost": x.st ?? "não está na Intelipost" });
-  const LIN_OC = (x) => ({ "NF": x.nf, "Motivo": x.motivo || "", "Aberta em": br(x.criado), "Dias aberta": dias(x.criado), "Última mensagem em": br(x.msgEm), "Status Intelipost": x.st ?? "fora do arquivo" });
+  const COMUM = (x) => ({ "Pedido": x.pedido, "NF": x.nf, "Data prometida": br(x.prom), "Nova data": br(x.nova), "Situação": venceTxt(x.diasEf), "Status Intelipost": x.st, "Micro status": x.micro });
+  const LIN_REP = (x) => ({ ...COMUM(x), "Ticket": x.ticket, "NF de reposição": x.nfNova, "Emissão da NF nova": br(x.emissao), "Tipo de reposição": x.tipoRep || "" });
+  const LIN_OC = (x) => ({ ...COMUM(x), "Motivo da ocorrência": x.motivo || "", "Ocorrência aberta em": br(x.criado) });
   const limpaNome = (t) => String(t).replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   function excel(g) {
     const wb = XLSX.utils.book_new();
@@ -106,11 +105,9 @@
     if (!ok) { $("cm-info").textContent = "Não consegui carregar: " + msgErro; return; }
     if (!carregado) return;
     const G = grupos(), tot = { rep: 0, oc: 0 }; G.forEach((g) => { tot.rep += g.rep.length; tot.oc += g.oc.length; });
-    const fora = {}; [...R, ...O].forEach((x) => { const m = motivoFora(x); if (m) fora[m] = (fora[m] || 0) + 1; });
-    $("cm-info").textContent = `${fmt(R.length)} reposições com nova NF e ${fmt(O.length)} ocorrências lidas · ficaram de fora: ` + (Object.entries(fora).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") || "nenhuma");
+    $("cm-info").textContent = `${fmt(U)} pedidos vencidos, vencendo hoje ou amanhã (pela nova data quando houver) · ficaram de fora: ` + (Object.entries(fora).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") || "nenhum");
     $("cm-k-transp").textContent = fmt(G.length); $("cm-k-rep").textContent = fmt(tot.rep); $("cm-k-oc").textContent = fmt(tot.oc);
     $("cm-k-env").textContent = `${fmt(G.filter((g) => enviados.has(g.k)).length)} de ${fmt(G.length)}`;
-    $("cm-op-oc").checked = opt.ocorrFora;
     const sel = $("cm-transp"), atual = transpSel;
     sel.innerHTML = `<option value="">Todas as transportadoras</option>` + G.map((g) => `<option value="${esc(g.k)}"${g.k === atual ? " selected" : ""}>${esc(g.nome)} (${g.rep.length + g.oc.length})</option>`).join("");
     $("cm-linhas").innerHTML = G.map((g) => {
@@ -126,11 +123,13 @@
   function desenharCasos(G) {
     const q = norm(busca).split(/[\s,;]+/).filter(Boolean);
     const L = G.filter((g) => !transpSel || g.k === transpSel).flatMap((g) => [...(tipoSel === "oc" ? [] : g.rep), ...(tipoSel === "rep" ? [] : g.oc)].map((x) => ({ ...x, nome: g.nome })))
-      .filter((x) => !q.length || q.some((b) => norm(x.nf).includes(b) || norm(x.nova).includes(b) || norm(x.ticket).includes(b)));
+      .filter((x) => !q.length || q.some((b) => norm(x.nf).includes(b) || norm(x.pedido).includes(b) || norm(x.nfNova).includes(b) || norm(x.ticket).includes(b)))
+      .sort((a, b) => a.diasEf - b.diasEf);
     $("cm-casos-tit").textContent = `Casos para cobrar${transpSel ? " · " + (G.find((g) => g.k === transpSel)?.nome || "") : ""} (${fmt(L.length)})`;
+    const sit = (x) => `<b class="${x.diasEf < 0 ? "txt-vermelho" : ""}">${venceTxt(x.diasEf)}</b><div class="s">prometido ${br(x.prom)}${x.nova ? " · nova data " + br(x.nova) : ""}</div>`;
     $("cm-casos").innerHTML = L.slice(0, 500).map((x) => x.tipo === "rep"
-      ? `<tr><td><span class="chip azul">Reposição</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}</td><td>${esc(x.nova)}${x.emissao ? `<div class="s">emitida ${br(x.emissao)}</div>` : ""}</td><td>${x.ticket ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}<div class="s">${esc(x.fila || "")}</div></td><td>${esc(x.st ?? "não está na Intelipost")}</td><td class="num">${dias(x.emissao)}</td></tr>`
-      : `<tr><td><span class="chip laranja">Ocorrência</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}</td><td>${esc(x.motivo || "")}</td><td><a href="https://ccp.360multi.com/occurrences/${encodeURIComponent(x.nf)}" target="_blank" rel="noopener noreferrer">ver no portal ↗</a></td><td>${esc(x.st ?? "fora do arquivo")}</td><td class="num">${dias(x.criado)}</td></tr>`).join("")
+      ? `<tr><td><span class="chip azul">Reposição</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>NF nova ${esc(x.nfNova)}${x.emissao ? `<div class="s">emitida ${br(x.emissao)}</div>` : ""}</td><td>${x.ticket ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}<div class="s">${esc(x.fila || "")}</div></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`
+      : `<tr><td><span class="chip laranja">Ocorrência</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>${esc(x.motivo || "")}</td><td><a href="https://ccp.360multi.com/occurrences/${encodeURIComponent(x.nf)}" target="_blank" rel="noopener noreferrer">ver no portal ↗</a></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`).join("")
       + (L.length > 500 ? `<tr><td colspan="7" class="s">Mostrando 500 de ${fmt(L.length)}: o Excel traz todos.</td></tr>` : "");
     $("cm-casos-vazio").hidden = !!L.length;
   }
@@ -148,8 +147,6 @@
   $("cm-transp").addEventListener("change", (e) => { transpSel = e.target.value; desenhar(); });
   $("cm-tipo").addEventListener("change", (e) => { tipoSel = e.target.value; desenhar(); });
   $("cm-busca").addEventListener("input", (e) => { busca = e.target.value; desenharCasos(grupos()); });
-  const salvaOpt = () => { try { localStorage.setItem("painel.cm.opt", JSON.stringify(opt)); } catch (_) {} };
-  $("cm-op-oc").addEventListener("change", (e) => { opt.ocorrFora = e.target.checked; salvaOpt(); desenhar(); });
   $("cm-xl-todas").addEventListener("click", () => { const G = grupos(); if (!G.length) return toast("Nada para cobrar.", true); excelTodas(G); });
   $("cm-xl-cada").addEventListener("click", async () => {
     const G = grupos().filter((g) => !enviados.has(g.k)); if (!G.length) return toast("Todas já foram enviadas hoje.", true);
