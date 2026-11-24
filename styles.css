@@ -1353,3 +1353,7 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 .sm-evo-ant { font-size: 15px; font-weight: 600; color: var(--texto-2); }
 .sm-filtro-card:empty { display: none; }
 #rp-sla tfoot .rp-total td { font-weight: 700; border-top: 2px solid var(--marinho); }
+#rp-sla a.sm-n { font-weight: 700; text-decoration: none; border-bottom: 1px dotted currentColor; padding: 0 2px; border-radius: 3px; }
+#rp-sla a.sm-n:not(.txt-vermelho):not(.txt-laranja) { color: var(--marinho); }
+#rp-sla a.sm-n:hover { background: #fff3c4; }
+.tabela-rolagem { overflow-x: auto; max-width: 100%; }

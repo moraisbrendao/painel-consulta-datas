@@ -4373,8 +4373,9 @@ ${extra}
     // aba Falta de volumes (faltas.js) tem filtros e lista próprios: esconde os filtros e o título da Reposição
     if ($("rp-faltas")) $("rp-faltas").hidden = repAba !== "faltas";
     if ($("rp-filas")) $("rp-filas").hidden = repAba !== "filasoc";
-    if ($("rp-sla")) $("rp-sla").hidden = repAba !== "sla";
-    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc" || repAba === "sla"));
+    if (repAba === "sla") { repAba = "geral"; gargAberto = true; }   // a aba virou parte do card Gargalos por fila (Brenda 24/11)
+    if ($("rp-sla")) $("rp-sla").hidden = !(repAba === "geral" && gargAberto);
+    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc"));
     const fl = repAba === "pre" || repAba === "pos";
     repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
@@ -4382,7 +4383,6 @@ ${extra}
     if (repAba === "det" && repFaixa >= 0) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && faixaFila(diasFila(r)) === repFaixa);
     if (repAba === "det" && pvDet && pvDet.slaFx != null) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && (pvDet.slaFx === -9 ? slaFx(r) >= 0 : slaFx(r) === pvDet.slaFx));
     $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc", "sla"].includes(repAba);
-    if (repAba === "sla") return desenharSlaMon();
     if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
   }
 
@@ -4426,6 +4426,7 @@ ${extra}
       <td class="rp-col-barra"><div class="rp-barra rp-barra-garg"><span class="${g.media >= 20 ? "alto" : g.media >= 10 ? "medio" : "baixo"}" style="width:${(g.soma / gmax) * 100}%"></span></div><span class="s">${fmt(g.soma)} dias</span></td></tr>`).join("")
       || `<tr><td colspan="11" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
     desenharLinhaSla(gbox, gargCasos);
+    if (caixa === "rpg-garg" && $("rp-sla")) { const m = $("rp-sla"); if (m.parentElement !== gbox) gbox.prepend(m); m.hidden = false; desenharSlaMon(); }
   }
   // linha do tempo do SLA por fila (Brenda 24/11): onde os tickets com SLA se acumulam, em dias úteis do prazo
   function desenharLinhaSla(gbox, casos) {
@@ -4452,7 +4453,7 @@ ${extra}
   let smModo = "uteis"; try { const m = localStorage.getItem("painel.smModo"); if (m === "uteis" || m === "corridos") smModo = m; } catch (_) {}
   const smF = { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" };
   let smEscopo = "todos"; try { const e = localStorage.getItem("painel.smEscopo"); if (["todos", "aberto", "fin"].includes(e)) smEscopo = e; } catch (_) {}
-  let smSit = "", smFila = null, smGrp = "", smResp = null, smHist = null, smHistCarr = false, smOrd = "atraso", smPag = 1, smLista = [];
+  let smSit = "", smLsit = "", smFila = null, smGrp = "", smResp = null, smHist = null, smHistCarr = false, smOrd = "atraso", smPag = 1, smLista = [];
   const SM_SIT = { venc: "Fora do SLA", prox: "Próximo do vencimento", dentro: "Dentro do SLA", sem: "Sem SLA definido" };
   const SM_ORD_SIT = { venc: 0, prox: 1, dentro: 2, sem: 3 };
   const smUn = () => (smModo === "uteis" ? "dias úteis" : "dias corridos");
@@ -4494,11 +4495,14 @@ ${extra}
     }
     return o;
   }
+  // número clicável: lista os tickets daquela fila/responsável e situação (Brenda 24/11)
+  const smNum = (n, cel, o = {}, cls = "") => (!n ? "·" : `<a href="#" class="sm-n ${cls}" data-smcel="${cel}"${o.fila != null ? ` data-smf="${esc(o.fila)}"` : ""}${o.grp ? ` data-smg="${o.grp}"` : ""}${o.resp != null ? ` data-smr="${esc(o.resp)}"` : ""} title="Ver esses tickets">${fmt(n)}</a>`);
   const smPct = (x) => (x == null ? "–" : Math.round(x * 100) + "%");
   const smDiaTxt = (x) => { if (x == null) return "–"; const a = Math.abs(x); if (smModo === "corridos" && a < 1) return Math.round(a * 24) + " h"; const v = smModo === "corridos" ? Math.round(a * 10) / 10 : a; return String(v).replace(".", ",") + (v === 1 ? " dia" : " dias"); };
   const smResta = (c) => c.resta == null ? "–" : c.sit === "venc" ? `<b class="txt-vermelho">atraso de ${smDiaTxt(c.resta)}</b>` : Math.abs(c.resta) < (smModo === "uteis" ? 1 : 1 / 24) ? `<b class="txt-laranja">vence hoje</b>` : `${smDiaTxt(c.resta) === "1 dia" ? "falta" : "faltam"} ${smDiaTxt(c.resta)}`;
   const smBarra = (c) => c.cons == null ? `<span class="s">${c.ab === false ? "–" : "sem SLA"}</span>` : `<div class="sm-cons ${c.sit}"><span style="width:${Math.min(100, Math.max(2, c.cons * 100))}%"></span></div><b class="sm-cons-n ${c.sit}">${smPct(c.cons)}</b>`;
-  const smBase = () => (smEscopo === "todos" ? reps : smEscopo === "fin" ? reps.filter((r) => !abertoRep(r)) : reps.filter(abertoRep));
+  // segue também os filtros do topo da Reposição (o monitoramento fica dentro do card Gargalos por fila da Visão geral)
+  const smBase = () => { const R = filtroRep(); return smEscopo === "todos" ? R : smEscopo === "fin" ? R.filter((r) => !abertoRep(r)) : R.filter(abertoRep); };
   const smCasa = (r, sem = "") => { const d = String(r.criado_em || "").slice(0, 10);
     return (sem === "grupo" || !smF.grupo.length || smF.grupo.includes(grupoRep(r))) && (sem === "fila" || !smF.fila.length || smF.fila.includes(filaRep(r) || SEM_FILA))
       && (sem === "resp" || !smF.resp.length || smF.resp.includes(respRep(r))) && (!smF.tipo || r._t === smF.tipo) && (!smF.de || (d && d >= smF.de)) && (!smF.ate || (d && d <= smF.ate)) && (!smF.per || (d && diasEntre(d, hojeISO()) < +smF.per)); };
@@ -4566,14 +4570,15 @@ ${extra}
         : `<tr><th>Fila em que finalizou</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Dentro</th><th class="num" title="Fora do SLA ÷ tickets com a Qtd Fora do SLA na planilha">% fora do SLA</th><th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th><th class="num">Tempo médio até finalizar (${smUn()})</th><th class="num">Sem SLA</th></tr>`;
       const linhas = FF.map((f, i) => `<tr class="sm-rank-l${smFila === f.fila && smGrp === g ? " sel" : ""}" data-smfila="${esc(f.fila)}" data-smgrp="${g}" title="Ver os tickets desta fila"><td><span class="sm-pos">${i + 1}</span><a href="#">${esc(f.fila)}</a></td>
         <td class="sm-col-barra"><div class="sm-barra">${seg(f.venc, "venc", f)}${seg(f.prox, "prox", f)}${seg(f.dentro, "dentro", f)}${seg(f.sem, "sem", f)}</div></td>
-        <td class="num tot">${fmt(f.n)}</td><td class="num">${f.venc ? `<b class="txt-vermelho">${fmt(f.venc)}</b>` : "·"}</td>`
-        + (ab ? `<td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td>${pv(f)}${smEscopo !== "aberto" ? est(f) : ""}<td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td class="num">${f.atrasoMax ? `<b class="txt-vermelho">${smDiaTxt(f.atrasoMax)}</b>` : "·"}</td><td>${f.velho ? `${linkTicket(f.velho.ticket)}<div class="s">${smDiaTxt(smCalc(f.velho).idade)} em aberto</div>` : "–"}</td>
+        <td class="num tot">${smNum(f.n, "", { fila: f.fila, grp: g })}</td><td class="num">${smNum(f.venc, "venc", { fila: f.fila, grp: g }, "txt-vermelho")}</td>`
+        + (ab ? `<td class="num">${smNum(f.prox, "prox", { fila: f.fila, grp: g }, "txt-laranja")}</td>${pv(f)}${smEscopo !== "aberto" ? est(f) : ""}<td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td class="num">${f.atrasoMax ? `<b class="txt-vermelho">${smDiaTxt(f.atrasoMax)}</b>` : "·"}</td><td>${f.velho ? `${linkTicket(f.velho.ticket)}<div class="s">${smDiaTxt(smCalc(f.velho).idade)} em aberto</div>` : "–"}</td>
         <td class="num">${f.mCons == null ? "–" : `<b class="${f.mCons > 1 ? "txt-vermelho" : f.mCons >= 0.8 ? "txt-laranja" : ""}">${smPct(f.mCons)}</b>`}</td></tr>`
-          : `<td class="num">${f.dentro ? fmt(f.dentro) : "·"}</td>${pv(f)}${est(f)}<td class="num">${f.mIdade == null ? "–" : dia1(f.mIdade)}</td><td class="num s">${f.sem ? fmt(f.sem) : "·"}</td></tr>`)).join("")
+          : `<td class="num">${smNum(f.dentro, "dentro", { fila: f.fila, grp: g })}</td>${pv(f)}${est(f)}<td class="num">${f.mIdade == null ? "–" : dia1(f.mIdade)}</td><td class="num s">${smNum(f.sem, "sem", { fila: f.fila, grp: g })}</td></tr>`)).join("")
         || `<tr><td colspan="10" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
       const tit = smEscopo === "todos" ? `<div class="sm-rank-sub"><h3>${ab ? "🟡 Em andamento" : "✅ Finalizados"}</h3><span class="s">${fmt(FF.reduce((a, f) => a + f.n, 0))} tickets${ab ? " em aberto agora" : " (Resolvido, Encerrado ou Recuperação de crédito)"}</span></div>` : "";
       const T = FF.reduce((o, f) => { ["n", "venc", "prox", "dentro", "sem", "com", "estouros"].forEach((k) => (o[k] += f[k] || 0)); return o; }, { n: 0, venc: 0, prox: 0, dentro: 0, sem: 0, com: 0, estouros: 0 });
-      const tot = FF.length ? `<tfoot><tr class="rp-total"><td>Total</td><td></td><td class="num">${fmt(T.n)}</td><td class="num">${fmt(T.venc)}</td>` + (ab ? `<td class="num">${fmt(T.prox)}</td><td class="num">${pct(T.venc, T.com)}</td>${smEscopo !== "aberto" ? `<td class="num">${fmt(T.estouros)}</td>` : ""}<td></td><td></td><td></td><td></td>` : `<td class="num">${fmt(T.dentro)}</td><td class="num">${pct(T.venc, T.com)}</td><td class="num">${fmt(T.estouros)}</td><td></td><td class="num">${fmt(T.sem)}</td>`) + `</tr></tfoot>` : "";
+      const tg = { grp: smEscopo === "todos" ? g : "" };
+      const tot = FF.length ? `<tfoot><tr class="rp-total"><td>Total</td><td></td><td class="num">${smNum(T.n, "", tg)}</td><td class="num">${smNum(T.venc, "venc", tg)}</td>` + (ab ? `<td class="num">${smNum(T.prox, "prox", tg)}</td><td class="num">${pct(T.venc, T.com)}</td>${smEscopo !== "aberto" ? `<td class="num">${fmt(T.estouros)}</td>` : ""}<td></td><td></td><td></td><td></td>` : `<td class="num">${smNum(T.dentro, "dentro", tg)}</td><td class="num">${pct(T.venc, T.com)}</td><td class="num">${fmt(T.estouros)}</td><td></td><td class="num">${smNum(T.sem, "sem", tg)}</td>`) + `</tr></tfoot>` : "";
       return `${tit}<div class="tabela-rolagem"><table class="tabela sm-rank"><thead>${cab}</thead><tbody>${linhas}</tbody>${tot}</table></div>`; };
     box.querySelector(".sm-ranks").innerHTML = smEscopo === "todos" ? rankHTML(smFilas(Lk.filter(abertoRep)), "ab") + rankHTML(smFilas(Lk.filter((r) => !abertoRep(r))), "fin") : rankHTML(F, smEscopo === "fin" ? "fin" : "ab");
     box.querySelector(".sm-diag").innerHTML = smDiagnostico(L, smFilas(L), t);
@@ -4581,7 +4586,7 @@ ${extra}
     desenharCriticidade(box, F); desenharResp(box, Lk); desenharEvolucao(box);
     // lista de tickets (card e/ou fila clicados)
     if (smFila && !F.some((f) => f.fila === smFila)) { smFila = null; smGrp = ""; }
-    let D = L.filter((r) => (!smSit || smCalc(r).sit === smSit) && (!smFila || ((filaRep(r) || SEM_FILA) === smFila && (!smGrp || (smGrp === "ab") === abertoRep(r)))) && (!smResp || respRep(r) === smResp));
+    let D = L.filter((r) => (!smSit || smCalc(r).sit === smSit) && (!smLsit || smCalc(r).sit === smLsit) && (!smFila || ((filaRep(r) || SEM_FILA) === smFila && (!smGrp || (smGrp === "ab") === abertoRep(r)))) && (!smResp || respRep(r) === smResp));
     const nn = (x, d) => (x == null ? d : x);
     const ord = { atraso: (a, b) => SM_ORD_SIT[a.sit] - SM_ORD_SIT[b.sit] || nn(b.atraso, -1) - nn(a.atraso, -1) || nn(a.resta, 1e9) - nn(b.resta, 1e9),
       antigo: (a, b) => nn(b.idade, -1) - nn(a.idade, -1),
@@ -4589,7 +4594,7 @@ ${extra}
       parado: (a, b) => nn(b.parado, -1) - nn(a.parado, -1) }[smOrd];
     D = D.slice().sort((x, y) => ord(smCalc(x), smCalc(y)) || nn(smCalc(y).idade, -1) - nn(smCalc(x).idade, -1)); smLista = D;
     box.querySelector(".sm-ord").value = smOrd;
-    box.querySelector(".sm-det-tit").innerHTML = `${fmt(D.length)} tickets` + (smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : "") + (smFila ? ` <button type="button" class="chip amarelo sm-x" data-smx="fila">${esc(smFila)}${smEscopo === "todos" && smGrp ? (smGrp === "ab" ? " · em andamento" : " · finalizados") : ""} ✕</button>` : "") + (smResp ? ` <button type="button" class="chip amarelo sm-x" data-smx="resp">Responsável: ${esc(smResp)} ✕</button>` : "");
+    box.querySelector(".sm-det-tit").innerHTML = `${fmt(D.length)} tickets` + (smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : "") + (smLsit && smLsit !== smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="lsit">${esc(SM_SIT[smLsit])} ✕</button>` : "") + (smFila ? ` <button type="button" class="chip amarelo sm-x" data-smx="fila">${esc(smFila)}${smEscopo === "todos" && smGrp ? (smGrp === "ab" ? " · em andamento" : " · finalizados") : ""} ✕</button>` : "") + (smResp ? ` <button type="button" class="chip amarelo sm-x" data-smx="resp">Responsável: ${esc(smResp)} ✕</button>` : "");
     const POR = 100, pags = Math.max(1, Math.ceil(D.length / POR)); smPag = Math.min(smPag, pags);
     const quando = (c) => (!c.prazo ? "–" : smModo === "corridos" ? new Date(c.prazo).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : br(c.prazo));
     box.querySelector(".sm-det-corpo").innerHTML = D.slice((smPag - 1) * POR, smPag * POR).map((r) => { const c = smCalc(r), s = r._sla;
@@ -4614,7 +4619,7 @@ ${extra}
       const vol = porVol.indexOf(x.f.fila) + 1;
       return `<tr class="sm-rank-l" data-smfila="${esc(x.f.fila)}" data-smgrp="" title="Ver os tickets desta fila"><td><span class="sm-pos">${i + 1}</span><a href="#">${esc(x.f.fila)}</a></td><td><span class="sm-chip ${x.niv[2]}">${x.niv[1]}</span></td>
         <td class="sm-col-barra"><div class="sm-ind" title="Vencidos ${x.partes[0]} + % vencidos ${x.partes[1]} + atraso ${x.partes[2]}"><span class="a" style="width:${x.partes[0]}%"></span><span class="b" style="width:${x.partes[1]}%"></span><span class="c" style="width:${x.partes[2]}%"></span></div><b class="sm-ind-n">${x.ind}</b></td>
-        <td class="num"><b class="txt-vermelho">${fmt(x.f.venc)}</b></td><td class="num">${pct(x.f.venc, x.f.com)}<div class="s">${fmt(x.f.venc)}/${fmt(x.f.com)}</div></td><td class="num">${x.f.atrasoMax ? smDiaTxt(x.f.atrasoMax) : "–"}</td>
+        <td class="num">${smNum(x.f.venc, "venc", { fila: x.f.fila }, "txt-vermelho")}</td><td class="num">${pct(x.f.venc, x.f.com)}<div class="s">${fmt(x.f.venc)}/${fmt(x.f.com)}</div></td><td class="num">${x.f.atrasoMax ? smDiaTxt(x.f.atrasoMax) : "–"}</td>
         <td class="num">${vol}º${vol !== i + 1 ? ` <span class="s">${vol > i + 1 ? "▲ mais grave do que o volume indica" : "▼ volume alto, gravidade menor"}</span>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`;
   }
   // ---- análise por responsável (Brenda 24/11)
@@ -4624,10 +4629,10 @@ ${extra}
     el.innerHTML = `<div class="tabela-rolagem"><table class="tabela sm-resp-t"><thead><tr><th>Responsável</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Atribuídos</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num">Dentro</th><th class="num">Sem SLA</th><th class="num" title="Fora do SLA ÷ tickets com informação de SLA">% vencimento</th><th class="num" title="Desde a última movimentação (só em andamento)">Média dias parados</th><th class="num" title="Média de dias além do prazo, só tickets vencidos em andamento">Média dias de atraso</th></tr></thead><tbody>${(() => {
       const mx = Math.max(1, ...R.map((f) => f.n)), seg = (n, k) => (n ? `<span class="sm-s ${k}" style="width:${(n / mx) * 100}%"></span>` : "");
       return R.map((f) => `<tr class="sm-rank-l${smResp === f.fila ? " sel" : ""}" data-smresp="${esc(f.fila)}" title="Ver os tickets deste responsável"><td><a href="#">${esc(f.fila)}</a></td><td class="sm-col-barra"><div class="sm-barra">${seg(f.venc, "venc")}${seg(f.prox, "prox")}${seg(f.dentro, "dentro")}${seg(f.sem, "sem")}</div></td>
-        <td class="num tot">${fmt(f.n)}</td><td class="num">${f.venc ? `<b class="txt-vermelho">${fmt(f.venc)}</b>` : "·"}</td><td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td><td class="num">${f.dentro ? fmt(f.dentro) : "·"}</td><td class="num s">${f.sem ? fmt(f.sem) : "·"}</td>
+        <td class="num tot">${smNum(f.n, "", { resp: f.fila })}</td><td class="num">${smNum(f.venc, "venc", { resp: f.fila }, "txt-vermelho")}</td><td class="num">${smNum(f.prox, "prox", { resp: f.fila }, "txt-laranja")}</td><td class="num">${smNum(f.dentro, "dentro", { resp: f.fila })}</td><td class="num s">${smNum(f.sem, "sem", { resp: f.fila })}</td>
         <td class="num">${f.com ? `<b class="${f.pv >= 0.5 ? "txt-vermelho" : f.pv >= 0.25 ? "txt-laranja" : ""}">${pct(f.venc, f.com)}</b><div class="s">${fmt(f.venc)}/${fmt(f.com)}</div>` : `<span class="s">sem SLA</span>`}</td>
         <td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td class="num">${f.mAtraso == null ? "–" : dia1(f.mAtraso)}</td></tr>`).join("") || `<tr><td colspan="10" class="vazio">Nenhum ticket nesse filtro.</td></tr>`; })()}</tbody>${(() => { const T = R.reduce((o, f) => { ["n", "venc", "prox", "dentro", "sem", "com"].forEach((k) => (o[k] += f[k])); return o; }, { n: 0, venc: 0, prox: 0, dentro: 0, sem: 0, com: 0 });
-      return R.length ? `<tfoot><tr class="rp-total"><td>Total</td><td></td><td class="num">${fmt(T.n)}</td><td class="num">${fmt(T.venc)}</td><td class="num">${fmt(T.prox)}</td><td class="num">${fmt(T.dentro)}</td><td class="num">${fmt(T.sem)}</td><td class="num">${pct(T.venc, T.com)}</td><td></td><td></td></tr></tfoot>` : ""; })()}</table></div>`;
+      return R.length ? `<tfoot><tr class="rp-total"><td>Total</td><td></td><td class="num">${smNum(T.n, "", {})}</td><td class="num">${smNum(T.venc, "venc", {})}</td><td class="num">${smNum(T.prox, "prox", {})}</td><td class="num">${smNum(T.dentro, "dentro", {})}</td><td class="num">${smNum(T.sem, "sem", {})}</td><td class="num">${pct(T.venc, T.com)}</td><td></td><td></td></tr></tfoot>` : ""; })()}</table></div>`;
   }
   // ---- evolução (Brenda 24/11): só histórico real = leituras do robô guardadas em repo_sla_hist (tickets em andamento); nada é estimado
   async function carregarSlaHist() {
@@ -4635,7 +4640,7 @@ ${extra}
     const desde = new Date(Date.now() - 62 * 864e5).toISOString(); let H = [];
     try { for (let de = 0; ; de += 1000) { const { data, error } = await sb.from("repo_sla_hist").select("ticket,fila,situacao,inicio,horas,lido_em").gte("lido_em", desde).order("id").range(de, de + 999); if (error) throw error; H = H.concat(data || []); if (!data || data.length < 1000) break; } smHist = H; }
     catch (_) { smHist = []; }
-    if (repAba === "sla") desenharSlaMon();
+    if ($("rp-sla") && !$("rp-sla").hidden) desenharSlaMon();
   }
   function smSitLeitura(h, dia) {
     const hh = Number(h.horas); if (!h.inicio || !(hh > 0) || /DEFINID/i.test(h.situacao || "")) return "sem";
@@ -4677,13 +4682,14 @@ ${extra}
       if (e.target.closest(".sm-ord")) { smOrd = e.target.value; smPag = 1; desenharSlaMon(); }
     });
     box.addEventListener("click", (e) => {
-      const es = e.target.closest("[data-smesc]"); if (es) { smEscopo = es.dataset.smesc; smSit = ""; smFila = null; smGrp = ""; smResp = null; smPag = 1; try { localStorage.setItem("painel.smEscopo", smEscopo); } catch (_) {} desenharSlaMon(); return; }
+      const es = e.target.closest("[data-smesc]"); if (es) { smEscopo = es.dataset.smesc; smSit = ""; smLsit = ""; smFila = null; smGrp = ""; smResp = null; smPag = 1; try { localStorage.setItem("painel.smEscopo", smEscopo); } catch (_) {} desenharSlaMon(); return; }
       const m = e.target.closest("[data-smmodo]"); if (m) { smModo = m.dataset.smmodo; try { localStorage.setItem("painel.smModo", smModo); } catch (_) {} desenharSlaMon(); return; }
-      if (e.target.closest(".sm-limpar")) { Object.assign(smF, { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" }); smSit = ""; smFila = null; smGrp = ""; smResp = null; smPag = 1; desenharSlaMon(); return; }
+      if (e.target.closest(".sm-limpar")) { Object.assign(smF, { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" }); smSit = ""; smLsit = ""; smFila = null; smGrp = ""; smResp = null; smPag = 1; desenharSlaMon(); return; }
+      const ce = e.target.closest("[data-smcel]"); if (ce) { e.preventDefault(); e.stopPropagation(); smLsit = ce.dataset.smcel; smFila = ce.dataset.smf != null ? ce.dataset.smf : null; smGrp = ce.dataset.smg || ""; smResp = ce.dataset.smr != null ? ce.dataset.smr : null; smPag = 1; desenharSlaMon(); box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
       const k = e.target.closest("[data-smsit]"); if (k) { smSit = !k.dataset.smsit || smSit === k.dataset.smsit ? "" : k.dataset.smsit; smPag = 1; desenharSlaMon(); return; }
-      const l = e.target.closest("tr[data-smfila]"); if (l && !e.target.closest("a[href^='http']")) { e.preventDefault(); const mesmo = smFila === l.dataset.smfila && smGrp === l.dataset.smgrp; smFila = mesmo ? null : l.dataset.smfila; smGrp = mesmo ? "" : l.dataset.smgrp; smPag = 1; desenharSlaMon(); if (smFila) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
-      const rp = e.target.closest("tr[data-smresp]"); if (rp && !e.target.closest("a[href^='http']")) { e.preventDefault(); smResp = smResp === rp.dataset.smresp ? null : rp.dataset.smresp; smPag = 1; desenharSlaMon(); if (smResp) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
-      const x = e.target.closest("[data-smx]"); if (x) { if (x.dataset.smx === "sit") smSit = ""; else if (x.dataset.smx === "resp") smResp = null; else { smFila = null; smGrp = ""; } smPag = 1; desenharSlaMon(); return; }
+      const l = e.target.closest("tr[data-smfila]"); if (l && !e.target.closest("a[href^='http']")) { e.preventDefault(); const mesmo = smFila === l.dataset.smfila && smGrp === l.dataset.smgrp; smFila = mesmo ? null : l.dataset.smfila; smGrp = mesmo ? "" : l.dataset.smgrp; smLsit = ""; smResp = null; smPag = 1; desenharSlaMon(); if (smFila) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+      const rp = e.target.closest("tr[data-smresp]"); if (rp && !e.target.closest("a[href^='http']")) { e.preventDefault(); smResp = smResp === rp.dataset.smresp ? null : rp.dataset.smresp; smLsit = ""; smFila = null; smGrp = ""; smPag = 1; desenharSlaMon(); if (smResp) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+      const x = e.target.closest("[data-smx]"); if (x) { if (x.dataset.smx === "sit") smSit = ""; else if (x.dataset.smx === "lsit") smLsit = ""; else if (x.dataset.smx === "resp") smResp = null; else { smFila = null; smGrp = ""; } smPag = 1; desenharSlaMon(); return; }
       const p = e.target.closest("[data-smp]"); if (p) { smPag += +p.dataset.smp; desenharSlaMon(); return; }
       if (!e.target.closest(".sm-excel")) return;
       if (!smLista.length) return toast("Nenhum ticket nesse filtro.", true);
