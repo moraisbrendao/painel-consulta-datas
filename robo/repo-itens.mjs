@@ -226,6 +226,19 @@ export async function diagRepo2({ chamar, log, ctx, hashes }) {
   for (const x of T) { const a = await chamar(`repo_atual?select=ticket,nfs_novas&ticket=eq.${encodeURIComponent(x.ticket)}`).catch((e) => "erro " + e.message.slice(0, 60));
     const s2 = await chamar(`reposicoes_tk?select=status,tipo&ticket=eq.${encodeURIComponent(x.ticket)}`).catch(() => []);
     log(`   tipo pre=${/^reposicao$/i.test(sem(x.tipo))} (${sem(x.tipo).replace(/[a-z]/gi, "x").length} letras) · status=${(s2[0] || {}).status} · repo_atual: ${Array.isArray(a) ? a.length + " linha(s), nova NF " + (a[0] && a[0].nfs_novas ? "sim" : "não") + " · tipo ticket " + typeof (a[0] || {}).ticket : a}`); }
+  { // simula a escolha do rodarRepo
+    const TT = []; for (let de = 0; ; de += 1000) { const P = await chamar(`reposicoes_tk?select=ticket,tipo,fila,status&order=ticket&limit=1000&offset=${de}`); TT.push(...P); if (P.length < 1000) break; }
+    const L0 = TT.filter((x) => /pos/i.test(sem(x.tipo)) || /^reposicao$/i.test(sem(x.tipo)));
+    const ehAE = (x) => /aguardando\s*entrega/i.test(sem(x.fila)) && !/^(RESOLVID|ENCERRAD|FINALIZAD)/i.test(sem(x.status).toUpperCase());
+    const AE = L0.filter(ehAE), comNf = new Set();
+    for (let i = 0; i < AE.length; i += 150) { const ids = AE.slice(i, i + 150).map((x) => `"${x.ticket}"`).join(","); (await chamar(`repo_atual?select=ticket&nfs_novas=not.is.null&ticket=in.(${encodeURIComponent(ids)})`)).forEach((x) => comNf.add(String(x.ticket))); }
+    const lidos = new Map(); for (let de = 0; ; de += 1000) { const P = await chamar(`repo_itens_tk?select=ticket,eventos_ok,pdf_ok,lido_em&order=ticket&limit=1000&offset=${de}`); P.forEach((x) => lidos.set(String(x.ticket), x)); if (P.length < 1000) break; }
+    const querPdf = (x) => /^reposicao$/i.test(sem(x.tipo)) && ehAE(x) && comNf.has(String(x.ticket));
+    const velho = (l) => Date.now() - new Date(l.lido_em).getTime() > 20 * 3600e3;
+    const falta = L0.filter((x) => { const l = lidos.get(String(x.ticket)); if (!l) return true; if (!l.eventos_ok) return velho(l); if (querPdf(x) && !l.pdf_ok) return l.pdf_ok === null || velho(l); return false; }).sort((a, b) => Number(querPdf(b)) - Number(querPdf(a)));
+    log(`simulação: L0 ${L0.length} · AE ${AE.length} · comNf ${comNf.size} · lidos ${lidos.size} · falta ${falta.length} · querPdf na fila ${falta.filter(querPdf).length}`);
+    for (const x of T) { const l = lidos.get(String(x.ticket)); log(`   alvo: em L0 ${L0.some((y) => y.ticket === x.ticket)} · AE ${ehAE(x)} · comNf ${comNf.has(String(x.ticket))} · querPdf ${querPdf(x)} · lido ${!!l} pdf_ok ${l && l.pdf_ok} · posição na fila ${falta.findIndex((y) => y.ticket === x.ticket)}`); }
+  }
   if (process.env.SO_DADOS) return;
   const p = await entrarMulti360(ctx, log);
   for (const [i, x] of T.entries()) {
