@@ -1357,3 +1357,9 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 #rp-sla a.sm-n:not(.txt-vermelho):not(.txt-laranja) { color: var(--marinho); }
 #rp-sla a.sm-n:hover { background: #fff3c4; }
 .tabela-rolagem { overflow-x: auto; max-width: 100%; }
+
+/* contatos das transportadoras (Retornos) */
+.modal-fundo { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: grid; place-items: center; z-index: 1000; padding: 16px; }
+.rt-cont-modal .modal-caixa { max-width: 420px; padding: 18px; background: #fff; display: flex; flex-direction: column; gap: 10px; min-height: 0; border-radius: 14px; }
+.rt-cont-modal label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; }
+.rt-cont-modal input { padding: 8px; border: 1px solid var(--borda, #ccc); border-radius: 8px; font: inherit; }

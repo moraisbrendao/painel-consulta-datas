@@ -3248,3 +3248,19 @@ end $$;
 revoke all on function public._robo_anota_portal() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-anota-portal';
 select cron.schedule('robo-anota-portal', '0 12,16,20 * * 1-5', 'select public._robo_anota_portal()');
+
+-- parte 68: contatos das transportadoras (WhatsApp / e-mail) para a cobrança em Retornos
+create table if not exists public.transp_contatos (
+  transportadora text primary key,
+  whatsapp text,
+  emails text,
+  cc text,
+  atualizado_por text,
+  atualizado_em timestamptz default now()
+);
+alter table public.transp_contatos enable row level security;
+revoke all on public.transp_contatos from anon;
+grant select, insert, update, delete on public.transp_contatos to authenticated;
+drop policy if exists "logistica cuida" on public.transp_contatos;
+create policy "logistica cuida" on public.transp_contatos for all to authenticated
+  using ((select not public.e_sac())) with check ((select not public.e_sac()));
