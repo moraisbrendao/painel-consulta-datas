@@ -81,11 +81,17 @@
   // "Erro: verificar" = rastreio sem devolução/entrega e sem anotação: a transportadora não atuou.
   // Quadrinhos por transportadora (a do ticket 360: redespacho, senão a transportadora; senão a do pedido) com Excel e mensagem para o WhatsApp.
   // um quadrinho por transportadora (Brenda 23/11): junta os métodos (Dominalog - Filial SP, Dominalog Express…) e deixa só o nome
-  const NOME_BASE = [[/dominalog/i, "Dominalog"], [/\btsl\b/i, "TSL"], [/tempo\s*justo|^\s*vm\b|vm\s+transportes/i, "Tempo Justo"], [/zelog/i, "Zelog"], [/jadlog/i, "Jadlog"],
+  // mesma transportadora com outro nome (Brenda 24/11): Via Cargas = Transiga; JS = Trans Sua; Transvanio = o apelido dela (nome de pessoa,
+  // por isso comparado só por um código: o nome não fica no código público)
+  const NOME_BASE = [[/via\s*cargas/i, "Transiga"], [/^\s*js\b/i, "Trans Sua"], [/transvanio/i, "Transvanio"], [/dominalog/i, "Dominalog"], [/\btsl\b/i, "TSL"], [/tempo\s*justo|^\s*vm\b|vm\s+transportes/i, "Tempo Justo"], [/zelog/i, "Zelog"], [/jadlog/i, "Jadlog"],
     [/transiga/i, "Transiga"], [/trans\s*sua/i, "Trans Sua"], [/aceville/i, "Aceville"], [/atual\s*cargas/i, "Atual Cargas"], [/bento\s*brasil/i, "Bento Brasil"], [/formato/i, "Formato"],
     [/tr[aâ]nsito\s*brasil/i, "Trânsito Brasil"], [/petrymar/i, "Petrymar"], [/transcai/i, "Transcai"], [/flog\b/i, "Flog"], [/zafer/i, "Zafer"], [/prolog/i, "Prolog"], [/r[aá]pido\s*al[eé]m/i, "Rápido Além Paraíba"]];
+  const fnv = (x) => { let h = 0x811c9dc5; for (const c of x) { h ^= c.charCodeAt(0); h = Math.imul(h, 0x01000193) >>> 0; } return h.toString(16); };
+  const MESMA_DE = { e1120140: "Transvanio" };   // 2 primeiras palavras do nome (sem acento, maiúsculas) → transportadora
   function nomeBase(t) {
     t = String(t || "").trim(); if (!t) return "";
+    const dois = t.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().replace(/[^A-Z0-9 ]/g, " ").split(/\s+/).filter(Boolean).slice(0, 2).join(" ");
+    if (MESMA_DE[fnv(dois)]) return MESMA_DE[fnv(dois)];
     const k = NOME_BASE.find(([re]) => re.test(t)); if (k) return k[1];
     let n = t.split(/\s+-\s+|\(|\//)[0].trim();
     n = n.replace(/\b(standard|express[oa]?|econ[oô]mic[oa]|filial\s+\w+|ltda|eireli|s\.?\/?a\.?|me|transportes?|log[ií]sticas?|opera[cç][oõ]es|transportadora|solu[cç][oõ]es)\b\.?/gi, " ").replace(/\s+/g, " ").trim().replace(/(\s+e)+$/i, "");
