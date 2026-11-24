@@ -486,6 +486,18 @@ if (MODO === "diag-cf") {   // Conferência SSW: quando foi a última importaç�
   log(`conferência ${C.length} pedidos · importado_em ${JSON.stringify(imp)}`);
   log(`último Enviar Intelipost: ${info[0] ? info[0].enviado_em + " · linhas " + info[0].total_linhas + " · fechados " + info[0].fechados : "?"} · intelipost_fechados ${F.size}`);
   log(`falta atualizar ${ent.length} · desses já Entregue/Cancelado na Intelipost (intelipost_fechados) ${jaFech.length} · sobram ${ent.length - jaFech.length}`);
+  // as que sobram: estão na base aberta? qual status Intelipost/BI? data da entrega? quando foram conferidas?
+  const sob = ent.filter((c) => !F.has(c.pedido));
+  const B = new Map(); for (let de = 0; ; de += 1000) { const x = await chamar(`base_pedidos?select=pedido,status_intelipost&order=pedido&limit=1000&offset=${de}`); x.forEach((b) => B.set(b.pedido, b.status_intelipost)); if (x.length < 1000) break; }
+  const conta = (L, f) => { const m = {}; L.forEach((c) => { const k = f(c) || "(vazio)"; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, v]) => `${k}: ${v}`).join(" · "); };
+  log(`sobram ${sob.length} · status no arquivo Intelipost: ${conta(sob, (c) => c.status_intelipost)}`);
+  log(`  status na base BI: ${conta(sob, (c) => (B.has(c.pedido) ? B.get(c.pedido) : "não está na base"))}`);
+  const D = []; for (let de = 0; ; de += 1000) { const x = await chamar(`conferencia_ssw?select=pedido,transportadora,data_entrega,consultado_em,ultimo_evento&situacao=eq.entregue&order=pedido&limit=1000&offset=${de}`); D.push(...x); if (x.length < 1000) break; }
+  const sobS = new Set(sob.map((c) => c.pedido)), DS = D.filter((d) => sobS.has(d.pedido));
+  log(`  transportadora: ${conta(DS, (d) => d.transportadora)}`);
+  log(`  mês da entrega: ${conta(DS, (d) => String(d.data_entrega || "").slice(0, 7))}`);
+  log(`  dia da conferência: ${conta(DS, (d) => String(d.consultado_em || "").slice(0, 10))}`);
+  log(`  evento (só palavras-chave): ${conta(DS, (d) => (String(d.ultimo_evento || "").toUpperCase().match(/ENTREGUE|ENTREGA REALIZADA|BAIXAD|FINALIZAD|COMPROVANTE|DEVOLV|SEGREGAD/) || ["outro"])[0])}`);
 }
 if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão VM/Tempo Justo) tem mais atraso hoje: só contagens agregadas
   await entrarSupabase();
