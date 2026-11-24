@@ -3264,3 +3264,7 @@ grant select, insert, update, delete on public.transp_contatos to authenticated;
 drop policy if exists "logistica cuida" on public.transp_contatos;
 create policy "logistica cuida" on public.transp_contatos for all to authenticated
   using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- parte 69: Barrar entrega › quadrinhos de cobrança: botão "✓ OK, enviei" por transportadora
+alter table public.barrar_entrega add column if not exists cobrado_em timestamptz;
+alter table public.barrar_entrega add column if not exists cobrado_por text;

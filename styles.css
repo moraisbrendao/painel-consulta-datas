@@ -1365,3 +1365,4 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 .rt-cont-modal input { padding: 8px; border: 1px solid var(--borda, #ccc); border-radius: 8px; font: inherit; }
 .br-busca-linha { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 4px 0 12px; }
 .br-busca { padding: 8px 12px; border: 1px solid var(--borda, #ccc); border-radius: 10px; font: inherit; width: 280px; max-width: 100%; }
+.br-et-q.br-et-enviado { border-color: #1f9d55; background: #f1fbf5; opacity: .85; }

@@ -132,6 +132,16 @@
     if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): está logo abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
   }
   document.addEventListener("input", (e) => { const i = e.target.closest("#br-erro-transp .br-busca"); if (!i) return; brBusca = i.value; $("br-busca").value = i.value; desenhar(); });
+  const diaSP = (ts) => (ts ? new Date(ts).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : "");
+  const enviadoHoje = (xs) => { const h = diaSP(Date.now()); return xs.length > 0 && xs.every((x) => x.cobrado_em && diaSP(x.cobrado_em) === h); };
+  async function marcarEnviado(xs, desfazer) {
+    const email = (((await sb().auth.getSession()).data.session || {}).user || {}).email || null;
+    const campos = desfazer ? { cobrado_em: null, cobrado_por: null } : { cobrado_em: new Date().toISOString(), cobrado_por: email };
+    const { error } = await sb().from("barrar_entrega").update(campos).in("nf", xs.map((x) => x.nf));
+    if (error) return toast(/cobrado_em|column|schema cache/i.test(error.message) ? "Rode a parte 69 no Supabase para guardar o ✓ Enviado." : "Erro: " + error.message, true);
+    xs.forEach((x) => Object.assign(x, campos)); desenhar();
+    toast(desfazer ? "Marcação desfeita: o quadrinho voltou para os pendentes." : "Marcado como enviado: o quadrinho foi para o fim da lista.");
+  }
   function desenharErroTransp() {
     let box = $("br-erro-transp");
     if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
@@ -141,7 +151,8 @@
     const msgs = new Map([...box.querySelectorAll(".br-et-msg")].filter((t) => t.dataset.editada).map((t) => [t.dataset.t, t.value]));
     brBusca = $("br-busca").value;
     const yAntes = window.scrollY, focoBusca = document.activeElement && document.activeElement.classList.contains("br-busca");
-    const G = gruposErro();
+    // quadrinhos já cobrados hoje (botão ✓ Enviado) vão para o fim; nota nova na transportadora volta o quadrinho para pendente (Brenda 24/11)
+    const G = gruposErro().map((g) => [g[0], g[1], enviadoHoje(g[1])]).sort((a, b) => (a[2] ? 1 : 0) - (b[2] ? 1 : 0));
     const C = L.filter((x) => sit(x) === "manual" && anotsDe(x).length)
       .map((x) => [alvoTransp(x), x]).sort((a, b) => (diasDesde(b[1].ticket_criado) ?? -1) - (diasDesde(a[1].ticket_criado) ?? -1) || String(a[1].nf).localeCompare(String(b[1].nf)));
     const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button><button type="button" class="btn lilas mini br-an-enviar" title="Salva as decisões escolhidas: as notas vão para o card Aprovadas">Aprovar decisões</button>` : ""}</div>
@@ -155,11 +166,12 @@
       ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
       <div class="br-busca-linha"><input type="search" class="br-busca" placeholder="🔎 Pesquisar NF ou ticket" value="${esc(brBusca)}" autocomplete="off"><span class="s br-busca-info"></span></div>
       ${quadroAnot}
-      <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
-        return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
+      <div class="br-et-grade">${G.map(([t, xs, env], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
+        const ult = env ? xs.map((x) => x.cobrado_em).sort().pop() : null;
+        return `<div class="br-et-q${env ? " br-et-enviado" : ""}"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
           <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotações e rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr data-busca="${esc(x.nf + " " + (x.ticket || ""))}"><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${anotsDe(x).map((a) => `<div class="br-et-an">${a.por ? `<b>${esc(a.por)}</b> · ` : ""}${a.quando ? `<span class="s">${esc(a.quando)}</span>` : ""}${a.por || a.quando ? "<br>" : ""}${esc(a.texto)}</div>`).join("")}<div class="br-et-rast"><b>Status atual do rastreio:</b> ${esc(ultStatus(x))}${x.print_rastreio ? ` · <a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a>` : ""}</div></td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}" data-t="${esc(t)}">${esc(msgTransp(t, xs))}</textarea>
-          <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
+          <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button><button type="button" class="btn mini br-et-ok ${env ? "verde" : "contorno"}" data-i="${i}" title="${env ? "Clique para desfazer" : "Marque depois de mandar a mensagem para a transportadora"}">${env ? `✓ Enviado ${new Date(ult).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "✓ OK, enviei"}</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
     box._G = G; box._C = C; contarAnot(); aplicarBusca(box);
     if (focoBusca) { const i = box.querySelector(".br-busca"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
     box.querySelectorAll(".br-et-lista, .tabela-wrap").forEach((el, k) => { if (rolT[k]) el.scrollTop = rolT[k]; });
@@ -172,6 +184,7 @@
     if (e.target.closest(".br-et-todas")) return baixarErro(G, "todas");
     if (e.target.closest(".br-an-enviar")) return enviarAnot(box);
     if (e.target.closest(".br-an-xls")) { const C = box._C || [], wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(linhasXls(C.map(([, x]) => x)))), "Com anotação"); return XLSX.writeFile(wb, `barrar_com_anotacao_${new Date().toISOString().slice(0, 10)}.xlsx`); }
+    if (e.target.closest(".br-et-ok")) return marcarEnviado(G[i][1], !!G[i][2]);
     if (e.target.closest(".br-et-xls")) return baixarErro([G[i]], G[i][0].normalize("NFD").replace(/[^\w]+/g, "_").slice(0, 30));
     const txt = () => (box.querySelector(`.br-et-msg[data-i="${i}"]`) || {}).value || "";
     if (e.target.closest(".br-et-copiar")) { try { await navigator.clipboard.writeText(txt()); toast("Mensagem copiada. Cole no WhatsApp da transportadora."); } catch { const t = box.querySelector(`.br-et-msg[data-i="${i}"]`); t.select(); document.execCommand("copy"); toast("Mensagem copiada."); } return; }
