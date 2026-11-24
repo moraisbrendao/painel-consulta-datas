@@ -259,7 +259,9 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
       // regra (Brenda, 18/11): entregue no rastreio o robô aprova sozinho (não barrado · Entregue) e aplica no fim da rodada
       const auto = ENTREGUE_AUTO && s.sugestao === "nao_barrar" && s.opcao === "Entregue" && !x.decisao && print_rastreio;
       // regra (Brenda, 24/11): Dominalog com anotação "Devolução solicitada, pedido segregado." → o robô marca BARRADO sozinho, com o print da anotação no ticket
-      const autoDom = s.dominalog && !x.decisao && !!(print_path || print_rastreio);
+      // Flog: por enquanto só sugere barrar (a Brenda aprova) até termos exemplos para testar (Brenda, 24/11 15:52)
+      const FLOG_AUTO = false;
+      const autoDom = s.dominalog && (FLOG_AUTO || nomeSeg(rastreio, pt) !== "Flog") && !x.decisao && !!(print_path || print_rastreio);
       await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio,
         ...(auto ? { decisao: "nao_barrar", decisao_opcao: "Entregue", decisao_motivo: s.motivo, decisao_por: "robô (entregue automático)", decisao_em: new Date().toISOString() } : {}),
         ...(autoDom ? { decisao: "barrar", decisao_opcao: null, decisao_motivo: s.motivo, decisao_por: `robô (${nomeSeg(rastreio, pt)}: pedido segregado)`, decisao_em: new Date().toISOString() } : {}) });
