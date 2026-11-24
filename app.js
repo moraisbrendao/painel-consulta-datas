@@ -2124,7 +2124,7 @@ ${extra}
     $("rt-transp-linhas").innerHTML = [...porT.values()].map((x) => ({ ...x, cobrar: x.p1 + x.p2 + x.p3 + x.p4 + x.p5 + x.p6 })).filter((x) => x.cobrar || x.ok).sort((a, b) => (b.p1 + b.p2) - (a.p1 + a.p2) || b.cobrar - a.cobrar)
       .map((x) => `<tr class="clicavel ${rtTransp === x.k ? "sel" : ""}" data-rtt="${esc(x.k)}"><td>${esc(x.k)}</td><td class="num ${x.p1 ? "ruim-t" : ""}">${fmt(x.p1)}</td><td class="num ${x.p2 ? "ruim-t" : ""}">${fmt(x.p2)}</td><td class="num">${fmt(x.p3)}</td><td class="num">${fmt(x.p4)}</td><td class="num">${fmt(x.p5)}</td><td class="num">${fmt(x.p6)}</td><td class="num"><b>${fmt(x.cobrar)}</b></td>
         <td class="num ${x.alvo && x.cob / x.alvo < 0.7 ? "ruim" : "ok"}">${pctTxt(x.cob, x.alvo)}</td><td class="num">${rtResumo ? fmt(x.queb) : "—"}</td>
-        <td><button class="btn mini contorno" data-rtx="${esc(x.k)}" title="Excel no formato do Enviar retornos, só desta transportadora">⤓ Cobrança</button> <button class="btn mini contorno" data-rtm="${esc(x.k)}" title="Texto pronto para e-mail ou WhatsApp">⧉ Mensagem</button> <button class="btn mini contorno" data-rtw="${esc(x.k)}" title="${rtContatos.get(norm(x.k))?.whatsapp ? "Abre o WhatsApp da transportadora com a mensagem pronta: você confere e aperta enviar" : "Abre o WhatsApp com a mensagem pronta (cadastre o número em 📇 para já abrir na conversa certa)"}">WhatsApp ↗</button> <button class="btn mini contorno" data-rte="${esc(x.k)}" title="Abre o e-mail pronto para a transportadora: você confere e envia">✉ E-mail</button> <button class="btn mini contorno" data-rtcont="${esc(x.k)}" title="Contatos da transportadora (WhatsApp e e-mails)">📇${rtContatos.has(norm(x.k)) ? "" : " ⚠"}</button></td></tr>`).join("")
+        <td><button class="btn mini contorno" data-rtx="${esc(x.k)}" title="Excel no formato do Enviar retornos, só desta transportadora">⤓ Cobrança</button> <button class="btn mini contorno" data-rtm="${esc(x.k)}" title="Texto pronto para e-mail ou WhatsApp">⧉ Mensagem</button> <button class="btn mini contorno" data-rtw="${esc(x.k)}" title="Mensagem e número prontos para copiar e colar no WhatsApp Web">💬 WhatsApp</button> <button class="btn mini contorno" data-rte="${esc(x.k)}" title="Para, Cc, assunto e corpo prontos para copiar no Outlook">✉ E-mail</button> <button class="btn mini contorno" data-rtcont="${esc(x.k)}" title="Contatos da transportadora (WhatsApp e e-mails)">📇${rtContatos.has(norm(x.k)) ? "" : " ⚠"}</button></td></tr>`).join("")
       || `<tr><td colspan="11" class="vazio">Nada para cobrar.</td></tr>`;
     // observações
     const C = L.filter((p) => p._rt), porC = new Map();
@@ -2232,26 +2232,45 @@ ${extra}
   async function carregarContatos() { try { const { data, error } = await sb.from("transp_contatos").select("*"); if (error) throw error; rtContatos = new Map((data || []).map((c) => [norm(c.transportadora), c])); } catch (_) { rtContatos = new Map(); } }
   const foneWa = (t) => { let d = String(t || "").replace(/\D/g, ""); if (!d) return ""; if (d.length <= 11) d = "55" + d; return d; };
   // genéricos (usados também no Preventivo › Retornos das transportadoras, retornos-semana.js)
+  // a TI bloqueia wa.me e o link do Outlook (Brenda 24/11): o painel abre uma janela com tudo pronto para COPIAR e colar
+  async function cbCopiar(dados) {   // dados: { html?, texto }
+    try {
+      if (dados.html && window.ClipboardItem) await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([dados.html], { type: "text/html" }), "text/plain": new Blob([dados.texto], { type: "text/plain" }) })]);
+      else await navigator.clipboard.writeText(dados.texto);
+      return true;
+    } catch (_) {
+      const ta = document.createElement("textarea"); ta.value = dados.texto; document.body.appendChild(ta); ta.select(); const ok = document.execCommand("copy"); ta.remove(); return ok;
+    }
+  }
+  function cbJanela(titulo, campos, aviso) {   // campos: [{ rot, texto, html?, grande? }]
+    const d = document.createElement("div"); d.className = "modal-fundo rt-cont-modal cb-copia";
+    d.innerHTML = `<div class="modal-caixa" role="dialog" aria-label="${esc(titulo)}"><h3>${esc(titulo)}</h3>${aviso ? `<p class="s">${aviso}</p>` : ""}
+      ${campos.map((c, i) => `<label>${esc(c.rot)}${c.grande ? `<textarea rows="9" readonly>${esc(c.texto)}</textarea>` : `<input type="text" readonly value="${esc(c.texto)}">`}<button type="button" class="btn ${i === campos.length - 1 ? "amarelo" : "contorno"} mini" data-cp="${i}"${c.texto ? "" : " disabled"}>⧉ Copiar ${esc(c.rot.toLowerCase())}</button></label>`).join("")}
+      <div class="acoes-robo"><button type="button" class="btn contorno" data-x>Fechar</button></div></div>`;
+    document.body.appendChild(d);
+    d.addEventListener("click", async (e) => {
+      if (e.target === d || e.target.closest("[data-x]")) return d.remove();
+      const b = e.target.closest("[data-cp]"); if (!b) return;
+      const c = campos[Number(b.dataset.cp)];
+      if (await cbCopiar(c)) { b.textContent = "✓ Copiado"; b.classList.add("verde"); setTimeout(() => { b.textContent = `⧉ Copiar ${c.rot.toLowerCase()}`; b.classList.remove("verde"); }, 2500); }
+      else toast("Não consegui copiar: selecione o texto e use Ctrl+C.", true);
+    });
+  }
   function cbWhats(nome, texto) {
-    const c = rtContatos.get(norm(nome)), f = foneWa(c && c.whatsapp);
-    const txt = texto.length > 3500 ? texto.slice(0, 3400) + "\n… (lista completa no Excel)" : texto;
-    window.open(`https://wa.me/${f}?text=${encodeURIComponent(txt)}`, "_blank", "noopener");
-    if (!f) toast("Sem número cadastrado: escolha o contato no WhatsApp. Cadastre em 📇 para abrir direto na conversa.");
+    const c = rtContatos.get(norm(nome)) || {};
+    cbJanela(`WhatsApp · ${nome}`, [
+      { rot: "Número", texto: c.whatsapp || "" },
+      { rot: "Mensagem", texto, grande: true },
+    ], `Copie a mensagem e cole na conversa da transportadora no WhatsApp Web. Nada é enviado sozinho.${c.whatsapp ? "" : " Sem número cadastrado: cadastre em 📇."}`);
   }
   async function cbEmail(nome, assunto, texto, html, n) {
     const c = rtContatos.get(norm(nome)) || {};
-    const q = (o) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
-    // texto curto vai no corpo; lista grande: a tabela vai copiada (Ctrl+V), porque o link de e-mail tem limite de tamanho
-    let corpo = texto, colou = false;
-    if (texto.length > 1500) {
-      try { await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html || esc(texto).replace(/\n/g, "<br>")], { type: "text/html" }), "text/plain": new Blob([texto], { type: "text/plain" }) })]); colou = true; } catch (_) {}
-      corpo = colou ? `Olá, equipe ${nome}!\n\n(Ctrl+V aqui: a lista dos ${n} pedidos já está copiada)\n` : texto.slice(0, 1500) + "\n… (lista completa no Excel em anexo)";
-    }
-    // abre o Outlook Web (webmail da empresa) já com o e-mail pronto
-    const lista = (x) => String(x || "").split(/[;,\s]+/).filter(Boolean).join(",");
-    const url = `https://outlook.office.com/mail/deeplink/compose?${q({ to: lista(c.emails), cc: lista(c.cc), subject: assunto, body: corpo })}`;
-    if (!window.open(url, "_blank")) location.href = url;
-    toast(colou ? "E-mail aberto. Cole (Ctrl+V) a lista no corpo e confira antes de enviar." : c.emails ? "E-mail aberto: confira e envie." : "E-mail aberto sem destinatário: cadastre os e-mails da transportadora em 📇.");
+    cbJanela(`E-mail · ${nome}`, [
+      { rot: "Para", texto: c.emails || "" },
+      { rot: "Cc", texto: c.cc || "" },
+      { rot: "Assunto", texto: assunto },
+      { rot: "Corpo", texto, html: html || null, grande: true },
+    ], `Abra um e-mail novo no Outlook e copie cada campo. O corpo vai com a tabela formatada${n ? ` (${n} pedidos)` : ""}. Nada é enviado sozinho.${c.emails ? "" : " Sem e-mail cadastrado: cadastre em 📇."}`);
   }
   function cbContato(tr, depois) {
     const c = rtContatos.get(norm(tr)) || {};
