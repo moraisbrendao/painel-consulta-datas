@@ -527,6 +527,16 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
+if (MODO === "diag-par") {   // quantas páginas ao mesmo tempo é mais rápido (só tempos)
+  await entrarSupabase();
+  for (const [tab, J] of [["base_pedidos", 1], ["base_pedidos", 2], ["base_pedidos", 4], ["base_aberta_bi", 1], ["base_aberta_bi", 3]]) {
+    const t = Date.now(); let n = 0, err = 0, lento = 0;
+    for (let de = 0; ; de += 1000 * J) { const ps = await Promise.all(Array.from({ length: J }, async (_, j) => { const t1 = Date.now(); const r = await chamar(`${tab}?select=*&order=pedido&limit=1000&offset=${de + j * 1000}`).catch(() => { err++; return null; }); lento = Math.max(lento, Date.now() - t1); return r || []; }));
+      ps.forEach((p) => { n += p.length; }); if (ps.some((p) => p.length < 1000) || de > 20000) break; }
+    log(`${tab} ${J} por vez: ${n} linhas em ${((Date.now() - t) / 1000).toFixed(1)} s · página mais lenta ${(lento / 1000).toFixed(1)} s · erros ${err}`);
+  }
+  process.exit(0);
+}
 if (MODO === "diag-db") {   // tempos de consultas simples, uma por vez (só tempos e contagens)
   await entrarSupabase();
   const T = [["tratativas?select=pedido&limit=1", "1 linha tratativas"], ["base_pedidos?select=pedido&limit=1", "1 linha base"],
