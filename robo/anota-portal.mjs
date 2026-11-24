@@ -110,27 +110,32 @@ export async function diagAnota({ chamar, log, ctx }) {
 // Nada se repete: antes de escrever, confere se o comentário / a anotação já existem.
 export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   const q15 = new Date(Date.now() - 15 * 864e5).toISOString(), ontem = new Date(Date.now() - 20 * 3600e3).toISOString();
-  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,portal_anot_status,portal_anot_em&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(chat_pdf_status.is.null,chat_pdf_status.eq.sem_pdf,portal_anot_status.is.null,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
+  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(chat_pdf_status.is.null,chat_pdf_status.eq.sem_pdf,chat_pdf_status.eq.conferir,and(chat_pdf_status.eq.erro,chat_pdf_msg.like.Coment*),portal_anot_status.is.null,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
+  // envio da 1ª versão marcado como erro "Comentário enviado…": só conferir, nunca reenviar
+  L.forEach((x) => { if (x.chat_pdf_status === "erro" && /^Coment[aá]rio enviado/.test(x.chat_pdf_msg || "")) x.chat_pdf_status = "conferir"; });
   log(`anota-portal: ${L.length} troca(s) para olhar`);
   if (!L.length) return;
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const patch = (x, o) => chamar(`troca_notas?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", o);
   // 1) chat do ticket
-  const chat = L.filter((x) => !x.chat_pdf_status || x.chat_pdf_status === "sem_pdf");
+  const chat = L.filter((x) => !x.chat_pdf_status || x.chat_pdf_status === "sem_pdf" || x.chat_pdf_status === "conferir");
   if (chat.length) {
     const m = await entrarMulti360(ctx, log);
     for (const x of chat) {
       try {
         await abrirTicket(m, x.ticket);
+        // já enviado numa rodada anterior e não confirmado: só confere, NUNCA envia de novo
+        if (x.chat_pdf_status === "conferir") { let ok = false; for (let k = 0; k < 3 && !ok; k++) { if (k) { await m.waitForTimeout(4000); await abrirTicket(m, x.ticket); } ok = await jaMandouPdf(m); }
+          x.chat_pdf_status = ok ? "feito" : "conferir"; soma(ok ? "chat: envio anterior confirmado" : "chat: envio anterior ainda sem confirmação"); if (ok) await patch(x, { chat_pdf_status: "feito", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: null }); continue; }
         if (await jaMandouPdf(m)) { x.chat_pdf_status = "ja_tinha"; soma("chat: já tinha o PDF"); await patch(x, { chat_pdf_status: "ja_tinha", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: null }); continue; }
         const pdf = await pdfDaNovaNf(m, x.nf_nova);
         if (!pdf.buf) { x.chat_pdf_status = "sem_pdf"; soma("chat: PDF da nova NF ainda não está no ticket"); await patch(x, { chat_pdf_status: "sem_pdf", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: `PDF da nova NF não encontrado no ticket (${pdf.pdfs} PDF(s) olhados)` }); continue; }
         await comentarioPublico(m, x.ticket, TXT_CHAT, [{ name: `NF ${nfComSerie(x)}.pdf`, mimeType: "application/pdf", buffer: pdf.buf }]);
-        await abrirTicket(m, x.ticket);
-        const ok = await jaMandouPdf(m);
-        x.chat_pdf_status = ok ? "feito" : "erro"; soma(ok ? "chat: PDF enviado" : "chat: enviei mas não confirmei");
-        await patch(x, { chat_pdf_status: x.chat_pdf_status, chat_pdf_em: new Date().toISOString(), chat_pdf_msg: ok ? null : "Comentário enviado, mas não apareceu como Externo: conferir à mão" });
-      } catch (e) { x.chat_pdf_status = "erro"; soma("chat: erro"); log("  chat erro:", mascara(String(e.message).split("\n")[0])); await patch(x, { chat_pdf_status: "erro", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: String(e.message).split("\n")[0].slice(0, 200) }).catch(() => {}); }
+        // confere (o comentário demora a aparecer): até 3 vezes; sem confirmação fica "conferir" e a próxima rodada só olha, não reenvia
+        let ok = false; for (let k = 0; k < 3 && !ok; k++) { await m.waitForTimeout(5000); await abrirTicket(m, x.ticket); ok = await jaMandouPdf(m); }
+        x.chat_pdf_status = ok ? "feito" : "conferir"; soma(ok ? "chat: PDF enviado" : "chat: enviei, confirmo na próxima rodada");
+        await patch(x, { chat_pdf_status: x.chat_pdf_status, chat_pdf_em: new Date().toISOString(), chat_pdf_msg: ok ? null : "Comentário enviado; ainda não apareceu como Externo (o robô confere de novo, sem reenviar)" });
+      } catch (e) { if (x.chat_pdf_status === "conferir") continue; x.chat_pdf_status = "erro"; soma("chat: erro"); log("  chat erro:", mascara(String(e.message).split("\n")[0])); await patch(x, { chat_pdf_status: "erro", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: String(e.message).split("\n")[0].slice(0, 200) }).catch(() => {}); }
     }
   }
   // 2) anotação no portal (depois do chat; sem PDF, espera até 3 dias da troca antes de anotar só a NF)
@@ -145,13 +150,25 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
       try {
         const linha = await acharLinha(p, x.nf_ticket);
         if (!linha) { soma("portal: NF ainda fora da lista"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
-        const cel = linha.locator("td").nth(ia);
+        const cel = linha.locator("td").nth(ia), txt = textoAnotacao(x, ["feito", "ja_tinha"].includes(x.chat_pdf_status));
         if ((await cel.innerText()).includes(soNum(x.nf_nova))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
-        const campo = cel.locator("input[placeholder^='Escreva uma anota'], textarea").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
-        if (!(await campo.count()) || !(await b.count())) throw new Error("campo ou botão Criar Anotação não encontrado");
-        await campo.click(); await campo.fill(textoAnotacao(x, ["feito", "ja_tinha"].includes(x.chat_pdf_status))); await p.waitForTimeout(300);
-        await b.click(); await p.waitForTimeout(3000);
-        const l2 = await acharLinha(p, x.nf_ticket), ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(soNum(x.nf_nova));
+        let ok;
+        const campo = cel.locator("input[placeholder^='Escreva uma anota']").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
+        if (await campo.count() && await b.count()) {   // NF sem anotação: campo na própria linha
+          await campo.click(); await campo.fill(txt); await p.waitForTimeout(300); await b.click(); await p.waitForTimeout(3000);
+          const l2 = await acharLinha(p, x.nf_ticket); ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(soNum(x.nf_nova));
+          if (!ok && l2) { const vb2 = l2.locator("td").nth(ia).locator("button:has-text('Ver Anota'), button[title*='Anota' i]").first(); if (await vb2.count()) { await vb2.click(); const d2 = p.locator("[role=dialog]").last(); await d2.waitFor({ timeout: 10000 }); await p.waitForTimeout(900); ok = (await textoModal(d2)).includes(soNum(x.nf_nova)); await p.keyboard.press("Escape"); await p.waitForTimeout(500); } }
+        } else {   // NF que já tem anotação: botão "Ver Anotações" → janela com "Adicione aqui a sua anotação..." + botão de enviar
+          const vb = cel.locator("button:has-text('Ver Anota'), button[title*='Anota' i]").first();
+          if (!(await vb.count())) throw new Error("nem campo de anotação nem Ver Anotações na linha");
+          await vb.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(900);
+          if ((await textoModal(d)).includes(soNum(x.nf_nova))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); await p.keyboard.press("Escape"); await p.waitForTimeout(500); continue; }
+          const ta = d.locator("textarea[placeholder^='Adicione aqui'], textarea").first(), env = d.locator("button[type=submit]").first();
+          if (!(await ta.count()) || !(await env.count())) throw new Error("campo ou botão da janela de anotações não encontrado");
+          await ta.click(); await ta.fill(txt); await p.waitForTimeout(300); await env.click(); await p.waitForTimeout(3000);
+          ok = (await textoModal(p.locator("[role=dialog]").last())).includes(soNum(x.nf_nova));
+          await p.keyboard.press("Escape"); await p.waitForTimeout(600);
+        }
         if (ok) { soma("portal: anotado"); await grava(x, "feito"); } else { soma("portal: gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na coluna Anotações depois de gravar: conferir à mão"); }
       } catch (e) { soma("portal: erro"); log("  portal erro:", mascara(String(e.message).split("\n")[0])); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); }
     }
