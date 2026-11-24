@@ -3227,3 +3227,21 @@ grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, in
 alter table public.troca_notas add column if not exists portal_anot_status text;   -- feito | ja_tinha | nao_achou | erro (vazio = falta anotar)
 alter table public.troca_notas add column if not exists portal_anot_em timestamptz;
 alter table public.troca_notas add column if not exists portal_anot_msg text;
+-- robô anota no portal 3x por dia (09:00, 13:00 e 17:00 de Brasília), só as trocas feitas que ainda não têm a anotação
+create or replace function public._robo_anota_portal()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"anota-portal","auto":"1"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_anota_portal() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-anota-portal';
+select cron.schedule('robo-anota-portal', '0 12,16,20 * * 1-5', 'select public._robo_anota_portal()');

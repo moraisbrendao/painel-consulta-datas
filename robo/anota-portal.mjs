@@ -64,33 +64,33 @@ export async function diagAnota({ chamar, log, ctx }) {
     await p.keyboard.press("Escape"); } catch (e) { log("Janela não abriu:", mascara(e.message).slice(0, 80)); } }
 }
 
-// grava as anotações pendentes (troca feita, nova NF conhecida, ainda sem anotação no portal)
+// grava as anotações pendentes (troca feita, nova NF conhecida, ainda sem anotação no portal). Usa o campo da própria linha
+// ("Escreva uma anotação.." + botão "Criar Anotação"). NF que ainda não está na lista do portal: tenta de novo nas próximas rodadas (até 15 dias).
 export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
-  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&portal_anot_status=is.null&order=robo_feito_em.asc&limit=${limite}`);
+  const ontem = new Date(Date.now() - 20 * 3600e3).toISOString(), q15 = new Date(Date.now() - 15 * 864e5).toISOString();
+  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(portal_anot_status.is.null,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
   log(`anota-portal: ${L.length} NF(s) para anotar`);
   if (!L.length) return;
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const grava = (x, st, msg = null) => chamar(`troca_notas?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { portal_anot_status: st, portal_anot_em: new Date().toISOString(), portal_anot_msg: msg });
   const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
+  if (ia < 0) throw new Error("coluna Anotações não encontrada");
   for (const x of L) {
     try {
       const linha = await acharLinha(p, x.nf_ticket);
-      if (!linha) { soma("NF fora da lista do portal"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega)"); continue; }
-      const d = await abrirAnotacoes(p, linha);
-      if ((await textoModal(d)).includes(soNum(x.nf_nova))) { soma("já tinha a anotação"); await grava(x, "ja_tinha"); await p.keyboard.press("Escape"); await p.waitForTimeout(500); continue; }
-      const campo = campoNovo(d), b = await botaoSalvar(d);
-      if (!(await campo.count()) || !b) throw new Error("campo ou botão de gravar não encontrado");
-      await campo.click(); await campo.fill(textoAnotacao(x)); await p.waitForTimeout(400);
-      await b.click(); await p.waitForTimeout(2500);
-      // confere: a anotação nova aparece na janela (se a janela fechou, abre de novo)
-      let d2 = p.locator("[role=dialog]").last(); if (!(await d2.count()) || !(await d2.isVisible().catch(() => false))) { const l2 = await acharLinha(p, x.nf_ticket); d2 = l2 ? await abrirAnotacoes(p, l2) : null; }
-      const ok = d2 && (await textoModal(d2)).includes(soNum(x.nf_nova));
-      if (ok) { soma("anotado"); await grava(x, "feito"); } else { soma("gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na lista de anotações depois de gravar: conferir à mão"); }
-      await p.keyboard.press("Escape"); await p.waitForTimeout(600);
+      if (!linha) { soma("NF ainda fora da lista do portal"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
+      const cel = linha.locator("td").nth(ia);
+      if ((await cel.innerText()).includes(soNum(x.nf_nova))) { soma("já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
+      const campo = cel.locator("input[placeholder^='Escreva uma anota'], textarea").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
+      if (!(await campo.count()) || !(await b.count())) throw new Error("campo ou botão Criar Anotação não encontrado");
+      await campo.click(); await campo.fill(textoAnotacao(x)); await p.waitForTimeout(300);
+      await b.click(); await p.waitForTimeout(3000);
+      const l2 = await acharLinha(p, x.nf_ticket), ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(soNum(x.nf_nova));
+      if (ok) { soma("anotado"); await grava(x, "feito"); } else { soma("gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na coluna Anotações depois de gravar: conferir à mão"); }
     } catch (e) {
       soma("erro"); log("  erro:", mascara(String(e.message).split("\n")[0]));
       await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {});
-      await p.keyboard.press("Escape").catch(() => {});
     }
   }
   log("anota-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));

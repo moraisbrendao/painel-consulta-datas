@@ -3232,6 +3232,9 @@ ${extra}
         ${t.responsavel ? `<p class="s">Com ${esc(t.responsavel)} desde ${new Date(t.pego_em || t.atualizado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${t.responsavel === meuEmail() ? ' · <button class="link" data-soltar="' + esc(t.ticket) + '">soltar</button>' : ""}</p>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar este ticket</button>`}
       </div></div>`;
   }
+  // anotação da nova NF no portal do transportador (Reposições › Pré Entrega), feita pelo robô anota-portal (parte 67)
+  const anotPortal = (t) => { const quando = (d) => (d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : ""); const st = t.portal_anot_status; if (!st) return t.nf_nova ? `<p class="tn-robo s">Portal do transportador: anotação da nova NF ainda não feita (o robô passa às 09h, 13h e 17h).</p>` : "";
+    return `<p class="tn-robo ${st === "feito" || st === "ja_tinha" ? "verde" : st === "erro" ? "vermelho" : "s"}">Portal do transportador: ${st === "feito" ? `anotação "NF ${esc(t.nf_nova)} emitida para o pedido" feita` : st === "ja_tinha" ? "a nova NF já estava nas anotações" : st === "nao_achou" ? "a NF original ainda não aparece em Reposições (Pré Entrega); o robô tenta de novo por 15 dias" : `erro: ${esc(t.portal_anot_msg || "")}`}${t.portal_anot_em ? ` · ${quando(t.portal_anot_em)}` : ""}.</p>`; };
   function tnRoboInfo(t) {
     const quando = (d) => d ? new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
     const modo = t.robo_modo === "real" ? "de verdade" : "em teste";
@@ -3241,7 +3244,7 @@ ${extra}
       case "pendente": return `<p class="tn-robo ambar">Na fila do robô (${modo}) desde ${quando(t.robo_pedido_em)}.</p>`;
       case "processando": return `<p class="tn-robo ambar">O robô está fazendo agora (${modo}).</p>`;
       case "testado": return `<p class="tn-robo verde">Teste ok em ${quando(t.robo_feito_em)}: o robô preencheu tudo e não salvou.${dt}${vol}</p>`;
-      case "feito": return `<p class="tn-robo verde">Feito pelo robô em ${quando(t.robo_feito_em)}.${dt}${vol} ${t.etapas && t.etapas[7] ? "" : "Confira as etapas 6 e 7 (ticket)."}</p>`;
+      case "feito": return `<p class="tn-robo verde">Feito pelo robô em ${quando(t.robo_feito_em)}.${dt}${vol} ${t.etapas && t.etapas[7] ? "" : "Confira as etapas 6 e 7 (ticket)."}</p>${anotPortal(t)}`;
       case "erro": return `<p class="tn-robo vermelho">⚠ ${esc(t.robo_msg || "O robô não conseguiu.")}${t.robo_modo === "real" && t.robo_passos && Object.keys(t.robo_passos).some((k) => /^[1-5]$/.test(k)) ? ` Já tinha feito: etapa(s) ${Object.keys(t.robo_passos).filter((k) => /^[1-5]$/.test(k)).join(", ")}.` : ""}</p>`;
       default: return "";
     }
