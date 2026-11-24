@@ -1277,3 +1277,14 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .kpi .kpi-quebra.aberta { display: flex; position: absolute; left: -1px; right: -1px; top: calc(100% - 6px); z-index: 30; background: #fff; border: 1px solid #f5c518; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 10px 24px rgba(13,34,64,.18); padding: 8px 12px 10px; margin-top: 0; left: auto; width: max(100%, 260px); box-sizing: border-box; }
 .kpi .kpi-mais { display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 600; color: #3b5bdb; cursor: pointer; }
 .kpi .kpi-mais:hover { text-decoration: underline; }
+/* linha do tempo do SLA (Reposição › Gargalos) */
+.rp-sla-linha { margin-top: 18px; border-top: 1px solid var(--borda, #e5e7eb); padding-top: 12px; }
+.rp-sla-t th.sla-h { font-size: 11px; white-space: nowrap; }
+.rp-sla-t th.sla-h.v4, .rp-sla-t th.sla-h.v3, .rp-sla-t th.sla-h.v2, .rp-sla-t th.sla-h.v1 { color: #b91c1c; }
+.rp-sla-t th.sla-h.h0 { color: #b45309; }
+.rp-sla-t th.sla-h.f1, .rp-sla-t th.sla-h.f2, .rp-sla-t th.sla-h.f3, .rp-sla-t th.sla-h.f4 { color: #15803d; }
+.rp-sla-t td.sla-c a { color: #0f1b3d; font-weight: 600; text-decoration: none; display: block; }
+.rp-sla-t td.sla-c.v4, .rp-sla-t td.sla-c.v3, .rp-sla-t td.sla-c.v2, .rp-sla-t td.sla-c.v1 { background: rgba(220, 38, 38, calc(var(--a) * .55)); }
+.rp-sla-t td.sla-c.h0 { background: rgba(245, 180, 0, calc(var(--a) * .6)); }
+.rp-sla-t td.sla-c.f1, .rp-sla-t td.sla-c.f2, .rp-sla-t td.sla-c.f3, .rp-sla-t td.sla-c.f4 { background: rgba(22, 163, 74, calc(var(--a) * .4)); }
+.rp-sla-t td.sla-c.v4 a, .rp-sla-t td.sla-c.v3 a { color: #fff; }

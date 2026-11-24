@@ -4218,11 +4218,18 @@ ${extra}
   // dias parados na fila atual: desde a mudança de fila vista no histórico do detalhamento; se o ticket já estava nessa
   // fila no 1º detalhamento guardado, conta desde a Data da Última Atualização do ticket (tabela de acompanhamento)
   // dias ÚTEIS entre duas datas (seg a sex; sem feriados): regra da Brenda 24/11 ("sempre calcular em dias úteis")
+  // feriados nacionais (tabela feriados, parte 51): também não contam como dia útil
+  let FERIADOS = new Set();
+  const ehUtil = (d) => { const w = d.getUTCDay(); return w !== 0 && w !== 6 && !FERIADOS.has(d.toISOString().slice(0, 10)); };
   function duEntre(a, b) {
-    if (!a || !b) return null; const d = new Date(String(a).slice(0, 10) + "T12:00:00"), f = new Date(String(b).slice(0, 10) + "T12:00:00"); if (f <= d) return 0;
-    let n = 0; while (d < f) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n++; } return n;
+    if (!a || !b) return null; const d = new Date(String(a).slice(0, 10) + "T12:00:00Z"), f = new Date(String(b).slice(0, 10) + "T12:00:00Z"); if (f <= d) return 0;
+    let n = 0; while (d < f) { d.setUTCDate(d.getUTCDate() + 1); if (ehUtil(d)) n++; } return n;
   }
-  function somaDU(iso, n) { const d = new Date(String(iso).slice(0, 10) + "T12:00:00"); let k = 0; while (k < n) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) k++; } return d.toISOString().slice(0, 10); }
+  function somaDU(iso, n) { const d = new Date(String(iso).slice(0, 10) + "T12:00:00Z"); let k = 0; while (k < n) { d.setUTCDate(d.getUTCDate() + 1); if (ehUtil(d)) k++; } return d.toISOString().slice(0, 10); }
+  // posição na linha do tempo do SLA, em dias úteis: negativo = vencido há N; 0 = vence hoje; positivo = faltam N
+  const slaDelta = (r) => { const pz = slaPrazo(r); if (!pz) return null; const h = hojeISO(); return h > pz ? -duEntre(pz, h) : duEntre(h, pz); };
+  const SLA_FX = [["Vencido +10", -1e9, -11, "v4"], ["Vencido 6 a 10", -10, -6, "v3"], ["Vencido 3 a 5", -5, -3, "v2"], ["Vencido 1 a 2", -2, -1, "v1"], ["Vence hoje", 0, 0, "h0"], ["Falta 1", 1, 1, "f1"], ["Falta 2", 2, 2, "f2"], ["Falta 3 a 5", 3, 5, "f3"], ["Falta +5", 6, 1e9, "f4"]];
+  const slaFx = (r) => { const d = slaDelta(r); return d == null ? -1 : SLA_FX.findIndex(([, a, b]) => d >= a && d <= b); };
   // SLA do ticket lido pelo robô (parte 65): prazo em dias úteis = início + Horas SLA ÷ 24 dias úteis (o 360 conta horas corridas)
   const slaPrazo = (r) => { const s = r._sla; if (!s || !s.inicio || !s.horas || /DEFINID/i.test(s.situacao || "")) return null; return somaDU(diaLocal(s.inicio), Math.ceil(Number(s.horas) / 24)); };
   const slaSit = (r) => { const pz = slaPrazo(r); if (!pz) return "sem"; return hojeISO() > pz ? "vencido" : "dentro"; };
@@ -4265,6 +4272,7 @@ ${extra}
       repItTk = new Map(tk.map((x) => [String(x.ticket), x])); repItens = new Map(); it.forEach((x) => { const k = String(x.ticket); (repItens.get(k) || repItens.set(k, []).get(k)).push(x.codigo); });
       volCad = new Map(cad.map((x) => [x.codigo, x.descricao])); repItOk = true;
     } catch (_) { repItOk = false; repItTk = new Map(); repItens = new Map(); volCad = new Map(); }
+    try { const fr = await buscarTudo("feriados", "data", "data,uf"); FERIADOS = new Set(fr.filter((x) => !x.uf).map((x) => String(x.data).slice(0, 10))); } catch (_) {}
     try { const sl = await buscarTudo("repo_sla", "ticket"); repSla = new Map(sl.filter((x) => !x.erro).map((x) => [String(x.ticket), x])); } catch (_) { repSla = new Map(); }
     if (!ajCarregado) await carregarApelidos().catch(() => {});
     reps.forEach((r) => { r._sla = repSla.get(String(r.ticket)) || null; r._d = repAtual.get(String(r.ticket)) || null; r._promob = r._d ? promobNome(r._d.transp_promob) : null;
@@ -4371,6 +4379,7 @@ ${extra}
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
     if (repAba === "det" && pvDet) repFiltradas = repFiltradas.filter((r) => casaPv(r, pvDet));
     if (repAba === "det" && repFaixa >= 0) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && faixaFila(diasFila(r)) === repFaixa);
+    if (repAba === "det" && pvDet && pvDet.slaFx != null) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && (pvDet.slaFx === -9 ? slaFx(r) >= 0 : slaFx(r) === pvDet.slaFx));
     $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc"].includes(repAba);
     if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
   }
@@ -4414,6 +4423,24 @@ ${extra}
       <td class="num">${g.venc ? `<b class="txt-vermelho">${fmt(g.venc)}</b>` : "·"}</td><td class="num">${g.dentro ? fmt(g.dentro) : "·"}</td><td class="num s">${g.semSla ? fmt(g.semSla) : "·"}</td>
       <td class="rp-col-barra"><div class="rp-barra rp-barra-garg"><span class="${g.media >= 20 ? "alto" : g.media >= 10 ? "medio" : "baixo"}" style="width:${(g.soma / gmax) * 100}%"></span></div><span class="s">${fmt(g.soma)} dias</span></td></tr>`).join("")
       || `<tr><td colspan="11" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
+    desenharLinhaSla(gbox, gargCasos);
+  }
+  // linha do tempo do SLA por fila (Brenda 24/11): onde os tickets com SLA se acumulam, em dias úteis do prazo
+  function desenharLinhaSla(gbox, casos) {
+    const el = gbox.querySelector(".rp-sla-linha"); if (!el) return;
+    const com = casos.filter((r) => slaFx(r) >= 0), sem = casos.length - com.length;
+    if (!com.length) { el.innerHTML = `<p class="s">Nenhum ticket com SLA definido nesse filtro${repSla.size ? "" : " (o robô ainda não leu o SLA dos tickets)"}.</p>`; return; }
+    const linhas = contaPor(com, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const v = SLA_FX.map(() => 0); rs.forEach((r) => v[slaFx(r)]++);
+      const venc = rs.filter((r) => slaDelta(r) < 0), dVenc = venc.reduce((a, r) => a - slaDelta(r), 0);
+      return { fila, rs, v, venc: venc.length, dVenc, pct: venc.length / rs.length }; }).sort((a, b) => b.dVenc - a.dVenc || b.venc - a.venc || b.rs.length - a.rs.length);
+    const tot = SLA_FX.map((_, i) => com.filter((r) => slaFx(r) === i).length), mx = Math.max(1, ...linhas.flatMap((l) => l.v));
+    const cel = (n, fila, i) => n ? `<td class="num sla-c ${SLA_FX[i][3]}" style="--a:${(0.18 + 0.82 * (n / mx)).toFixed(2)}"><a href="#" data-pfila="${esc(fila)}" data-psla="${i}" title="${esc(SLA_FX[i][0])} · ver os tickets">${fmt(n)}</a></td>` : `<td class="num vazio-c">·</td>`;
+    const tVenc = com.filter((r) => slaDelta(r) < 0).length, tDias = com.reduce((a, r) => a + Math.max(0, -slaDelta(r)), 0);
+    el.innerHTML = `<div class="rp-q-cab"><h3>⏱ Linha do tempo do SLA por fila · dias úteis</h3><span class="s">${fmt(com.length)} tickets com SLA · ${fmt(tVenc)} vencidos (${pct(tVenc, com.length)}) · ${fmt(sem)} sem SLA definido</span></div>
+      <p class="s">Cada ticket fica na coluna da distância até o prazo do SLA (início + horas SLA, em dias úteis; sem sábado, domingo e feriados nacionais). Da esquerda para a direita: dos mais vencidos até os que ainda têm folga. As filas estão em ordem de gargalo: soma dos dias úteis vencidos. Clique num número para ver os tickets.</p>
+      <div class="tabela-rolagem"><table class="tabela rp-sla-t"><thead><tr><th>Fila</th>${SLA_FX.map(([t], i) => `<th class="num sla-h ${SLA_FX[i][3]}">${t}</th>`).join("")}<th class="num">Com SLA</th><th class="num">% vencido</th><th class="num" title="Soma dos dias úteis vencidos dos tickets da fila">Dias úteis vencidos</th></tr></thead>
+      <tbody>${linhas.map((l) => `<tr><td><a href="#" data-pfila="${esc(l.fila)}" data-psla="-9">${esc(l.fila)}</a></td>${l.v.map((n, i) => cel(n, l.fila, i)).join("")}<td class="num tot">${fmt(l.rs.length)}</td><td class="num"><b class="${l.pct >= 0.5 ? "txt-vermelho" : l.pct >= 0.25 ? "txt-laranja" : ""}">${pct(l.venc, l.rs.length)}</b></td><td class="num">${l.dVenc ? fmt(l.dVenc) : "·"}</td></tr>`).join("")}</tbody>
+      <tfoot><tr class="rp-total"><td>Total</td>${tot.map((n, i) => `<td class="num">${n ? `<a href="#" data-pfila="*" data-psla="${i}">${fmt(n)}</a>` : "·"}</td>`).join("")}<td class="num">${fmt(com.length)}</td><td class="num">${pct(tVenc, com.length)}</td><td class="num">${fmt(tDias)}</td></tr></tfoot></table></div>`;
   }
 
   // quadro "Em aberto por fila × dias parados na fila", agrupado por responsável (como a dinâmica da Brenda)
@@ -4536,7 +4563,7 @@ ${extra}
     rpdPag = Math.min(rpdPag, pags);
     $("rpd-titulo").innerHTML = `${fmt(L.length)} tickets` + (repCard ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro do card">${esc(ROT_CARD[repCard] || repCard)} ✕</button>` : "")
       + (repFaixa >= 0 ? ` <button type="button" class="chip amarelo rp-card-x" title="Tirar o filtro de dias">Parados na fila: ${esc(FAIXAS_FILA[repFaixa][0])} ✕</button>` : "")
-      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.grupo && "Grupo " + pvDet.grupo, pvDet.grupos && pvDet.grupos.length && "Grupo " + pvDet.grupos.join(", "), pvDet.fila, pvDet.resp].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
+      + (pvDet ? [pvDet.serie && "Série " + pvDet.serie, pvDet.grupo && "Grupo " + pvDet.grupo, pvDet.grupos && pvDet.grupos.length && "Grupo " + pvDet.grupos.join(", "), pvDet.fila, pvDet.resp, pvDet.slaFx != null && "SLA: " + (pvDet.slaFx === -9 ? "com SLA" : SLA_FX[pvDet.slaFx][0])].filter(Boolean).map((t) => ` <button type="button" class="chip amarelo rp-card-x">${esc(t)} ✕</button>`).join("") : "");
     $("rpd-linhas").innerHTML = L.slice((rpdPag - 1) * POR, rpdPag * POR).map(linhaDet).join("") || `<tr><td colspan="20" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
     $("rpd-pag").innerHTML = L.length > POR ? `<button class="btn" data-p="-1" ${rpdPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${rpdPag} de ${pags}</span><button class="btn" data-p="1" ${rpdPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
   }
@@ -4740,7 +4767,7 @@ ${extra}
     const c = e.target.closest("[data-pfila]");
     if (c) { e.preventDefault(); e.stopPropagation();
       if (["pre", "pos"].includes(repAba)) $("rep-tipo").value = repAba;
-      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: "", grupos: gf.grupo.slice() } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila;
+      pvDet = c.closest(".rp-garg-box") ? { serie: "", fila: "", resp: "", grupo: "", grupos: gf.grupo.slice() } : { ...pv }; if (c.dataset.pgrupo) pvDet.grupo = c.dataset.pgrupo; if (c.dataset.pfila !== "*") pvDet.fila = c.dataset.pfila; if (c.dataset.psla !== undefined) pvDet.slaFx = +c.dataset.psla;
       repCard = "ab"; repFaixa = c.dataset.pfx === undefined ? -1 : +c.dataset.pfx; repAba = "det"; rpdPag = 1; filtrarRep(); $("rp-det").scrollIntoView({ block: "start" }); }
   }, true);
   $("pagina-reposicao").addEventListener("change", (e) => { const g = e.target.closest(".garg-sel"); if (g) { gf[g.dataset.gf] = [...g.selectedOptions].map((o) => o.value); filtrarRep(); return; } });
