@@ -4545,6 +4545,10 @@ ${extra}
     const destRep = (r) => { const c = cobRep(r); return /^Cobrado/.test(c) ? "Em nome da transportadora" : /CPF/.test(c) ? "Em nome do cliente (CPF)" : /outro CNPJ/.test(c) ? "Outro CNPJ" : "Nota não lida"; };
     const ORD_DEST = ["Em nome da transportadora", "Em nome do cliente (CPF)", "Outro CNPJ", "Nota não lida"];
     const dest = ORD_DEST.map((k) => [k, pre.filter((r) => destRep(r) === k)]).filter(([, rs]) => rs.length);
+    // soma dos itens enviados (pedido da Brenda, 24/11): por pré/pós e parcial/total
+    const qVol = (r) => Number(r._it && r._it.volumes) || r._cods.length;
+    const somaGr = [["pre", "PARCIAL"], ["pre", "TOTAL"], ["pos", "PARCIAL"], ["pos", "TOTAL"]].map(([f, t]) => ({ k: `${f}|${t}`, rot: `${ROT_FLUXO[f] || f} · ${t === "PARCIAL" ? "Parcial" : "Total"}`, rs: lidos.filter((r) => r._t === f && tpRep(r) === t) }));
+    const semTp = lidos.filter((r) => !tpRep(r)); if (semTp.length) somaGr.push({ k: "*|", rot: "Sem Parcial/Total", rs: semTp });
     const TIPOS_M = ["PARCIAL", "TOTAL", ""], COLS_M = ["Em nome da transportadora", "Em nome do cliente (CPF)", "Outro CNPJ", "Nota não lida"];
     const mat = TIPOS_M.map((t) => ({ t, rs: pre.filter((r) => tpRep(r) === t) })).filter((x) => x.rs.length || x.t);
     const parCli = pre.filter((r) => destRep(r) === "Em nome do cliente (CPF)" && tpRep(r) === "PARCIAL"), parCliT = contaPor(parCli, (r) => trRep(r) || "(sem transportadora)");
@@ -4553,6 +4557,7 @@ ${extra}
     volQ = { vol: { rot: "Volumes mais enviados", todos: lidos.filter((r) => r._cods.length), de: (k) => lidos.filter((r) => r._cods.includes(k)) },
       mot: { rot: "Por motivo", todos: lidos, de: (k) => lidos.filter((r) => motRep(r) === k) },
       cob: { rot: "Pré-entrega · cobrança", todos: pre, de: (k) => pre.filter((r) => cobRep(r) === k) },
+      soma: { rot: "Itens enviados", todos: lidos, de: (k) => { const g = somaGr.find((x) => x.k === k); return g ? g.rs : lidos; } },
       dest: { rot: "Pré-entrega · em nome de quem", todos: pre, de: (k) => { const [t, c] = k.split("|"); return pre.filter((r) => (t === "*" || tpRep(r) === t) && (c === "*" || destRep(r) === c)); } },
       parcli: { rot: "Parcial em nome do cliente", todos: parCli, de: (k) => parCli.filter((r) => (trRep(r) || "(sem transportadora)") === k) },
       proc: { rot: "Em processo", todos: proc, de: (k) => proc.filter((r) => (filaRep(r) || SEM_FILA) === k) } };
@@ -4577,10 +4582,13 @@ ${extra}
       </div>
       <div class="rp-vol-grade">
         <div>${volCab("vol", "Volumes mais enviados")}<div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Volume</th><th>Descrição</th><th class="num">Tickets</th><th class="num">Total</th><th class="num">Parcial</th><th class="num">Pré</th><th class="num">Pós</th><th>Motivo que mais aparece</th></tr></thead>
-          <tbody>${vs.slice(0, 50).map((v) => { const tm = topMot(v.mot); return `<tr ${volLin("vol", v.c)}><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td>${num(v.tot)}${num(v.par)}${num(v.pre)}${num(v.pos)}<td class="s">${esc(tm[0])}${tm[1] ? ` (${fmt(tm[1])})` : ""}</td></tr>`; }).join("")
+          <tbody>${vs.map((v) => { const tm = topMot(v.mot); return `<tr ${volLin("vol", v.c)}><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td>${num(v.tot)}${num(v.par)}${num(v.pre)}${num(v.pos)}<td class="s">${esc(tm[0])}${tm[1] ? ` (${fmt(tm[1])})` : ""}</td></tr>`; }).join("")
             || `<tr><td colspan="8" class="vazio">Nenhum ticket lido ainda nesse filtro.</td></tr>`}</tbody>
-          ${lidos.length ? `<tfoot><tr class="rp-total"><td colspan="2">Total geral (${fmt(vs.length)} volumes diferentes)</td><td class="num">${fmt(lidos.length)}</td>${num(lidos.filter((r) => tpRep(r) === "TOTAL").length)}${num(lidos.filter((r) => tpRep(r) === "PARCIAL").length)}${num(pre.length)}${num(lidos.length - pre.length)}<td></td></tr></tfoot>` : ""}</table></div>${vs.length > 50 ? `<p class="s">Mostrando os 50 mais enviados de ${fmt(vs.length)}. O Exportar traz todos.</p>` : ""}${volCasosH("vol")}</div>
-        <div class="rp-vol-lado"><div>${volCab("mot", "Por motivo")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
+          ${lidos.length ? `<tfoot><tr class="rp-total"><td colspan="2">Total geral (${fmt(vs.length)} volumes diferentes)</td><td class="num">${fmt(lidos.length)}</td>${num(lidos.filter((r) => tpRep(r) === "TOTAL").length)}${num(lidos.filter((r) => tpRep(r) === "PARCIAL").length)}${num(pre.length)}${num(lidos.length - pre.length)}<td></td></tr></tfoot>` : ""}</table></div>${volCasosH("vol")}</div>
+        <div class="rp-vol-lado"><div>${volCab("soma", "Itens enviados · soma")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th></th><th class="num">Tickets</th><th class="num">Itens (códigos)</th><th class="num">Volumes</th></tr></thead>
+          <tbody>${somaGr.map((g) => `<tr ${volLin("soma", g.k)}><td>${esc(g.rot)}</td><td class="num tot">${fmt(g.rs.length)}</td>${num(g.rs.reduce((a, r) => a + r._cods.length, 0))}${num(g.rs.reduce((a, r) => a + qVol(r), 0))}</tr>`).join("")}</tbody>
+          <tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(lidos.length)}</td><td class="num">${fmt(lidos.reduce((a, r) => a + r._cods.length, 0))}</td><td class="num">${fmt(lidos.reduce((a, r) => a + qVol(r), 0))}</td></tr></tfoot></table></div>
+          <p class="s">Só os tickets que o robô já leu (chegaram em Aguardando entrega com nova NF). Itens = códigos de volume; Volumes = quantidade do quadro Reposição.</p>${volCasosH("soma")}</div><div>${volCab("mot", "Por motivo")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
           <tbody>${pm.map((x) => `<tr ${volLin("mot", x.mot)}><td>${esc(x.mot)}</td><td class="num tot">${fmt(x.n)}</td>${num(x.vols)}<td class="s">${x.top ? esc(x.top + " · " + descVol(x.top)) + ` (${fmt(x.topN)})` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="vazio">—</td></tr>`}</tbody>
           ${pm.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(lidos.length)}</td>${num(pm.reduce((t, x) => t + x.vols, 0))}<td></td></tr></tfoot>` : ""}</table></div>${volCasosH("mot")}</div>
           ${repAba !== "pos" ? `<div>${volCab("dest", "Pré-entrega · Parcial × Total, em nome de quem saiu a nota")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t rp-mat"><thead><tr><th></th><th class="num">Transportadora</th><th class="num">Cliente (CPF)</th><th class="num">Outro CNPJ</th><th class="num">Não lida</th><th class="num">Total</th></tr></thead>
@@ -4608,9 +4616,15 @@ ${extra}
     [...lado.children].forEach((d) => { const b = d.querySelector(".vol-exp[data-vq]"); if (b) d.dataset.q = b.dataset.vq; });
     let ord = []; try { ord = JSON.parse(localStorage.getItem(ORD_Q_KEY) || "[]"); } catch (_) {}
     ord.forEach((q) => { const d = lado.querySelector(`:scope > [data-q="${q}"]`); if (d) lado.appendChild(d); });
+    let lg = {}; try { lg = JSON.parse(localStorage.getItem(ORD_Q_KEY + ".larg") || "{}"); } catch (_) {}
+    [...lado.children].forEach((d) => { if (lg[d.dataset.q]) d.style.width = lg[d.dataset.q] + "px"; });
     [...lado.children].filter((d) => !ord.includes(d.dataset.q)).forEach((d) => { if (d.dataset.q && ord.length) { /* quadro novo: fica no fim */ lado.appendChild(d); } });
   }
   let arrQ = null;
+  // largura: a pessoa puxa o canto de baixo à direita do quadro (fica salvo neste navegador)
+  document.addEventListener("mouseup", () => { document.querySelectorAll(".rp-vol-lado > [data-q]").forEach((d) => { if (!d.style.width) return;
+    let lg = {}; try { lg = JSON.parse(localStorage.getItem(ORD_Q_KEY + ".larg") || "{}"); } catch (_) {}
+    const w = Math.round(parseFloat(d.style.width)); if (lg[d.dataset.q] !== w) { lg[d.dataset.q] = w; try { localStorage.setItem(ORD_Q_KEY + ".larg", JSON.stringify(lg)); } catch (_) {} } }); });
   document.addEventListener("mousedown", (e) => { const h = e.target.closest(".rp-arrasta"); const d = h && h.closest(".rp-vol-lado > [data-q]"); if (d) d.draggable = true; });
   document.addEventListener("dragstart", (e) => { const d = e.target.closest && e.target.closest(".rp-vol-lado > [data-q]"); if (!d) return; arrQ = d; d.classList.add("arrastando"); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", d.dataset.q); } catch (_) {} });
   document.addEventListener("dragover", (e) => { if (!arrQ) return; const alvo = e.target.closest && e.target.closest(".rp-vol-lado > [data-q]"); if (!alvo || alvo === arrQ || alvo.parentElement !== arrQ.parentElement) return;

@@ -1266,3 +1266,7 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .rp-mat td small { display: block; font-size: 11px; color: #6b7488; font-weight: 400; }
 .rp-mat td.rp-q-cel { cursor: pointer; }
 .rp-mat td.rp-q-cel:hover, .rp-mat td.rp-q-cel.sel { background: #fdf3c4; }
+.rp-vol-lado { display: flex !important; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+.rp-vol-lado > div { flex: 1 1 auto; width: 300px; min-width: 260px; max-width: 100%; resize: horizontal; overflow: auto; padding-bottom: 6px; }
+.rp-vol-lado > div::-webkit-resizer { background: linear-gradient(135deg, transparent 55%, #9aa3b8 55%, #9aa3b8 62%, transparent 62%, transparent 75%, #9aa3b8 75%, #9aa3b8 82%, transparent 82%); }
+.rp-vol-lado > div[style*="width"] { flex-grow: 0; }
