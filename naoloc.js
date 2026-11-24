@@ -23,6 +23,9 @@
   }
   const tk = (id) => (id ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)}</a>` : "");
 
+  // DLOG na série 35 só faz a first mile (Brenda 24/11): conferências feitas antes da regra usaram o rastreio dela → revisar
+  const serieDe = (x) => String(x.serie || String(x.nf || "").split("-")[1] || "").replace(/^0+/, "");
+  const dlogRev = (x) => serieDe(x) === "35" && /\bDLOG\b/i.test((x.rastreio || {}).alvo || "");
   const SUG = { voltar_barrar: ["azul", "Voltar para o barrar"], entregue: ["verde", "Entregue → não barrado"], cancelar: ["vermelho", "Seguir para cancelamento"], aguardar: ["ambar", "Aguardando prazo"], manual: ["laranja", "Verificar à mão"] };
   const CARDS = [
     ["fila", "Na fila", "notas da última planilha", "", (x) => x.na_planilha],
@@ -33,6 +36,7 @@
     ["manual", "Verificar à mão", "sem transportadora ou série sem regra", "roxo", (x) => x.na_planilha && x.sugestao === "manual"],
     ["robo", "Aguardando o robô", "ainda não conferidas", "", (x) => x.na_planilha && !x.conferido_em],
     ["erro", "Ação com erro", "o robô não conseguiu no ticket", "vermelho", (x) => x.acao_status === "erro"],
+    ["dlog", "⚠ DLOG série 35 · revisar", "rastreio da DLOG (first mile) foi usado", "vermelho", (x) => dlogRev(x)],
     ["cte", "⚠ CT-e depois do cancelamento", "apareceu no rastreio depois", "vermelho", (x) => !!x.cte_alerta_em],
     ["hist", "Histórico", "todas as notas que passaram pela fila", "", () => true]];
   let L = [], info = null, card = "fila", busca = "", ok = true, assinatura = "", urls = new Map();
@@ -57,6 +61,7 @@
   function linha(x) {
     const r = x.rastreio || {}, s = SUG[x.sugestao], d = dias(x.ticket_criado);
     const rast = !x.conferido_em ? `<span class="s">o robô ainda não olhou</span>` : `<b>${esc(r.situacao || "—")}</b>${r.fonte ? ` <span class="s">(${esc(r.fonte)})</span>` : ""}${r.evento ? `<div class="s">${esc(r.evento)}${r.data_evento ? " · " + br(r.data_evento) : ""}</div>` : ""}${r.alvo ? `<div class="s">transp.: ${esc(r.alvo)}</div>` : ""}`;
+    const dl = dlogRev(x) ? `<div class="nl-cte">⚠ Série 35 com rastreio da DLOG (só first mile): esta conferência não vale${x.acao_status === "feito" ? ` e a ação "${esc((SUG[x.acao] || [, x.acao])[1])}" já foi feita no ticket: revisar` : ""}${x.acao_status === "feito" ? "" : ". O robô reconfere pelo redespacho na próxima rodada"}.</div>` : "";
     const cte = x.cte_alerta_em ? `<div class="nl-cte">⚠ CT-e no rastreio depois do cancelamento: <b>${esc((x.cte_depois || {}).situacao || "")}</b> ${esc((x.cte_depois || {}).evento || "")} · avisado ${hora(x.cte_alerta_em)}${x.cte_visto_por ? ` · visto por ${esc(x.cte_visto_por.split("@")[0])}` : ` <button type="button" class="btn contorno mini nl-visto" data-nf="${esc(x.nf)}">Marcar como visto</button>`}</div>` : "";
     return `<tr${x.na_planilha ? "" : ` class="nl-fora"`}>
       <td><b>${esc(x.nf)}</b><div>${tk(x.ticket)}</div>${x.na_planilha ? "" : `<div class="s">saiu da fila</div>`}</td>
@@ -64,7 +69,7 @@
       <td>${esc(x.transp_pedido || "—")}${x.status_intelipost ? `<div class="s">Intelipost: ${esc(x.status_intelipost)}</div>` : ""}</td>
       <td class="num">${d ?? "—"}<div class="s">${br(x.ticket_criado)}</div></td>
       <td>${((pz) => (pz ? `${br(pz)}${new Date().toISOString().slice(0, 10) > pz ? `<div class="s txt-vermelho">vencido</div>` : ""}` : `<span class="s">sem regra</span>`))(x.prazo_ate || prazoAte(x.serie, x.ticket_criado))}</td>
-      <td>${rast}<div class="nl-bts"><button type="button" class="btn contorno mini nl-ver" data-nf="${esc(x.nf)}">Ver rastreio</button>${x.print_rastreio ? ` <a href="#" class="nl-print" data-p="${esc(x.print_rastreio)}">print</a>` : ""}</div>${cte}</td>
+      <td>${rast}<div class="nl-bts"><button type="button" class="btn contorno mini nl-ver" data-nf="${esc(x.nf)}">Ver rastreio</button>${x.print_rastreio ? ` <a href="#" class="nl-print" data-p="${esc(x.print_rastreio)}">print</a>` : ""}</div>${dl}${cte}</td>
       <td>${s ? `<span class="chip ${s[0]}">${s[1]}</span>` : ""}${x.sugestao_motivo ? `<div class="s">${esc(x.sugestao_motivo)}</div>` : ""}</td>
       <td>${acaoTxt(x)}${x.na_planilha && x.acao_status !== "feito" ? `<label class="s nl-seg"><input type="checkbox" class="nl-segurar" data-nf="${esc(x.nf)}"${x.segurar ? " checked" : ""}> segurar (robô não mexe)</label>` : ""}</td></tr>`;
   }

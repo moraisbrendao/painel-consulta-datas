@@ -95,6 +95,13 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
         if (!rd) { soma("TSL 35 sem redespacho"); return { semAlvo: "TSL série 35 fora do RJ sem redespacho na base: verificar à mão" }; }
         alvo = rd; soma("TSL 35 pelo redespacho"); }
     }
+    // DLOG série 35 (Brenda, 24/11): a DLOG só faz a first mile → o rastreio dela não vale; usa o redespacho da base; sem redespacho = verificar à mão
+    if (serie === "35" && /\bDLOG\b/i.test(alvo || "")) {
+      const b = await daBase(x.nf);
+      const rd = [String(b.rd || "").trim(), x.transp_pedido].find((t) => t && !/\bDLOG\b/i.test(t) && !/^(sem\b|-$)/i.test(t)) || "";
+      if (!rd) { soma("DLOG 35 sem redespacho"); return { semAlvo: "DLOG série 35 é só first mile e não há redespacho na base: verificar à mão" }; }
+      alvo = rd; soma("DLOG 35 pelo redespacho");
+    }
     return alvo;
   };
   // séries 25/34/35 dessas transportadoras: CT-e da Rajlog (milk run) não vale como rastreio (Brenda, 23/11)
@@ -148,6 +155,14 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   log("naoloc: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
   // entregues que voltaram para o barrar: já marca no portal "não barrado · Entregue" (X vermelho) + prints no ticket (Brenda, 23/11)
   if (entreguesFeitos) { log(`naoloc: ${entreguesFeitos} entregue(s) de volta no barrar → portal`); await new Promise((ok) => setTimeout(ok, 20000)); await B.aplicarBarrar({ chamar, log, ctx, soAuto: true }).catch((e) => log("naoloc: portal erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120))); }
+}
+
+// contagem (só números) das conferências que usaram o rastreio da DLOG na série 35
+export async function diagDlog({ chamar, log }) {
+  const L = await chamar("nao_localizada?select=nf,serie,sugestao,acao,acao_status,na_planilha,rastreio&limit=5000");
+  const D = L.filter((x) => String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, "") === "35" && /\bDLOG\b/i.test((x.rastreio || {}).alvo || ""));
+  const c = {}; D.forEach((x) => { const k = `sugestão ${x.sugestao || "-"} · ação ${x.acao_status === "feito" ? x.acao + " feita" : x.acao_status || "nenhuma"}`; c[k] = (c[k] || 0) + 1; });
+  log(`diag-dlog: ${D.length} nota(s) série 35 conferidas pelo rastreio da DLOG (de ${L.length})`); Object.entries(c).forEach(([k, v]) => log(`  ${k}: ${v}`));
 }
 
 // só olha a ação de 1 ticket da fila (sem clicar em nada além de Cancelar)
