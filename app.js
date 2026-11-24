@@ -4541,11 +4541,18 @@ ${extra}
       const tv = topMot(cc); return { mot, n: rs.length, vols: rs.reduce((a, r) => a + (Number(r._it.volumes) || r._cods.length), 0), top: tv[0], topN: tv[1] }; });
     // cobrança (pré)
     const pre = lidos.filter((r) => r._t === "pre"), cob = contaPor(pre, cobRep);
+    // em nome de quem saiu a nota da reposição (pré) + parciais que saíram em nome do cliente (pedido da Brenda, 24/11)
+    const destRep = (r) => { const c = cobRep(r); return /^Cobrado/.test(c) ? "Em nome da transportadora" : /CPF/.test(c) ? "Em nome do cliente (CPF)" : /outro CNPJ/.test(c) ? "Outro CNPJ" : "Nota não lida"; };
+    const ORD_DEST = ["Em nome da transportadora", "Em nome do cliente (CPF)", "Outro CNPJ", "Nota não lida"];
+    const dest = ORD_DEST.map((k) => [k, pre.filter((r) => destRep(r) === k)]).filter(([, rs]) => rs.length);
+    const parCli = pre.filter((r) => destRep(r) === "Em nome do cliente (CPF)" && tpRep(r) === "PARCIAL"), parCliT = contaPor(parCli, (r) => trRep(r) || "(sem transportadora)");
     const tit = volTipo === "TOTAL" ? "totais" : volTipo === "PARCIAL" ? "parciais" : "totais e parciais";
     // cada quadro: linhas clicáveis (mostram os casos embaixo) + Exportar em cima
     volQ = { vol: { rot: "Volumes mais enviados", todos: lidos.filter((r) => r._cods.length), de: (k) => lidos.filter((r) => r._cods.includes(k)) },
       mot: { rot: "Por motivo", todos: lidos, de: (k) => lidos.filter((r) => motRep(r) === k) },
       cob: { rot: "Pré-entrega · cobrança", todos: pre, de: (k) => pre.filter((r) => cobRep(r) === k) },
+      dest: { rot: "Pré-entrega · em nome de quem", todos: pre, de: (k) => pre.filter((r) => destRep(r) === k) },
+      parcli: { rot: "Parcial em nome do cliente", todos: parCli, de: (k) => parCli.filter((r) => (trRep(r) || "(sem transportadora)") === k) },
       proc: { rot: "Em processo", todos: proc, de: (k) => proc.filter((r) => (filaRep(r) || SEM_FILA) === k) } };
     if (volSel && (!volQ[volSel.q] || !volQ[volSel.q].de(volSel.k).length)) volSel = null;
     const volCab = (q, t) => `<div class="rp-q-cab"><h3>${t}</h3><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" title="Baixar em Excel os tickets deste quadro">↓ Exportar</button></div>`;
@@ -4574,6 +4581,12 @@ ${extra}
         <div class="rp-vol-lado"><div>${volCab("mot", "Por motivo")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
           <tbody>${pm.map((x) => `<tr ${volLin("mot", x.mot)}><td>${esc(x.mot)}</td><td class="num tot">${fmt(x.n)}</td>${num(x.vols)}<td class="s">${x.top ? esc(x.top + " · " + descVol(x.top)) + ` (${fmt(x.topN)})` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="vazio">—</td></tr>`}</tbody>
           ${pm.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(lidos.length)}</td>${num(pm.reduce((t, x) => t + x.vols, 0))}<td></td></tr></tfoot>` : ""}</table></div>${volCasosH("mot")}</div>
+          ${repAba !== "pos" ? `<div>${volCab("dest", "Pré-entrega · em nome de quem saiu a nota")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Nota da reposição</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
+          <tbody>${dest.map(([k, rs]) => `<tr ${volLin("dest", k)}><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, pre.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody>
+          ${pre.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(pre.length)}</td><td class="num">100%</td></tr></tfoot>` : ""}</table></div>${volCasosH("dest")}</div>
+          <div>${volCab("parcli", "Parcial, mas saiu em nome do cliente (não da transportadora)")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Transportadora</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
+          <tbody>${parCliT.map(([k, rs]) => `<tr ${volLin("parcli", k)}><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, parCli.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum caso nesse filtro.</td></tr>`}</tbody>
+          ${parCli.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(parCli.length)}</td><td class="num">100%</td></tr></tfoot>` : ""}</table></div>${volCasosH("parcli")}</div>` : ""}
           ${repAba !== "pos" ? `<div>${volCab("cob", "Pré-entrega · cobrança à transportadora")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Nota da reposição</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
           <tbody>${cob.map(([k, rs]) => `<tr ${volLin("cob", k)}><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, pre.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody>
           ${pre.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(pre.length)}</td><td class="num">100%</td></tr></tfoot>` : ""}</table></div>${volCasosH("cob")}</div>` : ""}
