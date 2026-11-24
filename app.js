@@ -4212,16 +4212,26 @@ ${extra}
   const serieRep = (r) => { const m = String(r.nf || "").trim().match(/-\s*(\d+)\s*$/); return m ? String(Number(m[1])) : SEM_SERIE; };
   // dias parados na fila atual: desde a mudança de fila vista no histórico do detalhamento; se o ticket já estava nessa
   // fila no 1º detalhamento guardado, conta desde a Data da Última Atualização do ticket (tabela de acompanhamento)
+  // dias ÚTEIS entre duas datas (seg a sex; sem feriados): regra da Brenda 24/11 ("sempre calcular em dias úteis")
+  function duEntre(a, b) {
+    if (!a || !b) return null; const d = new Date(String(a).slice(0, 10) + "T12:00:00"), f = new Date(String(b).slice(0, 10) + "T12:00:00"); if (f <= d) return 0;
+    let n = 0; while (d < f) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) n++; } return n;
+  }
+  function somaDU(iso, n) { const d = new Date(String(iso).slice(0, 10) + "T12:00:00"); let k = 0; while (k < n) { d.setDate(d.getDate() + 1); const w = d.getDay(); if (w !== 0 && w !== 6) k++; } return d.toISOString().slice(0, 10); }
+  // SLA do ticket lido pelo robô (parte 65): prazo em dias úteis = início + Horas SLA ÷ 24 dias úteis (o 360 conta horas corridas)
+  const slaPrazo = (r) => { const s = r._sla; if (!s || !s.inicio || !s.horas || /DEFINID/i.test(s.situacao || "")) return null; return somaDU(diaLocal(s.inicio), Math.ceil(Number(s.horas) / 24)); };
+  const slaSit = (r) => { const pz = slaPrazo(r); if (!pz) return "sem"; return hojeISO() > pz ? "vencido" : "dentro"; };
+  const slaAtraso = (r) => { const pz = slaPrazo(r); return pz && hojeISO() > pz ? duEntre(pz, hojeISO()) : 0; };
   function diasFila(r) {
     const d = r._d, hoje = hojeISO();
     const mesma = d && norm(d.fila_atual) === norm(filaRep(r));   // a mudança vista no detalhamento só vale se for a mesma fila da tabela
     const viu = mesma && d.ultima_mudanca_em && d.primeiro_envio_em && d.ultima_mudanca_em > d.primeiro_envio_em ? d.ultima_mudanca_em : null;
     const base = viu || r.atualizado_em || r.criado_em;
-    return base ? Math.max(0, diasEntre(diaLocal(base), hoje)) : null;
+    return base ? duEntre(diaLocal(base), hoje) : null;
   }
   const FAIXAS_FILA = [["+50 dias", 50, 1e9], ["+40 dias", 40, 49], ["+30 dias", 30, 39], ["+20 dias", 20, 29], ["+10 dias", 10, 19], ["+5 dias", 5, 9], ["4 dias", 4, 4], ["3 dias", 3, 3], ["2 dias", 2, 2], ["1 dia", 1, 1], ["Hoje", 0, 0]];
   const faixaFila = (n) => (n == null ? -1 : FAIXAS_FILA.findIndex(([, a, b]) => n >= a && n <= b));
-  const diasAberto = (r) => (abertoRep(r) && r.criado_em ? Math.max(0, diasEntre(String(r.criado_em).slice(0, 10), hojeISO())) : null);
+  const diasAberto = (r) => (abertoRep(r) && r.criado_em ? duEntre(String(r.criado_em).slice(0, 10), hojeISO()) : null);
   const semAtualiz = (r) => abertoRep(r) && r.atualizado_em && diasEntre(String(r.atualizado_em).slice(0, 10), hojeISO()) > 2;
   const ROT_FLUXO = { pre: "Pré-entrega", pos: "Pós-entrega" };
   const pct = (a, b) => (b ? ((100 * a) / b).toFixed(1).replace(".", ",") + "%" : "–");
@@ -4250,8 +4260,9 @@ ${extra}
       repItTk = new Map(tk.map((x) => [String(x.ticket), x])); repItens = new Map(); it.forEach((x) => { const k = String(x.ticket); (repItens.get(k) || repItens.set(k, []).get(k)).push(x.codigo); });
       volCad = new Map(cad.map((x) => [x.codigo, x.descricao])); repItOk = true;
     } catch (_) { repItOk = false; repItTk = new Map(); repItens = new Map(); volCad = new Map(); }
+    try { const sl = await buscarTudo("repo_sla", "ticket"); repSla = new Map(sl.filter((x) => !x.erro).map((x) => [String(x.ticket), x])); } catch (_) { repSla = new Map(); }
     if (!ajCarregado) await carregarApelidos().catch(() => {});
-    reps.forEach((r) => { r._d = repAtual.get(String(r.ticket)) || null; r._promob = r._d ? promobNome(r._d.transp_promob) : null;
+    reps.forEach((r) => { r._sla = repSla.get(String(r.ticket)) || null; r._d = repAtual.get(String(r.ticket)) || null; r._promob = r._d ? promobNome(r._d.transp_promob) : null;
       r._it = repItTk.get(String(r.ticket)) || null; r._cods = repItens.get(String(r.ticket)) || []; });
     montarReposicao();
   }
@@ -4367,13 +4378,16 @@ ${extra}
     return `<td class="num"><span class="rp-var ${p > 0 ? "sobe" : p < 0 ? "desce" : ""}">${p > 0 ? "▲ +" : p < 0 ? "▼ " : ""}${p}%</span></td>`; };
 
   // quadro de gargalos (card próprio "Gargalos por fila"): por fila, quantos casos e há quantos dias estão parados
+  let repSla = new Map();
   let gargAberto = false; const gf = { grupo: [], fila: [] };   // várias escolhas let gargCasos = [];
   const casaGf = (r) => (!gf.grupo.length || gf.grupo.includes(grupoRep(r))) && (!gf.fila.length || gf.fila.includes(filaRep(r) || SEM_FILA));
   function gargalos(L, comFiltro) {
     const ab = L.filter((r) => abertoRep(r) && (!comFiltro || casaGf(r)));
     return contaPor(ab, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const d = rs.map(diasFila).filter((n) => n != null);
       const soma = d.reduce((x, y) => x + y, 0); const grs = contaPor(rs, grupoRep).map((x) => x[0]);
-      return { fila, grupo: grs.join(", "), n: rs.length, media: d.length ? soma / d.length : 0, max: d.length ? Math.max(...d) : 0, mais10: d.filter((x) => x >= 10).length, soma }; })
+      const da = rs.map(diasAberto).filter((n) => n != null);
+      return { fila, grupo: grs.join(", "), n: rs.length, media: d.length ? soma / d.length : 0, max: d.length ? Math.max(...d) : 0, mais10: d.filter((x) => x >= 10).length, soma,
+        abMedia: da.length ? da.reduce((x, y) => x + y, 0) / da.length : 0, venc: rs.filter((r) => slaSit(r) === "vencido").length, dentro: rs.filter((r) => slaSit(r) === "dentro").length, semSla: rs.filter((r) => slaSit(r) === "sem").length }; })
       .sort((x, y) => y.soma - x.soma || y.n - x.n);
   }
   function desenharGargalos(caixa, L) {
@@ -4391,9 +4405,10 @@ ${extra}
     const gs = gargalos(L, true);
     const gmax = Math.max(1, ...gs.map((g) => g.soma));
     gbox.querySelector(".rp-garg-corpo").innerHTML = gs.map((g) => `<tr class="rp-garg-l" data-pfila="${esc(g.fila)}" title="Ver os tickets desta fila"><td><a href="#">${esc(g.fila)}</a></td><td class="s">${esc(g.grupo)}</td><td class="num tot">${fmt(g.n)}</td>
-      <td class="num"><b class="${g.media >= 20 ? "txt-vermelho" : g.media >= 10 ? "txt-laranja" : ""}">${dia1(g.media)}</b></td><td class="num">${fmt(g.max)}</td>${num(g.mais10)}
+      <td class="num"><b class="${g.media >= 20 ? "txt-vermelho" : g.media >= 10 ? "txt-laranja" : ""}">${dia1(g.media)}</b></td><td class="num">${fmt(g.max)}</td>${num(g.mais10)}<td class="num">${dia1(g.abMedia)}</td>
+      <td class="num">${g.venc ? `<b class="txt-vermelho">${fmt(g.venc)}</b>` : "·"}</td><td class="num">${g.dentro ? fmt(g.dentro) : "·"}</td><td class="num s">${g.semSla ? fmt(g.semSla) : "·"}</td>
       <td class="rp-col-barra"><div class="rp-barra rp-barra-garg"><span class="${g.media >= 20 ? "alto" : g.media >= 10 ? "medio" : "baixo"}" style="width:${(g.soma / gmax) * 100}%"></span></div><span class="s">${fmt(g.soma)} dias</span></td></tr>`).join("")
-      || `<tr><td colspan="7" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
+      || `<tr><td colspan="11" class="vazio">Nenhum caso em aberto nesse filtro.</td></tr>`;
   }
 
   // quadro "Em aberto por fila × dias parados na fila", agrupado por responsável (como a dinâmica da Brenda)
@@ -4729,8 +4744,8 @@ ${extra}
     if (!e.target.closest(".garg-excel")) return;
     if (!gargCasos.length) return toast("Nenhum caso em aberto nesse filtro.", true);
     const L = gargCasos.slice().sort((x, y) => (diasFila(y) ?? -1) - (diasFila(x) ?? -1));
-    const cab = ["Ticket", "NF original", "Série da NF", "Pedido", "Pré/pós", "Grupo", "Fila atual", "Dias parados na fila", "Dias em aberto", "Status", "Transportadora", "Motivo", "Filial", "Responsável", "Criado em", "Última atualização", "Nova NF", "No detalhamento"];
-    const linhas = [cab].concat(L.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", serieRep(r), r.pedido || "", ROT_FLUXO[r._t], r.grupo || "", filaRep(r), diasFila(r) ?? "", diasAberto(r) ?? "", r.status || "",
+    const cab = ["Ticket", "NF original", "Série da NF", "Pedido", "Pré/pós", "Grupo", "Fila atual", "Dias úteis parados na fila", "Dias úteis em aberto", "SLA (360)", "Início do SLA", "Horas SLA", "Prazo SLA (dias úteis)", "SLA vencido há (dias úteis)", "Status", "Transportadora", "Motivo", "Filial", "Responsável", "Criado em", "Última atualização", "Nova NF", "No detalhamento"];
+    const linhas = [cab].concat(L.map((r) => { const d = r._d || {}; return [r.ticket, r.nf || "", serieRep(r), r.pedido || "", ROT_FLUXO[r._t], r.grupo || "", filaRep(r), diasFila(r) ?? "", diasAberto(r) ?? "", (r._sla && r._sla.situacao) || "", r._sla && r._sla.inicio ? br(diaLocal(r._sla.inicio)) : "", (r._sla && r._sla.horas) ?? "", slaPrazo(r) ? br(slaPrazo(r)) : "", slaAtraso(r) || "", r.status || "",
       r.transportadora || "", r.motivo || "", r.filial || "", r.responsavel || "", br(r.criado_em), br(r.atualizado_em), d.nfs_novas || "", r._d ? "Sim" : "Não"]; }));
     const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = cab.map((c) => ({ wch: Math.min(34, Math.max(10, c.length)) }));
     const gs = contaPor(L, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => { const d = rs.map(diasFila).filter((n) => n != null), s = d.reduce((x, y) => x + y, 0);
