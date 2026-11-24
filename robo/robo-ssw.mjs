@@ -547,6 +547,23 @@ if (MODO === "diag-par") {   // quantas páginas ao mesmo tempo é mais rápido 
   }
   process.exit(0);
 }
+if (MODO === "diag-bento2") {   // NFs da Bento (por hash da NF-série no input transp): quantos resultados o site traz e qual o robô pegou (sem nomes; números longos mascarados)
+  const { createHash } = await import("node:crypto"); await entrarSupabase();
+  const hs = new Set(String(process.env.TRANSP || "").split(",").map((x) => x.trim()).filter(Boolean)), L = [];
+  for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao,data_entrega,consultado_em&order=pedido&limit=1000&offset=${de}`); P.forEach((x) => { if (x.nf && hs.has(createHash("sha256").update(x.nf).digest("hex").slice(0, 16))) L.push(x); }); if (P.length < 1000) break; }
+  log("achei", L.length, "de", hs.size);
+  for (const l of L) {
+    const [num, ser] = String(l.nf).split("-");
+    const r = await pagina("https://sistema.bentobrasil.com.br/consultaNotas.php", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ nr: "00349443000192", nrNota: num }).toString() });
+    const m = String(r.txt || "").match(/dados = '([\s\S]*?)';/); let d = null; try { d = m && JSON.parse(m[1]); } catch {}
+    const arr = Array.isArray(d) ? d : d ? [d] : [];
+    log(`NF série ${ser} · painel: ${l.situacao} entrega ${l.data_entrega} (conferido ${String(l.consultado_em).slice(0, 16)}) · site: ${arr.length} resultado(s)`);
+    arr.forEach((e, i) => log(`  [${i}] emissão ${String(e.dtemissao || "").slice(0, 16)} · entrega ${String(e.dtentrega || "").slice(0, 16)} · campos ${Object.keys(e).filter((k) => /serie|nota|nf|remet|cnpj|ctrc|doc/i.test(k)).map((k) => k + "=" + String(e[k] ?? "").replace(/[A-Za-zÀ-ú]{3,}/g, "x").replace(/\d{5,}/g, (z) => "#" + z.length)).join(" ")}`));
+    log(`  robô pegou: ${JSON.stringify(lerBento(r.txt)).replace(/\d{5,}/g, "#")}`);
+    await new Promise((ok) => setTimeout(ok, 1500));
+  }
+  process.exit(0);
+}
 if (MODO === "diag-db") {   // tempos de consultas simples, uma por vez (só tempos e contagens)
   await entrarSupabase();
   const T = [["tratativas?select=pedido&limit=1", "1 linha tratativas"], ["base_pedidos?select=pedido&limit=1", "1 linha base"],
