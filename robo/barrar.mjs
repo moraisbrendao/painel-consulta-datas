@@ -236,7 +236,9 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
   if (/^h:/.test(process.env.TRANSP || "")) { const { createHash } = await import("node:crypto"); const hs = new Set(process.env.TRANSP.slice(2).split(",")); L.splice(0, L.length, ...L.filter((x) => hs.has(createHash("sha256").update(String(x.nf)).digest("hex").slice(0, 16)))); log(`barrar: filtro por hash → ${L.length} nota(s)`); }
   // TRANSP = "segregado": reconfere já, sem esperar 3 h, as notas Dominalog/Flog com anotação de segregado (conferidas antes da regra de 24/11)
   if (process.env.TRANSP === "segregado") { L.splice(0, L.length, ...L.filter((x) => !x.decisao && /SEGREGAD/.test(sa((x.portal || {}).anotacao) + " " + sa((x.rastreio || {}).evento)))); log(`barrar: com segregado na última conferência → ${L.length} nota(s)`); }
-  const falta = L.filter((x) => process.env.TRANSP === "refazer" || process.env.TRANSP === "segregado" || /^h:/.test(process.env.TRANSP || "") || !x.conferido_em || Date.now() - new Date(x.conferido_em).getTime() > 3 * 3600e3).slice(0, limite);
+  // planilha nova (Brenda 24/11): nota conferida antes do último envio da planilha é conferida de novo, sem esperar 3 h
+  const envio = Date.parse(((await chamar("barrar_info?select=enviado_em&limit=1").catch(() => []))[0] || {}).enviado_em || "") || 0;
+  const falta = L.filter((x) => (envio && x.conferido_em && Date.parse(x.conferido_em) < envio) || process.env.TRANSP === "refazer" || process.env.TRANSP === "segregado" || /^h:/.test(process.env.TRANSP || "") || !x.conferido_em || Date.now() - new Date(x.conferido_em).getTime() > 3 * 3600e3).slice(0, limite);
   log(`barrar: ${L.length} notas na planilha sem ação no portal · ${falta.length} para conferir`);
   if (!falta.length) return;
   await R.carregarSenhasDB();
