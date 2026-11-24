@@ -1002,7 +1002,7 @@ try {
   const entrou = await entrar();
   if (MODO === "manter") { await gravarEstado("intelipost_manter", { em: new Date().toISOString(), ok: entrou !== false }).catch(() => {}); log(entrou !== false ? "Sessão da Intelipost mantida viva." : "Sessão não estava viva.");
     if (entrou !== false && BAIXA_ENTREGUE_AUTO) await baixaEntregueIP(true, 30).catch((e) => log("baixa-entregue: " + String(e.message).split("\n")[0].slice(0, 120))); }
-  else if (MODO === "entregue-teste" || MODO === "entregue-real") await baixaEntregueIP(MODO === "entregue-real", Number(process.env.LIMITE || 0) || 1);
+  else if (MODO === "entregue-teste" || MODO === "entregue-real") await baixaEntregueIP(MODO === "entregue-real", Number(process.env.LIMITE || process.env.TICKET || 0) || 1);   // no disparo manual, o campo "ticket" leva o limite
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
   else if (MODO === "diag-troca") await diagTroca();
