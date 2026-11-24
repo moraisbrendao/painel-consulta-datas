@@ -848,11 +848,10 @@ async function diagEntregue() {
   await pagina.locator("table tbody tr input[type=checkbox]").first().click({ force: true }); await pagina.waitForTimeout(1000);
   const sel = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
   const pick = async (re, nome) => { const s = sel(re); const l = (await s.locator("option", { hasText: re }).first().innerText().catch(() => "")).trim(); if (!l) { log(`diag-entregue: não achei ${nome}`); return false; } await s.selectOption({ label: l }); await pagina.waitForTimeout(2500); log(`diag-entregue: escolhi ${nome}: ${l}`); return true; };
-  for (const por of ["Macro", "Micro"]) {
-    if (!(await pick(new RegExp(`^\\s*${por}\\s*$`), `Alterar por: ${por}`))) continue;
-    await camposDetalhe(pagina, `Alterar por ${por}`, null);
-    if (await pick(/entreg/i, `${por} com "entreg"`)) { await camposDetalhe(pagina, `${por} entregue escolhido`, null); }
-    await pick(/^\s*Selecione\s*$/, "volta para Selecione").catch(() => {});
+  if (await pick(/^\s*Macro\s*$/, "Alterar por: Macro") && await pick(/^\s*Entregue\s*$/, "Status Entregue")) {
+    const ins = await pagina.evaluate(() => [...document.querySelectorAll("input,textarea,select")].filter((e) => e.getBoundingClientRect().width > 0)
+      .map((e) => `${e.tagName.toLowerCase()} type=${e.type} placeholder=${e.placeholder || ""} name=${e.name || ""} class=${String(e.className).slice(0, 60)} rótulo=${(e.closest("div")?.innerText || "").replace(/\s+/g, " ").slice(0, 40)}`));
+    ins.forEach((x) => log("  campo Entregue:", x.replace(/\d{5,}/g, "#")));
   }
   const botoes = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("button, input[type=submit]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => (e.innerText || e.value || "").trim()).filter(Boolean))]);
   log("diag-entregue: botões " + botoes.join(" / ") + " (nada foi salvo)");
