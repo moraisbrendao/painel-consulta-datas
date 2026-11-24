@@ -10,7 +10,7 @@
 import { chromium } from "playwright";
 import { entrarMulti360, olharTicket, fazerTicket } from "./multi360.mjs";
 import { createHash, createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
-import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro, trocaDoTicket } from "./supa.mjs";
+import { entrarSupabase, pegarIntelipost, resultadoIntelipost, lerEstado, gravarEstado, umPedidoParaOlhar, pegarTroca, resultadoTroca, ultimaTrocaComErro, trocaDoTicket, chamar } from "./supa.mjs";
 
 const MODO = (process.env.MODO || "diag").toLowerCase();
 const BASE = (process.env.INTELIPOST_URL || "https://secure.intelipost.com.br").replace(/\/$/, "");
@@ -834,6 +834,29 @@ async function fazerTroca(job) {
 }
 
 // diagnóstico da tela de Simulação de cotação e da Busca por Lote (só olha; mascarado)
+// Alterar Pedidos › status ENTREGUE (Brenda 24/11): só lista as opções de Macro/Micro/Evento para "Entregue". NÃO clica em Alterar.
+async function diagEntregue() {
+  const [t] = await chamar("troca_notas?select=pedido&robo_status=eq.feito&tipo=eq.TOTAL&pedido=not.is.null&order=robo_feito_em.desc&limit=1");
+  if (!t) { log("diag-entregue: nenhuma troca total feita para usar de exemplo"); return; }
+  const caixa = await caixaPedidos("/order/change-order");
+  await pagina.locator("select:visible").first().selectOption({ label: "Pedido" });
+  await caixa.fill(t.pedido);
+  await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
+  await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 });
+  const st = await pagina.evaluate(() => { const ths = [...document.querySelectorAll("table thead th")].map((e) => e.innerText.trim()); const i = ths.findIndex((h) => /status transportador/i.test(h)); const td = document.querySelector("table tbody tr")?.querySelectorAll("td")[i]; return { ths, st: td ? td.innerText.trim() : "?" }; });
+  log(`diag-entregue: colunas ${st.ths.join(" | ")} · status transportador: ${st.st}`);
+  await pagina.locator("table tbody tr input[type=checkbox]").first().click({ force: true }); await pagina.waitForTimeout(1000);
+  const sel = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
+  const pick = async (re, nome) => { const s = sel(re); const l = (await s.locator("option", { hasText: re }).first().innerText().catch(() => "")).trim(); if (!l) { log(`diag-entregue: não achei ${nome}`); return false; } await s.selectOption({ label: l }); await pagina.waitForTimeout(2500); log(`diag-entregue: escolhi ${nome}: ${l}`); return true; };
+  for (const por of ["Macro", "Micro"]) {
+    if (!(await pick(new RegExp(`^\\s*${por}\\s*$`), `Alterar por: ${por}`))) continue;
+    await camposDetalhe(pagina, `Alterar por ${por}`, null);
+    if (await pick(/entreg/i, `${por} com "entreg"`)) { await camposDetalhe(pagina, `${por} entregue escolhido`, null); }
+    await pick(/^\s*Selecione\s*$/, "volta para Selecione").catch(() => {});
+  }
+  const botoes = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("button, input[type=submit]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => (e.innerText || e.value || "").trim()).filter(Boolean))]);
+  log("diag-entregue: botões " + botoes.join(" / ") + " (nada foi salvo)");
+}
 async function diagSim() {
   const p = pagina; const m = (t) => String(t || "").replace(/\d{5,}/g, "#");
   const ruins = []; p.on("response", (r) => { if (r.status() >= 400 && !/log|track|analytics|hotjar|segment|sentry/i.test(r.url())) ruins.push(r.status() + " " + new URL(r.url()).host + new URL(r.url()).pathname.replace(/\d+/g, "#").slice(0, 60)); });
@@ -879,6 +902,7 @@ try {
   const entrou = await entrar();
   if (MODO === "manter") { await gravarEstado("intelipost_manter", { em: new Date().toISOString(), ok: entrou !== false }).catch(() => {}); log(entrou !== false ? "Sessão da Intelipost mantida viva." : "Sessão não estava viva."); }
   else if (MODO === "diag-sim") await diagSim();
+  else if (MODO === "diag-entregue") await diagEntregue();
   else if (MODO === "diag-troca") await diagTroca();
   else if (MODO === "diag-cep") await diagCep();
   else if (MODO === "diag-status") await diagStatus();

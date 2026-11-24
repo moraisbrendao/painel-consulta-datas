@@ -13,7 +13,7 @@ on:
       modo:
         description: "diag = só olhar as telas · diag-troca = olhar as telas da troca de notas · dryrun = preencher sem salvar · real = alterar"
         type: choice
-        options: [diag, diag-sim, diag-troca, diag-cep, diag-status, diag-ticket, diag-data, dryrun, real, manter]
+        options: [diag, diag-entregue, diag-sim, diag-troca, diag-cep, diag-status, diag-ticket, diag-data, dryrun, real, manter]
         default: diag
       ticket:
         description: "Número do ticket (só para diag-data e diag-cep)"
