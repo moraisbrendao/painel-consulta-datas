@@ -172,7 +172,7 @@ export async function diagDlog({ chamar, log }) {
     log(`diag-dlog nota: chaves do rastreio: ${Object.keys(r).join(",")}`);
     return;
   }
-  const D = L.filter((x) => String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, "") === "35" && /\bDLOG\b/i.test((x.rastreio || {}).alvo || ""));
+  const D = L.filter((x) => String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, "") === "35" && (/\bDLOG\b/i.test((x.rastreio || {}).alvo || "") || /\bDLOG\b/i.test((x.rastreio || {}).transp || "")));
   const c = {}; D.forEach((x) => { const k = `sugestão ${x.sugestao || "-"} · ação ${x.acao_status === "feito" ? x.acao + " feita" : x.acao_status || "nenhuma"}`; c[k] = (c[k] || 0) + 1; });
   log(`diag-dlog: ${D.length} nota(s) série 35 conferidas pelo rastreio da DLOG (de ${L.length})`); Object.entries(c).forEach(([k, v]) => log(`  ${k}: ${v}`));
   // nomes de transportadora (não são dado pessoal): quem foi usada no rastreio, por série, e onde aparece DLOG
