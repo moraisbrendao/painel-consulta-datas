@@ -110,7 +110,7 @@ export async function diagAnota({ chamar, log, ctx }) {
 // Nada se repete: antes de escrever, confere se o comentário / a anotação já existem.
 export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   const q15 = new Date(Date.now() - 15 * 864e5).toISOString(), ontem = new Date(Date.now() - 20 * 3600e3).toISOString();
-  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(chat_pdf_status.is.null,chat_pdf_status.eq.sem_pdf,chat_pdf_status.eq.conferir,and(chat_pdf_status.eq.erro,chat_pdf_msg.like.Coment*),portal_anot_status.is.null,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
+  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(chat_pdf_status.is.null,chat_pdf_status.eq.sem_pdf,chat_pdf_status.eq.conferir,and(chat_pdf_status.eq.erro,chat_pdf_msg.like.Coment*),portal_anot_status.is.null,portal_anot_status.eq.erro,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
   // envio da 1ª versão marcado como erro "Comentário enviado…": só conferir, nunca reenviar
   L.forEach((x) => { if (x.chat_pdf_status === "erro" && /^Coment[aá]rio enviado/.test(x.chat_pdf_msg || "")) x.chat_pdf_status = "conferir"; });
   log(`anota-portal: ${L.length} troca(s) para olhar`);
@@ -140,7 +140,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   }
   // 2) anotação no portal (depois do chat; sem PDF, espera até 3 dias da troca antes de anotar só a NF)
   const tres = Date.now() - 3 * 864e5;
-  const anota = L.filter((x) => (!x.portal_anot_status || x.portal_anot_status === "nao_achou") && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres));
+  const anota = L.filter((x) => (!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres));
   if (anota.length) {
     const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
     const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
