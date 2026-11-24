@@ -909,7 +909,7 @@ async function baixaEntregueIP(real, limite) {
       const depois = x._porNF ? await buscar(x._porNF, "Nota Fiscal") : await buscar(x.pedido);
       if (depois.length === 1 && /\bentregue\b/i.test(depois[0])) { soma("alterado para Entregue"); await grava(x, "feito", `Status Entregue na Intelipost${x.data_entrega ? ` (data ${x.data_entrega.split("-").reverse().join("/")})` : ""}.`); }
       else { soma("cliquei mas não confirmou"); await grava(x, "conferir", "Cliquei em Alterar Status, mas a busca não mostrou Entregue: conferir na Intelipost."); }
-    } catch (e) { soma("erro"); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)); }
+    } catch (e) { soma("erro"); log("  erro: " + String(e.message).split("\n")[0].replace(/[A-Z0-9]{6,}/gi, "#").slice(0, 160)); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)); }
   }
   log("baixa-entregue: " + (Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada"));
 }
