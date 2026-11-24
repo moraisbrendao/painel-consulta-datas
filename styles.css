@@ -1270,3 +1270,4 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .rp-vol-lado > div { flex: 1 1 auto; width: 300px; min-width: 260px; max-width: 100%; resize: horizontal; overflow: auto; padding-bottom: 6px; }
 .rp-vol-lado > div::-webkit-resizer { background: linear-gradient(135deg, transparent 55%, #9aa3b8 55%, #9aa3b8 62%, transparent 62%, transparent 75%, #9aa3b8 75%, #9aa3b8 82%, transparent 82%); }
 .rp-vol-lado > div[style*="width"] { flex-grow: 0; }
+.rp-vol-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; align-items: start; margin-bottom: 8px; }

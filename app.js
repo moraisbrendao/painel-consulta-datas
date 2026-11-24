@@ -4535,6 +4535,8 @@ ${extra}
     const m = new Map();
     lidos.forEach((r) => r._cods.forEach((c) => { const x = m.get(c) || { c, n: 0, tot: 0, par: 0, pre: 0, pos: 0, mot: new Map() }; x.n++; tpRep(r) === "TOTAL" ? x.tot++ : x.par++; x[r._t]++; x.mot.set(motRep(r), (x.mot.get(motRep(r)) || 0) + 1); m.set(c, x); }));
     const vs = [...m.values()].sort((a, b) => b.n - a.n || a.c.localeCompare(b.c));
+    // volumes por fluxo (pré e pós separados, sem total/parcial): pedido da Brenda 24/11
+    const vsDe = (f) => { const mm = new Map(); lidos.filter((r) => r._t === f).forEach((r) => [...new Set(r._cods)].forEach((c) => mm.set(c, (mm.get(c) || 0) + 1))); return [...mm.entries()].map(([c, n]) => ({ c, n })).sort((a, b) => b.n - a.n || a.c.localeCompare(b.c)); };
     const topMot = (mp) => [...mp.entries()].sort((a, b) => b[1] - a[1])[0] || ["", 0];
     // por motivo
     const pm = contaPor(lidos, motRep).map(([mot, rs]) => { const cc = new Map(); rs.forEach((r) => r._cods.forEach((c) => cc.set(c, (cc.get(c) || 0) + 1)));
@@ -4554,7 +4556,9 @@ ${extra}
     const parCli = pre.filter((r) => destRep(r) === "Em nome do cliente (CPF)" && tpRep(r) === "PARCIAL"), parCliT = contaPor(parCli, (r) => trRep(r) || "(sem transportadora)");
     const tit = volTipo === "TOTAL" ? "totais" : volTipo === "PARCIAL" ? "parciais" : "totais e parciais";
     // cada quadro: linhas clicáveis (mostram os casos embaixo) + Exportar em cima
-    volQ = { vol: { rot: "Volumes mais enviados", todos: lidos.filter((r) => r._cods.length), de: (k) => lidos.filter((r) => r._cods.includes(k)) },
+    volQ = { volpre: { rot: "Pré-entrega volumes", todos: lidos.filter((r) => r._t === "pre" && r._cods.length), de: (k) => lidos.filter((r) => r._t === "pre" && r._cods.includes(k)) },
+      volpos: { rot: "Pós-entrega volumes", todos: lidos.filter((r) => r._t === "pos" && r._cods.length), de: (k) => lidos.filter((r) => r._t === "pos" && r._cods.includes(k)) },
+      vol: { rot: "Volumes mais enviados", todos: lidos.filter((r) => r._cods.length), de: (k) => lidos.filter((r) => r._cods.includes(k)) },
       mot: { rot: "Por motivo", todos: lidos, de: (k) => lidos.filter((r) => motRep(r) === k) },
       cob: { rot: "Pré-entrega · cobrança", todos: pre, de: (k) => pre.filter((r) => cobRep(r) === k) },
       soma: { rot: "Itens enviados", todos: lidos, de: (k) => { const g = somaGr.find((x) => x.k === k); return g ? g.rs : lidos; } },
@@ -4581,10 +4585,10 @@ ${extra}
         <div><b>${volCad.size ? fmt(volCad.size) : "–"}</b><span>${volCad.size ? "volumes no cadastro" : "cadastro de volumes não enviado"}</span></div>
       </div>
       <div class="rp-vol-grade">
-        <div>${volCab("vol", "Volumes mais enviados")}<div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Volume</th><th>Descrição</th><th class="num">Tickets</th><th class="num">Total</th><th class="num">Parcial</th><th class="num">Pré</th><th class="num">Pós</th><th>Motivo que mais aparece</th></tr></thead>
-          <tbody>${vs.map((v) => { const tm = topMot(v.mot); return `<tr ${volLin("vol", v.c)}><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td>${num(v.tot)}${num(v.par)}${num(v.pre)}${num(v.pos)}<td class="s">${esc(tm[0])}${tm[1] ? ` (${fmt(tm[1])})` : ""}</td></tr>`; }).join("")
-            || `<tr><td colspan="8" class="vazio">Nenhum ticket lido ainda nesse filtro.</td></tr>`}</tbody>
-          ${lidos.length ? `<tfoot><tr class="rp-total"><td colspan="2">Total geral (${fmt(vs.length)} volumes diferentes)</td><td class="num">${fmt(lidos.length)}</td>${num(lidos.filter((r) => tpRep(r) === "TOTAL").length)}${num(lidos.filter((r) => tpRep(r) === "PARCIAL").length)}${num(pre.length)}${num(lidos.length - pre.length)}<td></td></tr></tfoot>` : ""}</table></div>${volCasosH("vol")}</div>
+        <div class="rp-vol-2">${["pre", "pos"].map((f) => { const q = "vol" + f, L2 = vsDe(f), nT = lidos.filter((r) => r._t === f && r._cods.length).length;
+          return `<div>${volCab(q, `${ROT_FLUXO[f] || f} · volumes mais enviados`)}<div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Volume</th><th>Descrição</th><th class="num">Tickets</th></tr></thead>
+          <tbody>${L2.map((v) => `<tr ${volLin(q, v.c)}><td>${esc(v.c)}</td><td>${esc(descVol(v.c))}</td><td class="num tot">${fmt(v.n)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum ticket lido nesse filtro.</td></tr>`}</tbody>
+          ${L2.length ? `<tfoot><tr class="rp-total"><td colspan="2">Total: ${fmt(L2.length)} volumes diferentes em ${fmt(nT)} tickets</td><td class="num">${fmt(L2.reduce((a, v) => a + v.n, 0))}</td></tr></tfoot>` : ""}</table></div>${volCasosH(q)}</div>`; }).join("")}</div>
         <div class="rp-vol-lado"><div>${volCab("soma", "Itens enviados · soma")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th></th><th class="num">Tickets</th><th class="num">Itens (códigos)</th><th class="num">Volumes</th></tr></thead>
           <tbody>${somaGr.map((g) => `<tr ${volLin("soma", g.k)}><td>${esc(g.rot)}</td><td class="num tot">${fmt(g.rs.length)}</td>${num(g.rs.reduce((a, r) => a + r._cods.length, 0))}${num(g.rs.reduce((a, r) => a + qVol(r), 0))}</tr>`).join("")}</tbody>
           <tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(lidos.length)}</td><td class="num">${fmt(lidos.reduce((a, r) => a + r._cods.length, 0))}</td><td class="num">${fmt(lidos.reduce((a, r) => a + qVol(r), 0))}</td></tr></tfoot></table></div>
