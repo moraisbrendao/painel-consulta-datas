@@ -527,6 +527,15 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
   log("resultado html:", r.txt.slice(Math.max(0, i0 - 200), i0 + 3000).replace(/<script[\s\S]*?<\/script>/gi, "").replace(/>[^<]+</g, (t) => ">" + limpo(t.slice(1, -1)) + "<").replace(/class="[^"]*"|style="[^"]*"/g, "").replace(/\d{4,}/g, "#").replace(/\s+/g, " ").slice(0, 3000));
   log("cabeçalhos/links:", tags(r.txt, /<th[^>]*>[^<]{0,40}|<a [^>]*href=["'][^"']{0,120}["']|<iframe[^>]*>|<form[^>]*>/gi).map((x) => x.replace(/\d{4,}/g, "#")).slice(0, 30).join(" | "));
 }
+if (MODO === "diag-db") {   // tempos de consultas simples, uma por vez (só tempos e contagens)
+  await entrarSupabase();
+  const T = [["tratativas?select=pedido&limit=1", "1 linha tratativas"], ["base_pedidos?select=pedido&limit=1", "1 linha base"],
+    ["base_pedidos?select=pedido&order=pedido&limit=1000", "1000 pedidos (só coluna pedido)"], ["base_pedidos?select=pedido&order=pedido&limit=1000&offset=12000", "1000 pedidos offset 12000 (só pedido)"],
+    ["base_pedidos?select=*&order=pedido&limit=1000", "1000 linhas inteiras"], ["base_pedidos?select=pedido,nf,canal&order=pedido&limit=1000&offset=6000", "1000 linhas 3 colunas offset 6000"],
+    ["base_pedidos?select=*&order=pedido&limit=1000&offset=12000", "1000 linhas inteiras offset 12000"], ["intelipost_fechados?select=pedido&limit=1000", "1000 fechados"]];
+  for (const [u, nome] of T) { const t = Date.now(); try { const x = await chamar(u); log(`${nome}: ${x.length} em ${((Date.now() - t) / 1000).toFixed(1)} s`); } catch (e) { log(`${nome}: ERRO em ${((Date.now() - t) / 1000).toFixed(1)} s ${String(e.message).slice(-80)}`); } }
+  process.exit(0);
+}
 if (MODO === "teste-velocidade") {   // mede quanto demora baixar a base como o painel faz (só tempos e contagens)
   await entrarSupabase();
   const COLS = "pedido,nf,canal,uf,cidade,transportadora,status_intelipost,micro_status,origem,data_expedicao,prev_original,prev_atual,ultima_atualizacao,data_criacao,data_entrega,range_atrasos,dias_atraso,status_prazo,sem_expedicao,trocas:extra->>trocas";
