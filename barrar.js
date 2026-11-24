@@ -132,9 +132,10 @@
     const linha = box.querySelector(".br-busca-linha");
     if (q && linha) linha.after(brSecGeral); else if (brSecAncora.parentNode && brSecGeral.previousSibling !== brSecAncora) brSecAncora.after(brSecGeral);
     const n = $("br-linhas") ? $("br-linhas").querySelectorAll("tr:not(:has(td.vazio))").length : 0, info = box.querySelector(".br-busca-info");
-    if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): está logo abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
+    const outros = [$("br-transp").value && `transportadora do pedido "${esc($("br-transp").value)}" (filtro do topo)`, brTranspP && brBusca.trim() && `pesquisa "${esc(brBusca.trim())}"`].filter(Boolean);
+    if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): está logo abaixo, com o campo de decisão.${outros.length ? ` Também filtrando por ${outros.join(" e ")}.` : ""}` : `Nenhuma nota aqui${outros.length ? ` com ${outros.join(" e ")}` : ""}.`) : "";
   }
-  document.addEventListener("change", (e) => { const sl = e.target.closest("#br-erro-transp .br-busca-t"); if (!sl) return; brTranspP = sl.value; desenhar(); });
+  document.addEventListener("change", (e) => { const sl = e.target.closest("#br-erro-transp .br-busca-t"); if (!sl) return; brTranspP = sl.value; if (brTranspP) $("br-transp").value = ""; desenhar(); });   // o filtro do topo é pela transportadora do pedido (planilha), que pode ser outra: limpa para não esconder notas
   document.addEventListener("input", (e) => { const i = e.target.closest("#br-erro-transp .br-busca"); if (!i) return; brBusca = i.value; $("br-busca").value = i.value; desenhar(); });
   const diaSP = (ts) => (ts ? new Date(ts).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : "");
   const enviadoHoje = (xs) => { const h = diaSP(Date.now()); return xs.length > 0 && xs.every((x) => x.cobrado_em && diaSP(x.cobrado_em) === h); };
