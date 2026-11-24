@@ -492,11 +492,14 @@ if (MODO === "diag-cf") {   // Conferência SSW: quando foi a última importaç�
   const conta = (L, f) => { const m = {}; L.forEach((c) => { const k = f(c) || "(vazio)"; m[k] = (m[k] || 0) + 1; }); return Object.entries(m).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([k, v]) => `${k}: ${v}`).join(" · "); };
   log(`sobram ${sob.length} · status no arquivo Intelipost: ${conta(sob, (c) => c.status_intelipost)}`);
   log(`  status na base BI: ${conta(sob, (c) => (B.has(c.pedido) ? B.get(c.pedido) : "não está na base"))}`);
-  const D = []; for (let de = 0; ; de += 1000) { const x = await chamar(`conferencia_ssw?select=pedido,transportadora,data_entrega,consultado_em,ultimo_evento&situacao=eq.entregue&order=pedido&limit=1000&offset=${de}`); D.push(...x); if (x.length < 1000) break; }
+  const D = []; for (let de = 0; ; de += 1000) { const x = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,data_entrega,consultado_em,ultimo_evento,detalhe&situacao=eq.entregue&order=pedido&limit=1000&offset=${de}`); D.push(...x); if (x.length < 1000) break; }
   const sobS = new Set(sob.map((c) => c.pedido)), DS = D.filter((d) => sobS.has(d.pedido));
   log(`  transportadora: ${conta(DS, (d) => d.transportadora)}`);
   log(`  mês da entrega: ${conta(DS, (d) => String(d.data_entrega || "").slice(0, 7))}`);
   log(`  dia da conferência: ${conta(DS, (d) => String(d.consultado_em || "").slice(0, 10))}`);
+  log(`  série confere (detalhe.serie_ok): ${conta(DS, (d) => String(d.detalhe && d.detalhe.serie_ok))} · achada em outro CNPJ: ${DS.filter((d) => d.detalhe && d.detalhe.cnpj_outro).length}`);
+  log(`  chaves do detalhe: ${conta(DS.flatMap((d) => Object.keys(d.detalhe || {})).map((k) => ({ k })), (x) => x.k)}`);
+  log(`  fonte: ${conta(DS, (d) => d.detalhe && (d.detalhe.fonte || d.detalhe.origem))} · dias entre entrega e hoje: ${conta(DS, (d) => { const n = Math.floor((Date.now() - Date.parse(String(d.data_entrega) + "T12:00:00Z")) / 864e5); return n <= 1 ? "0-1" : n <= 3 ? "2-3" : n <= 7 ? "4-7" : "8+"; })}`);
   log(`  evento (só palavras-chave): ${conta(DS, (d) => (String(d.ultimo_evento || "").toUpperCase().match(/ENTREGUE|ENTREGA REALIZADA|BAIXAD|FINALIZAD|COMPROVANTE|DEVOLV|SEGREGAD/) || ["outro"])[0])}`);
 }
 if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão VM/Tempo Justo) tem mais atraso hoje: só contagens agregadas
