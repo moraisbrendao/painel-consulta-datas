@@ -557,6 +557,7 @@ if (MODO === "diag-bento2") {   // NFs da Bento (por hash da NF-série no input 
     const r = await pagina("https://sistema.bentobrasil.com.br/consultaNotas.php", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ nr: "00349443000192", nrNota: num }).toString() });
     const m = String(r.txt || "").match(/dados = '([\s\S]*?)';/); let d = null; try { d = m && JSON.parse(m[1]); } catch {}
     const arr = Array.isArray(d) ? d : d ? [d] : [];
+    { const t = String(r.txt || ""); const i = t.search(/dados/i); log(`  status ${r.status} · tamanho ${t.length} · trecho: ${(i >= 0 ? t.slice(Math.max(0, i - 40), i + 200) : t.replace(/\s+/g, " ").slice(0, 300)).replace(/[A-Za-zÀ-ú]{4,}/g, (w) => /dados|json|var|serie|nota|emissao|entrega|ctrc|parse|null|true|false/i.test(w) ? w : "x").replace(/\d{5,}/g, (z) => "#" + z.length)}`); }
     log(`NF série ${ser} · painel: ${l.situacao} entrega ${l.data_entrega} (conferido ${String(l.consultado_em).slice(0, 16)}) · site: ${arr.length} resultado(s)`);
     arr.forEach((e, i) => log(`  [${i}] emissão ${String(e.dtemissao || "").slice(0, 16)} · entrega ${String(e.dtentrega || "").slice(0, 16)} · campos ${Object.keys(e).filter((k) => /serie|nota|nf|remet|cnpj|ctrc|doc/i.test(k)).map((k) => k + "=" + String(e[k] ?? "").replace(/[A-Za-zÀ-ú]{3,}/g, "x").replace(/\d{5,}/g, (z) => "#" + z.length)).join(" ")}`));
     log(`  robô pegou: ${JSON.stringify(lerBento(r.txt)).replace(/\d{5,}/g, "#")}`);
