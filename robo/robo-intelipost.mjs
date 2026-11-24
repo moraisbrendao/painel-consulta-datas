@@ -889,8 +889,22 @@ async function baixaEntregueIP(real, limite) {
         const dd = x.data_entrega.split("-").reverse().join("/");
         const campoD = pagina.locator("div.field, div.control").filter({ has: pagina.locator("label", { hasText: /Data da altera/i }) }).locator("input[type=text]").first();
         const dataIn = (await campoD.count()) ? campoD : pagina.locator("input.input[type=text]:visible").nth(1);
-        await dataIn.click(); await dataIn.fill(dd); await dataIn.press("Enter").catch(() => {}); await pagina.keyboard.press("Escape").catch(() => {}); await pagina.waitForTimeout(600);
+        const ro = await dataIn.evaluate((e) => e.readOnly).catch(() => null);
+        log(`  data: campo ${ro ? "só leitura (calendário)" : "editável"}`);
+        if (!ro) { await dataIn.click(); await dataIn.fill(dd, { timeout: 8000 }); await dataIn.press("Enter").catch(() => {}); await pagina.keyboard.press("Escape").catch(() => {}); await pagina.waitForTimeout(600); }
+        else {   // Buefy datepicker: abre o calendário, escolhe mês/ano nos selects do cabeçalho e clica no dia
+          const [ano, mes, dia] = x.data_entrega.split("-").map(Number);
+          await dataIn.click(); await pagina.waitForTimeout(800);
+          const dp = pagina.locator(".datepicker .dropdown-content:visible, .datepicker .dropdown-menu:visible").first();
+          const sels = dp.locator(".datepicker-header select");
+          const info = await dp.evaluate((d) => [...d.querySelectorAll(".datepicker-header select")].map((s) => [...s.options].map((o) => o.value + "=" + o.text).slice(0, 14).join(","))).catch(() => []);
+          log("  calendário selects: " + info.join(" | ").replace(/\d{4}=\d{4}/g, (m) => m.slice(0, 4)).slice(0, 300));
+          if ((await sels.count()) >= 2) { await sels.nth(0).selectOption(String(mes - 1)).catch(() => {}); await sels.nth(1).selectOption(String(ano)).catch(() => {}); await pagina.waitForTimeout(500); }
+          const cel = dp.locator(".datepicker-cell:not(.is-nearby):not(.is-unselectable)").filter({ hasText: new RegExp(`^\\s*${dia}\\s*$`) }).first();
+          await cel.click({ timeout: 8000 }); await pagina.waitForTimeout(600);
+        }
         const lido = await dataIn.inputValue();
+        log(`  data lida no campo: ${lido.replace(/\d/g, "9")} · confere: ${lido === dd ? "sim" : "não"}`);
         if (lido !== dd) throw new Error("o campo Data da alteração não aceitou a data da entrega");
         if (x.data_entrega !== hojeBR()) {
           const campoH = pagina.locator("div.field, div.control").filter({ has: pagina.locator("label", { hasText: /Hora da altera/i }) }).locator("input[type=text]").first();
@@ -909,7 +923,7 @@ async function baixaEntregueIP(real, limite) {
       const depois = x._porNF ? await buscar(x._porNF, "Nota Fiscal") : await buscar(x.pedido);
       if (depois.length === 1 && /\bentregue\b/i.test(depois[0])) { soma("alterado para Entregue"); await grava(x, "feito", `Status Entregue na Intelipost${x.data_entrega ? ` (data ${x.data_entrega.split("-").reverse().join("/")})` : ""}.`); }
       else { soma("cliquei mas não confirmou"); await grava(x, "conferir", "Cliquei em Alterar Status, mas a busca não mostrou Entregue: conferir na Intelipost."); }
-    } catch (e) { soma("erro"); log("  erro: " + String(e.message).split("\n")[0].replace(/[A-Z0-9]{6,}/gi, "#").slice(0, 160)); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)); }
+    } catch (e) { soma("erro"); log("  erro: " + String(e.message).split("\n")[0].replace(/\d{5,}/g, "#").replace(/[A-Z]{2,}\d[A-Z0-9]{4,}/g, "#").slice(0, 160)); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)); }
   }
   log("baixa-entregue: " + (Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada"));
 }
