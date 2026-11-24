@@ -845,12 +845,15 @@ async function diagEntregue() {
   await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 });
   const st = await pagina.evaluate(() => { const ths = [...document.querySelectorAll("table thead th")].map((e) => e.innerText.trim()); const i = ths.findIndex((h) => /status transportador/i.test(h)); const td = document.querySelector("table tbody tr")?.querySelectorAll("td")[i]; return { ths, st: td ? td.innerText.trim() : "?" }; });
   log(`diag-entregue: colunas ${st.ths.join(" | ")} · status transportador: ${st.st}`);
+  const linha = await pagina.evaluate(() => { const tr = [...document.querySelectorAll("tr, [role=row]")].find((r) => /entregue|transito|trânsito|despachado/i.test(r.innerText)); return tr ? tr.innerText.replace(/\s+/g, " ").slice(0, 200) : "(nenhuma linha)"; });
+  log("diag-entregue: linha do resultado (mascarada): " + linha.replace(/[A-Z0-9]{6,}/gi, "#"));
   await pagina.locator("table tbody tr input[type=checkbox]").first().click({ force: true }); await pagina.waitForTimeout(1000);
   const sel = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
   const pick = async (re, nome) => { const s = sel(re); const l = (await s.locator("option", { hasText: re }).first().innerText().catch(() => "")).trim(); if (!l) { log(`diag-entregue: não achei ${nome}`); return false; } await s.selectOption({ label: l }); await pagina.waitForTimeout(2500); log(`diag-entregue: escolhi ${nome}: ${l}`); return true; };
   if (await pick(/^\s*Macro\s*$/, "Alterar por: Macro") && await pick(/^\s*Entregue\s*$/, "Status Entregue")) {
     const ins = await pagina.evaluate(() => [...document.querySelectorAll("input,textarea,select")].filter((e) => e.getBoundingClientRect().width > 0)
-      .map((e) => `${e.tagName.toLowerCase()} type=${e.type} placeholder=${e.placeholder || ""} name=${e.name || ""} class=${String(e.className).slice(0, 60)} rótulo=${(e.closest("div")?.innerText || "").replace(/\s+/g, " ").slice(0, 40)}`));
+      .map((e) => { let g = e.parentElement, t = ""; for (let i = 0; i < 5 && g && !t; i++, g = g.parentElement) { const l = g.querySelector("label"); t = l ? l.innerText.trim() : ""; }
+        return `${e.tagName.toLowerCase()} type=${e.type} class=${String(e.className).slice(0, 60)} label=${t.slice(0, 40)} valor=${e.tagName === "INPUT" && e.type === "text" ? String(e.value).replace(/\d/g, "9").slice(0, 20) : ""} pai=${String(e.parentElement?.className || "").slice(0, 50)}`; }));
     ins.forEach((x) => log("  campo Entregue:", x.replace(/\d{5,}/g, "#")));
   }
   const botoes = await pagina.evaluate(() => [...new Set([...document.querySelectorAll("button, input[type=submit]")].filter((e) => e.getBoundingClientRect().width > 0).map((e) => (e.innerText || e.value || "").trim()).filter(Boolean))]);
