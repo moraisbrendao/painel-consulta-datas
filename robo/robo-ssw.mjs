@@ -499,7 +499,7 @@ if (MODO === "diag-cf") {   // Conferência SSW: quando foi a última importaç�
   log(`  dia da conferência: ${conta(DS, (d) => String(d.consultado_em || "").slice(0, 10))}`);
   log(`  série confere (detalhe.serie_ok): ${conta(DS, (d) => String(d.detalhe && d.detalhe.serie_ok))} · achada em outro CNPJ: ${DS.filter((d) => d.detalhe && d.detalhe.cnpj_outro).length}`);
   log(`  chaves do detalhe: ${conta(DS.flatMap((d) => Object.keys(d.detalhe || {})).map((k) => ({ k })), (x) => x.k)}`);
-  log(`  fonte: ${conta(DS, (d) => d.detalhe && (d.detalhe.fonte || d.detalhe.origem))} · dias entre entrega e hoje: ${conta(DS, (d) => { const n = Math.floor((Date.now() - Date.parse(String(d.data_entrega) + "T12:00:00Z")) / 864e5); return n <= 1 ? "0-1" : n <= 3 ? "2-3" : n <= 7 ? "4-7" : "8+"; })}`);
+  log(`  fonte: ${conta(DS, (d) => d.detalhe && (d.detalhe.fonte || d.detalhe.origem))} · dias entre entrega e hoje: ${conta(DS, (d) => { const n = Math.floor((Date.now() - Date.parse(String(d.data_entrega) + "T12:00:00Z")) / 864e5); return n <= 1 ? String(d.data_entrega) : n <= 3 ? "2-3" : n <= 7 ? "4-7" : "8+"; })}`);
   log(`  evento (só palavras-chave): ${conta(DS, (d) => (String(d.ultimo_evento || "").toUpperCase().match(/ENTREGUE|ENTREGA REALIZADA|BAIXAD|FINALIZAD|COMPROVANTE|DEVOLV|SEGREGAD/) || ["outro"])[0])}`);
 }
 if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão VM/Tempo Justo) tem mais atraso hoje: só contagens agregadas
