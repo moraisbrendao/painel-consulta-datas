@@ -3,9 +3,30 @@
 // (mesmo texto que a Logística já usa; pedido da Brenda 24/11). Antes de escrever, lê as anotações: se a nova NF já está lá, não repete.
 // Registro público (Actions): só contagens e estrutura mascarada — nunca número de nota, nome ou texto de anotação.
 import { entrarPortal } from "./barrar.mjs";
+import { entrarMulti360, abrirTicket } from "./multi360.mjs";
+import { textoPdf } from "./repo-itens.mjs";
 
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 80);
 const soNum = (t) => String(t ?? "").replace(/\D/g, "");
+export const TXT_CHAT = "Segue PDF da NF de reposição em anexo";
+// PDFs anexados no ticket: devolve o da nova NF (número da nota lido na chave de acesso da DANFE: posições 26 a 34), com o arquivo em memória
+export async function pdfDaNovaNf(p, nfNova) {
+  const alvo = Number(soNum(String(nfNova).split("-")[0]));
+  const hrefs = await p.evaluate(() => [...document.querySelectorAll("a[href]")].filter((a) => /\.pdf(\?|#|$)/i.test(a.getAttribute("href") || "") || /baixar anexo/i.test(a.textContent || "")).map((a) => a.href));
+  let pdfs = 0;
+  for (const h of [...new Set(hrefs)].reverse()) {
+    try {
+      const r = await p.context().request.get(h, { timeout: 30000 }); if (!r.ok()) continue;
+      const buf = await r.body(); if (buf.slice(0, 4).toString() !== "%PDF") continue; pdfs++;
+      const t = (await textoPdf(buf)).txt || "";
+      const chaves = (t.replace(/[ .]/g, "").match(/\d{44}/g) || []);
+      if (chaves.some((c) => Number(c.slice(25, 34)) === alvo)) return { buf, anexos: hrefs.length, pdfs };
+    } catch (_) {}
+  }
+  return { buf: null, anexos: hrefs.length, pdfs };
+}
+// já existe comentário público (Externo) com o texto do PDF?
+export const jaMandouPdf = (p) => p.evaluate((txt) => { const ls = document.body.innerText.split("\n").map((l) => l.trim()); return ls.some((l, i) => l.startsWith(txt) && ls.slice(Math.max(0, i - 6), i).some((x) => /^externo$/i.test(x))); }, TXT_CHAT);
 export const textoAnotacao = (x) => { const n = String(x.nf_nova || "").trim(); return `NF ${/-/.test(n) || !x.serie ? n : `${n}-${String(x.serie).trim()}`} emitida para o pedido`; };
 
 async function abrirRepoPre(p, log) {
@@ -62,6 +83,22 @@ export async function diagAnota({ chamar, log, ctx }) {
     log("Janela campos:", (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()} "${e.placeholder || ""}"`))).map(mascara).join(" | "));
     log("Janela botões:", (await d.locator("button").evaluateAll((es) => es.map((e) => `${e.type}:${[e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"}`))).map(mascara).join(" | "));
     await p.keyboard.press("Escape"); } catch (e) { log("Janela não abriu:", mascara(e.message).slice(0, 80)); } }
+  // Multi360: o ticket da troca tem o PDF da nova NF? já tem o comentário público? como trocar Interno → Público (abre o menu e fecha, não envia)
+  const t = L.find((y) => y.robo_status === "feito") || L[0];
+  const m = await entrarMulti360(ctx, log); await abrirTicket(m, t.ticket);
+  const pdf = await pdfDaNovaNf(m, t.nf_nova);
+  log(`360: anexos ${pdf.anexos} · PDFs ${pdf.pdfs} · PDF da nova NF: ${pdf.buf ? "achei" : "não achei"} · comentário público do PDF já existe: ${(await jaMandouPdf(m)) ? "sim" : "não"}`);
+  const btc = m.getByRole("button", { name: /coment[aá]rio (interno|p[uú]blico)/i }).first();
+  log("Botão do tipo de comentário:", (await btc.count()) ? mascara(await btc.innerText()) : "não achei");
+  if (await btc.count()) {
+    await btc.click(); await m.waitForTimeout(1500);
+    const r = await m.evaluate(() => { const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+      return { menu: [...document.querySelectorAll("[role=menuitem], [role=option], [role=menuitemradio], [role=menu] *")].filter(vis).map((e) => (e.innerText || "").trim().slice(0, 40)).filter(Boolean).slice(0, 12),
+        caixas: [...document.querySelectorAll("textarea, [contenteditable=true]")].filter(vis).map((e) => e.getAttribute("placeholder") || "(sem)"), arquivos: document.querySelectorAll("input[type=file]").length,
+        enviar: document.querySelectorAll("button:has(svg.lucide-send)").length }; });
+    log("Depois de clicar:", JSON.stringify(r).replace(/\d{4,}/g, "#"));
+    await m.keyboard.press("Escape"); await abrirTicket(m, t.ticket);
+  }
 }
 
 // grava as anotações pendentes (troca feita, nova NF conhecida, ainda sem anotação no portal). Usa o campo da própria linha
