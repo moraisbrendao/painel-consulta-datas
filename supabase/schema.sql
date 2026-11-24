@@ -3222,3 +3222,8 @@ begin
 end $$;
 revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
+
+-- ============ PARTE 67: Troca de notas — anotação da nova NF no portal do transportador (Reposições › Pré Entrega) ============
+alter table public.troca_notas add column if not exists portal_anot_status text;   -- feito | ja_tinha | nao_achou | erro (vazio = falta anotar)
+alter table public.troca_notas add column if not exists portal_anot_em timestamptz;
+alter table public.troca_notas add column if not exists portal_anot_msg text;
