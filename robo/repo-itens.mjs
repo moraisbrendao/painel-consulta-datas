@@ -222,6 +222,11 @@ export async function diagRepo2({ chamar, log, ctx, hashes }) {
   const { createHash } = await import("node:crypto"); const hs = new Set(hashes);
   const T = []; for (let de = 0; ; de += 1000) { const P = await chamar(`reposicoes_tk?select=ticket,tipo,fila&order=ticket&limit=1000&offset=${de}`); P.forEach((x) => { if (hs.has(createHash("sha256").update(String(x.ticket)).digest("hex").slice(0, 16))) T.push(x); }); if (P.length < 1000) break; }
   log("achei", T.length, "de", hs.size);
+  const sem = (t) => (t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  for (const x of T) { const a = await chamar(`repo_atual?select=ticket,nfs_novas&ticket=eq.${encodeURIComponent(x.ticket)}`).catch((e) => "erro " + e.message.slice(0, 60));
+    const s2 = await chamar(`reposicoes_tk?select=status,tipo&ticket=eq.${encodeURIComponent(x.ticket)}`).catch(() => []);
+    log(`   tipo pre=${/^reposicao$/i.test(sem(x.tipo))} (${sem(x.tipo).replace(/[a-z]/gi, "x").length} letras) · status=${(s2[0] || {}).status} · repo_atual: ${Array.isArray(a) ? a.length + " linha(s), nova NF " + (a[0] && a[0].nfs_novas ? "sim" : "não") + " · tipo ticket " + typeof (a[0] || {}).ticket : a}`); }
+  if (process.env.SO_DADOS) return;
   const p = await entrarMulti360(ctx, log);
   for (const [i, x] of T.entries()) {
     const it = (await chamar(`repo_itens_tk?select=eventos_ok,pdf_ok,dest_doc,erro,lido_em&ticket=eq.${encodeURIComponent(x.ticket)}`).catch(() => []))[0] || {};
