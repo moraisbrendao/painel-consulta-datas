@@ -102,7 +102,8 @@ const OP_NAO_RECEBEU = "Sem Emissão em Sistema / Material Não Recebido";
 // regra (Brenda, 24/11): SÓ Dominalog (não vale para Tempo Justo/Trans Sua/Transvanio): anotação no portal "Devolução solicitada, pedido segregado." = BARRADO
 const EH_DOMINALOG = (t) => /DOMINALOG/.test(sa(t));
 const PAL_SEGREGADO_DOM = /DEVOLUCAO\s+SOLICITADA\W+PEDIDO\s+SEGREGADO/;
-export const segregadoDominalog = (r, pt) => EH_DOMINALOG((r || {}).alvo || (pt || {}).transp) && ((pt || {}).anotacoes || []).some((a) => PAL_SEGREGADO_DOM.test(sa(a.texto)));
+// regra (Brenda, 24/11 15:47): Dominalog com pedido segregado = sempre BARRADO (anotação no portal OU status atual do rastreio "segregado")
+export const segregadoDominalog = (r, pt) => EH_DOMINALOG((r || {}).alvo || (pt || {}).transp) && (((pt || {}).anotacoes || []).some((a) => PAL_SEGREGADO_DOM.test(sa(a.texto)) || /PEDIDO\s+SEGREGADO/.test(sa(a.texto))) || /SEGREGAD/.test(sa((r || {}).evento)));
 const sa = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 const GEN = new Set(["LTDA", "ME", "SA", "S", "A", "E", "DE", "DA", "DO", "EIRELI", "TRANSPORTE", "TRANSPORTES", "TRANSPORTADORA", "LOGISTICA", "LOG", "CARGAS", "CARGA", "EXPRESS", "EXPRESSO", "STANDARD", "FILIAL", "MATRIZ", "SERVICOS", "SP", "RJ", "MG", "PE", "PR", "SC", "RS", "BA", "CE", "GO", "ES"]);
 const pals = (t) => sa(t).replace(/[^A-Z0-9]+/g, " ").split(" ").filter((w) => w.length > 1 && !GEN.has(w));
@@ -181,7 +182,7 @@ async function lerPortal(p, nf, R) {
 function sugerir(x) {
   const r = x.rastreio || {}, pt = x.portal || {}, an = sa(pt.anotacao);
   if (r.sem_transp) return { sugestao: "manual", opcao: null, motivo: "Erro: o ticket do 360 não tem transportadora nem redespacho." };
-  if (segregadoDominalog(r, pt)) return { sugestao: "barrar", opcao: null, motivo: "Anotação da Dominalog no portal: Devolução solicitada, pedido segregado.", dominalog: true };
+  if (segregadoDominalog(r, pt)) return { sugestao: "barrar", opcao: null, motivo: /SEGREGAD/.test(sa(r.evento)) ? `Dominalog: pedido segregado (status atual do rastreio: ${String(r.evento).toLowerCase().slice(0, 80)}).` : "Anotação da Dominalog no portal: Devolução solicitada, pedido segregado.", dominalog: true };
   // regra (Brenda, 18/11): barrado SÓ quando o status atual (último evento) do rastreio é devolução; segregado ou devolução no histórico não contam
   const devolucao = PAL_DEVOLUCAO.test(sa(r.evento));
   if (devolucao) return { sugestao: "barrar", opcao: null, motivo: `Status atual no rastreio (${r.fonte}): ${String(r.evento).toLowerCase().slice(0, 80)}.` };
@@ -257,7 +258,7 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
       // regra (Brenda, 18/11): entregue no rastreio o robô aprova sozinho (não barrado · Entregue) e aplica no fim da rodada
       const auto = ENTREGUE_AUTO && s.sugestao === "nao_barrar" && s.opcao === "Entregue" && !x.decisao && print_rastreio;
       // regra (Brenda, 24/11): Dominalog com anotação "Devolução solicitada, pedido segregado." → o robô marca BARRADO sozinho, com o print da anotação no ticket
-      const autoDom = s.dominalog && !x.decisao && !!print_path;
+      const autoDom = s.dominalog && !x.decisao && !!(print_path || print_rastreio);
       await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio,
         ...(auto ? { decisao: "nao_barrar", decisao_opcao: "Entregue", decisao_motivo: s.motivo, decisao_por: "robô (entregue automático)", decisao_em: new Date().toISOString() } : {}),
         ...(autoDom ? { decisao: "barrar", decisao_opcao: null, decisao_motivo: s.motivo, decisao_por: "robô (Dominalog: devolução solicitada, segregado)", decisao_em: new Date().toISOString() } : {}) });
@@ -364,7 +365,7 @@ async function comentarTicket(x, m360, baixarArquivo, M, chamar) {
   if (!arquivos.length) throw new Error("sem print para anexar");
   const r = x.rastreio || {};
   const texto = x.decisao === "barrar" && /Dominalog/i.test(x.decisao_por || "")
-    ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Anotação da Dominalog no portal do transportador: "Devolução solicitada, pedido segregado." Print${arquivos.length > 1 ? "s" : ""} em anexo.`
+    ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. ${String(x.decisao_motivo || "Dominalog: pedido segregado.").slice(0, 200)} Print${arquivos.length > 1 ? "s" : ""} em anexo.`
     : x.decisao === "barrar"
     ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Rastreio${r.alvo ? " " + r.alvo : ""}: ${r.evento ? String(r.evento).toLowerCase().slice(0, 80) : "devolução"}. Print${arquivos.length > 1 ? "s" : ""} em anexo.`
     : `Barrar entrega: NF ${x.nf} marcada como NÃO BARRADA no portal (${x.decisao_opcao || OP_NAO_RECEBEU}). ${x.decisao_motivo ? "Motivo: " + String(x.decisao_motivo).slice(0, 200) + ". " : ""}Print${arquivos.length > 1 ? "s" : ""} em anexo.`;
