@@ -89,7 +89,8 @@
     linhas.push("", "Por favor, nos informem o status atualizado e a previsão de entrega de cada nota ainda hoje.", "", "Obrigada!");
     return linhas.join("\n");
   }
-  const COMUM = (x) => ({ "Pedido": x.pedido, "NF": x.nf, "Data prometida": br(x.prom), "Nova data informada pela transportadora": br(x.nova), "Situação": venceTxt(x.diasEf), "Status Intelipost": x.st, "Micro status": x.micro, "Último retorno": x.obs || "" });
+  const COMUM = (x) => ({ "Pedido": x.pedido, "NF": x.nf, "Data prometida": br(x.prom), "Situação": venceTxt(x.diasEf), "Status Intelipost": x.st, "Micro status": x.micro });
+  const LIN_AT = (x) => ({ ...COMUM(x), "Último retorno": x.obs || "" });
   const LIN_REP = (x) => ({ ...COMUM(x), "Ticket": x.ticket, "NF de reposição": x.nfNova, "Emissão da NF nova": br(x.emissao), "Saída da NF nova": br(x.saida), "Tipo de reposição": x.tipoRep || "" });
   const LIN_OC = (x) => ({ ...COMUM(x), "Motivo da ocorrência": x.motivo || "", "Ocorrência aberta em": br(x.criado), "Última mensagem da ocorrência": x.msg || "", "Data da última mensagem": br(x.msgEm), "Quem mandou a última": x.solic || "" });
   const limpaNome = (t) => String(t).replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
@@ -97,7 +98,7 @@
     const wb = XLSX.utils.book_new();
     if (g.rep.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(g.rep.map(LIN_REP)), "Reposições");
     if (g.oc.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(g.oc.map(LIN_OC)), "Ocorrências");
-    if (g.at.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(g.at.map(COMUM)), "Entregas");
+    if (g.at.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(g.at.map(LIN_AT)), "Entregas");
     XLSX.writeFile(wb, `Cobrança ${limpaNome(g.nome)} ${hojeISO().split("-").reverse().join("-")}.xlsx`);
   }
   function excelTodas(G) {
@@ -105,7 +106,7 @@
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(G.map((g) => ({ "Transportadora": g.nome, "Reposições": g.rep.length, "Ocorrências": g.oc.length, "Entregas": g.at.length, "Total": tot(g), "E-mails": contatos.get(g.k)?.emails || "", "Enviado hoje": enviados.has(g.k) ? "sim" : "" }))), "Resumo");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(G.flatMap((g) => g.rep.map((x) => ({ "Transportadora": g.nome, ...LIN_REP(x) })))), "Reposições");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(G.flatMap((g) => g.oc.map((x) => ({ "Transportadora": g.nome, ...LIN_OC(x) })))), "Ocorrências");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(G.flatMap((g) => g.at.map((x) => ({ "Transportadora": g.nome, ...COMUM(x) })))), "Entregas");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(G.flatMap((g) => g.at.map((x) => ({ "Transportadora": g.nome, ...LIN_AT(x) })))), "Entregas");
     XLSX.writeFile(wb, `Cobrança em massa ${hojeISO().split("-").reverse().join("-")}.xlsx`);
   }
   const copiar = async (t, ok) => { try { await navigator.clipboard.writeText(t); toast(ok); } catch (_) { const a = document.createElement("textarea"); a.value = t; document.body.appendChild(a); a.select(); document.execCommand("copy"); a.remove(); toast(ok); } };
