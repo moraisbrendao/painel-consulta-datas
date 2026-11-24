@@ -162,6 +162,16 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
 // contagem (só números) das conferências que usaram o rastreio da DLOG na série 35
 export async function diagDlog({ chamar, log }) {
   const L = await chamar("nao_localizada?select=*&limit=5000");
+  const hs = (process.env.SSW_LIMITE_H || "").split(",").filter(Boolean);
+  if (/^dlog:/.test(process.env.TRANSP || "")) {   // uma nota (hash sha256[:16] da NF): o que foi gravado, sem número nem nomes de pessoas
+    const { createHash } = await import("node:crypto"); const h = process.env.TRANSP.slice(5);
+    const x = L.find((y) => createHash("sha256").update(String(y.nf)).digest("hex").slice(0, 16) === h);
+    if (!x) return log("diag-dlog: nota não encontrada");
+    const r = x.rastreio || {}, mask = (t) => String(t ?? "").replace(/\d{4,}/g, "#");
+    log(`diag-dlog nota: série ${x.serie} · transp ticket ${mask(x.transp_ticket)} · transp pedido ${mask(x.transp_pedido)} · rastreio alvo ${mask(r.alvo)} · redesp ticket ${mask(r.redesp_ticket)} · fonte ${r.fonte} · situação ${r.situacao} · transp do CT-e ${mask(r.transp)} · evento ${mask(r.evento)} · data ${r.data_evento} · sugestão ${x.sugestao} · motivo ${mask(x.sugestao_motivo)} · ação ${x.acao}/${x.acao_status} em ${x.acao_em}`);
+    log(`diag-dlog nota: chaves do rastreio: ${Object.keys(r).join(",")}`);
+    return;
+  }
   const D = L.filter((x) => String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, "") === "35" && /\bDLOG\b/i.test((x.rastreio || {}).alvo || ""));
   const c = {}; D.forEach((x) => { const k = `sugestão ${x.sugestao || "-"} · ação ${x.acao_status === "feito" ? x.acao + " feita" : x.acao_status || "nenhuma"}`; c[k] = (c[k] || 0) + 1; });
   log(`diag-dlog: ${D.length} nota(s) série 35 conferidas pelo rastreio da DLOG (de ${L.length})`); Object.entries(c).forEach(([k, v]) => log(`  ${k}: ${v}`));
