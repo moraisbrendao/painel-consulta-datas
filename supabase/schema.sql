@@ -3292,3 +3292,18 @@ select cron.schedule('robo-naoloc', '0 11 * * *', 'select public._robo_naoloc()'
 alter table public.aguardando_entrega add column if not exists ip_entregue_status text;   -- feito | ja_estava | conferir | erro
 alter table public.aguardando_entrega add column if not exists ip_entregue_msg text;
 alter table public.aguardando_entrega add column if not exists ip_entregue_em timestamptz;
+-- parte 72: o robô grava o resultado da baixa ENTREGUE na Intelipost (fila Aguardando entrega)
+set lock_timeout = '15s';
+create or replace function public.gravar_ip_entregue(p_ticket text, p_status text, p_msg text)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.aguardando_entrega
+     set ip_entregue_status = p_status, ip_entregue_msg = p_msg, ip_entregue_em = case when p_status is null then null else now() end
+   where ticket = p_ticket;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.gravar_ip_entregue(text, text, text) from public, anon;
+grant execute on function public.gravar_ip_entregue(text, text, text) to authenticated;

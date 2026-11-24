@@ -850,7 +850,7 @@ async function baixaEntregueIP(real, limite) {
   log("baixa-entregue: tipos " + Object.entries(tipos).map(([k, v]) => `${k}: ${v}`).join(" · "));
   log(`baixa-entregue: ${L.length} baixa(s) feitas na fila · ${A.length} de reposição total para conferir na Intelipost · ${real ? "DE VERDADE" : "TESTE (não clica em Alterar Status)"}`);
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
-  const grava = (x, st, msg) => chamar(`aguardando_entrega?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { ip_entregue_status: st, ip_entregue_msg: msg, ip_entregue_em: new Date().toISOString() }).then((r) => { if (!r || !r.length) log("  gravar: nenhuma linha atualizada"); }).catch((e) => log("  gravar: falhou " + String(e.message).replace(/\d{5,}/g, "#").slice(0, 160)));
+  const grava = (x, st, msg) => chamar("rpc/gravar_ip_entregue", "POST", { p_ticket: String(x.ticket), p_status: st, p_msg: msg }).then((n) => { if (!n) log("  gravar: nenhuma linha atualizada"); }).catch((e) => log("  gravar: falhou " + (/gravar_ip_entregue/.test(e.message) && /404|PGRST202/.test(e.message) ? "(falta rodar a parte 72)" : String(e.message).replace(/\d{5,}/g, "#").slice(0, 160))));
   const sel = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
   const pick = async (re, nome) => { const sx = sel(re); const l = (await sx.locator("option", { hasText: re }).first().innerText().catch(() => "")).trim(); if (!l) throw new Error(`não achei a opção ${nome}`); await sx.selectOption({ label: l }); await pagina.waitForTimeout(1500); };
   const buscar = async (pedido, por = "Pedido") => {
