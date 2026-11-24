@@ -206,12 +206,23 @@ export async function printRastreio(ctx, nf, r) {
   try {
     await pg.setViewportSize({ width: 1100, height: 700 });
     const quando = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-    const topo = `<div style="font:14px Arial;background:#0b1f3a;color:#fff;padding:8px 12px">Rastreio ${escH(r.fonte)} · NF ${escH(nf)} · consultado em ${escH(quando)}</div>`;
+    const topo = `<div id="topo-print" style="font:14px Arial;background:#0b1f3a;color:#fff;padding:8px 12px">Rastreio ${escH(r.fonte)} · NF ${escH(nf)} · consultado em ${escH(quando)}</div>`;
     if (r._html) await pg.setContent(`<base href="https://ssw.inf.br/2/">${topo}${r._html.replace(/<script[\s\S]*?<\/script>/gi, "")}`, { waitUntil: "load", timeout: 20000 }).catch(() => {});
     else await pg.setContent(`${topo}<table style="font:15px Arial;border-collapse:collapse;margin:16px" border="1" cellpadding="8">
       <tr><th align="left">Situação</th><td>${escH(r.situacao)}</td></tr><tr><th align="left">Último evento</th><td>${escH(r.evento || "—")}</td></tr>
       <tr><th align="left">Data do evento</th><td>${escH(r.data_evento || "—")}</td></tr><tr><th align="left">Transportadora</th><td>${escH(r.transp || r.fonte)}</td></tr></table>`);
     await pg.waitForTimeout(800);
+    // pedido da Brenda (24/11): no print do SSW só do título "Rastreamento pelo …" para baixo (menus e links de cima ficam fora)
+    if (r._html) await pg.evaluate(() => {
+      const tit = [...document.querySelectorAll("h1,h2,h3,h4,b,strong,font,div,span,td,p")].filter((e) => /^\s*Rastreamento pelo\b/i.test(e.innerText || "") && (e.innerText || "").trim().length < 60).pop();
+      const topo = document.getElementById("topo-print"); if (!tit) return;
+      for (const el of [...document.body.querySelectorAll("*")]) {
+        if (el === topo || topo.contains(el) || el.contains(tit) || tit.contains(el)) continue;
+        if (el.compareDocumentPosition(tit) & Node.DOCUMENT_POSITION_FOLLOWING) el.style.display = "none";
+      }
+      const w = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT); const tx = []; while (w.nextNode()) tx.push(w.currentNode);
+      for (const n of tx) if (!topo.contains(n) && !tit.contains(n) && n.compareDocumentPosition(tit) & Node.DOCUMENT_POSITION_FOLLOWING) n.textContent = "";
+    }).catch(() => {});
     return await pg.screenshot({ fullPage: true, clip: undefined, type: "png" });
   } finally { await pg.close(); }
 }
