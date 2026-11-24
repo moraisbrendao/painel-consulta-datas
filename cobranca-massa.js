@@ -89,7 +89,7 @@
     linhas.push("", "Por favor, nos informem o status atualizado e a previsão de entrega de cada nota ainda hoje.", "", "Obrigada!");
     return linhas.join("\n");
   }
-  const COMUM = (x) => ({ "Pedido": x.pedido, "NF": x.nf, "Data prometida": br(x.prom), "Nova data": br(x.nova), "Situação": venceTxt(x.diasEf), "Status Intelipost": x.st, "Micro status": x.micro, "Último retorno": x.obs || "" });
+  const COMUM = (x) => ({ "Pedido": x.pedido, "NF": x.nf, "Data prometida": br(x.prom), "Nova data informada pela transportadora": br(x.nova), "Situação": venceTxt(x.diasEf), "Status Intelipost": x.st, "Micro status": x.micro, "Último retorno": x.obs || "" });
   const LIN_REP = (x) => ({ ...COMUM(x), "Ticket": x.ticket, "NF de reposição": x.nfNova, "Emissão da NF nova": br(x.emissao), "Saída da NF nova": br(x.saida), "Tipo de reposição": x.tipoRep || "" });
   const LIN_OC = (x) => ({ ...COMUM(x), "Motivo da ocorrência": x.motivo || "", "Ocorrência aberta em": br(x.criado), "Última mensagem da ocorrência": x.msg || "", "Data da última mensagem": br(x.msgEm), "Quem mandou a última": x.solic || "" });
   const limpaNome = (t) => String(t).replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
@@ -135,7 +135,7 @@
       .filter((x) => !q.length || q.some((b) => norm(x.nf).includes(b) || norm(x.pedido).includes(b) || norm(x.nfNova).includes(b) || norm(x.ticket).includes(b)))
       .sort((a, b) => a.diasEf - b.diasEf);
     $("cm-casos-tit").textContent = `Casos para cobrar${transpSel ? " · " + (G.find((g) => g.k === transpSel)?.nome || "") : ""} (${fmt(L.length)})`;
-    const sit = (x) => `<b class="${x.diasEf < 0 ? "txt-vermelho" : ""}">${venceTxt(x.diasEf)}</b><div class="s">prometido ${br(x.prom)}${x.nova ? " · nova data " + br(x.nova) : ""}</div>`;
+    const sit = (x) => `<b class="${x.diasEf < 0 ? "txt-vermelho" : ""}">${venceTxt(x.diasEf)}</b><div class="s">prometido ${br(x.prom)}${x.nova ? " · nova data da transportadora " + br(x.nova) : ""}</div>`;
     $("cm-casos").innerHTML = L.slice(0, 500).map((x) => x.tipo === "rep"
       ? `<tr><td><span class="chip azul">Reposição</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>NF nova ${esc(x.nfNova)}${x.emissao ? `<div class="s">emitida ${br(x.emissao)}${x.saida ? " · saiu " + br(x.saida) : ""}</div>` : ""}</td><td>${x.ticket ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}<div class="s">${esc(x.fila || "")}</div></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`
       : x.tipo === "at" ? `<tr><td><span class="chip">Entrega</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>${esc(x.obs || "")}</td><td></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`
