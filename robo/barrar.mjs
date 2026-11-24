@@ -256,7 +256,7 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
     } catch (e) { soma("erro"); log("  erro:", String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 120)); }
   }
   log("barrar: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
-  if (autoN) { log(`barrar: aplicando no portal os ${autoN} entregue(s) aprovados pelo robô`); await aplicarBarrar({ chamar, log, ctx, soAuto: true }); }
+  if (autoN) { log(`barrar: aplicando no portal os ${autoN} caso(s) aprovados pelo robô (entregue ou Dominalog segregado)`); await aplicarBarrar({ chamar, log, ctx, soAuto: true }); }
 }
 
 // Aplica no portal só o que alguém da Logística aprovou no painel (decisao preenchida)
