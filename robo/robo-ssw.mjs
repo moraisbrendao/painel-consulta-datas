@@ -447,6 +447,10 @@ if (MODO === "diag-cobmassa") {   // Cobrança em massa (Brenda 24/11): só cont
   log(`ocorr. sem par: casam só pelo número ${On.filter((o) => SN.has(nfK(o.nf).split("-")[0])).length} de ${On.length} · séries: ${conta(On, (o) => nfK(o.nf).split("-")[1]).slice(0, 300)}`);
   const nov = Rn.flatMap((r) => String(r.nfs_novas).split(",").map((t) => t.trim())).filter(Boolean);
   log(`NFs novas ${nov.length} · formato ${String(nov[0] || "").replace(/\d/g, "9")} · na base ${nov.filter((n) => ST.has(nfK(n))).length} · só número ${nov.filter((n) => SN.has(nfK(n).split("-")[0])).length} · status IP: ${conta(nov.filter((n) => ST.has(nfK(n))), (n) => ST.get(nfK(n)).status_intelipost)}`);
+  const C = await tudo("conferencia_ssw?select=nf,status_intelipost&order=pedido"); const CS = new Map(C.map((c) => [nfK(c.nf), c]));
+  log(`conferência (arquivo Intelipost, abertos) ${C.length} · formato ${String(C[0]?.nf || "").replace(/\d/g, "9")} · status: ${conta(C, (c) => c.status_intelipost).slice(0, 500)}`);
+  log(`ocorr. em andamento no arquivo Intelipost ${Oa.filter((o) => CS.has(nfK(o.nf))).length} · status: ${conta(Oa.filter((o) => CS.has(nfK(o.nf))), (o) => CS.get(nfK(o.nf)).status_intelipost)}`);
+  log(`NFs novas no arquivo Intelipost ${nov.filter((n) => CS.has(nfK(n))).length} · status: ${conta(nov.filter((n) => CS.has(nfK(n))), (n) => CS.get(nfK(n)).status_intelipost)}`);
   process.exit(0);
 }
 if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem nova data válida e em reposição (só contagens)
