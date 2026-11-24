@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=312">
+  <link rel="stylesheet" href="styles.css?v=313">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -757,7 +757,6 @@
       </div>
       <section class="filtros-cartao" aria-label="Opções">
         <span class="filtros-rot">⛉ Opções</span>
-        <label class="cm-op"><input id="cm-op-repo" type="checkbox"> Cobrar reposição cuja NF nova ainda não está na Intelipost</label>
         <label class="cm-op"><input id="cm-op-oc" type="checkbox"> Cobrar ocorrência que não está no arquivo da Intelipost (em aberto)</label>
       </section>
       <section class="kpis">
@@ -777,7 +776,7 @@
         <p id="cm-casos-vazio" class="vazio" hidden>Nenhum caso aqui. 🎉</p></div>
       </section>
       <details class="cartao c-regras"><summary>Como a lista é montada</summary>
-        <p><b>Reposições</b>: tickets do detalhamento (aba Reposições) que já têm NF de reposição emitida pelo Promob. Ficam de fora os tickets Resolvidos/Encerrados (tabela de acompanhamento) e os da fila Recuperação de crédito. Transportadora = a de redespacho da nota de reposição; se não tiver, a da nota de reposição. Status Intelipost = o da NF nova; se ela não estiver lá, o da NF original.</p>
+        <p><b>Reposições</b>: tickets do detalhamento (aba Reposições) que já têm NF de reposição emitida pelo Promob. Ficam de fora os tickets Resolvidos/Encerrados (tabela de acompanhamento) e os da fila Recuperação de crédito. Transportadora = a de redespacho da nota de reposição; se não tiver, a da nota de reposição. Toda reposição com nova NF no detalhamento entra (a NF nova normalmente nem está na Intelipost); só sai se a NF nova estiver na Intelipost como Despachado, Pré-lista ou Falha ao criar.</p>
         <p><b>Ocorrências</b>: aba Ocorrências do detalhamento, só status "Em andamento". Transportadora = a da ocorrência.</p>
         <p><b>Intelipost</b>: vem do último arquivo de transações (botão Enviar Intelipost, pedidos em aberto). Não cobra Despachado, Pré-lista de postagem nem Falha ao criar pedido com a transportadora. VM Transportes e Tempo Justo contam como uma só.</p>
       </details>
@@ -1685,22 +1684,22 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=312"></script>
-  <script src="mapa-brasil.js?v=312"></script>
-  <script src="troca-notas.js?v=312"></script>
-  <script src="app.js?v=312"></script>
-  <script src="ordenar.js?v=312"></script>
-  <script src="menu.js?v=312"></script>
-  <script src="ajuda.js?v=312"></script>
-  <script src="documentos.js?v=312"></script>
-  <script src="barrar.js?v=312"></script>
-  <script src="naoloc.js?v=312"></script>
-  <script src="faltas.js?v=312"></script>
-  <script src="motor.js?v=312"></script>
-  <script src="retornos-semana.js?v=312"></script>
-  <script src="cobranca-massa.js?v=312"></script>
-  <script src="gargalos.js?v=312"></script>
-  <script src="filas.js?v=312"></script>
-  <script src="filtros.js?v=312"></script>
+  <script src="config.js?v=313"></script>
+  <script src="mapa-brasil.js?v=313"></script>
+  <script src="troca-notas.js?v=313"></script>
+  <script src="app.js?v=313"></script>
+  <script src="ordenar.js?v=313"></script>
+  <script src="menu.js?v=313"></script>
+  <script src="ajuda.js?v=313"></script>
+  <script src="documentos.js?v=313"></script>
+  <script src="barrar.js?v=313"></script>
+  <script src="naoloc.js?v=313"></script>
+  <script src="faltas.js?v=313"></script>
+  <script src="motor.js?v=313"></script>
+  <script src="retornos-semana.js?v=313"></script>
+  <script src="cobranca-massa.js?v=313"></script>
+  <script src="gargalos.js?v=313"></script>
+  <script src="filas.js?v=313"></script>
+  <script src="filtros.js?v=313"></script>
 </body>
 </html>

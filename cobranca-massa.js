@@ -60,7 +60,6 @@
     if (x.tipo === "rep") {
       if (/RESOLVID|ENCERRAD/.test(norm(x.statusTk))) return "ticket resolvido/encerrado";
       if (/RECUPERACAO DE CREDITO/.test(norm(x.fila))) return "fila Recuperação de crédito";
-      if (x.st == null && !opt.repoFora) return "NF fora da Intelipost";
     } else {
       if (!/EM ANDAMENTO/.test(norm(x.status))) return "ocorrência não está em andamento";
       if (x.st == null && !opt.ocorrFora) return "fora do arquivo da Intelipost";
@@ -111,7 +110,7 @@
     $("cm-info").textContent = `${fmt(R.length)} reposições com nova NF e ${fmt(O.length)} ocorrências lidas · ficaram de fora: ` + (Object.entries(fora).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k} ${fmt(v)}`).join(" · ") || "nenhuma");
     $("cm-k-transp").textContent = fmt(G.length); $("cm-k-rep").textContent = fmt(tot.rep); $("cm-k-oc").textContent = fmt(tot.oc);
     $("cm-k-env").textContent = `${fmt(G.filter((g) => enviados.has(g.k)).length)} de ${fmt(G.length)}`;
-    $("cm-op-repo").checked = opt.repoFora; $("cm-op-oc").checked = opt.ocorrFora;
+    $("cm-op-oc").checked = opt.ocorrFora;
     const sel = $("cm-transp"), atual = transpSel;
     sel.innerHTML = `<option value="">Todas as transportadoras</option>` + G.map((g) => `<option value="${esc(g.k)}"${g.k === atual ? " selected" : ""}>${esc(g.nome)} (${g.rep.length + g.oc.length})</option>`).join("");
     $("cm-linhas").innerHTML = G.map((g) => {
@@ -150,7 +149,6 @@
   $("cm-tipo").addEventListener("change", (e) => { tipoSel = e.target.value; desenhar(); });
   $("cm-busca").addEventListener("input", (e) => { busca = e.target.value; desenharCasos(grupos()); });
   const salvaOpt = () => { try { localStorage.setItem("painel.cm.opt", JSON.stringify(opt)); } catch (_) {} };
-  $("cm-op-repo").addEventListener("change", (e) => { opt.repoFora = e.target.checked; salvaOpt(); desenhar(); });
   $("cm-op-oc").addEventListener("change", (e) => { opt.ocorrFora = e.target.checked; salvaOpt(); desenhar(); });
   $("cm-xl-todas").addEventListener("click", () => { const G = grupos(); if (!G.length) return toast("Nada para cobrar.", true); excelTodas(G); });
   $("cm-xl-cada").addEventListener("click", async () => {
