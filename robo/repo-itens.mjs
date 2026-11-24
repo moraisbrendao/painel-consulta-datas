@@ -293,3 +293,27 @@ export async function diagSla({ chamar, log, ctx, n = 3 }) {
     } catch (e) { log(`[${i + 1}] erro`, String(e.message).split("\n")[0].slice(0, 100)); }
   }
 }
+
+// todos os tickets de reposição em aberto: lê o SLA e grava (atual + histórico)
+export async function rodarSla({ chamar, log, ctx, limite = 600 }) {
+  const sem = (t) => (t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").trim();
+  const T = []; for (let de = 0; ; de += 1000) { const P = await chamar(`reposicoes_tk?select=ticket,tipo,fila,status&order=ticket&limit=1000&offset=${de}`); T.push(...P); if (P.length < 1000) break; }
+  const ab = T.filter((x) => (/pos/i.test(sem(x.tipo)) || /^reposicao$/i.test(sem(x.tipo))) && !/^(RESOLVID|ENCERRAD|FINALIZAD)/i.test(sem(x.status).toUpperCase()));
+  log(`repo-sla: ${ab.length} tickets de reposição em aberto (limite ${limite})`);
+  if (!ab.length) return;
+  const p = await entrarMulti360(ctx, log);
+  const cont = {}; let erros = 0, n = 0;
+  for (const x of ab.slice(0, limite)) {
+    const reg = { ticket: String(x.ticket), fila: x.fila || null, lido_em: new Date().toISOString(), situacao: null, inicio: null, prazo_360: null, horas: null, restante: null, erro: null };
+    try { await p.goto("about:blank"); await abrir(p, x.ticket); const r = await lerSla(p);
+      if (r.erro) reg.erro = r.erro; else Object.assign(reg, { situacao: r.situacao, inicio: r.inicio, prazo_360: r.prazo, horas: r.horas, restante: r.restante });
+    } catch (e) { reg.erro = String(e.message).split("\n")[0].slice(0, 120); }
+    if (reg.erro) erros++; else cont[reg.situacao || "?"] = (cont[reg.situacao || "?"] || 0) + 1;
+    try {
+      await chamar("repo_sla?on_conflict=ticket", "POST", reg, { Prefer: "resolution=merge-duplicates" });
+      if (!reg.erro) await chamar("repo_sla_hist", "POST", { ticket: reg.ticket, fila: reg.fila, situacao: reg.situacao, inicio: reg.inicio, prazo_360: reg.prazo_360, horas: reg.horas, lido_em: reg.lido_em });
+    } catch (e) { log("gravar: " + String(e.message).split("\n")[0].slice(0, 120)); erros++; }
+    n++;
+  }
+  log(`repo-sla: lidos ${n} · ${Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ")} · erros ${erros}`);
+}

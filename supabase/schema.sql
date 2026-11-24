@@ -3131,3 +3131,60 @@ end $$;
 revoke all on function public.rodar_robo_naoloc(text) from public, anon;
 grant execute on function public.rodar_robo_naoloc(text) to authenticated;
 notify pgrst, 'reload schema';
+-- ============================================================
+-- PARTE 65) Reposição: SLA de cada ticket lido no Multi360 (Detalhes do SLA) + histórico de cada leitura (pedido da Brenda, 24/11/2026)
+create table if not exists public.repo_sla (
+  ticket       text primary key,
+  fila         text,
+  situacao     text,          -- DENTRO DO PRAZO / EXPIRADO / AINDA NÃO DEFINIDO ...
+  inicio       timestamptz,
+  prazo_360    timestamptz,   -- prazo do 360 (horas corridas)
+  horas        numeric,
+  restante     text,
+  lido_em      timestamptz not null default now(),
+  erro         text
+);
+create table if not exists public.repo_sla_hist (
+  id           bigserial primary key,
+  ticket       text not null,
+  fila         text,
+  situacao     text,
+  inicio       timestamptz,
+  prazo_360    timestamptz,
+  horas        numeric,
+  lido_em      timestamptz not null default now()
+);
+create index if not exists repo_sla_hist_ticket on public.repo_sla_hist (ticket, lido_em);
+alter table public.repo_sla enable row level security;
+alter table public.repo_sla_hist enable row level security;
+revoke all on public.repo_sla, public.repo_sla_hist from anon;
+grant select, insert, update, delete on public.repo_sla to authenticated;
+grant select, insert on public.repo_sla_hist to authenticated;
+grant usage, select on sequence public.repo_sla_hist_id_seq to authenticated;
+drop policy if exists "logistica le" on public.repo_sla;
+drop policy if exists "logistica grava" on public.repo_sla;
+drop policy if exists "logistica le" on public.repo_sla_hist;
+drop policy if exists "logistica grava" on public.repo_sla_hist;
+create policy "logistica le" on public.repo_sla for select to authenticated using ((select not public.e_sac()));
+create policy "logistica grava" on public.repo_sla for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+create policy "logistica le" on public.repo_sla_hist for select to authenticated using ((select not public.e_sac()));
+create policy "logistica grava" on public.repo_sla_hist for insert to authenticated with check ((select not public.e_sac()));
+
+-- robô lê o SLA dos tickets em aberto 2x por dia (08:30 e 14:30 de Brasília)
+create or replace function public._robo_repo_sla()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"repo-sla","auto":"1"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_repo_sla() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-repo-sla';
+select cron.schedule('robo-repo-sla', '30 11,17 * * *', 'select public._robo_repo_sla()');

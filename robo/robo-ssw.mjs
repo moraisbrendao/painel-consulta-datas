@@ -6,7 +6,7 @@ const MODO = process.env.MODO || "diag";
 let ultimaLinha = "";
 const log = (...a) => { const t = a.map((x) => String(x).replace(/\d{5,}/g, "#####")).join(" "); ultimaLinha = t; console.log(t); };
 // aviso verde no painel: robô começou / terminou (só nome do robô, horário e a última linha do registro, que já é mascarada)
-const ANDAMENTO = { aguardando: "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", barrar: "Barrar entrega: conferir", faltas: "Falta de volumes: retornos", "barrar-portal": "Barrar entrega: portal", transportadora: "Conferência de uma transportadora", naoloc: "Nota não localizada", "naoloc-teste": "Nota não localizada (teste)" }[MODO];
+const ANDAMENTO = { aguardando: "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", "repo-sla": "SLA dos tickets de reposição (Multi360)", barrar: "Barrar entrega: conferir", faltas: "Falta de volumes: retornos", "barrar-portal": "Barrar entrega: portal", transportadora: "Conferência de uma transportadora", naoloc: "Nota não localizada", "naoloc-teste": "Nota não localizada (teste)" }[MODO];
 if (ANDAMENTO) {
   const inicio = new Date().toISOString(); let fechou = false;
   try { await entrarSupabase(); await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: true, inicio }); } catch (_) {}
@@ -1385,6 +1385,12 @@ if (MODO === "diag-repo2") {   // Reposição: tickets (hash no input transp) co
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ acceptDownloads: true });
   try { await (await import("./repo-itens.mjs")).diagRepo2({ chamar, log, ctx, hashes: String(process.env.TRANSP || "").split(",").map((x) => x.trim()).filter(Boolean) }); } finally { await nav.close(); }
+}
+if (MODO === "repo-sla") {   // Reposição: SLA de todos os tickets em aberto (robo/repo-itens.mjs)
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext();
+  try { await (await import("./repo-itens.mjs")).rodarSla({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 600 }); } finally { await nav.close(); }
 }
 if (MODO === "diag-sla") {   // Reposição: lê o SLA de 3 tickets em aberto (só datas e situação no log)
   await entrarSupabase();
