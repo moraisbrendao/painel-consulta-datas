@@ -442,6 +442,11 @@ if (MODO === "diag-cobmassa") {   // Cobrança em massa (Brenda 24/11): só cont
   log(`  status do ticket (tabela de acompanhamento): ${conta(Rn, (r) => KM.get(String(r.ticket))?.status)}`);
   log(`  filas: ${conta(Rn, (r) => r.fila_atual).slice(0, 600)}`);
   log(`  acharam na base ${Rn.filter((r) => ST.has(nfK(r.nota_ticket))).length} · status IP: ${conta(Rn, (r) => ST.get(nfK(r.nota_ticket))?.status_intelipost)}`);
+  const SN = new Map(); B.forEach((b) => { const n = nfK(b.nf).split("-")[0]; SN.set(n, (SN.get(n) || 0) + 1); });
+  const On = Oa.filter((o) => !ST.has(nfK(o.nf)));
+  log(`ocorr. sem par: casam só pelo número ${On.filter((o) => SN.has(nfK(o.nf).split("-")[0])).length} de ${On.length} · séries: ${conta(On, (o) => nfK(o.nf).split("-")[1]).slice(0, 300)}`);
+  const nov = Rn.flatMap((r) => String(r.nfs_novas).split(",").map((t) => t.trim())).filter(Boolean);
+  log(`NFs novas ${nov.length} · formato ${String(nov[0] || "").replace(/\d/g, "9")} · na base ${nov.filter((n) => ST.has(nfK(n))).length} · só número ${nov.filter((n) => SN.has(nfK(n).split("-")[0])).length} · status IP: ${conta(nov.filter((n) => ST.has(nfK(n))), (n) => ST.get(nfK(n)).status_intelipost)}`);
   process.exit(0);
 }
 if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem nova data válida e em reposição (só contagens)
