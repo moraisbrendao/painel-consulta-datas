@@ -3307,3 +3307,44 @@ begin
 end $$;
 revoke all on function public.gravar_ip_entregue(text, text, text) from public, anon;
 grant execute on function public.gravar_ip_entregue(text, text, text) to authenticated;
+-- parte 73: "Enviar Intelipost" atualiza a Conferência SSW em lotes e SEM apagar o que o robô já conferiu
+--   (a função antiga apagava tudo e regravava ~13 mil linhas de uma vez: estourava o tempo e a lista ficava velha)
+set lock_timeout = '15s';
+create or replace function public.importar_conferencia_lote(linhas jsonb, p_inicio timestamptz)
+returns integer language plpgsql security definer set search_path = public set statement_timeout = '120s' as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  insert into public.conferencia_ssw as c (pedido, nf, transportadora, status_intelipost, prev_cliente, situacao, importado_em, importado_por)
+  select distinct on (r.pedido) r.pedido, nullif(r.nf, ''), r.transportadora, r.status_intelipost, r.prev_cliente,
+         case when coalesce(r.nf, '') = '' then 'sem nf' else 'pendente' end, p_inicio, auth.jwt() ->> 'email'
+  from jsonb_to_recordset(linhas) as r(pedido text, nf text, transportadora text, status_intelipost text, prev_cliente date)
+  where coalesce(r.pedido, '') <> ''
+  on conflict (pedido) do update set
+    transportadora = excluded.transportadora, status_intelipost = excluded.status_intelipost, prev_cliente = excluded.prev_cliente,
+    importado_em = p_inicio, importado_por = excluded.importado_por,
+    -- NF trocou: o resultado antigo não vale mais
+    nf = excluded.nf,
+    situacao = case when c.nf is distinct from excluded.nf then excluded.situacao else c.situacao end,
+    ultimo_evento = case when c.nf is distinct from excluded.nf then null else c.ultimo_evento end,
+    data_evento = case when c.nf is distinct from excluded.nf then null else c.data_evento end,
+    data_entrega = case when c.nf is distinct from excluded.nf then null else c.data_entrega end,
+    consultado_em = case when c.nf is distinct from excluded.nf then null else c.consultado_em end;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.importar_conferencia_lote(jsonb, timestamptz) from public, anon;
+grant execute on function public.importar_conferencia_lote(jsonb, timestamptz) to authenticated;
+
+-- no fim: tira o que não veio no arquivo novo (já entregue/cancelado ou fora da lista)
+create or replace function public.fechar_conferencia_lote(p_inicio timestamptz)
+returns integer language plpgsql security definer set search_path = public set statement_timeout = '120s' as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  delete from public.conferencia_ssw where importado_em < p_inicio;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.fechar_conferencia_lote(timestamptz) from public, anon;
+grant execute on function public.fechar_conferencia_lote(timestamptz) to authenticated;

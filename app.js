@@ -1079,7 +1079,17 @@ ${extra}
     let avisoCf = "";
     if (cfOk) {
       try { const { itens } = await lerConferencia(arq);
-        if (itens.length) { carregando("Mandando para a Conferência SSW…"); const { error } = await sb.rpc("importar_conferencia", { linhas: itens }); avisoCf = error ? " · Conferência SSW: " + error.message : ` · ${fmt(itens.length)} em aberto foram para a Conferência SSW`; } }
+        if (itens.length) {   // parte 73: em lotes, sem apagar o que o robô já conferiu; no fim tira o que não veio no arquivo
+          const inicio = new Date().toISOString(); let erro = null;
+          for (let i = 0; i < itens.length && !erro; i += 1500) {
+            carregando(`Mandando para a Conferência SSW… ${fmt(Math.min(i + 1500, itens.length))} de ${fmt(itens.length)}`);
+            let r = await sb.rpc("importar_conferencia_lote", { linhas: itens.slice(i, i + 1500), p_inicio: inicio });
+            if (r.error && /timeout|canceling/i.test(r.error.message || "")) { await new Promise((ok) => setTimeout(ok, 2000)); r = await sb.rpc("importar_conferencia_lote", { linhas: itens.slice(i, i + 1500), p_inicio: inicio }); }
+            erro = r.error;
+          }
+          if (!erro) erro = (await sb.rpc("fechar_conferencia_lote", { p_inicio: inicio })).error;
+          avisoCf = erro ? " · Conferência SSW: " + (/importar_conferencia_lote|fechar_conferencia_lote|PGRST202|schema cache/i.test(erro.message || "") ? "rode a parte 73 no Supabase" : erro.message) : ` · ${fmt(itens.length)} em aberto foram para a Conferência SSW`;
+        } }
       catch (err) { avisoCf = " · Conferência SSW: " + err.message; }
     }
     carregando("");
