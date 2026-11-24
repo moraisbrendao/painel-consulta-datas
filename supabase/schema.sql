@@ -3268,3 +3268,22 @@ create policy "logistica cuida" on public.transp_contatos for all to authenticat
 -- parte 69: Barrar entrega › quadrinhos de cobrança: botão "✓ OK, enviei" por transportadora
 alter table public.barrar_entrega add column if not exists cobrado_em timestamptz;
 alter table public.barrar_entrega add column if not exists cobrado_por text;
+
+-- parte 70: Nota não localizada — robô olha o rastreio todo dia (8h de Brasília), além do botão "Rodar o robô"
+create or replace function public._robo_naoloc()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"naoloc","auto":"1"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_naoloc() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-naoloc';
+select cron.schedule('robo-naoloc', '0 11 * * *', 'select public._robo_naoloc()');

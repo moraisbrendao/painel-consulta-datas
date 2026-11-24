@@ -13,12 +13,12 @@
   const toast = (msg, erro) => { const t = $("toast"); if (!t) return alert(msg); t.textContent = msg; t.classList.toggle("erro", !!erro); t.hidden = false; clearTimeout(toast._t); toast._t = setTimeout(() => (t.hidden = true), erro ? 6000 : 3500); };
   const sb = () => { const c = window.__sb; if (!c) throw new Error("Entre no painel de novo (sessão expirada)."); return c; };
   const dias = (d) => (d ? Math.max(0, Math.floor((Date.now() - Date.parse(String(d).replace(" ", "T"))) / 864e5)) : null);
-  // mesmo prazo do robô: série 35 = 30 dias corridos; 34 e 25 = 7 dias úteis; 7, 31 e 4 = 5 dias úteis (desde a criação do ticket)
+  // mesmo prazo do robô: séries 35, 34 e 25 = 20 dias úteis; 7, 31 e 4 = 10 dias úteis (desde a criação do ticket)
   function prazoAte(serie, criado) {
     if (!criado) return null; const d = new Date(String(criado).replace(" ", "T").slice(0, 19)); if (isNaN(d)) return null;
     const sr = String(serie || "").replace(/^0+/, ""), x = new Date(d);
-    const du = { "34": 7, "25": 7, "7": 5, "31": 5, "4": 5 }[sr];
-    if (sr === "35") x.setDate(x.getDate() + 30); else if (du) { let n = 0; while (n < du) { x.setDate(x.getDate() + 1); if (x.getDay() % 6) n++; } } else return null;
+    const du = { "35": 20, "34": 20, "25": 20, "7": 10, "31": 10, "4": 10 }[sr];   // Brenda 24/11
+    if (du) { let n = 0; while (n < du) { x.setDate(x.getDate() + 1); if (x.getDay() % 6) n++; } } else return null;
     return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
   }
   const tk = (id) => (id ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)}</a>` : "");

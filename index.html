@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=309">
+  <link rel="stylesheet" href="styles.css?v=310">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1299,7 +1299,7 @@
             <h1>Nota não localizada</h1>
             <p class="sub">Fila <b>Nota não localizada (Sem Emissão)</b> do Multi360. 1) Envie a planilha de tickets da fila (use o <b>modelo</b>). 2) O robô olha o rastreio de cada nota (transportadora do ticket: redespacho, se tiver) e executa a ação no ticket:
               <b>no rastreio</b> → voltar para o barrar · <b>entregue</b> → voltar para o barrar e entra no Barrar entrega como não barrado (Entregue) ·
-              <b>fora do rastreio</b> e passou do prazo → seguir para cancelamento com o comentário "Pedido não localizado em rastreio" (série 35: 30 dias; séries 34 e 25: 7 dias úteis; séries 7, 31 e 4: 5 dias úteis, contados da criação do ticket).
+              <b>fora do rastreio</b> e passou do prazo → seguir para cancelamento com o comentário "Pedido não localizado em rastreio" (séries 35, 34 e 25: 20 dias úteis; séries 7, 31 e 4: 10 dias úteis, contados da criação do ticket; o robô olha o rastreio todo dia).
               Depois do cancelamento o robô continua olhando o rastreio e avisa aqui se aparecer CT-e.</p>
             <p id="nl-info" class="info-base">Nenhuma planilha enviada ainda.</p>
           </div>
@@ -1647,21 +1647,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=309"></script>
-  <script src="mapa-brasil.js?v=309"></script>
-  <script src="troca-notas.js?v=309"></script>
-  <script src="app.js?v=309"></script>
-  <script src="ordenar.js?v=309"></script>
-  <script src="menu.js?v=309"></script>
-  <script src="ajuda.js?v=309"></script>
-  <script src="documentos.js?v=309"></script>
-  <script src="barrar.js?v=309"></script>
-  <script src="naoloc.js?v=309"></script>
-  <script src="faltas.js?v=309"></script>
-  <script src="motor.js?v=309"></script>
-  <script src="retornos-semana.js?v=309"></script>
-  <script src="gargalos.js?v=309"></script>
-  <script src="filas.js?v=309"></script>
-  <script src="filtros.js?v=309"></script>
+  <script src="config.js?v=310"></script>
+  <script src="mapa-brasil.js?v=310"></script>
+  <script src="troca-notas.js?v=310"></script>
+  <script src="app.js?v=310"></script>
+  <script src="ordenar.js?v=310"></script>
+  <script src="menu.js?v=310"></script>
+  <script src="ajuda.js?v=310"></script>
+  <script src="documentos.js?v=310"></script>
+  <script src="barrar.js?v=310"></script>
+  <script src="naoloc.js?v=310"></script>
+  <script src="faltas.js?v=310"></script>
+  <script src="motor.js?v=310"></script>
+  <script src="retornos-semana.js?v=310"></script>
+  <script src="gargalos.js?v=310"></script>
+  <script src="filas.js?v=310"></script>
+  <script src="filtros.js?v=310"></script>
 </body>
 </html>
