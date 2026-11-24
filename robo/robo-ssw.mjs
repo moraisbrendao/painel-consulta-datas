@@ -1250,8 +1250,9 @@ async function conferirLote() {
   // Bento Brasil e Trânsito Brasil: site próprio, uma nota por vez (com pausa). Antes só rodavam no "Conferir tudo agora";
   // agora entram em toda rodada em lote, só as não entregues que não foram olhadas nas últimas 2 h.
   const pSites = (async () => { for (const [EH, fn, nome] of [[EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) {
-    const F = []; for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*${nome}*&or=(situacao.neq.entregue,data_entrega.lt.${new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10)})&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
-    const fila = F.filter((x) => !(x.detalhe && x.detalhe.emissor) && !(x.consultado_em && Date.now() - Date.parse(x.consultado_em) < 2 * 3600000)).slice(0, 300);
+    const F = []; for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em,situacao&transportadora=ilike.*${nome}*&or=(situacao.neq.entregue,data_entrega.lt.${new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10)})&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    const fila = F.filter((x) => !(x.detalhe && x.detalhe.emissor) && !(x.consultado_em && Date.now() - Date.parse(x.consultado_em) < 2 * 3600000))
+      .sort((a, b) => Number(b.situacao === "entregue") - Number(a.situacao === "entregue")).slice(0, 300);   // "entregue" com data antiga (CT-e velho) primeiro
     if (!fila.length) continue;
     const m = await fn(fila), linhas = fila.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
       return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: r.detalhe ? { ...r.detalhe, previsao: r.previsao || r.detalhe.previsao || null } : r.previsao ? { fonte: nome, previsao: r.previsao } : null }; });
