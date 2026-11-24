@@ -4545,20 +4545,22 @@ ${extra}
     const destRep = (r) => { const c = cobRep(r); return /^Cobrado/.test(c) ? "Em nome da transportadora" : /CPF/.test(c) ? "Em nome do cliente (CPF)" : /outro CNPJ/.test(c) ? "Outro CNPJ" : "Nota não lida"; };
     const ORD_DEST = ["Em nome da transportadora", "Em nome do cliente (CPF)", "Outro CNPJ", "Nota não lida"];
     const dest = ORD_DEST.map((k) => [k, pre.filter((r) => destRep(r) === k)]).filter(([, rs]) => rs.length);
+    const TIPOS_M = ["PARCIAL", "TOTAL", ""], COLS_M = ["Em nome da transportadora", "Em nome do cliente (CPF)", "Outro CNPJ", "Nota não lida"];
+    const mat = TIPOS_M.map((t) => ({ t, rs: pre.filter((r) => tpRep(r) === t) })).filter((x) => x.rs.length || x.t);
     const parCli = pre.filter((r) => destRep(r) === "Em nome do cliente (CPF)" && tpRep(r) === "PARCIAL"), parCliT = contaPor(parCli, (r) => trRep(r) || "(sem transportadora)");
     const tit = volTipo === "TOTAL" ? "totais" : volTipo === "PARCIAL" ? "parciais" : "totais e parciais";
     // cada quadro: linhas clicáveis (mostram os casos embaixo) + Exportar em cima
     volQ = { vol: { rot: "Volumes mais enviados", todos: lidos.filter((r) => r._cods.length), de: (k) => lidos.filter((r) => r._cods.includes(k)) },
       mot: { rot: "Por motivo", todos: lidos, de: (k) => lidos.filter((r) => motRep(r) === k) },
       cob: { rot: "Pré-entrega · cobrança", todos: pre, de: (k) => pre.filter((r) => cobRep(r) === k) },
-      dest: { rot: "Pré-entrega · em nome de quem", todos: pre, de: (k) => pre.filter((r) => destRep(r) === k) },
+      dest: { rot: "Pré-entrega · em nome de quem", todos: pre, de: (k) => { const [t, c] = k.split("|"); return pre.filter((r) => (t === "*" || tpRep(r) === t) && (c === "*" || destRep(r) === c)); } },
       parcli: { rot: "Parcial em nome do cliente", todos: parCli, de: (k) => parCli.filter((r) => (trRep(r) || "(sem transportadora)") === k) },
       proc: { rot: "Em processo", todos: proc, de: (k) => proc.filter((r) => (filaRep(r) || SEM_FILA) === k) } };
     if (volSel && (!volQ[volSel.q] || !volQ[volSel.q].de(volSel.k).length)) volSel = null;
-    const volCab = (q, t) => `<div class="rp-q-cab"><h3>${t}</h3><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" title="Baixar em Excel os tickets deste quadro">↓ Exportar</button></div>`;
+    const volCab = (q, t) => `<div class="rp-q-cab"><h3><span class="rp-arrasta" title="Arraste para mudar o quadro de lugar">⠿</span> ${t}</h3><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" title="Baixar em Excel os tickets deste quadro">↓ Exportar</button></div>`;
     const volLin = (q, k) => `class="rp-q-lin${volSel && volSel.q === q && volSel.k === k ? " sel" : ""}" data-vq="${q}" data-vk="${esc(k)}" title="Clique para ver os casos"`;
     const volCasosH = (q) => { if (!volSel || volSel.q !== q) return ""; const rs = volQ[q].de(volSel.k);
-      return `<div class="rp-q-casos"><div class="rp-q-cab"><h3>${esc(volSel.k)} · ${fmt(rs.length)} tickets</h3><span><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" data-vk="${esc(volSel.k)}">↓ Exportar estes casos</button> <button type="button" class="btn contorno mini vol-fechar" title="Fechar a lista">✕</button></span></div>
+      return `<div class="rp-q-casos"><div class="rp-q-cab"><h3>${esc(volSel.k.replace(/^\*\|/, "").replace(/\|\*$/, "").replace("|", " · "))} · ${fmt(rs.length)} tickets</h3><span><button type="button" class="btn contorno mini vol-exp" data-vq="${q}" data-vk="${esc(volSel.k)}">↓ Exportar estes casos</button> <button type="button" class="btn contorno mini vol-fechar" title="Fechar a lista">✕</button></span></div>
         <div class="tabela-wrap rp-vol-rol"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Ticket</th><th>NF original</th><th>Pré/pós</th><th>Total/Parcial</th><th>Motivo</th><th>Transportadora</th><th>Fila atual</th><th>Volumes</th></tr></thead>
         <tbody>${rs.slice(0, 300).map((r) => `<tr><td><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(r.ticket)}" target="_blank" rel="noopener noreferrer">${esc(r.ticket)}</a></td><td>${esc(r.nf || "")}</td><td>${esc(ROT_FLUXO[r._t] || "")}</td><td>${esc(tpRep(r))}</td><td>${esc(motRep(r))}</td><td>${esc(trRep(r))}</td><td>${esc(filaRep(r) || "")}</td><td class="s">${esc(r._cods.join(", "))}</td></tr>`).join("")}</tbody></table></div>
         ${rs.length > 300 ? `<p class="s">Mostrando 300 de ${fmt(rs.length)}. O Exportar traz todos.</p>` : ""}</div>`; };
@@ -4581,9 +4583,11 @@ ${extra}
         <div class="rp-vol-lado"><div>${volCab("mot", "Por motivo")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Motivo</th><th class="num">Tickets</th><th class="num">Volumes</th><th>Volume que mais aparece</th></tr></thead>
           <tbody>${pm.map((x) => `<tr ${volLin("mot", x.mot)}><td>${esc(x.mot)}</td><td class="num tot">${fmt(x.n)}</td>${num(x.vols)}<td class="s">${x.top ? esc(x.top + " · " + descVol(x.top)) + ` (${fmt(x.topN)})` : ""}</td></tr>`).join("") || `<tr><td colspan="4" class="vazio">—</td></tr>`}</tbody>
           ${pm.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(lidos.length)}</td>${num(pm.reduce((t, x) => t + x.vols, 0))}<td></td></tr></tfoot>` : ""}</table></div>${volCasosH("mot")}</div>
-          ${repAba !== "pos" ? `<div>${volCab("dest", "Pré-entrega · em nome de quem saiu a nota")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Nota da reposição</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
-          <tbody>${dest.map(([k, rs]) => `<tr ${volLin("dest", k)}><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, pre.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody>
-          ${pre.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(pre.length)}</td><td class="num">100%</td></tr></tfoot>` : ""}</table></div>${volCasosH("dest")}</div>
+          ${repAba !== "pos" ? `<div>${volCab("dest", "Pré-entrega · Parcial × Total, em nome de quem saiu a nota")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t rp-mat"><thead><tr><th></th><th class="num">Transportadora</th><th class="num">Cliente (CPF)</th><th class="num">Outro CNPJ</th><th class="num">Não lida</th><th class="num">Total</th></tr></thead>
+          <tbody>${mat.map(({ t, rs }) => { const rot = t === "PARCIAL" ? "Parcial" : t === "TOTAL" ? "Total" : "Sem Parcial/Total"; const cel = (c) => { const n = rs.filter((r) => destRep(r) === c).length; const k = `${t}|${c}`;
+              return `<td class="num rp-q-cel${volSel && volSel.q === "dest" && volSel.k === k ? " sel" : ""}" data-vq="dest" data-vk="${esc(k)}" title="Clique para ver os casos">${fmt(n)}<small>${pct(n, rs.length)}</small></td>`; };
+            return `<tr><td><b>${rot}</b></td>${COLS_M.map(cel).join("")}<td class="num tot rp-q-cel" data-vq="dest" data-vk="${esc(t + "|*")}">${fmt(rs.length)}<small>${pct(rs.length, pre.length)}</small></td></tr>`; }).join("") || `<tr><td colspan="6" class="vazio">Nenhum pré-entrega lido nesse filtro.</td></tr>`}</tbody>
+          ${pre.length ? `<tfoot><tr class="rp-total"><td>Total geral</td>${COLS_M.map((c) => { const n = pre.filter((r) => destRep(r) === c).length; return `<td class="num rp-q-cel" data-vq="dest" data-vk="${esc("*|" + c)}">${fmt(n)}<small>${pct(n, pre.length)}</small></td>`; }).join("")}<td class="num">${fmt(pre.length)}<small>100%</small></td></tr></tfoot>` : ""}</table></div>${volCasosH("dest")}</div>
           <div>${volCab("parcli", "Parcial, mas saiu em nome do cliente (não da transportadora)")}<div class="tabela-wrap"><table class="tabela-pedidos rp-vol-t"><thead><tr><th>Transportadora</th><th class="num">Tickets</th><th class="num">%</th></tr></thead>
           <tbody>${parCliT.map(([k, rs]) => `<tr ${volLin("parcli", k)}><td>${esc(k)}</td><td class="num tot">${fmt(rs.length)}</td><td class="num">${pct(rs.length, parCli.length)}</td></tr>`).join("") || `<tr><td colspan="3" class="vazio">Nenhum caso nesse filtro.</td></tr>`}</tbody>
           ${parCli.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(parCli.length)}</td><td class="num">100%</td></tr></tfoot>` : ""}</table></div>${volCasosH("parcli")}</div>` : ""}
@@ -4595,7 +4599,25 @@ ${extra}
           ${proc.length ? `<tfoot><tr class="rp-total"><td>Total geral</td><td class="num">${fmt(proc.length)}</td></tr></tfoot>` : ""}</table></div>${volCasosH("proc")}</div>
         </div>
       </div></section>`;
+    arrumarQuadros(box);
   }
+  // quadros da direita: a pessoa arrasta pelo ⠿ para mudar a ordem (fica salvo neste navegador)
+  const ORD_Q_KEY = "painel.repQuadros";
+  function arrumarQuadros(box) {
+    const lado = box.querySelector(".rp-vol-lado"); if (!lado) return;
+    [...lado.children].forEach((d) => { const b = d.querySelector(".vol-exp[data-vq]"); if (b) d.dataset.q = b.dataset.vq; });
+    let ord = []; try { ord = JSON.parse(localStorage.getItem(ORD_Q_KEY) || "[]"); } catch (_) {}
+    ord.forEach((q) => { const d = lado.querySelector(`:scope > [data-q="${q}"]`); if (d) lado.appendChild(d); });
+    [...lado.children].filter((d) => !ord.includes(d.dataset.q)).forEach((d) => { if (d.dataset.q && ord.length) { /* quadro novo: fica no fim */ lado.appendChild(d); } });
+  }
+  let arrQ = null;
+  document.addEventListener("mousedown", (e) => { const h = e.target.closest(".rp-arrasta"); const d = h && h.closest(".rp-vol-lado > [data-q]"); if (d) d.draggable = true; });
+  document.addEventListener("dragstart", (e) => { const d = e.target.closest && e.target.closest(".rp-vol-lado > [data-q]"); if (!d) return; arrQ = d; d.classList.add("arrastando"); e.dataTransfer.effectAllowed = "move"; try { e.dataTransfer.setData("text/plain", d.dataset.q); } catch (_) {} });
+  document.addEventListener("dragover", (e) => { if (!arrQ) return; const alvo = e.target.closest && e.target.closest(".rp-vol-lado > [data-q]"); if (!alvo || alvo === arrQ || alvo.parentElement !== arrQ.parentElement) return;
+    e.preventDefault(); const r = alvo.getBoundingClientRect(), depois = (e.clientX - r.left) > r.width / 2 || (e.clientY - r.top) > r.height * 0.75;
+    alvo.parentElement.insertBefore(arrQ, depois ? alvo.nextSibling : alvo); });
+  document.addEventListener("dragend", () => { if (!arrQ) return; arrQ.classList.remove("arrastando"); arrQ.draggable = false;
+    try { localStorage.setItem(ORD_Q_KEY, JSON.stringify([...arrQ.parentElement.children].map((d) => d.dataset.q).filter(Boolean))); } catch (_) {} arrQ = null; });
   const linhaVolXls = (r) => [r.ticket, r.nf || "", serieRep(r), ROT_FLUXO[r._t], tpRep(r), (r._it && r._it.quando) || "", r._it ? r._it.volumes ?? "" : "", r._cods.join(", "), r._cods.map(descVol).join(" | "), motRep(r), trRep(r), cobRep(r), filaRep(r), (r._d && r._d.nfs_novas) || "", r._it ? br(r._it.lido_em) : ""];
   const CAB_VOL_XLS = ["Ticket", "NF original", "Série da NF", "Pré/pós", "Total/Parcial", "Antes/depois da entrega", "Qtd volumes", "Volumes (código)", "Descrição dos volumes", "Motivo", "Transportadora", "Nota da reposição (pré)", "Fila atual", "Nova NF", "Lido pelo robô em"];
   $("pagina-reposicao").addEventListener("click", (e) => {
@@ -4606,7 +4628,7 @@ ${extra}
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_VOL_XLS].concat(rs.map(linhaVolXls))), "Tickets");
       const nome = (q.rot + (k != null ? " " + k : "")).normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\w]+/g, "_").replace(/^_|_$/g, "").slice(0, 60);
       XLSX.writeFile(wb, `reposicao_${nome}_${hojeISO()}.xlsx`); return; }
-    const ln = e.target.closest("tr.rp-q-lin");
+    const ln = e.target.closest("td.rp-q-cel") || e.target.closest("tr.rp-q-lin");
     if (ln && !e.target.closest("a")) { e.preventDefault(); const q = ln.dataset.vq, k = ln.dataset.vk; volSel = volSel && volSel.q === q && volSel.k === k ? null : { q, k }; filtrarRep(); return; }
     if (!e.target.closest(".vol-excel")) return;
     if (!volCasos.length) return toast("Nenhum ticket lido nesse filtro.", true);

@@ -1261,3 +1261,8 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .nl-seg { display: flex; gap: 4px; align-items: center; margin-top: 4px; }
 #nl-alerta { display: flex; align-items: center; gap: 10px; }
 #nl-alerta[hidden] { display: none; }
+.rp-arrasta { cursor: grab; color: #9aa3b8; margin-right: 2px; user-select: none; }
+.rp-vol-lado > .arrastando { opacity: .45; outline: 2px dashed #f5c518; border-radius: 8px; }
+.rp-mat td small { display: block; font-size: 11px; color: #6b7488; font-weight: 400; }
+.rp-mat td.rp-q-cel { cursor: pointer; }
+.rp-mat td.rp-q-cel:hover, .rp-mat td.rp-q-cel.sel { background: #fdf3c4; }
