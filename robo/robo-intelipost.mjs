@@ -856,11 +856,13 @@ async function baixaEntregueIP(real, limite) {
   const buscar = async (pedido, por = "Pedido") => {
     const caixa = await caixaPedidos("/order/change-order");
     await pagina.locator("select:visible").first().selectOption({ label: por });
-    await caixa.fill(pedido);
+    log(`  busca por ${por}: caixa ok`);
+    await caixa.fill(pedido, { timeout: 15000 });
     await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
     await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 }).catch(() => {});
     await pagina.waitForTimeout(2500);
     const rows = await pagina.evaluate(() => [...document.querySelectorAll("table tbody tr")].map((r) => r.innerText.replace(/\s+/g, " ")).filter((t) => t.trim() && !/nenhum/i.test(t)));
+    log(`  busca por ${por}: ${rows.length} linha(s)`);
     return rows;
   };
   // pedido na Intelipost: o da base pela NF original (ex.: SHOPEE + nº do marketplace); senão o pedido da planilha
