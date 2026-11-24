@@ -529,7 +529,17 @@ if (MODO === "diag-bento") {   // rastreio da Bento Brasil: formulário e estrut
 }
 if (MODO === "diag-par") {   // quantas páginas ao mesmo tempo é mais rápido (só tempos)
   await entrarSupabase();
-  for (const [tab, J] of [["base_pedidos", 1], ["base_pedidos", 2], ["base_pedidos", 4], ["base_aberta_bi", 1], ["base_aberta_bi", 3]]) {
+  for (let rep = 0; rep < 2; rep++) for (const J of [4, 6]) {   // por faixas da chave (como o painel novo)
+    const t = Date.now(); let ch = []; for (let de = 0; ; de += 8000) { const ps = await Promise.all(Array.from({ length: 8 }, (_, j) => chamar(`base_pedidos?select=pedido&order=pedido&limit=1000&offset=${de + j * 1000}`)));
+      ps.forEach((p) => { ch = ch.concat(p.map((x) => x.pedido)); }); if (ps.some((p) => p.length < 1000)) break; }
+    const cortes = [null]; for (let k = 999; k < ch.length; k += 1000) cortes.push(ch[k]); let n = 0, err = 0, lento = 0;
+    const fx = cortes.map((a, i) => [a, cortes[i + 1]]);
+    for (let i = 0; i < fx.length; i += J) { const ps = await Promise.all(fx.slice(i, i + J).map(async ([a, b]) => { const t1 = Date.now();
+      const r = await chamar(`base_pedidos?select=*&order=pedido&limit=1000${a != null ? "&pedido=gt." + encodeURIComponent(a) : ""}${b != null ? "&pedido=lte." + encodeURIComponent(b) : ""}`).catch(() => { err++; return []; }); lento = Math.max(lento, Date.now() - t1); return r; }));
+      ps.forEach((p) => { n += p.length; }); }
+    log(`faixas ${J} por vez (rodada ${rep + 1}): ${n} linhas em ${((Date.now() - t) / 1000).toFixed(1)} s · página mais lenta ${(lento / 1000).toFixed(1)} s · erros ${err}`);
+  }
+  for (const [tab, J] of [["base_pedidos", 4], ["base_pedidos", 6]]) {
     const t = Date.now(); let n = 0, err = 0, lento = 0;
     for (let de = 0; ; de += 1000 * J) { const ps = await Promise.all(Array.from({ length: J }, async (_, j) => { const t1 = Date.now(); const r = await chamar(`${tab}?select=*&order=pedido&limit=1000&offset=${de + j * 1000}`).catch(() => { err++; return null; }); lento = Math.max(lento, Date.now() - t1); return r || []; }));
       ps.forEach((p) => { n += p.length; }); if (ps.some((p) => p.length < 1000) || de > 20000) break; }
