@@ -1569,15 +1569,20 @@ ${extra}
       if (r._atraso) atrHoje++; else if (!r._fechado && r._prom && r._prom >= hoje) venc.set(r._prom, (venc.get(r._prom) || 0) + 1);
     });
     const val = dias.map((d) => ({ d, e: d <= hoje ? ent.get(d) || 0 : null, v: d >= hoje ? venc.get(d) || 0 : 0, a: d === hoje ? atrHoje : 0 }));
-    const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v + x.a)));
+    const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v, x.a)));
     const W = 1000, H = gProdCheia ? Math.max(gProdGiro() ? 180 : 260, Math.round((1000 * Math.max(gProdGiro() ? 160 : 240, gProdGiro() ? innerWidth - 92 : innerHeight - 230)) / Math.max(320, $("g-prod").clientWidth || innerWidth - 40))) : 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (n) => H - pb - (n / max) * (H - pb - pt);
     let g = "";
     for (let i = 0; i <= 4; i++) { const n = Math.round((max * i) / 4); g += `<line x1="${pl}" x2="${W - 10}" y1="${y(n)}" y2="${y(n)}" class="grade"/><text x="${pl - 6}" y="${y(n) + 4}" class="eixo" text-anchor="end">${fmt(n)}</text>`; }
     val.forEach((x, i) => {
       const cx = pl + i * cw + cw / 2, bw = Math.min(34, cw * 0.7);
-      if (x.v) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="vence" x="${cx - bw / 2}" y="${y(x.v)}" width="${bw}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${ddmm(x.d)}: ${fmt(x.v)} vencem</title></rect>`;
-      if (x.a) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="atraso" x="${cx - bw / 2}" y="${y(x.v + x.a)}" width="${bw}" height="${y(x.v) - y(x.v + x.a)}" fill="#f5b400" rx="2"><title>${fmt(x.a)} atrasados · clique para ver a lista e baixar o Excel</title></rect>`;
-      if (x.v + x.a) g += `<text x="${cx}" y="${y(x.v + x.a) - 5}" class="rot" text-anchor="middle">${fmt(x.v + x.a)}</text>`;
+      if (x.d === hoje) {   // hoje: duas barras lado a lado, "vence hoje" e "atrasado" separados (Brenda 24/11)
+        const b2 = Math.min(22, cw * 0.42), xa = cx - b2 - 1, xv = cx + 1;
+        if (x.a) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="atraso" x="${xa}" y="${y(x.a)}" width="${b2}" height="${y(0) - y(x.a)}" fill="#f5b400" rx="2"><title>${fmt(x.a)} atrasados · clique para ver a lista e baixar o Excel</title></rect><text x="${xa + b2 / 2}" y="${y(x.a) - 5}" class="rot" text-anchor="middle">${fmt(x.a)}</text>`;
+        if (x.v) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="vence" x="${xv}" y="${y(x.v)}" width="${b2}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${ddmm(x.d)}: ${fmt(x.v)} vencem hoje</title></rect><text x="${xv + b2 / 2}" y="${y(x.v) - 5}" class="rot" text-anchor="middle">${fmt(x.v)}</text>`;
+      } else {
+        if (x.v) g += `<rect class="bar-clic" data-dia="${x.d}" data-tipo="vence" x="${cx - bw / 2}" y="${y(x.v)}" width="${bw}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${ddmm(x.d)}: ${fmt(x.v)} vencem</title></rect>`;
+        if (x.v) g += `<text x="${cx}" y="${y(x.v) - 5}" class="rot" text-anchor="middle">${fmt(x.v)}</text>`;
+      }
       g += `<text x="${cx}" y="${H - pb + 16}" class="eixo ${x.d === hoje ? "hoje" : ""}" text-anchor="end" transform="rotate(-45 ${cx} ${H - pb + 16})">${ddmm(x.d)}</text>`;
     });
     const pts = val.map((x, i) => (x.e === null ? null : [pl + i * cw + cw / 2, y(x.e), x])).filter(Boolean);
