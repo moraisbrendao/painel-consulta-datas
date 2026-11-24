@@ -173,5 +173,10 @@ export async function diagAnota2({ chamar, log, ctx }) {
   const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
   const linha = await acharLinha(p, x.nf_ticket); log(`Portal: linha ${!!linha} · coluna anotações ${ia} de ${ths.length} · tds na linha ${linha ? await linha.locator("td").count() : 0}`);
   if (!linha) return;
+  const vb = linha.locator("button[title*='Anota' i], button:has-text('Ver Anota')").first();
+  if (await vb.count()) { await vb.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(900);
+    log(`  janela: tem a nova NF ${(await textoModal(d)).includes(soNum(x.nf_nova)) ? "sim" : "não"} · campos:`, (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()} "${e.placeholder || ""}"`))).map(mascara).join(" | "),
+      "· botões:", (await d.locator("button").evaluateAll((es) => es.map((e) => `${e.type}:${[e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"}`))).map(mascara).join(" | "));
+    await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
   for (let k = 0; k < await linha.locator("td").count(); k++) { const c = linha.locator("td").nth(k); const el = await c.locator("input, textarea, button").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}:${e.placeholder || e.innerText || e.title || e.getAttribute("aria-label") || "?"}`)); if (el.length) log(`  td ${k}:`, el.map(mascara).join(" | ")); }
 }
