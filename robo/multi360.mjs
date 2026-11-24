@@ -245,3 +245,25 @@ export async function comentarioInterno(p, ticket, texto, arquivos) {
   for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); if (!(await caixa.inputValue().catch(() => ""))) return { ok: true, cresceu: (await p.evaluate(() => document.body.innerText.length)) > antes }; }
   throw new Error("Cliquei em enviar, mas o comentário continuou na caixa.");
 }
+
+// Comentário Público (sai como "Externo" e aparece no chat do portal do transportador). arquivos = [{ name, mimeType, buffer }]
+export async function comentarioPublico(p, ticket, texto, arquivos) {
+  await abrirTicket(p, ticket);
+  const tipo = p.getByRole("button", { name: /coment[aá]rio (interno|p[uú]blico)/i }).first();
+  await tipo.waitFor({ timeout: 15000 });
+  if (!/p[uú]blico/i.test(await tipo.innerText())) {
+    await tipo.click(); await p.waitForTimeout(1000);
+    await p.getByRole("menuitem", { name: /coment[aá]rio p[uú]blico/i }).or(p.getByRole("option", { name: /coment[aá]rio p[uú]blico/i })).or(p.getByText(/^\s*Coment[aá]rio P[uú]blico\s*$/i)).last().click();
+    await p.waitForTimeout(1200);
+  }
+  if (!/p[uú]blico/i.test(await p.getByRole("button", { name: /coment[aá]rio (interno|p[uú]blico)/i }).first().innerText())) throw new Error("não consegui trocar para Comentário Público");
+  const caixa = p.getByPlaceholder(/digite sua mensagem/i).last();
+  await caixa.waitFor({ timeout: 15000 });
+  if (arquivos.length) { await p.locator("input[type=file]").last().setInputFiles(arquivos); await p.waitForTimeout(3000); }
+  await caixa.fill(texto);
+  const enviar = p.locator("button:has(svg.lucide-send)").last();
+  await enviar.waitFor({ timeout: 10000 });
+  await enviar.click();
+  for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); if (!(await caixa.inputValue().catch(() => ""))) return { ok: true }; }
+  throw new Error("Cliquei em enviar, mas o comentário continuou na caixa.");
+}

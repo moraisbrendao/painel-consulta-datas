@@ -3,7 +3,7 @@
 // (mesmo texto que a Logística já usa; pedido da Brenda 24/11). Antes de escrever, lê as anotações: se a nova NF já está lá, não repete.
 // Registro público (Actions): só contagens e estrutura mascarada — nunca número de nota, nome ou texto de anotação.
 import { entrarPortal } from "./barrar.mjs";
-import { entrarMulti360, abrirTicket } from "./multi360.mjs";
+import { entrarMulti360, abrirTicket, comentarioPublico } from "./multi360.mjs";
 import { textoPdf } from "./repo-itens.mjs";
 
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 80);
@@ -27,7 +27,8 @@ export async function pdfDaNovaNf(p, nfNova) {
 }
 // já existe comentário público (Externo) com o texto do PDF?
 export const jaMandouPdf = (p) => p.evaluate((txt) => { const ls = document.body.innerText.split("\n").map((l) => l.trim()); return ls.some((l, i) => l.startsWith(txt) && ls.slice(Math.max(0, i - 6), i).some((x) => /^externo$/i.test(x))); }, TXT_CHAT);
-export const textoAnotacao = (x) => { const n = String(x.nf_nova || "").trim(); return `NF ${/-/.test(n) || !x.serie ? n : `${n}-${String(x.serie).trim()}`} emitida para o pedido`; };
+const nfComSerie = (x) => { const n = String(x.nf_nova || "").trim(); return /-/.test(n) || !x.serie ? n : `${n}-${String(x.serie).trim()}`; };
+export const textoAnotacao = (x, comPdf) => `NF ${nfComSerie(x)} emitida para o pedido${comPdf ? ", também temos o pdf em anexo na aba chat" : ""}`;
 
 async function abrirRepoPre(p, log) {
   const link = p.getByRole("link", { name: /reposi[cç][oõ]es/i }).first();
@@ -101,33 +102,58 @@ export async function diagAnota({ chamar, log, ctx }) {
   }
 }
 
-// grava as anotações pendentes (troca feita, nova NF conhecida, ainda sem anotação no portal). Usa o campo da própria linha
-// ("Escreva uma anotação.." + botão "Criar Anotação"). NF que ainda não está na lista do portal: tenta de novo nas próximas rodadas (até 15 dias).
+// Para cada troca de notas FEITA pelo robô na Intelipost (pré-entrega), nos últimos 15 dias:
+//   1) ticket do 360: baixa o PDF da nova NF que está anexado no ticket e manda num Comentário Público (Externo) com
+//      "Segue PDF da NF de reposição em anexo" → aparece no chat do portal do transportador. Sem PDF ainda: tenta de novo até 3 dias.
+//   2) portal › Reposições (Pré Entrega): anotação "NF <nova> emitida para o pedido[, também temos o pdf em anexo na aba chat]"
+//      no campo da linha + "Criar Anotação". NF fora da lista: tenta de novo nas próximas rodadas.
+// Nada se repete: antes de escrever, confere se o comentário / a anotação já existem.
 export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
-  const ontem = new Date(Date.now() - 20 * 3600e3).toISOString(), q15 = new Date(Date.now() - 15 * 864e5).toISOString();
-  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(portal_anot_status.is.null,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
-  log(`anota-portal: ${L.length} NF(s) para anotar`);
+  const q15 = new Date(Date.now() - 15 * 864e5).toISOString(), ontem = new Date(Date.now() - 20 * 3600e3).toISOString();
+  const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,portal_anot_status,portal_anot_em&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(chat_pdf_status.is.null,chat_pdf_status.eq.sem_pdf,portal_anot_status.is.null,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
+  log(`anota-portal: ${L.length} troca(s) para olhar`);
   if (!L.length) return;
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
-  const grava = (x, st, msg = null) => chamar(`troca_notas?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { portal_anot_status: st, portal_anot_em: new Date().toISOString(), portal_anot_msg: msg });
-  const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
-  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
-  if (ia < 0) throw new Error("coluna Anotações não encontrada");
-  for (const x of L) {
-    try {
-      const linha = await acharLinha(p, x.nf_ticket);
-      if (!linha) { soma("NF ainda fora da lista do portal"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
-      const cel = linha.locator("td").nth(ia);
-      if ((await cel.innerText()).includes(soNum(x.nf_nova))) { soma("já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
-      const campo = cel.locator("input[placeholder^='Escreva uma anota'], textarea").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
-      if (!(await campo.count()) || !(await b.count())) throw new Error("campo ou botão Criar Anotação não encontrado");
-      await campo.click(); await campo.fill(textoAnotacao(x)); await p.waitForTimeout(300);
-      await b.click(); await p.waitForTimeout(3000);
-      const l2 = await acharLinha(p, x.nf_ticket), ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(soNum(x.nf_nova));
-      if (ok) { soma("anotado"); await grava(x, "feito"); } else { soma("gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na coluna Anotações depois de gravar: conferir à mão"); }
-    } catch (e) {
-      soma("erro"); log("  erro:", mascara(String(e.message).split("\n")[0]));
-      await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {});
+  const patch = (x, o) => chamar(`troca_notas?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", o);
+  // 1) chat do ticket
+  const chat = L.filter((x) => !x.chat_pdf_status || x.chat_pdf_status === "sem_pdf");
+  if (chat.length) {
+    const m = await entrarMulti360(ctx, log);
+    for (const x of chat) {
+      try {
+        await abrirTicket(m, x.ticket);
+        if (await jaMandouPdf(m)) { x.chat_pdf_status = "ja_tinha"; soma("chat: já tinha o PDF"); await patch(x, { chat_pdf_status: "ja_tinha", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: null }); continue; }
+        const pdf = await pdfDaNovaNf(m, x.nf_nova);
+        if (!pdf.buf) { x.chat_pdf_status = "sem_pdf"; soma("chat: PDF da nova NF ainda não está no ticket"); await patch(x, { chat_pdf_status: "sem_pdf", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: `PDF da nova NF não encontrado no ticket (${pdf.pdfs} PDF(s) olhados)` }); continue; }
+        await comentarioPublico(m, x.ticket, TXT_CHAT, [{ name: `NF ${nfComSerie(x)}.pdf`, mimeType: "application/pdf", buffer: pdf.buf }]);
+        await abrirTicket(m, x.ticket);
+        const ok = await jaMandouPdf(m);
+        x.chat_pdf_status = ok ? "feito" : "erro"; soma(ok ? "chat: PDF enviado" : "chat: enviei mas não confirmei");
+        await patch(x, { chat_pdf_status: x.chat_pdf_status, chat_pdf_em: new Date().toISOString(), chat_pdf_msg: ok ? null : "Comentário enviado, mas não apareceu como Externo: conferir à mão" });
+      } catch (e) { x.chat_pdf_status = "erro"; soma("chat: erro"); log("  chat erro:", mascara(String(e.message).split("\n")[0])); await patch(x, { chat_pdf_status: "erro", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: String(e.message).split("\n")[0].slice(0, 200) }).catch(() => {}); }
+    }
+  }
+  // 2) anotação no portal (depois do chat; sem PDF, espera até 3 dias da troca antes de anotar só a NF)
+  const tres = Date.now() - 3 * 864e5;
+  const anota = L.filter((x) => (!x.portal_anot_status || x.portal_anot_status === "nao_achou") && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres));
+  if (anota.length) {
+    const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+    const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
+    if (ia < 0) throw new Error("coluna Anotações não encontrada");
+    const grava = (x, st, msg = null) => patch(x, { portal_anot_status: st, portal_anot_em: new Date().toISOString(), portal_anot_msg: msg });
+    for (const x of anota) {
+      try {
+        const linha = await acharLinha(p, x.nf_ticket);
+        if (!linha) { soma("portal: NF ainda fora da lista"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
+        const cel = linha.locator("td").nth(ia);
+        if ((await cel.innerText()).includes(soNum(x.nf_nova))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
+        const campo = cel.locator("input[placeholder^='Escreva uma anota'], textarea").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
+        if (!(await campo.count()) || !(await b.count())) throw new Error("campo ou botão Criar Anotação não encontrado");
+        await campo.click(); await campo.fill(textoAnotacao(x, ["feito", "ja_tinha"].includes(x.chat_pdf_status))); await p.waitForTimeout(300);
+        await b.click(); await p.waitForTimeout(3000);
+        const l2 = await acharLinha(p, x.nf_ticket), ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(soNum(x.nf_nova));
+        if (ok) { soma("portal: anotado"); await grava(x, "feito"); } else { soma("portal: gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na coluna Anotações depois de gravar: conferir à mão"); }
+      } catch (e) { soma("portal: erro"); log("  portal erro:", mascara(String(e.message).split("\n")[0])); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); }
     }
   }
   log("anota-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));

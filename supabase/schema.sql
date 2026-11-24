@@ -3223,10 +3223,13 @@ end $$;
 revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
 grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
 
--- ============ PARTE 67: Troca de notas — anotação da nova NF no portal do transportador (Reposições › Pré Entrega) ============
+-- ============ PARTE 67: Troca de notas — PDF da nova NF no chat (Comentário Público) + anotação no portal do transportador (Reposições › Pré Entrega) ============
 alter table public.troca_notas add column if not exists portal_anot_status text;   -- feito | ja_tinha | nao_achou | erro (vazio = falta anotar)
 alter table public.troca_notas add column if not exists portal_anot_em timestamptz;
 alter table public.troca_notas add column if not exists portal_anot_msg text;
+alter table public.troca_notas add column if not exists chat_pdf_status text;      -- feito | ja_tinha | sem_pdf | erro: PDF da nova NF no Comentário Público do ticket
+alter table public.troca_notas add column if not exists chat_pdf_em timestamptz;
+alter table public.troca_notas add column if not exists chat_pdf_msg text;
 -- robô anota no portal 3x por dia (09:00, 13:00 e 17:00 de Brasília), só as trocas feitas que ainda não têm a anotação
 create or replace function public._robo_anota_portal()
 returns void language plpgsql security definer set search_path = public as $$
