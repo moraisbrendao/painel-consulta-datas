@@ -834,6 +834,80 @@ async function fazerTroca(job) {
 }
 
 // diagnóstico da tela de Simulação de cotação e da Busca por Lote (só olha; mascarado)
+// ===== Baixa ENTREGUE na Intelipost (Brenda 24/11) =====
+// Fila Aguardando entrega: reposição TOTAL que o robô deu baixa (nova NF entregue no rastreio) → se o pedido ainda não está
+// Entregue na Intelipost: Entregas › Alterar Pedidos › Pedido › Alterar por Macro › Status Entregue, com a data da entrega → Alterar Status.
+// real=false: preenche tudo e NÃO clica em Alterar Status. Registro: só contagens.
+const BAIXA_ENTREGUE_AUTO = false;   // liga depois do 1º teste real aprovado pela Brenda
+async function baixaEntregueIP(real, limite) {
+  const L = await chamar(`aguardando_entrega?select=ticket,pedido,nf_original,tipo_reposicao,data_entrega,ip_entregue_status&baixa_status=eq.feita&situacao=eq.entregue&pedido=not.is.null&or=(ip_entregue_status.is.null,ip_entregue_status.eq.erro)&order=consultado_em.desc&limit=200`)
+    .catch((e) => { log(/ip_entregue/i.test(e.message || "") ? "baixa-entregue: rode a parte 71 no Supabase." : "baixa-entregue: " + String(e.message).slice(0, 120)); return []; });
+  // só reposição TOTAL (a parcial não fecha o pedido); confirma pela troca de notas quando a planilha não diz
+  const tn = new Map((await chamar(`troca_notas?select=ticket,tipo&ticket=in.(${L.map((x) => `"${x.ticket}"`).join(",") || '""'})`).catch(() => [])).map((t) => [String(t.ticket), String(t.tipo || "")]));
+  const tot = (x) => /total/i.test(x.tipo_reposicao || "") || /total/i.test(tn.get(String(x.ticket)) || "");
+  const A = L.filter(tot).slice(0, limite || 50);
+  log(`baixa-entregue: ${L.length} baixa(s) feitas na fila · ${A.length} de reposição total para conferir na Intelipost · ${real ? "DE VERDADE" : "TESTE (não clica em Alterar Status)"}`);
+  const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
+  const grava = (x, st, msg) => chamar(`aguardando_entrega?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { ip_entregue_status: st, ip_entregue_msg: msg, ip_entregue_em: new Date().toISOString() }).catch(() => {});
+  const sel = (re) => pagina.locator("select:visible").filter({ has: pagina.locator("option", { hasText: re }) }).first();
+  const pick = async (re, nome) => { const sx = sel(re); const l = (await sx.locator("option", { hasText: re }).first().innerText().catch(() => "")).trim(); if (!l) throw new Error(`não achei a opção ${nome}`); await sx.selectOption({ label: l }); await pagina.waitForTimeout(1500); };
+  const buscar = async (pedido) => {
+    const caixa = await caixaPedidos("/order/change-order");
+    await pagina.locator("select:visible").first().selectOption({ label: "Pedido" });
+    await caixa.fill(pedido);
+    await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
+    await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 });
+    await pagina.waitForTimeout(1500);
+    const rows = await pagina.evaluate(() => [...document.querySelectorAll("table tbody tr")].map((r) => r.innerText.replace(/\s+/g, " ")).filter((t) => t.trim() && !/nenhum/i.test(t)));
+    return rows;
+  };
+  // pedido na Intelipost: o da base pela NF original (ex.: SHOPEE + nº do marketplace); senão o pedido da planilha
+  const pedidoIP = async (x) => {
+    if (x.nf_original) { const b = (await chamar(`base_pedidos?select=pedido&nf=eq.${encodeURIComponent(x.nf_original)}&limit=1`).catch(() => []))[0]; if (b && b.pedido) return b.pedido; }
+    const ped = String(x.pedido || "").trim();
+    if (ped.length >= 8) { const b = await chamar(`base_pedidos?select=pedido&pedido=like.*${encodeURIComponent(ped)}&limit=2`).catch(() => []); if (b.length === 1) return b[0].pedido; }
+    return ped;
+  };
+  for (const x of A) {
+    try {
+      x.pedido = await pedidoIP(x);
+      const rows = await buscar(x.pedido);
+      if (rows.length !== 1) { soma(`busca trouxe ${rows.length} linhas`); await grava(x, "erro", `A busca do pedido trouxe ${rows.length} linhas (esperava 1): conferir à mão.`); continue; }
+      if (/\bentregue\b/i.test(rows[0])) { soma("já estava entregue"); await grava(x, "ja_estava", "O pedido já estava Entregue na Intelipost."); continue; }
+      if (/cancelad/i.test(rows[0])) { soma("cancelado na Intelipost"); await grava(x, "erro", "O pedido está Cancelado na Intelipost: conferir à mão."); continue; }
+      await pagina.locator("table tbody tr input[type=checkbox]").first().click({ force: true }); await pagina.waitForTimeout(800);
+      await pick(/^\s*Macro\s*$/, "Alterar por: Macro");
+      await pick(/^\s*Entregue\s*$/, "Status Entregue");
+      // data da alteração = data da entrega no rastreio (hora 12:00 quando não é hoje)
+      if (x.data_entrega) {
+        const dd = x.data_entrega.split("-").reverse().join("/");
+        const campoD = pagina.locator("div.field, div.control").filter({ has: pagina.locator("label", { hasText: /Data da altera/i }) }).locator("input[type=text]").first();
+        const dataIn = (await campoD.count()) ? campoD : pagina.locator("input.input[type=text]:visible").nth(1);
+        await dataIn.click(); await dataIn.fill(dd); await dataIn.press("Enter").catch(() => {}); await pagina.keyboard.press("Escape").catch(() => {}); await pagina.waitForTimeout(600);
+        const lido = await dataIn.inputValue();
+        if (lido !== dd) throw new Error("o campo Data da alteração não aceitou a data da entrega");
+        if (x.data_entrega !== hojeBR()) {
+          const campoH = pagina.locator("div.field, div.control").filter({ has: pagina.locator("label", { hasText: /Hora da altera/i }) }).locator("input[type=text]").first();
+          const horaIn = (await campoH.count()) ? campoH : pagina.locator("input.input[type=text]:visible").nth(2);
+          await horaIn.click(); await horaIn.fill("12:00"); await horaIn.press("Enter").catch(() => {}); await pagina.keyboard.press("Escape").catch(() => {}); await pagina.waitForTimeout(600);
+          if ((await horaIn.inputValue()) !== "12:00") throw new Error("o campo Hora da alteração não aceitou 12:00");
+        }
+      }
+      const bt = pagina.getByRole("button", { name: /^\s*alterar status\s*$/i }).first();
+      if (!(await bt.count())) throw new Error("não achei o botão Alterar Status");
+      if (!real) { soma("teste ok (não salvou)"); await grava(x, null, null); continue; }
+      await bt.click(); await pagina.waitForTimeout(1500);
+      const conf = pagina.locator("[role=dialog]:visible, .modal:visible").getByRole("button", { name: /^\s*(confirmar|sim|ok|alterar|alterar status)\s*$/i }).first();
+      if (await conf.count()) { await conf.click(); await pagina.waitForTimeout(2500); }
+      await pagina.waitForTimeout(3000);
+      const depois = await buscar(x.pedido);
+      if (depois.length === 1 && /\bentregue\b/i.test(depois[0])) { soma("alterado para Entregue"); await grava(x, "feito", `Status Entregue na Intelipost${x.data_entrega ? ` (data ${x.data_entrega.split("-").reverse().join("/")})` : ""}.`); }
+      else { soma("cliquei mas não confirmou"); await grava(x, "conferir", "Cliquei em Alterar Status, mas a busca não mostrou Entregue: conferir na Intelipost."); }
+    } catch (e) { soma("erro"); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)); }
+  }
+  log("baixa-entregue: " + (Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ") || "nada"));
+}
+
 // Alterar Pedidos › status ENTREGUE (Brenda 24/11): só lista as opções de Macro/Micro/Evento para "Entregue". NÃO clica em Alterar.
 async function diagEntregue() {
   const [t] = await chamar("troca_notas?select=pedido&robo_status=eq.feito&tipo=eq.TOTAL&pedido=not.is.null&order=robo_feito_em.desc&limit=1");
@@ -902,7 +976,9 @@ if (anda) await gravarEstado("andamento:intelipost", { robo: "Nova data na Intel
 let andaResumo = "";
 try {
   const entrou = await entrar();
-  if (MODO === "manter") { await gravarEstado("intelipost_manter", { em: new Date().toISOString(), ok: entrou !== false }).catch(() => {}); log(entrou !== false ? "Sessão da Intelipost mantida viva." : "Sessão não estava viva."); }
+  if (MODO === "manter") { await gravarEstado("intelipost_manter", { em: new Date().toISOString(), ok: entrou !== false }).catch(() => {}); log(entrou !== false ? "Sessão da Intelipost mantida viva." : "Sessão não estava viva.");
+    if (entrou !== false && BAIXA_ENTREGUE_AUTO) await baixaEntregueIP(true, 30).catch((e) => log("baixa-entregue: " + String(e.message).split("\n")[0].slice(0, 120))); }
+  else if (MODO === "entregue-teste" || MODO === "entregue-real") await baixaEntregueIP(MODO === "entregue-real", Number(process.env.LIMITE || 0) || 1);
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
   else if (MODO === "diag-troca") await diagTroca();

@@ -3287,3 +3287,8 @@ end $$;
 revoke all on function public._robo_naoloc() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-naoloc';
 select cron.schedule('robo-naoloc', '0 11 * * *', 'select public._robo_naoloc()');
+
+-- parte 71: Aguardando entrega › reposição TOTAL entregue → robô põe o pedido como ENTREGUE na Intelipost
+alter table public.aguardando_entrega add column if not exists ip_entregue_status text;   -- feito | ja_estava | conferir | erro
+alter table public.aguardando_entrega add column if not exists ip_entregue_msg text;
+alter table public.aguardando_entrega add column if not exists ip_entregue_em timestamptz;

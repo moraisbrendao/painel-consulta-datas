@@ -3475,7 +3475,9 @@ ${extra}
   }
   function agRobo(t) {
     const q = t.baixa_em ? `<div class="s">${new Date(t.baixa_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}</div>` : "";
-    if (t.baixa_status === "feita") return `<span class="chip verde">✓ Baixa feita</span>${q}`;
+    if (t.baixa_status === "feita") { const ip = t.ip_entregue_status, im = t.ip_entregue_msg ? esc(t.ip_entregue_msg) : "";
+      const ipTxt = ip === "feito" ? `<div class="s txt-verde">✓ Entregue na Intelipost</div>` : ip === "ja_estava" ? `<div class="s">Intelipost já estava Entregue</div>` : ip === "conferir" ? `<div class="s txt-ambar">Intelipost: ${im}</div>` : ip === "erro" ? `<div class="s txt-vermelho">Intelipost: ${im}</div>` : "";
+      return `<span class="chip verde">✓ Baixa feita</span>${q}${ipTxt}`; }
     if (t.insucesso && t.situacao !== "entregue" && t.nf_nova) {   // onde está a ocorrência desse insucesso
       const n = nfSerie({ nf: t.nf_nova });
       if (ocCadastrada({ nf: t.nf_nova })) return `<span class="chip verde">✓ Ocorrência cadastrada</span>`;
