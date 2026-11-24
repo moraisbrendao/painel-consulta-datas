@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=285">
+  <link rel="stylesheet" href="styles.css?v=286">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -954,17 +954,18 @@
           <label>Fila atual<select class="sm-sel" data-sm="fila" multiple data-todos="Todas"></select></label>
           <label>Responsável<select class="sm-sel" data-sm="resp" multiple data-todos="Todos"></select></label>
           <label>Pré ou pós<select class="sm-sel" data-sm="tipo"><option value="">Pré e pós entrega</option><option value="pre">Pré-entrega</option><option value="pos">Pós-entrega</option></select></label>
+          <label>Período<select class="sm-sel" data-sm="per"><option value="">Todo o período</option><option value="7">Últimos 7 dias</option><option value="30">Últimos 30 dias</option><option value="60">Últimos 60 dias</option><option value="90">Últimos 90 dias</option></select></label>
           <label>Aberto de<input class="sm-data" data-sm="de" type="date"></label>
           <label>Até<input class="sm-data" data-sm="ate" type="date"></label>
           <button type="button" class="link limpar sm-limpar">Limpar filtros</button>
         </section>
         <div class="titulo-pagina com-acoes sm-titulo">
           <div><h1>Monitoramento de SLA e gargalos</h1><p class="sub sm-sub"></p></div>
-          <div class="acoes-robo"><div class="sm-modo" role="group" aria-label="Como contar o prazo"><button type="button" data-smmodo="uteis">Dias úteis</button><button type="button" data-smmodo="corridos">Dias corridos</button></div></div>
+          <div class="acoes-robo"><div class="sm-modo" role="group" aria-label="Quais casos"><button type="button" data-smesc="todos">Todos os casos</button><button type="button" data-smesc="aberto">Só em aberto</button></div><div class="sm-modo" role="group" aria-label="Como contar o prazo"><button type="button" data-smmodo="uteis">Dias úteis</button><button type="button" data-smmodo="corridos">Dias corridos</button></div></div>
         </div>
         <section class="kpis sm-cards"></section>
         <div class="sm-duas">
-          <section class="cartao sm-rank-q"><div class="cartao-topo"><div><h2>Ranking das filas · da mais problemática para a menos</h2><p class="sub">Ordem: tickets fora do SLA, depois % vencido, depois próximos do vencimento. Clique numa fila para ver os tickets dela.</p></div>
+          <section class="cartao sm-rank-q"><div class="cartao-topo"><div><h2>Ranking das filas · da mais problemática para a menos</h2><p class="sub">Ordem: tickets fora do SLA, depois % fora do SLA, depois próximos do vencimento. Clique numa fila para ver os tickets dela.</p></div>
             <div class="sm-legenda"><span class="sm-l v"></span>Vencido <span class="sm-l p"></span>Próximo (≥80%) <span class="sm-l d"></span>Dentro <span class="sm-l s"></span>Sem SLA</div></div>
             <div class="tabela-rolagem"><table class="tabela sm-rank"><thead><tr><th>Fila</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num" title="Vencidos ÷ tickets com SLA definido (sem SLA fica fora da conta)">% vencido</th><th class="num">Média dias parados</th><th>Ticket mais antigo</th><th class="num" title="Média do % do prazo já consumido, só tickets com SLA">Consumo médio</th></tr></thead><tbody class="sm-rank-corpo"></tbody></table></div>
           </section>
@@ -1643,21 +1644,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=285"></script>
-  <script src="mapa-brasil.js?v=285"></script>
-  <script src="troca-notas.js?v=285"></script>
-  <script src="app.js?v=285"></script>
-  <script src="ordenar.js?v=285"></script>
-  <script src="menu.js?v=285"></script>
-  <script src="ajuda.js?v=285"></script>
-  <script src="documentos.js?v=285"></script>
-  <script src="barrar.js?v=285"></script>
-  <script src="naoloc.js?v=285"></script>
-  <script src="faltas.js?v=285"></script>
-  <script src="motor.js?v=285"></script>
-  <script src="retornos-semana.js?v=285"></script>
-  <script src="gargalos.js?v=285"></script>
-  <script src="filas.js?v=285"></script>
-  <script src="filtros.js?v=285"></script>
+  <script src="config.js?v=286"></script>
+  <script src="mapa-brasil.js?v=286"></script>
+  <script src="troca-notas.js?v=286"></script>
+  <script src="app.js?v=286"></script>
+  <script src="ordenar.js?v=286"></script>
+  <script src="menu.js?v=286"></script>
+  <script src="ajuda.js?v=286"></script>
+  <script src="documentos.js?v=286"></script>
+  <script src="barrar.js?v=286"></script>
+  <script src="naoloc.js?v=286"></script>
+  <script src="faltas.js?v=286"></script>
+  <script src="motor.js?v=286"></script>
+  <script src="retornos-semana.js?v=286"></script>
+  <script src="gargalos.js?v=286"></script>
+  <script src="filas.js?v=286"></script>
+  <script src="filtros.js?v=286"></script>
 </body>
 </html>

@@ -3188,3 +3188,37 @@ end $$;
 revoke all on function public._robo_repo_sla() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-repo-sla';
 select cron.schedule('robo-repo-sla', '30 11,17 * * *', 'select public._robo_repo_sla()');
+
+-- ============ PARTE 66: Reposição — coluna "Qtd Fora do SLA" da tabela de acompanhamento (Monitoramento de SLA, todos os casos) ============
+alter table public.reposicoes_tk add column if not exists qtd_fora_sla numeric;
+create or replace function public.importar_reposicoes_tk(linhas jsonb, primeiro boolean, arquivo text, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if primeiro then
+    insert into public.reposicoes_tk_info (id, arquivo, linhas, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.reposicoes_tk (ticket, criado_em, criado_por, via, fila, tipo, motivo, status, transportadora, nf,
+    filial, responsavel, atualizado_em, finalizado_em, tempo_resolucao, estagnada, transp_final, transp_redesp, pedido, valor_pedido, grupo, qtd_fora_sla)
+  select r.ticket, r.criado_em, r.criado_por, r.via, r.fila, r.tipo, r.motivo, r.status, r.transportadora, r.nf,
+    r.filial, r.responsavel, r.atualizado_em, r.finalizado_em, r.tempo_resolucao, r.estagnada, r.transp_final, r.transp_redesp, r.pedido, r.valor_pedido, r.grupo, r.qtd_fora_sla
+  from jsonb_to_recordset(linhas) as r(ticket text, criado_em timestamp, criado_por text, via text, fila text, tipo text,
+    motivo text, status text, transportadora text, nf text, filial text, responsavel text, atualizado_em timestamp,
+    finalizado_em timestamp, tempo_resolucao numeric, estagnada text, transp_final text, transp_redesp text, pedido text, valor_pedido numeric, grupo text, qtd_fora_sla numeric)
+  where r.ticket is not null and r.ticket <> ''
+  on conflict (ticket) do update set criado_em = excluded.criado_em, criado_por = excluded.criado_por, via = excluded.via,
+    fila = excluded.fila, tipo = excluded.tipo, motivo = excluded.motivo, status = excluded.status,
+    transportadora = excluded.transportadora, nf = excluded.nf, filial = excluded.filial, responsavel = excluded.responsavel,
+    atualizado_em = excluded.atualizado_em, finalizado_em = excluded.finalizado_em, tempo_resolucao = excluded.tempo_resolucao,
+    estagnada = excluded.estagnada, transp_final = excluded.transp_final, transp_redesp = excluded.transp_redesp,
+    pedido = excluded.pedido, valor_pedido = excluded.valor_pedido, grupo = excluded.grupo, qtd_fora_sla = excluded.qtd_fora_sla;
+  return (select count(*) from public.reposicoes_tk);
+end $$;
+revoke all on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_reposicoes_tk(jsonb, boolean, text, integer) to authenticated;
