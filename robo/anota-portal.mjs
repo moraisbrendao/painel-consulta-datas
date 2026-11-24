@@ -113,6 +113,15 @@ export async function diagAnota({ chamar, log, ctx }) {
 export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   const q15 = new Date(Date.now() - 15 * 864e5).toISOString(), ontem = new Date(Date.now() - 20 * 3600e3).toISOString();
   const L = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&nf_nova=not.is.null&nf_ticket=not.is.null&robo_status=eq.feito&robo_feito_em=gte.${q15}&or=(chat_pdf_status.is.null,chat_pdf_status.eq.sem_pdf,chat_pdf_status.eq.conferir,and(chat_pdf_status.eq.erro,chat_pdf_msg.like.Coment*),portal_anot_status.is.null,portal_anot_status.eq.erro,and(portal_anot_status.eq.nao_achou,portal_anot_em.lt.${ontem}))&order=robo_feito_em.asc&limit=${limite}`);
+  // só alguns tickets (teste pedido pela Brenda): TRANSP = "h:" + hashes sha256[:16] dos tickets, para não expor o número no registro público
+  if (/^h:/.test(process.env.TRANSP || "")) {
+    const { createHash } = await import("node:crypto"); const hs = new Set(process.env.TRANSP.slice(2).split(","));
+    const T = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_status,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&order=criado_em.desc&limit=5000`).catch(() => chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_status,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&limit=5000`));
+    const A = T.filter((x) => hs.has(createHash("sha256").update(String(x.ticket)).digest("hex").slice(0, 16)));
+    log(`anota-portal: filtro por hash → ${A.length} troca(s)` + A.map((x) => ` [robô ${x.robo_status || "-"} · nova NF ${x.nf_nova ? "sim" : "não"} · NF do ticket ${x.nf_ticket ? "sim" : "não"} · chat ${x.chat_pdf_status || "-"} · portal ${x.portal_anot_status || "-"}]`).join(""));
+    L.splice(0, L.length, ...A.filter((x) => x.robo_status === "feito" && x.nf_nova && x.nf_ticket));
+    L.forEach((x) => { if (x.portal_anot_status === "nao_achou") x.portal_anot_status = null; });
+  }
   // envio da 1ª versão marcado como erro "Comentário enviado…": só conferir, nunca reenviar
   L.forEach((x) => { if (x.chat_pdf_status === "erro" && /^Coment[aá]rio enviado/.test(x.chat_pdf_msg || "")) x.chat_pdf_status = "conferir"; });
   log(`anota-portal: ${L.length} troca(s) para olhar`);
