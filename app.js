@@ -4451,8 +4451,8 @@ ${extra}
   // Sem SLA (não definido no 360 ou ainda não lido pelo robô) fica separado: nunca conta como dentro nem como vencido.
   let smModo = "uteis"; try { const m = localStorage.getItem("painel.smModo"); if (m === "uteis" || m === "corridos") smModo = m; } catch (_) {}
   const smF = { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" };
-  let smEscopo = "todos"; try { const e = localStorage.getItem("painel.smEscopo"); if (e === "todos" || e === "aberto") smEscopo = e; } catch (_) {}
-  let smSit = "", smFila = null, smOrd = "atraso", smPag = 1, smLista = [];
+  let smEscopo = "todos"; try { const e = localStorage.getItem("painel.smEscopo"); if (["todos", "aberto", "fin"].includes(e)) smEscopo = e; } catch (_) {}
+  let smSit = "", smFila = null, smGrp = "", smOrd = "atraso", smPag = 1, smLista = [];
   const SM_SIT = { venc: "Fora do SLA", prox: "Próximo do vencimento", dentro: "Dentro do SLA", sem: "Sem SLA definido" };
   const SM_ORD_SIT = { venc: 0, prox: 1, dentro: 2, sem: 3 };
   const smUn = () => (smModo === "uteis" ? "dias úteis" : "dias corridos");
@@ -4472,7 +4472,7 @@ ${extra}
     if (smModo === "uteis" && r._smK === k) return r._sm;
     const o = smVivo(r), ab = abertoRep(r), q = smQtd(r);
     o.ab = ab; o.qtd = q; o.vivo = o.sit;
-    if (smEscopo === "todos") {
+    if (smEscopo !== "aberto") {
       if (!ab) Object.assign(o, { cons: null, resta: null, prazo: null, parado: null, naoLido: false, vivo: "sem" });
       const v = o.vivo;
       o.sit = (q != null && q > 0) || v === "venc" ? "venc" : v === "prox" ? "prox" : v === "dentro" || q === 0 ? "dentro" : "sem";
@@ -4497,7 +4497,7 @@ ${extra}
   const smDiaTxt = (x) => { if (x == null) return "–"; const a = Math.abs(x); if (smModo === "corridos" && a < 1) return Math.round(a * 24) + " h"; const v = smModo === "corridos" ? Math.round(a * 10) / 10 : a; return String(v).replace(".", ",") + (v === 1 ? " dia" : " dias"); };
   const smResta = (c) => c.resta == null ? "–" : c.sit === "venc" ? `<b class="txt-vermelho">atraso de ${smDiaTxt(c.resta)}</b>` : Math.abs(c.resta) < (smModo === "uteis" ? 1 : 1 / 24) ? `<b class="txt-laranja">vence hoje</b>` : `${smDiaTxt(c.resta) === "1 dia" ? "falta" : "faltam"} ${smDiaTxt(c.resta)}`;
   const smBarra = (c) => c.cons == null ? `<span class="s">${c.ab === false ? "–" : "sem SLA"}</span>` : `<div class="sm-cons ${c.sit}"><span style="width:${Math.min(100, Math.max(2, c.cons * 100))}%"></span></div><b class="sm-cons-n ${c.sit}">${smPct(c.cons)}</b>`;
-  const smBase = () => (smEscopo === "todos" ? reps : reps.filter(abertoRep));
+  const smBase = () => (smEscopo === "todos" ? reps : smEscopo === "fin" ? reps.filter((r) => !abertoRep(r)) : reps.filter(abertoRep));
   const smCasa = (r, sem = "") => { const d = String(r.criado_em || "").slice(0, 10);
     return (sem === "grupo" || !smF.grupo.length || smF.grupo.includes(grupoRep(r))) && (sem === "fila" || !smF.fila.length || smF.fila.includes(filaRep(r) || SEM_FILA))
       && (sem === "resp" || !smF.resp.length || smF.resp.includes(respRep(r))) && (!smF.tipo || r._t === smF.tipo) && (!smF.de || (d && d >= smF.de)) && (!smF.ate || (d && d <= smF.ate)) && (!smF.per || (d && diasEntre(d, hojeISO()) < +smF.per)); };
@@ -4506,16 +4506,16 @@ ${extra}
       const cs = rs.map(smCalc), c = { venc: 0, prox: 0, dentro: 0, sem: 0 }; cs.forEach((x) => c[x.sit]++);
       const com = rs.length - c.sem, par = cs.map((x) => x.parado).filter((x) => x != null), cons = cs.filter((x) => x.cons != null).map((x) => x.cons);
       const abs = rs.filter(abertoRep), velho = abs.reduce((a, r) => (smCalc(r).idade ?? -1) > (a ? smCalc(a).idade ?? -1 : -2) ? r : a, null);
-      const estouros = cs.reduce((a, x) => a + (x.qtd || 0), 0), nAb = abs.length;
+      const estouros = cs.reduce((a, x) => a + (x.qtd || 0), 0), nAb = abs.length, ids = cs.filter((x) => !x.ab && x.idade != null).map((x) => x.idade);
       const atrasoMax = Math.max(0, ...cs.filter((x) => x.sit === "venc").map((x) => -x.resta));
-      return { fila, rs, n: rs.length, ...c, com, pv: com ? c.venc / com : 0, mPar: par.length ? par.reduce((a, b) => a + b, 0) / par.length : null, velho, mCons: cons.length ? cons.reduce((a, b) => a + b, 0) / cons.length : null, atrasoMax, estouros, nAb, naoLido: cs.filter((x) => x.naoLido).length };
+      return { fila, rs, n: rs.length, ...c, com, pv: com ? c.venc / com : 0, mPar: par.length ? par.reduce((a, b) => a + b, 0) / par.length : null, velho, mCons: cons.length ? cons.reduce((a, b) => a + b, 0) / cons.length : null, atrasoMax, estouros, nAb, mIdade: ids.length ? ids.reduce((a, b) => a + b, 0) / ids.length : null, naoLido: cs.filter((x) => x.naoLido).length };
     }).sort((a, b) => b.venc - a.venc || b.pv - a.pv || b.prox - a.prox || b.n - a.n);
   }
   function smDiagnostico(L, F, t) {
     if (!L.length) return `<p class="s">Nenhum ticket em aberto nesse filtro.</p>`;
     const pl = (n, a, b) => `${fmt(n)} ${n === 1 ? a : b}`, B = (x) => `<b>${esc(x)}</b>`, itens = [];
     const nAb = L.filter(abertoRep).length;
-    itens.push(`${smEscopo === "todos" ? `Dos ${pl(L.length, "caso", "casos")} (${fmt(nAb)} em aberto e ${fmt(L.length - nAb)} finalizados ou em Recuperação de crédito)` : `Dos ${pl(L.length, "ticket em aberto", "tickets em aberto")}`}, ${fmt(t.com)} ${t.com === 1 ? "tem" : "têm"} informação de SLA: ${B(fmt(t.venc) + " fora do SLA")} (${pct(t.venc, t.com)}), ${fmt(t.prox)} próximos do vencimento e ${fmt(t.dentro)} dentro do prazo. Cumprimento do SLA: ${B(pct(t.com - t.venc, t.com))} (${fmt(t.com - t.venc)} de ${fmt(t.com)}).${smEscopo === "todos" && t.estouros ? ` Ao todo foram ${fmt(t.estouros)} estouros de SLA (um ticket pode estourar em mais de uma fila).` : ""}`);
+    itens.push(`${smEscopo !== "aberto" ? `Dos ${pl(L.length, "caso", "casos")} (${fmt(nAb)} em aberto e ${fmt(L.length - nAb)} finalizados ou em Recuperação de crédito)` : `Dos ${pl(L.length, "ticket em aberto", "tickets em aberto")}`}, ${fmt(t.com)} ${t.com === 1 ? "tem" : "têm"} informação de SLA: ${B(fmt(t.venc) + " fora do SLA")} (${pct(t.venc, t.com)}), ${fmt(t.prox)} próximos do vencimento e ${fmt(t.dentro)} dentro do prazo. Cumprimento do SLA: ${B(pct(t.com - t.venc, t.com))} (${fmt(t.com - t.venc)} de ${fmt(t.com)}).${smEscopo !== "aberto" && t.estouros ? ` Ao todo foram ${fmt(t.estouros)} estouros de SLA (um ticket pode estourar em mais de uma fila).` : ""}`);
     const fv = F.filter((f) => f.venc).sort((a, b) => b.venc - a.venc)[0];
     if (fv) itens.push(`A fila ${B(fv.fila)} concentra mais tickets vencidos: ${fmt(fv.venc)} de ${fmt(t.venc)} (${pct(fv.venc, t.venc)} de todos os vencidos)${fv.atrasoMax ? `; o pior está ${smDiaTxt(fv.atrasoMax)} além do prazo` : ""}.`);
     else if (t.com) itens.push(`Nenhum ticket com SLA está vencido neste filtro.`);
@@ -4527,7 +4527,7 @@ ${extra}
     const fx = F.filter((f) => f.prox).sort((a, b) => b.prox - a.prox).slice(0, 3);
     if (fx.length) itens.push(`Próximos do vencimento (80% ou mais do prazo já consumido): ${fx.map((f) => `${B(f.fila)} (${fmt(f.prox)})`).join(", ")}. Atuar nesses antes que virem atraso.`);
     if (t.sem) { const fs = F.filter((f) => f.sem).sort((a, b) => b.sem - a.sem)[0];
-      itens.push(`${pl(t.sem, "ticket está", "tickets estão")} sem informação de SLA (${pct(t.sem, L.length)} ${smEscopo === "todos" ? "dos casos" : "dos em aberto"}) e ${t.sem === 1 ? "não entra" : "não entram"} no cálculo de cumprimento; a fila com mais casos assim é ${B(fs.fila)} (${fmt(fs.sem)}).${smEscopo === "todos" && t.semQtd ? ` ${pl(t.semQtd, "caso ainda não tem", "casos ainda não têm")} a coluna Qtd Fora do SLA guardada${t.semQtd === L.length ? ": rode a parte 66 no Supabase e suba a tabela de acompanhamento de novo" : ""}.` : ""}${t.naoLido ? ` ${pl(t.naoLido, "ticket em aberto ainda não foi lido", "tickets em aberto ainda não foram lidos")} pelo robô (ele lê às 08:30 e 14:30).` : ""}`); }
+      itens.push(`${pl(t.sem, "ticket está", "tickets estão")} sem informação de SLA (${pct(t.sem, L.length)} ${smEscopo !== "aberto" ? "dos casos" : "dos em aberto"}) e ${t.sem === 1 ? "não entra" : "não entram"} no cálculo de cumprimento; a fila com mais casos assim é ${B(fs.fila)} (${fmt(fs.sem)}).${smEscopo !== "aberto" && t.semQtd ? ` ${pl(t.semQtd, "caso ainda não tem", "casos ainda não têm")} a coluna Qtd Fora do SLA guardada${t.semQtd === L.length ? ": rode a parte 66 no Supabase e suba a tabela de acompanhamento de novo" : ""}.` : ""}${t.naoLido ? ` ${pl(t.naoLido, "ticket em aberto ainda não foi lido", "tickets em aberto ainda não foram lidos")} pelo robô (ele lê às 08:30 e 14:30).` : ""}`); }
     const pri = F.filter((f) => f.venc || f.prox).slice(0, 3);
     const priTxt = pri.length ? `<ol class="sm-pri">${pri.map((f) => `<li>${B(f.fila)}: ${[f.venc && `${fmt(f.venc)} vencidos (${pct(f.venc, f.com)})`, f.prox && `${fmt(f.prox)} perto de vencer`, f.atrasoMax && `pior atraso ${smDiaTxt(f.atrasoMax)}`].filter(Boolean).join(", ")}.</li>`).join("")}</ol>` : `<p class="s">Nenhuma fila com tickets vencidos ou perto de vencer.</p>`;
     return `<ul class="sm-diag-l">${itens.map((x) => `<li>${x}</li>`).join("")}</ul><h3 class="sm-pri-t">Prioridades de atuação</h3>${priTxt}`;
@@ -4546,27 +4546,34 @@ ${extra}
     L.forEach((r) => { const c = smCalc(r); t[c.sit]++; if (c.ab) tAb[c.sit]++; if (c.naoLido && c.ab) t.naoLido++; t.estouros += c.qtd || 0; if (c.qtd == null) t.semQtd++; }); t.com = L.length - t.sem;
     const quebra = (k) => (smEscopo === "todos" ? ` · ${fmt(tAb[k])} em aberto, ${fmt(t[k] - tAb[k])} finalizados` : "");
     const lido = [...repSla.values()].map((x) => x.lido_em).filter(Boolean).sort().pop();
-    box.querySelector(".sm-sub").innerHTML = `${fmt(L.length)} ${smEscopo === "todos" ? "casos de reposição (em aberto e finalizados)" : "tickets de reposição em aberto"}${L.length !== base.length ? ` (de ${fmt(base.length)})` : ""}${smEscopo === "todos" ? " · finalizados: Fora do SLA quando a coluna Qtd Fora do SLA da tabela de acompanhamento é 1 ou mais" : ""} · prazo contado em <b>${smUn()}</b>${smModo === "uteis" ? " (horas SLA ÷ 24, sem sábado, domingo e feriados nacionais)" : " (início + horas SLA, igual ao 360)"} · SLA lido do Multi360${lido ? ` em ${new Date(lido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ": ainda não lido"}.`;
+    box.querySelector(".sm-sub").innerHTML = `${fmt(L.length)} ${smEscopo === "todos" ? "casos de reposição (em aberto e finalizados)" : smEscopo === "fin" ? "casos de reposição finalizados (Resolvido, Encerrado ou Recuperação de crédito)" : "tickets de reposição em aberto"}${L.length !== base.length ? ` (de ${fmt(base.length)})` : ""}${smEscopo !== "aberto" ? " · finalizados: Fora do SLA quando a coluna Qtd Fora do SLA da tabela de acompanhamento é 1 ou mais" : ""} · prazo contado em <b>${smUn()}</b>${smModo === "uteis" ? " (horas SLA ÷ 24, sem sábado, domingo e feriados nacionais)" : " (início + horas SLA, igual ao 360)"} · SLA lido do Multi360${lido ? ` em ${new Date(lido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ": ainda não lido"}.`;
     const card = (k, rot, n, sub, cor) => `<button type="button" class="kpi kpi-info kpi-clic ${cor}${smSit === k ? " ativa" : ""}" data-smsit="${k}" title="Clique para filtrar a lista de tickets"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small></button>`;
     box.querySelector(".sm-cards").innerHTML = card("venc", "Fora do SLA", fmt(t.venc), `${pct(t.venc, t.com)} dos ${fmt(t.com)} com SLA${quebra("venc")}`, "vermelho")
       + card("prox", "Próximos do vencimento", fmt(t.prox), `em aberto, 80% ou mais do prazo consumido`, "laranja")
       + card("dentro", "Dentro do SLA", fmt(t.dentro), `${pct(t.dentro, t.com)} dos ${fmt(t.com)} com SLA${quebra("dentro")}`, "verde")
-      + card("sem", "Sem SLA definido", fmt(t.sem), `${pct(t.sem, L.length)} ${smEscopo === "todos" ? "dos casos" : "dos em aberto"}${t.naoLido ? ` · ${fmt(t.naoLido)} não lidos pelo robô` : ""}`, "cinza")
+      + card("sem", "Sem SLA definido", fmt(t.sem), `${pct(t.sem, L.length)} ${smEscopo !== "aberto" ? "dos casos" : "dos em aberto"}${t.naoLido ? ` · ${fmt(t.naoLido)} não lidos pelo robô` : ""}`, "cinza")
       + `<div class="kpi kpi-info azul"><span class="kpi-rot">Cumprimento do SLA</span><b class="kpi-num">${pct(t.com - t.venc, t.com)}</b><small>${fmt(t.com - t.venc)} não vencidos ÷ ${fmt(t.com)} com SLA (sem SLA fica fora)</small></div>`;
-    const F = smFilas(L), mx = Math.max(1, ...F.map((f) => f.n));
-    const seg = (n, k, f) => (n ? `<span class="sm-s ${k}" style="width:${(n / mx) * 100}%" title="${esc(f.fila)} · ${SM_SIT[k]}: ${fmt(n)}"></span>` : "");
-    box.querySelector(".sm-rank-corpo").innerHTML = F.map((f, i) => `<tr class="sm-rank-l${smFila === f.fila ? " sel" : ""}" data-smfila="${esc(f.fila)}" title="Ver os tickets desta fila"><td><span class="sm-pos">${i + 1}</span><a href="#">${esc(f.fila)}</a></td>
-      <td class="sm-col-barra"><div class="sm-barra">${seg(f.venc, "venc", f)}${seg(f.prox, "prox", f)}${seg(f.dentro, "dentro", f)}${seg(f.sem, "sem", f)}</div></td>
-      <td class="num tot">${fmt(f.n)}</td><td class="num">${f.venc ? `<b class="txt-vermelho">${fmt(f.venc)}</b>` : "·"}</td><td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td>
-      <td class="num" title="${fmt(f.venc)} vencidos ÷ ${fmt(f.com)} com SLA">${f.com ? `<b class="${f.pv >= 0.5 ? "txt-vermelho" : f.pv >= 0.25 ? "txt-laranja" : ""}">${pct(f.venc, f.com)}</b><div class="s">${fmt(f.venc)}/${fmt(f.com)}</div>` : `<span class="s">sem SLA</span>`}</td>
-      ${smEscopo === "todos" ? `<td class="num" title="Soma da coluna Qtd Fora do SLA">${f.estouros ? fmt(f.estouros) : "·"}</td>` : ""}<td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td>${f.velho ? `${linkTicket(f.velho.ticket)}<div class="s">${smDiaTxt(smCalc(f.velho).idade)} em aberto</div>` : "–"}</td>
-      <td class="num">${f.mCons == null ? "–" : `<b class="${f.mCons > 1 ? "txt-vermelho" : f.mCons >= 0.8 ? "txt-laranja" : ""}">${smPct(f.mCons)}</b>`}</td></tr>`).join("")
-      || `<tr><td colspan="10" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
-    box.querySelector(".sm-rank thead").innerHTML = `<tr><th>Fila</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num" title="Fora do SLA ÷ tickets com informação de SLA (sem SLA fica fora da conta)">% fora do SLA</th>${smEscopo === "todos" ? `<th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th>` : ""}<th class="num">Média dias parados${smEscopo === "todos" ? " (em aberto)" : ""}</th><th>Ticket em aberto mais antigo</th><th class="num" title="Média do % do prazo já consumido, só tickets em aberto com SLA lido">Consumo médio</th></tr>`;
+    const F = smFilas(L);
+    const rankHTML = (FF, g) => { const mx = Math.max(1, ...FF.map((f) => f.n)), ab = g === "ab";
+      const seg = (n, k, f) => (n ? `<span class="sm-s ${k}" style="width:${(n / mx) * 100}%" title="${esc(f.fila)} · ${SM_SIT[k]}: ${fmt(n)}"></span>` : "");
+      const pv = (f) => `<td class="num" title="${fmt(f.venc)} fora do SLA ÷ ${fmt(f.com)} com SLA">${f.com ? `<b class="${f.pv >= 0.5 ? "txt-vermelho" : f.pv >= 0.25 ? "txt-laranja" : ""}">${pct(f.venc, f.com)}</b><div class="s">${fmt(f.venc)}/${fmt(f.com)}</div>` : `<span class="s">sem SLA</span>`}</td>`;
+      const est = (f) => `<td class="num" title="Soma da coluna Qtd Fora do SLA">${f.estouros ? fmt(f.estouros) : "·"}</td>`;
+      const cab = ab ? `<tr><th>Fila</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num" title="Fora do SLA ÷ tickets com informação de SLA (sem SLA fica fora da conta)">% fora do SLA</th>${smEscopo !== "aberto" ? `<th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th>` : ""}<th class="num">Média dias parados</th><th>Mais antigo</th><th class="num" title="Média do % do prazo já consumido, só tickets com SLA lido">Consumo médio</th></tr>`
+        : `<tr><th>Fila em que finalizou</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Dentro</th><th class="num" title="Fora do SLA ÷ tickets com a Qtd Fora do SLA na planilha">% fora do SLA</th><th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th><th class="num">Tempo médio até finalizar (${smUn()})</th><th class="num">Sem SLA</th></tr>`;
+      const linhas = FF.map((f, i) => `<tr class="sm-rank-l${smFila === f.fila && smGrp === g ? " sel" : ""}" data-smfila="${esc(f.fila)}" data-smgrp="${g}" title="Ver os tickets desta fila"><td><span class="sm-pos">${i + 1}</span><a href="#">${esc(f.fila)}</a></td>
+        <td class="sm-col-barra"><div class="sm-barra">${seg(f.venc, "venc", f)}${seg(f.prox, "prox", f)}${seg(f.dentro, "dentro", f)}${seg(f.sem, "sem", f)}</div></td>
+        <td class="num tot">${fmt(f.n)}</td><td class="num">${f.venc ? `<b class="txt-vermelho">${fmt(f.venc)}</b>` : "·"}</td>`
+        + (ab ? `<td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td>${pv(f)}${smEscopo !== "aberto" ? est(f) : ""}<td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td>${f.velho ? `${linkTicket(f.velho.ticket)}<div class="s">${smDiaTxt(smCalc(f.velho).idade)} em aberto</div>` : "–"}</td>
+        <td class="num">${f.mCons == null ? "–" : `<b class="${f.mCons > 1 ? "txt-vermelho" : f.mCons >= 0.8 ? "txt-laranja" : ""}">${smPct(f.mCons)}</b>`}</td></tr>`
+          : `<td class="num">${f.dentro ? fmt(f.dentro) : "·"}</td>${pv(f)}${est(f)}<td class="num">${f.mIdade == null ? "–" : dia1(f.mIdade)}</td><td class="num s">${f.sem ? fmt(f.sem) : "·"}</td></tr>`)).join("")
+        || `<tr><td colspan="10" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
+      const tit = smEscopo === "todos" ? `<div class="sm-rank-sub"><h3>${ab ? "🟡 Em andamento" : "✅ Finalizados"}</h3><span class="s">${fmt(FF.reduce((a, f) => a + f.n, 0))} tickets${ab ? " em aberto agora" : " (Resolvido, Encerrado ou Recuperação de crédito)"}</span></div>` : "";
+      return `${tit}<div class="tabela-rolagem"><table class="tabela sm-rank"><thead>${cab}</thead><tbody>${linhas}</tbody></table></div>`; };
+    box.querySelector(".sm-ranks").innerHTML = smEscopo === "todos" ? rankHTML(smFilas(L.filter(abertoRep)), "ab") + rankHTML(smFilas(L.filter((r) => !abertoRep(r))), "fin") : rankHTML(F, smEscopo === "fin" ? "fin" : "ab");
     box.querySelector(".sm-diag").innerHTML = smDiagnostico(L, F, t);
     // lista de tickets (card e/ou fila clicados)
-    if (smFila && !F.some((f) => f.fila === smFila)) smFila = null;
-    let D = L.filter((r) => (!smSit || smCalc(r).sit === smSit) && (!smFila || (filaRep(r) || SEM_FILA) === smFila));
+    if (smFila && !F.some((f) => f.fila === smFila)) { smFila = null; smGrp = ""; }
+    let D = L.filter((r) => (!smSit || smCalc(r).sit === smSit) && (!smFila || ((filaRep(r) || SEM_FILA) === smFila && (!smGrp || (smGrp === "ab") === abertoRep(r)))));
     const nn = (x, d) => (x == null ? d : x);
     const ord = { atraso: (a, b) => SM_ORD_SIT[a.sit] - SM_ORD_SIT[b.sit] || nn(a.resta, 1e9) - nn(b.resta, 1e9),
       antigo: (a, b) => nn(b.idade, -1) - nn(a.idade, -1),
@@ -4574,7 +4581,7 @@ ${extra}
       parado: (a, b) => nn(b.parado, -1) - nn(a.parado, -1) }[smOrd];
     D = D.slice().sort((x, y) => ord(smCalc(x), smCalc(y)) || nn(smCalc(y).idade, -1) - nn(smCalc(x).idade, -1)); smLista = D;
     box.querySelector(".sm-ord").value = smOrd;
-    box.querySelector(".sm-det-tit").innerHTML = `${fmt(D.length)} tickets` + (smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : "") + (smFila ? ` <button type="button" class="chip amarelo sm-x" data-smx="fila">${esc(smFila)} ✕</button>` : "");
+    box.querySelector(".sm-det-tit").innerHTML = `${fmt(D.length)} tickets` + (smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : "") + (smFila ? ` <button type="button" class="chip amarelo sm-x" data-smx="fila">${esc(smFila)}${smEscopo === "todos" && smGrp ? (smGrp === "ab" ? " · em andamento" : " · finalizados") : ""} ✕</button>` : "");
     const POR = 100, pags = Math.max(1, Math.ceil(D.length / POR)); smPag = Math.min(smPag, pags);
     const quando = (c) => (!c.prazo ? "–" : smModo === "corridos" ? new Date(c.prazo).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : br(c.prazo));
     box.querySelector(".sm-det-corpo").innerHTML = D.slice((smPag - 1) * POR, smPag * POR).map((r) => { const c = smCalc(r), s = r._sla;
@@ -4592,12 +4599,12 @@ ${extra}
       if (e.target.closest(".sm-ord")) { smOrd = e.target.value; smPag = 1; desenharSlaMon(); }
     });
     box.addEventListener("click", (e) => {
-      const es = e.target.closest("[data-smesc]"); if (es) { smEscopo = es.dataset.smesc; smSit = ""; smPag = 1; try { localStorage.setItem("painel.smEscopo", smEscopo); } catch (_) {} desenharSlaMon(); return; }
+      const es = e.target.closest("[data-smesc]"); if (es) { smEscopo = es.dataset.smesc; smSit = ""; smFila = null; smGrp = ""; smPag = 1; try { localStorage.setItem("painel.smEscopo", smEscopo); } catch (_) {} desenharSlaMon(); return; }
       const m = e.target.closest("[data-smmodo]"); if (m) { smModo = m.dataset.smmodo; try { localStorage.setItem("painel.smModo", smModo); } catch (_) {} desenharSlaMon(); return; }
       if (e.target.closest(".sm-limpar")) { Object.assign(smF, { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" }); smSit = ""; smFila = null; smPag = 1; desenharSlaMon(); return; }
       const k = e.target.closest("[data-smsit]"); if (k) { smSit = smSit === k.dataset.smsit ? "" : k.dataset.smsit; smPag = 1; desenharSlaMon(); return; }
-      const l = e.target.closest("tr[data-smfila]"); if (l && !e.target.closest("a[href^='http']")) { e.preventDefault(); smFila = smFila === l.dataset.smfila ? null : l.dataset.smfila; smPag = 1; desenharSlaMon(); if (smFila) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
-      const x = e.target.closest("[data-smx]"); if (x) { if (x.dataset.smx === "sit") smSit = ""; else smFila = null; smPag = 1; desenharSlaMon(); return; }
+      const l = e.target.closest("tr[data-smfila]"); if (l && !e.target.closest("a[href^='http']")) { e.preventDefault(); const mesmo = smFila === l.dataset.smfila && smGrp === l.dataset.smgrp; smFila = mesmo ? null : l.dataset.smfila; smGrp = mesmo ? "" : l.dataset.smgrp; smPag = 1; desenharSlaMon(); if (smFila) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+      const x = e.target.closest("[data-smx]"); if (x) { if (x.dataset.smx === "sit") smSit = ""; else { smFila = null; smGrp = ""; } smPag = 1; desenharSlaMon(); return; }
       const p = e.target.closest("[data-smp]"); if (p) { smPag += +p.dataset.smp; desenharSlaMon(); return; }
       if (!e.target.closest(".sm-excel")) return;
       if (!smLista.length) return toast("Nenhum ticket nesse filtro.", true);

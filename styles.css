@@ -1339,3 +1339,7 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 #rp-sla > .kpis, #rp-sla > .cartao, #rp-sla .sm-duas > .cartao { margin: 0; }
 #rp-sla .sm-det td, #rp-sla .sm-rank td { vertical-align: middle; }
 #rp-sla .sm-det td.num { white-space: nowrap; }
+.sm-rank-sub { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; margin: 14px 0 4px; }
+.sm-rank-sub h3 { margin: 0; font-size: 15px; }
+.sm-ranks > .sm-rank-sub:first-child { margin-top: 4px; }
+#rp-sla .acoes-robo { display: flex; gap: 8px; flex-wrap: wrap; }
