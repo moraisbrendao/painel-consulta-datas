@@ -56,7 +56,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Preparar o navegador
-        if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag') || env.MODO == 'manter'
+        if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag') || startsWith(env.MODO, 'entregue') || env.MODO == 'manter'
         working-directory: robo
         run: |
           npm install --no-audit --no-fund
@@ -64,7 +64,7 @@ jobs:
           sudo apt-get install -y xvfb > /dev/null
 
       - name: Alterar na Intelipost
-        if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag') || env.MODO == 'manter'
+        if: steps.fila.outputs.tem == 'sim' || startsWith(env.MODO, 'diag') || startsWith(env.MODO, 'entregue') || env.MODO == 'manter'
         run: xvfb-run -a node robo/robo-intelipost.mjs
         env:
           INTELIPOST_EMAIL: ${{ secrets.INTELIPOST_EMAIL }}
