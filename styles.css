@@ -1271,3 +1271,9 @@ button.kpi > i::after { content: ""; position: absolute; inset: -6px; }
 .rp-vol-lado > div::-webkit-resizer { background: linear-gradient(135deg, transparent 55%, #9aa3b8 55%, #9aa3b8 62%, transparent 62%, transparent 75%, #9aa3b8 75%, #9aa3b8 82%, transparent 82%); }
 .rp-vol-lado > div[style*="width"] { flex-grow: 0; }
 .rp-vol-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(380px, 1fr)); gap: 16px; align-items: start; margin-bottom: 8px; }
+/* detalhe do card Totais × parciais: recolhido; aberto aparece por cima, sem esticar os outros cards */
+.kpi:has(.kpi-quebra) { position: relative; overflow: visible; }
+.kpi .kpi-quebra { display: none; }
+.kpi .kpi-quebra.aberta { display: flex; position: absolute; left: -1px; right: -1px; top: calc(100% - 6px); z-index: 30; background: #fff; border: 1px solid #f5c518; border-top: none; border-radius: 0 0 12px 12px; box-shadow: 0 10px 24px rgba(13,34,64,.18); padding: 8px 12px 10px; margin-top: 0; left: auto; width: max(100%, 260px); box-sizing: border-box; }
+.kpi .kpi-mais { display: inline-block; margin-top: 6px; font-size: 12px; font-weight: 600; color: #3b5bdb; cursor: pointer; }
+.kpi .kpi-mais:hover { text-decoration: underline; }

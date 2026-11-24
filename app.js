@@ -4329,9 +4329,13 @@ ${extra}
   const semTpMot = (r) => tpRep(r) ? "" : !r._it ? "nl" : r._it.erro ? "err" : "sq-" + sitRep(r);
   // onde está cada ticket sem Parcial/Total: finalizado, recuperação de crédito ou em qual fila (aguardando análise de reposição etc.)
   const ondeSemTp = (r) => (sitRep(r) === "fin" ? "fin" : sitRep(r) === "rec" ? "rec" : filaRep(r) || SEM_FILA);
+  // o detalhe do card "Totais × parciais" fica recolhido (deixava todos os cards compridos): ▾ abre (pedido da Brenda 24/11)
+  let quebraAberta = false;
+  document.addEventListener("click", (e) => { const m = e.target.closest("[data-mais]"); if (!m) return; e.preventDefault(); e.stopPropagation(); quebraAberta = !quebraAberta;
+    document.querySelectorAll(".kpi-quebra").forEach((q) => q.classList.toggle("aberta", quebraAberta)); document.querySelectorAll("[data-mais]").forEach((x) => (x.textContent = quebraAberta ? "▴ esconder" : "▾ ver detalhe")); }, true);
   const quebraSemTp = (L) => { const c = {}, sub = {}; L.forEach((r) => { const k = semTpMot(r); if (!k) return; c[k] = (c[k] || 0) + 1; const o = ondeSemTp(r); (sub[k] = sub[k] || {})[o] = (sub[k][o] || 0) + 1; });
     const rot = (o) => (o === "fin" ? "finalizados" : o === "rec" ? "Recuperação de crédito" : "fila " + o);
-    return `<span class="kpi-quebra">${Object.keys(SEM_TP).filter((k) => c[k]).map((k) => { const ss = Object.entries(sub[k]).sort((a, b) => b[1] - a[1]);
+    return `<span class="kpi-mais" data-mais title="Mostrar / esconder o detalhe">${quebraAberta ? "▴ esconder" : "▾ ver detalhe"}</span><span class="kpi-quebra${quebraAberta ? " aberta" : ""}">${Object.keys(SEM_TP).filter((k) => c[k]).map((k) => { const ss = Object.entries(sub[k]).sort((a, b) => b[1] - a[1]);
       const det = ss.length > 1 || (ss[0] && !["fin", "rec"].includes(ss[0][0])) ? ss.map(([o, n]) => `<span class="kpi-q kpi-q2" data-semtp="${k}"${["fin", "rec"].includes(o) ? "" : ` data-fila="${esc(o)}"`} title="Clique para ver esses tickets"><span>↳ ${esc(rot(o))}</span><b>${fmt(n)}</b></span>`).join("") : "";
       return `<span class="kpi-q" data-semtp="${k}" title="Clique para ver esses tickets"><span>${SEM_TP[k]}</span><b>${fmt(c[k])}</b></span>${det}`; }).join("")}</span>`; };
   const clic = (f, v, txt) => `<a href="#" class="rp-ir" data-f="${f}" data-v="${esc(v)}">${esc(txt)}</a>`;
