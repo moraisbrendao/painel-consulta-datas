@@ -422,6 +422,28 @@ if (MODO === "diag-sac") {   // Consulta SAC: quanto tempo a consultar_sac leva 
     try { const x = await chamarFaixa("rpc/consultar_sac", de, de + 999); n = x.length; } catch (e) { erro = String(e.message || e).replace(/\d{3,}/g, "#").slice(0, 160); }
     log(`consultar_sac linhas ${de}-${de + 999}: ${n} linhas em ${((Date.now() - t0) / 1000).toFixed(1)} s ${erro}`); if (n < 1000) break; }
 }
+if (MODO === "diag-cobmassa") {   // Cobrança em massa (Brenda 24/11): só contagens de status e de quantos casos entram pela regra
+  await entrarSupabase();
+  const tudo = async (q) => { const L = []; for (let de = 0; ; de += 1000) { const x = await chamar(`${q}&limit=1000&offset=${de}`); L.push(...x); if (x.length < 1000) break; } return L; };
+  const nfK = (v) => String(v ?? "").trim().split("-").map((t) => t.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-");
+  const conta = (L, f) => { const c = {}; L.forEach((x) => { const k = f(x) || "(vazio)"; c[k] = (c[k] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${v}`).join(" · "); };
+  const B = await tudo("base_pedidos?select=nf,status_intelipost,transportadora&order=pedido");
+  log(`base ${B.length} · status_intelipost: ${conta(B, (b) => b.status_intelipost).slice(0, 900)}`);
+  log(`exemplo formato nf base: ${String(B[0]?.nf || "").replace(/\d/g, "9")}`);
+  const ST = new Map(B.map((b) => [nfK(b.nf), b]));
+  const O = await tudo("ocorrencias_tk?select=nf,status,transportador&order=id");
+  log(`ocorrências ${O.length} · status: ${conta(O, (o) => o.status)} · formato nf ${String(O[0]?.nf || "").replace(/\d/g, "9")}`);
+  const Oa = O.filter((o) => /em andamento/i.test(o.status || ""));
+  log(`ocorrências em andamento ${Oa.length} · acharam na base ${Oa.filter((o) => ST.has(nfK(o.nf))).length} · status IP delas: ${conta(Oa, (o) => ST.get(nfK(o.nf))?.status_intelipost)}`);
+  const R = await tudo("repo_atual?select=ticket,nota_ticket,nfs_novas,fila_atual,tipo_reposicao&order=ticket");
+  const K = await tudo("reposicoes_tk?select=ticket,status,tipo&order=ticket"); const KM = new Map(K.map((k) => [String(k.ticket), k]));
+  const Rn = R.filter((r) => r.nfs_novas);
+  log(`reposições no detalhamento ${R.length} · com nova NF ${Rn.length} · formato nota_ticket ${String(R[0]?.nota_ticket || "").replace(/\d/g, "9")}`);
+  log(`  status do ticket (tabela de acompanhamento): ${conta(Rn, (r) => KM.get(String(r.ticket))?.status)}`);
+  log(`  filas: ${conta(Rn, (r) => r.fila_atual).slice(0, 600)}`);
+  log(`  acharam na base ${Rn.filter((r) => ST.has(nfK(r.nota_ticket))).length} · status IP: ${conta(Rn, (r) => ST.get(nfK(r.nota_ticket))?.status_intelipost)}`);
+  process.exit(0);
+}
 if (MODO === "diag-cobranca") {   // Cobrança do dia: por transportadora, sem nova data válida e em reposição (só contagens)
   await entrarSupabase();
   const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), am = new Date(Date.now() + 21 * 3600e3).toISOString().slice(0, 10);
