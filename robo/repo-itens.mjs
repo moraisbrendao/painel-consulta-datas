@@ -270,8 +270,13 @@ export async function lerSla(p) {
   });
   let det = "";
   const ic = p.locator("[data-sla-ic]").first();
-  if (await ic.count()) { await ic.hover().catch(() => {}); await p.waitForTimeout(800);
-    det = await p.evaluate(() => { const el = [...document.querySelectorAll("body *")].find((e) => e.children.length < 12 && /Detalhes do SLA/i.test(e.innerText || "") && /In[ií]cio/i.test(e.innerText || ""));
+  const achaDet = () => p.evaluate(() => { const el = [...document.querySelectorAll("body *")].find((e) => e.children.length < 12 && /Detalhes do SLA/i.test(e.innerText || "") && /In[ií]cio/i.test(e.innerText || ""));
+      return el ? el.innerText.replace(/\s+/g, " ") : ""; });
+  if (await ic.count()) { await ic.hover().catch(() => {}); await p.waitForTimeout(800); det = await achaDet();
+    if (!det) { await ic.click({ force: true }).catch(() => {}); await p.waitForTimeout(1200); det = await achaDet(); }
+    if (!det) { await ic.dispatchEvent("mouseenter").catch(() => {}); await ic.dispatchEvent("mouseover").catch(() => {}); await p.waitForTimeout(800); det = await achaDet(); }
+    if (det) await p.keyboard.press("Escape").catch(() => {});
+    if (!det) det = await p.evaluate(() => { const el = [...document.querySelectorAll("body *")].find((e) => e.children.length < 12 && /Detalhes do SLA/i.test(e.innerText || "") && /In[ií]cio/i.test(e.innerText || ""));
       return el ? el.innerText.replace(/\s+/g, " ") : ""; }); }
   const pega = (re) => (det.match(re) || [])[1] || "";
   const horas = pega(/Horas SLA:\s*([\d.,]+)/i);
