@@ -121,15 +121,21 @@
   }
   let brBusca = "";
   // a pesquisa dos pendentes usa o mesmo filtro "Nota ou ticket" do topo: a nota aparece na tabela geral (Erro: verificar), onde dá para decidir (Brenda 24/11)
+  let brSecGeral = null, brSecAncora = null;
   function aplicarBusca(box) {
     const q = brBusca.trim();
+    // pesquisando: a tabela geral (Erro: verificar, com a decisão) vem logo abaixo do campo; os quadros e quadrinhos continuam embaixo (Brenda 24/11)
+    if (!brSecGeral) { brSecGeral = $("br-linhas").closest("section"); brSecAncora = document.createComment("br-geral"); brSecGeral.before(brSecAncora); }
+    const linha = box.querySelector(".br-busca-linha");
+    if (q && linha) linha.after(brSecGeral); else if (brSecAncora.parentNode && brSecGeral.previousSibling !== brSecAncora) brSecAncora.after(brSecGeral);
     const n = $("br-linhas") ? $("br-linhas").querySelectorAll("tr:not(:has(td.vazio))").length : 0, info = box.querySelector(".br-busca-info");
-    if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): veja na tabela <b>Erro: verificar</b> abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
+    if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): está logo abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
   }
   document.addEventListener("input", (e) => { const i = e.target.closest("#br-erro-transp .br-busca"); if (!i) return; brBusca = i.value; $("br-busca").value = i.value; desenhar(); });
   function desenharErroTransp() {
     let box = $("br-erro-transp");
     if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
+    if (brSecGeral && box.contains(brSecGeral)) brSecAncora.after(brSecGeral);   // devolve a tabela geral ao lugar antes de redesenhar
     box.hidden = card !== "manual"; if (box.hidden) return;
     const rolT = [...box.querySelectorAll(".br-et-lista, .tabela-wrap")].map((el) => el.scrollTop);
     const msgs = new Map([...box.querySelectorAll(".br-et-msg")].filter((t) => t.dataset.editada).map((t) => [t.dataset.t, t.value]));
