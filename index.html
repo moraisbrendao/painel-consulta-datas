@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=311">
+  <link rel="stylesheet" href="styles.css?v=312">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -42,6 +42,7 @@
       <button class="menu-item so-log" data-pagina="canais"><span class="menu-icone">◎</span>Análise de canais</button>
       <button class="menu-item so-log" data-pagina="drop"><span class="menu-icone">📦</span>Dropshipping <span id="menu-drop" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="preventivo"><span class="menu-icone">◷</span>Preventivo</button>
+      <button class="menu-item so-log" data-pagina="cobmassa"><span class="menu-icone">📣</span>Cobrança em massa</button>
       <button class="menu-item so-log" data-pagina="retornos" hidden style="display:none"><span class="menu-icone">📣</span>Cobrança do dia <span id="menu-rt" class="menu-cont" hidden></span></button>
       <button class="menu-item so-log" data-pagina="reposicao"><span class="menu-icone">↻</span>Reposição</button>
       <button class="menu-item so-log" data-pagina="alterar"><span class="menu-icone">✎</span>Piloto Automático</button>
@@ -745,6 +746,43 @@
     </main>
 
     <!-- ============ OCORRÊNCIAS ============ -->
+    <main class="conteudo" id="pagina-cobmassa" hidden>
+      <div class="titulo-pagina com-acoes">
+        <div>
+          <h1>Cobrança em massa</h1>
+          <p class="sub">Só entra o que pode ser cobrado: <b>reposição com nova NF emitida</b> e <b>ocorrência em andamento</b>, com status na Intelipost diferente de Despachado, Pré-lista de postagem e Falha ao criar pedido com a transportadora. Uma linha por transportadora: baixe o Excel, copie o texto e envie. Nada sai sozinho.</p>
+          <p id="cm-info" class="info-base">Abra a página para carregar.</p>
+        </div>
+        <div class="acoes-robo"><button id="cm-xl-cada" class="btn amarelo" type="button" title="Um arquivo por transportadora ainda não enviada hoje">⬇ 1 Excel por transportadora</button><button id="cm-xl-todas" class="btn contorno" type="button">⬇ Excel com todas</button><button id="cm-recarregar" class="btn contorno" type="button">↻ Atualizar</button></div>
+      </div>
+      <section class="filtros-cartao" aria-label="Opções">
+        <span class="filtros-rot">⛉ Opções</span>
+        <label class="cm-op"><input id="cm-op-repo" type="checkbox"> Cobrar reposição cuja NF nova ainda não está na Intelipost</label>
+        <label class="cm-op"><input id="cm-op-oc" type="checkbox"> Cobrar ocorrência que não está no arquivo da Intelipost (em aberto)</label>
+      </section>
+      <section class="kpis">
+        <div class="kpi"><span class="kpi-rot">Transportadoras a cobrar</span><b class="kpi-num" id="cm-k-transp">–</b></div>
+        <div class="kpi azul"><span class="kpi-rot">Reposições com nova NF</span><b class="kpi-num" id="cm-k-rep">–</b></div>
+        <div class="kpi laranja"><span class="kpi-rot">Ocorrências em andamento</span><b class="kpi-num" id="cm-k-oc">–</b></div>
+        <div class="kpi verde"><span class="kpi-rot">Enviadas hoje</span><b class="kpi-num" id="cm-k-env">–</b></div>
+      </section>
+      <section class="cartao">
+        <div class="cartao-topo"><div><h2>Por transportadora</h2><p class="sub">Clique no nome para ver os casos. "⧉ Texto" copia a mensagem; clique no e-mail para copiar os destinatários (cadastre no botão 📇). Marque "✓ Enviei" depois de mandar: ela desce para o fim da lista (vale para hoje, neste computador).</p></div></div>
+        <div class="tabela-wrap"><table class="tabela-range cm-tabela"><thead><tr><th>Transportadora</th><th class="num">Reposições</th><th class="num">Ocorrências</th><th class="num">Total</th><th>E-mail</th><th></th></tr></thead><tbody id="cm-linhas"></tbody></table></div>
+      </section>
+      <section class="cartao" id="cm-casos-cartao">
+        <div class="cartao-topo"><div><h2 id="cm-casos-tit">Casos para cobrar</h2></div>
+          <div class="cm-filtros"><select id="cm-transp"></select><select id="cm-tipo"><option value="">Reposições e ocorrências</option><option value="rep">Só reposições</option><option value="oc">Só ocorrências</option></select><input id="cm-busca" type="search" placeholder="NF ou ticket"></div></div>
+        <div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr><th>Tipo</th><th>Transportadora</th><th>NF</th><th>NF nova / motivo</th><th>Ticket / portal</th><th>Status Intelipost</th><th class="num">Dias</th></tr></thead><tbody id="cm-casos"></tbody></table>
+        <p id="cm-casos-vazio" class="vazio" hidden>Nenhum caso aqui. 🎉</p></div>
+      </section>
+      <details class="cartao c-regras"><summary>Como a lista é montada</summary>
+        <p><b>Reposições</b>: tickets do detalhamento (aba Reposições) que já têm NF de reposição emitida pelo Promob. Ficam de fora os tickets Resolvidos/Encerrados (tabela de acompanhamento) e os da fila Recuperação de crédito. Transportadora = a de redespacho da nota de reposição; se não tiver, a da nota de reposição. Status Intelipost = o da NF nova; se ela não estiver lá, o da NF original.</p>
+        <p><b>Ocorrências</b>: aba Ocorrências do detalhamento, só status "Em andamento". Transportadora = a da ocorrência.</p>
+        <p><b>Intelipost</b>: vem do último arquivo de transações (botão Enviar Intelipost, pedidos em aberto). Não cobra Despachado, Pré-lista de postagem nem Falha ao criar pedido com a transportadora. VM Transportes e Tempo Justo contam como uma só.</p>
+      </details>
+    </main>
+
     <main class="conteudo" id="pagina-ocorrencias" hidden>
       <div class="titulo-pagina com-acoes">
         <div>
@@ -1647,21 +1685,22 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=311"></script>
-  <script src="mapa-brasil.js?v=311"></script>
-  <script src="troca-notas.js?v=311"></script>
-  <script src="app.js?v=311"></script>
-  <script src="ordenar.js?v=311"></script>
-  <script src="menu.js?v=311"></script>
-  <script src="ajuda.js?v=311"></script>
-  <script src="documentos.js?v=311"></script>
-  <script src="barrar.js?v=311"></script>
-  <script src="naoloc.js?v=311"></script>
-  <script src="faltas.js?v=311"></script>
-  <script src="motor.js?v=311"></script>
-  <script src="retornos-semana.js?v=311"></script>
-  <script src="gargalos.js?v=311"></script>
-  <script src="filas.js?v=311"></script>
-  <script src="filtros.js?v=311"></script>
+  <script src="config.js?v=312"></script>
+  <script src="mapa-brasil.js?v=312"></script>
+  <script src="troca-notas.js?v=312"></script>
+  <script src="app.js?v=312"></script>
+  <script src="ordenar.js?v=312"></script>
+  <script src="menu.js?v=312"></script>
+  <script src="ajuda.js?v=312"></script>
+  <script src="documentos.js?v=312"></script>
+  <script src="barrar.js?v=312"></script>
+  <script src="naoloc.js?v=312"></script>
+  <script src="faltas.js?v=312"></script>
+  <script src="motor.js?v=312"></script>
+  <script src="retornos-semana.js?v=312"></script>
+  <script src="cobranca-massa.js?v=312"></script>
+  <script src="gargalos.js?v=312"></script>
+  <script src="filas.js?v=312"></script>
+  <script src="filtros.js?v=312"></script>
 </body>
 </html>
