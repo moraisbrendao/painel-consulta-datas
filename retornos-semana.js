@@ -56,7 +56,7 @@
       for (let i = 0; i < 120 && !baseAberta(); i++) await new Promise((r) => setTimeout(r, 500));
       if (!baseAberta()) throw new Error("a base ainda não carregou: atualize a página");
       const desde = [somaDias(semana, -35), somaDias(hojeISO(), -60)].sort()[0];
-      const [hs, ts] = await Promise.all([paginasHist(desde), paginasTempos().catch(() => [])]);
+      const [hs, ts] = await Promise.all([paginasHist(desde), paginasTempos().catch(() => []), window.__cobranca ? window.__cobranca.carregar().catch(() => {}) : null]);
       H = new Map(); hs.forEach((r) => { (H.get(r.pedido) || H.set(r.pedido, []).get(r.pedido)).push(r); });
       H.forEach((xs) => xs.sort((a, b) => String(a.feito_em).localeCompare(String(b.feito_em)) || a.id - b.id));
       T = new Map(ts.map((x) => [`${x.transp}|${x.uf}|${x.cidade}`, x]));
@@ -137,7 +137,7 @@
     porT = [...m.values()].sort((a, b) => b.enrola - a.enrola || b.sem + b.vencida - (a.sem + a.vencida) || b.n - a.n);
     const c = (n, ruim) => `<td class="num ${n && ruim ? "ruim-t" : ""}">${n ? fmt(n) : "—"}</td>`;
     $("rs-linhas").innerHTML = porT.map((g) => `<tr class="clicavel" data-rst="${esc(g.k)}"><td>${esc(g.k)}</td><td class="num"><b>${fmt(g.n)}</b></td>${c(g.sem, 1)}${c(g.novo)}${c(g.mudou)}${c(g.mantido)}${c(g.vezes, 1)}${c(g.vencida, 1)}<td class="num">${g.cp ? (g.sp / g.cp).toLocaleString("pt-BR", { maximumFractionDigits: 1 }) : "—"}</td>${c(g.fora, 1)}${c(g.enrola, 1)}
-      <td><button type="button" class="btn mini contorno" data-rsm="${esc(g.k)}" title="Texto de cobrança pronto">⧉ Mensagem</button></td></tr>`).join("") || `<tr><td colspan="12" class="vazio">Nenhum pedido em aberto com retorno.</td></tr>`;
+      <td><button type="button" class="btn mini contorno" data-rsm="${esc(g.k)}" title="Texto de cobrança pronto">⧉ Mensagem</button> <button type="button" class="btn mini contorno" data-rsw="${esc(g.k)}" title="Abre o WhatsApp com a cobrança pronta: você confere e aperta enviar">WhatsApp ↗</button> <button type="button" class="btn mini contorno" data-rse="${esc(g.k)}" title="Abre o e-mail (Outlook) pronto: você confere e envia">✉ E-mail</button> <button type="button" class="btn mini contorno" data-rsc="${esc(g.k)}" title="Contatos da transportadora (WhatsApp e e-mails)">📇${window.__cobranca && !window.__cobranca.tem(g.k) ? " ⚠" : ""}</button></td></tr>`).join("") || `<tr><td colspan="12" class="vazio">Nenhum pedido em aberto com retorno.</td></tr>`;
     const comHist = L.filter((x) => x.rows.length).length;
     $("rs-info").textContent = `Semana de ${br(semana)} · ${fmt(L.length)} pedidos em aberto acompanhados · ${fmt(comHist)} com histórico de retorno · lido às ${lido.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}${T.size ? "" : " · Tempos reais ainda não calculados (aba Transportadoras): a auditoria por CEP fica de fora"}`;
   }
@@ -179,6 +179,23 @@
   }
 
   function mensagem(nome) {
+    const { txt, alvo } = textoCobranca(nome);
+    abrir(`Mensagem · ${nome}`, []);
+    $("rs-m-qtd").textContent = `${fmt(alvo.length)} pedido(s) na cobrança`; $("rs-m-excel").hidden = true;
+    $("rs-m-corpo").innerHTML = `<div class="rs-msg"><textarea id="rs-m-texto" rows="18">${esc(txt)}</textarea><button type="button" class="btn amarelo" id="rs-m-copiar">⧉ Copiar mensagem</button></div>`;
+    $("rs-m-rodape").textContent = "Nada é enviado sozinho: copie e mande pelo canal de sempre.";
+    mLista = alvo;
+  }
+  // WhatsApp / e-mail prontos (Brenda 24/11): o painel só abre a conversa ou o e-mail; a pessoa confere e envia
+  const CB = () => window.__cobranca;
+  function cobrarWhats(nome) { const { txt, alvo } = textoCobranca(nome); if (!alvo.length) return toast("Nada para cobrar.", true); CB().whats(nome, txt); }
+  function cobrarEmail(nome) {
+    const { txt, alvo } = textoCobranca(nome); if (!alvo.length) return toast("Nada para cobrar.", true);
+    const linhas = alvo.slice(0, 400).map((x) => { const p = x.p; return `<tr><td>${esc(p.nf || "")}</td><td>${esc(p.pedido || "")}</td><td>${esc((p.cidade || "") + "/" + (p.uf || ""))}</td><td>${x.cur ? br(x.cur) + (x.vencida ? " (vencida)" : "") : "sem retorno"}</td><td>${x.trocas >= 2 ? x.trocas + "x" : ""}</td><td>${x.par !== null && x.par >= 7 ? x.par + " dias" : ""}</td></tr>`; }).join("");
+    const html = `<p>Olá, ${esc(nome)}!</p><p>${esc(txt.split("\n\n")[0]).replace(/\n/g, "<br>")}</p><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-family:Arial;font-size:12px"><tr style="background:#0d2240;color:#fff"><th>NF</th><th>Pedido</th><th>Cidade/UF</th><th>Data informada</th><th>Alterada</th><th>Parado</th></tr>${linhas}</table><p>Obrigado!</p>`;
+    CB().email(nome, `Cobrança de retorno · ${nome} · ${alvo.length} pedido(s) · ${br(hojeISO())}`, txt, html, alvo.length);
+  }
+  function textoCobranca(nome) {
     const X = L.filter((x) => nomeT(x.p) === nome);
     const alvo = X.filter((x) => x.sit === "sem" || x.vencida || x.trocas >= 2 || x.ver === "enrola" || x.fora || (x.par !== null && x.par >= 7))
       .sort((a, b) => (b.ver === "enrola") - (a.ver === "enrola") || b.vencida - a.vencida || (b.sit === "sem") - (a.sit === "sem") || b.trocas - a.trocas);
@@ -189,11 +206,7 @@
       if (x.trocas >= 2) d.push(`data alterada ${x.trocas}x`); if (x.par !== null && x.par >= 7) d.push(`parado há ${x.par} dias`);
       return `• NF ${p.nf || p.pedido} · ${p.cidade || ""}/${p.uf || ""} · ${d.join(" · ")}`; });
     const txt = `Olá, ${nome}! Estamos na semana da Black Friday e precisamos finalizar com urgência as entregas em aberto com vocês. Hoje são ${alvo.length} pedido(s) que precisam de atenção${partes.length ? ": " + partes.join(", ") : ""}.\nConseguem nos passar uma posição real de cada um e priorizar essas entregas?\n\n${lin.join("\n")}${alvo.length > 60 ? `\n… e mais ${alvo.length - 60} (segue planilha).` : ""}`;
-    abrir(`Mensagem · ${nome}`, []);
-    $("rs-m-qtd").textContent = `${fmt(alvo.length)} pedido(s) na cobrança`; $("rs-m-excel").hidden = true;
-    $("rs-m-corpo").innerHTML = `<div class="rs-msg"><textarea id="rs-m-texto" rows="18">${esc(txt)}</textarea><button type="button" class="btn amarelo" id="rs-m-copiar">⧉ Copiar mensagem</button></div>`;
-    $("rs-m-rodape").textContent = "Nada é enviado sozinho: copie e mande pelo canal de sempre.";
-    mLista = alvo;
+    return { txt, alvo };
   }
 
   function excel(lista, titulo) {
@@ -214,6 +227,10 @@
     const c = e.target.closest("[data-rs]"); if (c)   // aqui o card não filtra nada: clicar em qualquer parte abre a lista
       { const d = CARDS.find((x) => x[0] === c.dataset.rs); return abrir(`${d[1]} · semana de ${br(semana)}`, L.filter(d[4])); }
     const mb = e.target.closest("[data-rsm]"); if (mb) return mensagem(mb.dataset.rsm);
+    if (!CB() && e.target.closest("[data-rsw],[data-rse],[data-rsc]")) return toast("Aguarde o painel terminar de carregar.", true);
+    const wb = e.target.closest("[data-rsw]"); if (wb) return cobrarWhats(wb.dataset.rsw);
+    const eb = e.target.closest("[data-rse]"); if (eb) return cobrarEmail(eb.dataset.rse);
+    const cb = e.target.closest("[data-rsc]"); if (cb) return CB().contato(cb.dataset.rsc, desenhar);
     const t = e.target.closest("[data-rst]"); if (t) return abrir(`${t.dataset.rst} · retornos da semana`, L.filter((x) => nomeT(x.p) === t.dataset.rst));
     if (e.target.closest("#rs-atualizar")) return carregar();
     if (e.target.closest("#rs-excel")) return excel(L, "todos");

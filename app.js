@@ -2231,35 +2231,29 @@ ${extra}
   let rtContatos = new Map();   // norm(transportadora) → { transportadora, whatsapp, emails, cc }
   async function carregarContatos() { try { const { data, error } = await sb.from("transp_contatos").select("*"); if (error) throw error; rtContatos = new Map((data || []).map((c) => [norm(c.transportadora), c])); } catch (_) { rtContatos = new Map(); } }
   const foneWa = (t) => { let d = String(t || "").replace(/\D/g, ""); if (!d) return ""; if (d.length <= 11) d = "55" + d; return d; };
-  function rtWhatsApp(tr) {
-    const t = rtMensagem(tr); if (!t) return toast("Nada para cobrar.", true);
-    const c = rtContatos.get(norm(tr)), f = foneWa(c && c.whatsapp);
-    const txt = t.length > 3500 ? t.slice(0, 3400) + "\n… (lista completa no Excel ⤓ Cobrança)" : t;
+  // genéricos (usados também no Preventivo › Retornos das transportadoras, retornos-semana.js)
+  function cbWhats(nome, texto) {
+    const c = rtContatos.get(norm(nome)), f = foneWa(c && c.whatsapp);
+    const txt = texto.length > 3500 ? texto.slice(0, 3400) + "\n… (lista completa no Excel)" : texto;
     window.open(`https://wa.me/${f}?text=${encodeURIComponent(txt)}`, "_blank", "noopener");
     if (!f) toast("Sem número cadastrado: escolha o contato no WhatsApp. Cadastre em 📇 para abrir direto na conversa.");
   }
-  function rtEmailHtml(tr) {
-    const L = rtParaCobrar(tr); const linhas = L.slice(0, 400).map((p) => `<tr><td>${esc(p.nf || "")}</td><td>${esc(p.pedido || "")}</td><td>${esc(RT_NOMES[p._rt] || "")}</td><td>${br(p._venc)}</td><td>${p._t && p._t.nova_data ? br(p._t.nova_data) : ""}</td><td>${esc((p._t && p._t.observacao) || "")}</td></tr>`).join("");
-    return `<p>Olá, equipe ${esc(tr)}!</p><p>Precisamos do retorno dos pedidos abaixo, com a nova data de entrega de cada um, ainda hoje.</p><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-family:Arial;font-size:12px"><tr style="background:#0d2240;color:#fff"><th>NF</th><th>Pedido</th><th>Situação</th><th>Prometido</th><th>Data informada</th><th>Observação</th></tr>${linhas}</table><p>Obrigado!</p>`;
-  }
-  async function rtEmail(tr) {
-    const t = rtMensagem(tr); if (!t) return toast("Nada para cobrar.", true);
-    const c = rtContatos.get(norm(tr)) || {}, n = rtParaCobrar(tr).length;
-    const assunto = `Cobrança de retorno · ${tr} · ${n} pedido${n === 1 ? "" : "s"} · ${br(hojeISO())}`;
+  async function cbEmail(nome, assunto, texto, html, n) {
+    const c = rtContatos.get(norm(nome)) || {};
     const q = (o) => Object.entries(o).filter(([, v]) => v).map(([k, v]) => `${k}=${encodeURIComponent(v)}`).join("&");
-    // texto curto vai no corpo; lista grande: o corpo leva a tabela copiada (Ctrl+V), porque o link de e-mail tem limite de tamanho
-    let corpo = t, colou = false;
-    if (t.length > 1500) {
-      try { await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([rtEmailHtml(tr)], { type: "text/html" }), "text/plain": new Blob([t], { type: "text/plain" }) })]); colou = true; } catch (_) {}
-      corpo = colou ? `Olá, equipe ${tr}!\n\n(Ctrl+V aqui: a tabela dos ${n} pedidos já está copiada)\n` : t.slice(0, 1500) + "\n… (lista completa no Excel em anexo)";
+    // texto curto vai no corpo; lista grande: a tabela vai copiada (Ctrl+V), porque o link de e-mail tem limite de tamanho
+    let corpo = texto, colou = false;
+    if (texto.length > 1500) {
+      try { await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([html || esc(texto).replace(/\n/g, "<br>")], { type: "text/html" }), "text/plain": new Blob([texto], { type: "text/plain" }) })]); colou = true; } catch (_) {}
+      corpo = colou ? `Olá, equipe ${nome}!\n\n(Ctrl+V aqui: a lista dos ${n} pedidos já está copiada)\n` : texto.slice(0, 1500) + "\n… (lista completa no Excel em anexo)";
     }
     // abre o Outlook Web (webmail da empresa) já com o e-mail pronto
     const lista = (x) => String(x || "").split(/[;,\s]+/).filter(Boolean).join(",");
     const url = `https://outlook.office.com/mail/deeplink/compose?${q({ to: lista(c.emails), cc: lista(c.cc), subject: assunto, body: corpo })}`;
     if (!window.open(url, "_blank")) location.href = url;
-    toast(colou ? "E-mail aberto. Cole (Ctrl+V) a tabela no corpo e confira antes de enviar." : c.emails ? "E-mail aberto: confira e envie." : "E-mail aberto sem destinatário: cadastre os e-mails da transportadora em 📇.");
+    toast(colou ? "E-mail aberto. Cole (Ctrl+V) a lista no corpo e confira antes de enviar." : c.emails ? "E-mail aberto: confira e envie." : "E-mail aberto sem destinatário: cadastre os e-mails da transportadora em 📇.");
   }
-  function rtEditarContato(tr) {
+  function cbContato(tr, depois) {
     const c = rtContatos.get(norm(tr)) || {};
     const d = document.createElement("div"); d.className = "modal-fundo rt-cont-modal";
     d.innerHTML = `<div class="modal-caixa" role="dialog" aria-label="Contatos da transportadora"><h3>📇 Contatos · ${esc(tr)}</h3><p class="s">Valem para todos da Logística. Nada é enviado sozinho: o painel só abre a conversa ou o e-mail pronto.</p>
@@ -2276,9 +2270,21 @@ ${extra}
       const reg = { transportadora: tr, whatsapp: v("whatsapp"), emails: v("emails"), cc: v("cc") };
       const { error } = await sb.from("transp_contatos").upsert(reg, { onConflict: "transportadora" });
       if (error) return toast(/relation|does not exist|schema cache/i.test(error.message) ? "Rode a parte 68 no Supabase para guardar os contatos." : "Erro ao salvar: " + error.message, true);
-      rtContatos.set(norm(tr), reg); fechar(); toast("Contatos salvos."); desenharRetornos();
+      rtContatos.set(norm(tr), reg); fechar(); toast("Contatos salvos."); if (depois) depois();
     });
   }
+  window.__cobranca = { carregar: () => carregarContatos(), tem: (n) => rtContatos.has(norm(n)), whats: cbWhats, email: cbEmail, contato: cbContato };
+  function rtWhatsApp(tr) { const t = rtMensagem(tr); if (!t) return toast("Nada para cobrar.", true); cbWhats(tr, t); }
+  function rtEmailHtml(tr) {
+    const L = rtParaCobrar(tr); const linhas = L.slice(0, 400).map((p) => `<tr><td>${esc(p.nf || "")}</td><td>${esc(p.pedido || "")}</td><td>${esc(RT_NOMES[p._rt] || "")}</td><td>${br(p._venc)}</td><td>${p._t && p._t.nova_data ? br(p._t.nova_data) : ""}</td><td>${esc((p._t && p._t.observacao) || "")}</td></tr>`).join("");
+    return `<p>Olá, equipe ${esc(tr)}!</p><p>Precisamos do retorno dos pedidos abaixo, com a nova data de entrega de cada um, ainda hoje.</p><table border="1" cellpadding="4" cellspacing="0" style="border-collapse:collapse;font-family:Arial;font-size:12px"><tr style="background:#0d2240;color:#fff"><th>NF</th><th>Pedido</th><th>Situação</th><th>Prometido</th><th>Data informada</th><th>Observação</th></tr>${linhas}</table><p>Obrigado!</p>`;
+  }
+  async function rtEmail(tr) {
+    const t = rtMensagem(tr); if (!t) return toast("Nada para cobrar.", true);
+    const n = rtParaCobrar(tr).length;
+    return cbEmail(tr, `Cobrança de retorno · ${tr} · ${n} pedido${n === 1 ? "" : "s"} · ${br(hojeISO())}`, t, rtEmailHtml(tr), n);
+  }
+  function rtEditarContato(tr) { cbContato(tr, desenharRetornos); }
   function rtMensagem(tr) {
     const L = rtParaCobrar(tr); if (!L.length) return "";
     const grupo = (k) => L.filter((p) => p._rt === k);
