@@ -62,9 +62,9 @@
         if (tks.some((r) => FILAS_SEM_NF.test(norm(r.fila_atual)) || !r.nfs_novas)) { conta("reposição ainda sem NF nova"); continue; }
         const rs = tks.length ? tks : null, os = ocs.length ? ocs : null;
         const base = { pedido: p.pedido, nf: p.nf, micro: p.micro_status || "", st: p.status_intelipost || "", prom: p._venc, nova: (p._t && p._t.nova_data) || "", obs: (p._t && p._t.observacao) || "", diasEf: p._diasEf };
-        (rs || []).forEach((r) => { const transp = r.transp_redesp_promob || r.transp_promob || p.transportadora || "";
+        (rs || []).forEach((r) => { const transp = p.transportadora || r.transp_redesp_promob || r.transp_promob || "";   // coluna H da base (Brenda 24/11)
           R.push({ ...base, tipo: "rep", ticket: r.ticket, nfNova: String(r.nfs_novas), emissao: r.data_emissao_nf, saida: r.data_saida_nf, tipoRep: r.tipo_reposicao, fila: r.fila_atual, transp, k: chaveT(transp) }); });
-        (os || []).forEach((o) => { const transp = o.transportador || p.transportadora || "";
+        (os || []).forEach((o) => { const transp = p.transportadora || o.transportador || "";
           O.push({ ...base, tipo: "oc", motivo: o.motivo, criado: o.criado_em, msgEm: o.mensagem_em, msg: o.mensagem, solic: o.solicitante, transp, k: chaveT(transp) }); });
         if (!rs && !os) { const transp = p.transportadora || ""; E.push({ ...base, tipo: "at", transp, k: chaveT(transp) }); }
       }

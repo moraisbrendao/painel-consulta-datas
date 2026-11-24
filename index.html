@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=321">
+  <link rel="stylesheet" href="styles.css?v=322">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -775,9 +775,10 @@
       <details class="cartao c-regras"><summary>Como a lista é montada</summary>
         <p><b>Quais pedidos</b>: os da base em aberto (não entregues na Intelipost) cujo vencimento já passou, é hoje ou amanhã. O vencimento é a nova data informada pela transportadora; sem nova data, a data prometida ao cliente. Quando a nova data vence, o pedido volta para a cobrança, como no Preventivo.</p>
         <p><b>Ficam de fora</b>: pedidos com ocorrência de status "Novo" (a Multi deve retorno para a transportadora) e pedidos com reposição ainda sem NF nova (filas Aguardando faturamento, Confirmar nova data de entrega, Digitar pedido de reposição [Pós]/[Pré], Upload de arquivo (Reposições)). Tickets Resolvidos/Encerrados e da fila Recuperação de crédito não contam como reposição.</p>
-        <p><b>Reposições</b>: o ticket já tem NF de reposição emitida (detalhamento, aba Reposições). Transportadora = a de redespacho da nota de reposição; se não tiver, a da nota de reposição.</p>
-        <p><b>Ocorrências</b>: ocorrência com status "Em andamento". Transportadora = a da ocorrência.</p>
-        <p><b>Entregas</b>: os demais pedidos (sem reposição nem ocorrência). Transportadora = a da base.</p>
+        <p><b>Reposições</b>: o ticket já tem NF de reposição emitida (detalhamento, aba Reposições). </p>
+        <p><b>Ocorrências</b>: ocorrência com status "Em andamento". </p>
+        <p><b>Entregas</b>: os demais pedidos (sem reposição nem ocorrência). </p>
+        <p><b>Transportadora</b>: sempre a da coluna H (Transportadora) da planilha base, nos 3 grupos.</p>
         <p><b>Intelipost</b>: não cobra pedido com status Despachado, Pré-lista de postagem ou Falha ao criar pedido com a transportadora. VM Transportes e Tempo Justo contam como uma só.</p>
       </details>
     </main>
@@ -1684,22 +1685,22 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=321"></script>
-  <script src="mapa-brasil.js?v=321"></script>
-  <script src="troca-notas.js?v=321"></script>
-  <script src="app.js?v=321"></script>
-  <script src="ordenar.js?v=321"></script>
-  <script src="menu.js?v=321"></script>
-  <script src="ajuda.js?v=321"></script>
-  <script src="documentos.js?v=321"></script>
-  <script src="barrar.js?v=321"></script>
-  <script src="naoloc.js?v=321"></script>
-  <script src="faltas.js?v=321"></script>
-  <script src="motor.js?v=321"></script>
-  <script src="retornos-semana.js?v=321"></script>
-  <script src="cobranca-massa.js?v=321"></script>
-  <script src="gargalos.js?v=321"></script>
-  <script src="filas.js?v=321"></script>
-  <script src="filtros.js?v=321"></script>
+  <script src="config.js?v=322"></script>
+  <script src="mapa-brasil.js?v=322"></script>
+  <script src="troca-notas.js?v=322"></script>
+  <script src="app.js?v=322"></script>
+  <script src="ordenar.js?v=322"></script>
+  <script src="menu.js?v=322"></script>
+  <script src="ajuda.js?v=322"></script>
+  <script src="documentos.js?v=322"></script>
+  <script src="barrar.js?v=322"></script>
+  <script src="naoloc.js?v=322"></script>
+  <script src="faltas.js?v=322"></script>
+  <script src="motor.js?v=322"></script>
+  <script src="retornos-semana.js?v=322"></script>
+  <script src="cobranca-massa.js?v=322"></script>
+  <script src="gargalos.js?v=322"></script>
+  <script src="filas.js?v=322"></script>
+  <script src="filtros.js?v=322"></script>
 </body>
 </html>
