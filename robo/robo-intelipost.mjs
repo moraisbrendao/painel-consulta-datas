@@ -856,8 +856,10 @@ async function baixaEntregueIP(real, limite) {
   const buscar = async (pedido, por = "Pedido") => {
     const caixa = await caixaPedidos("/order/change-order");
     await pagina.locator("select:visible").first().selectOption({ label: por });
+    await pagina.waitForTimeout(800);
+    const cx = por === "Pedido" ? caixa : pagina.getByPlaceholder(/^digite/i).first();   // trocar o "Buscar por" troca o texto da caixa
     log(`  busca por ${por}: caixa ok`);
-    await caixa.fill(pedido, { timeout: 15000 });
+    await cx.fill(pedido, { timeout: 15000 });
     await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
     await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 }).catch(() => {});
     await pagina.waitForTimeout(2500);
