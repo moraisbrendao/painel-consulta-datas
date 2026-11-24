@@ -1386,6 +1386,12 @@ if (MODO === "diag-repo2") {   // Reposição: tickets (hash no input transp) co
   const nav = await chromium.launch(); const ctx = await nav.newContext({ acceptDownloads: true });
   try { await (await import("./repo-itens.mjs")).diagRepo2({ chamar, log, ctx, hashes: String(process.env.TRANSP || "").split(",").map((x) => x.trim()).filter(Boolean) }); } finally { await nav.close(); }
 }
+if (MODO === "diag-sla") {   // Reposição: lê o SLA de 3 tickets em aberto (só datas e situação no log)
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext();
+  try { await (await import("./repo-itens.mjs")).diagSla({ chamar, log, ctx }); } finally { await nav.close(); }
+}
 if (MODO === "diag-repo") {   // Reposição: lê 1 ticket pós (Eventos) e 1 pré (PDF da nota) em Aguardando entrega — só contagens no log
   await entrarSupabase();
   const { chromium } = await import("playwright");

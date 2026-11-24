@@ -254,3 +254,37 @@ export async function diagRepo2({ chamar, log, ctx, hashes }) {
     } catch (e) { log("   erro:", String(e.message).split("\n")[0].slice(0, 100)); }
   }
 }
+
+// SLA do ticket (quadro "Situação do Ticket" › "Ticket SLA" + balão "Detalhes do SLA" no ?): pedido da Brenda 24/11
+const dataBR = (t) => { const m = String(t || "").match(/(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})(?::(\d{2}))?/); return m ? `${m[3]}-${m[2]}-${m[1]}T${m[4]}:${m[5]}:${m[6] || "00"}-03:00` : null; };
+export async function lerSla(p) {
+  const rot = p.getByText(/^\s*Ticket SLA:?\s*$/i).first();
+  if (!(await rot.count())) return { erro: "sem Ticket SLA" };
+  const info = await rot.evaluate((el) => {
+    let d = el; for (let i = 0; i < 4 && d && !/Ticket SLA:?[\s\S]*\S/i.test((d.innerText || "").replace(/Ticket SLA:?/i, "").trim() ? d.innerText : ""); i++) d = d.parentElement;
+    const box = d || el.parentElement; const t = (box.innerText || "").replace(/\s+/g, " ");
+    const sit = (t.match(/Ticket SLA:?\s*([A-ZÀ-Ú][A-ZÀ-Ú ]{2,30}?)(?=\s*(?:\?|$|[a-zà-ú]))/) || [])[1] || "";
+    const icone = box.querySelector("svg, i, [class*=question], [class*=help], [class*=tooltip], button");
+    if (icone) icone.setAttribute("data-sla-ic", "1");
+    return { sit: sit.trim(), temIcone: !!icone };
+  });
+  let det = "";
+  const ic = p.locator("[data-sla-ic]").first();
+  if (await ic.count()) { await ic.hover().catch(() => {}); await p.waitForTimeout(800);
+    det = await p.evaluate(() => { const el = [...document.querySelectorAll("body *")].find((e) => e.children.length < 12 && /Detalhes do SLA/i.test(e.innerText || "") && /In[ií]cio/i.test(e.innerText || ""));
+      return el ? el.innerText.replace(/\s+/g, " ") : ""; }); }
+  const pega = (re) => (det.match(re) || [])[1] || "";
+  const horas = pega(/Horas SLA:\s*([\d.,]+)/i);
+  return { situacao: info.sit || null, inicio: dataBR(pega(/In[ií]cio:\s*([\d/]+\s+[\d:]+)/i)), prazo: dataBR(pega(/Prazo SLA:\s*([\d/]+\s+[\d:]+)/i)),
+    horas: horas ? Number(horas.replace(",", ".")) : null, restante: pega(/Horas Restantes:\s*([^\n]+?)(?:$|\s{2})/i).slice(0, 40) || null, achouDetalhe: !!det, temIcone: info.temIcone };
+}
+export async function diagSla({ chamar, log, ctx, n = 3 }) {
+  const T = await chamar("reposicoes_tk?select=ticket,status&status=not.in.(Resolvido,Encerrado)&order=ticket.desc&limit=" + n);
+  const p = await entrarMulti360(ctx, log);
+  for (const [i, x] of T.entries()) {
+    try { await abrir(p, x.ticket); const r = await lerSla(p);
+      log(`[${i + 1}] status ${x.status} · SLA: ${JSON.stringify(r)}`);
+      if (!r.achouDetalhe) { const t = await p.evaluate(() => { const el = [...document.querySelectorAll("body *")].find((e) => e.children.length === 0 && /Ticket SLA/i.test(e.textContent || "")); let d = el; for (let k = 0; k < 3 && d; k++) d = d.parentElement; return d ? d.outerHTML.replace(/>[^<]+</g, (z) => z.replace(/[A-Za-zÀ-ú]{4,}/g, (w) => /ticket|sla|situa|prioridade|detalhes|inicio|prazo|horas/i.test(w) ? w : "x")).replace(/\d{5,}/g, "#").slice(0, 1500) : "nada"; }); log("   html:", t); }
+    } catch (e) { log(`[${i + 1}] erro`, String(e.message).split("\n")[0].slice(0, 100)); }
+  }
+}
