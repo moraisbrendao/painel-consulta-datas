@@ -533,7 +533,7 @@ if (MODO === "diag-db") {   // tempos de consultas simples, uma por vez (só tem
     ["base_pedidos?select=pedido&order=pedido&limit=1000", "1000 pedidos (só coluna pedido)"], ["base_pedidos?select=pedido&order=pedido&limit=1000&offset=12000", "1000 pedidos offset 12000 (só pedido)"],
     ["base_pedidos?select=*&order=pedido&limit=1000", "1000 linhas inteiras"], ["base_pedidos?select=pedido,nf,canal&order=pedido&limit=1000&offset=6000", "1000 linhas 3 colunas offset 6000"],
     ["base_pedidos?select=*&order=pedido&limit=1000&offset=12000", "1000 linhas inteiras offset 12000"], ["intelipost_fechados?select=pedido&limit=1000", "1000 fechados"]];
-  for (const tab of ["base_aberta_bi", "base_pedidos", "conferencia_ssw"]) {   // por faixas (como o painel faz agora)
+  for (const tab of ["base_pedidos", "conferencia_ssw", "base_aberta_bi"]) { try {   // por faixas (como o painel faz agora)
     const t = Date.now(); let ch = []; for (let de = 0; ; de += 8000) { const ps = await Promise.all(Array.from({ length: 8 }, (_, j) => chamar(`${tab}?select=pedido&order=pedido&limit=1000&offset=${de + j * 1000}`)));
       ps.forEach((p) => { ch = ch.concat(p.map((x) => x.pedido)); }); if (ps.some((p) => p.length < 1000)) break; }
     const t2 = Date.now(); const cortes = [null]; for (let k = 999; k < ch.length; k += 1000) cortes.push(ch[k]); cortes.push(undefined);
@@ -541,6 +541,7 @@ if (MODO === "diag-db") {   // tempos de consultas simples, uma por vez (só tem
         return chamar(`${tab}?select=*&order=pedido&limit=1000${a != null ? "&pedido=gt." + encodeURIComponent(a) : ""}${b != null ? "&pedido=lte." + encodeURIComponent(b) : ""}`).catch(() => { err++; return []; }); }));
       ps.forEach((p) => { n += p.length; }); }
     log(`${tab} por faixas: chaves ${ch.length} em ${((t2 - t) / 1000).toFixed(1)} s · linhas ${n} em ${((Date.now() - t2) / 1000).toFixed(1)} s · erros ${err}`);
+  } catch (e) { log(`${tab} por faixas: ERRO ${String(e.message).slice(-60)}`); }
   }
   for (const [u, nome] of T) { const t = Date.now(); try { const x = await chamar(u); log(`${nome}: ${x.length} em ${((Date.now() - t) / 1000).toFixed(1)} s`); } catch (e) { log(`${nome}: ERRO em ${((Date.now() - t) / 1000).toFixed(1)} s ${String(e.message).slice(-80)}`); } }
   process.exit(0);
