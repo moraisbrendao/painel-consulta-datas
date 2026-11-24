@@ -120,21 +120,21 @@
     XLSX.writeFile(wb, `barrar_pendentes_${nome}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
   let brBusca = "";
+  // a pesquisa dos pendentes usa o mesmo filtro "Nota ou ticket" do topo: a nota aparece na tabela geral (Erro: verificar), onde dá para decidir (Brenda 24/11)
   function aplicarBusca(box) {
-    const q = brBusca.trim().toLowerCase().replace(/^#/, "");
-    box.querySelectorAll("tr[data-busca]").forEach((tr) => { tr.hidden = !!q && !tr.dataset.busca.toLowerCase().includes(q); });
-    box.querySelectorAll(".br-et-q").forEach((d) => { d.hidden = !!q && !d.querySelector("tr[data-busca]:not([hidden])"); });
-    const an = box.querySelector(".br-an-q"); if (an) an.hidden = !!q && !an.querySelector("tr[data-busca]:not([hidden])");
-    const n = box.querySelectorAll("tr[data-busca]:not([hidden])").length, info = box.querySelector(".br-busca-info");
-    if (info) info.textContent = q ? (n ? `${n} encontrada(s)` : "Nenhuma nota ou ticket com esse número aqui.") : "";
+    const q = brBusca.trim();
+    box.querySelectorAll(".br-an-q, .br-et-grade").forEach((d) => { d.hidden = !!q; });
+    const n = $("br-linhas") ? $("br-linhas").querySelectorAll("tr:not(:has(td.vazio))").length : 0, info = box.querySelector(".br-busca-info");
+    if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): veja na tabela <b>Erro: verificar</b> abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
   }
-  document.addEventListener("input", (e) => { const i = e.target.closest("#br-erro-transp .br-busca"); if (!i) return; brBusca = i.value; aplicarBusca($("br-erro-transp")); });
+  document.addEventListener("input", (e) => { const i = e.target.closest("#br-erro-transp .br-busca"); if (!i) return; brBusca = i.value; $("br-busca").value = i.value; desenhar(); });
   function desenharErroTransp() {
     let box = $("br-erro-transp");
     if (!box) { box = document.createElement("section"); box.id = "br-erro-transp"; box.className = "cartao br-et"; $("br-cards").after(box); }
     box.hidden = card !== "manual"; if (box.hidden) return;
     const rolT = [...box.querySelectorAll(".br-et-lista, .tabela-wrap")].map((el) => el.scrollTop);
     const msgs = new Map([...box.querySelectorAll(".br-et-msg")].filter((t) => t.dataset.editada).map((t) => [t.dataset.t, t.value]));
+    brBusca = $("br-busca").value;
     const yAntes = window.scrollY, focoBusca = document.activeElement && document.activeElement.classList.contains("br-busca");
     const G = gruposErro();
     const C = L.filter((x) => sit(x) === "manual" && anotsDe(x).length)
@@ -148,14 +148,14 @@
         <td class="s">${esc(ultStatus(x))}${x.print_rastreio ? `<div><a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a></div>` : ""}</td><td class="br-an-dec">${celDecAnot(x)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="s">Nenhuma nota em "Erro: verificar" tem anotação no portal.</p>`}</div>`;
     box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem "não recebeu" no portal. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
       ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
-      <div class="br-busca-linha"><input type="search" class="br-busca" placeholder="🔎 Pesquisar NF ou ticket" value="${esc(brBusca)}" autocomplete="off"><span class="s br-busca-info"></span><button type="button" class="btn lilas mini br-an-enviar" title="Salva as decisões escolhidas (no quadro com anotação e nos quadrinhos): vão para o card Aprovadas">Aprovar decisões (0)</button></div>
+      <div class="br-busca-linha"><input type="search" class="br-busca" placeholder="🔎 Pesquisar NF ou ticket" value="${esc(brBusca)}" autocomplete="off"><span class="s br-busca-info"></span></div>
       ${quadroAnot}
       <div class="br-et-grade">${G.map(([t, xs], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
         return `<div class="br-et-q"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
-          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotações e rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr data-busca="${esc(x.nf + " " + (x.ticket || ""))}"><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${anotsDe(x).map((a) => `<div class="br-et-an">${a.por ? `<b>${esc(a.por)}</b> · ` : ""}${a.quando ? `<span class="s">${esc(a.quando)}</span>` : ""}${a.por || a.quando ? "<br>" : ""}${esc(a.texto)}</div>`).join("")}<div class="br-et-rast"><b>Status atual do rastreio:</b> ${esc(ultStatus(x))}${x.print_rastreio ? ` · <a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a>` : ""}</div>${anotsDe(x).length ? `<div class="s">Decisão: no quadro "Com anotação" acima.</div>` : `<div class="br-et-dec br-an-dec">${celDecAnot(x)}</div>`}</td></tr>`).join("")}</tbody></table></div>
+          <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotações e rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr data-busca="${esc(x.nf + " " + (x.ticket || ""))}"><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${anotsDe(x).map((a) => `<div class="br-et-an">${a.por ? `<b>${esc(a.por)}</b> · ` : ""}${a.quando ? `<span class="s">${esc(a.quando)}</span>` : ""}${a.por || a.quando ? "<br>" : ""}${esc(a.texto)}</div>`).join("")}<div class="br-et-rast"><b>Status atual do rastreio:</b> ${esc(ultStatus(x))}${x.print_rastreio ? ` · <a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a>` : ""}</div></td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}" data-t="${esc(t)}">${esc(msgTransp(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><a class="btn contorno mini br-et-wa" data-i="${i}" href="#" title="Abre o WhatsApp com a mensagem (você escolhe o contato)">WhatsApp ↗</a><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;
-    box._G = G; box._C = C; box._T = C.concat(G.flatMap(([t, xs]) => xs.filter((x) => !C.some(([, y]) => y === x)).map((x) => [t, x]))); contarAnot(); aplicarBusca(box);
+    box._G = G; box._C = C; contarAnot(); aplicarBusca(box);
     if (focoBusca) { const i = box.querySelector(".br-busca"); i.focus(); i.setSelectionRange(i.value.length, i.value.length); }
     box.querySelectorAll(".br-et-lista, .tabela-wrap").forEach((el, k) => { if (rolT[k]) el.scrollTop = rolT[k]; });
     box.querySelectorAll(".br-et-msg").forEach((t) => { if (msgs.has(t.dataset.t)) { t.value = msgs.get(t.dataset.t); t.dataset.editada = "1"; } });
@@ -192,9 +192,9 @@
       ${x.decisao && !rasc.has(x.nf) ? `<div class="s">✓ salva${x.decisao_por ? " por " + esc(x.decisao_por.split("@")[0]) : ""}</div>` : rasc.has(x.nf) ? `<div class="s txt-ambar">rascunho · ainda não enviado</div>` : ""}`;
   }
   function contarAnot() {
-    const box = $("br-erro-transp"); if (!box) return; const C = box._T || box._C || [];
+    const box = $("br-erro-transp"); if (!box) return; const C = box._C || [];
     const n = C.filter(([, x]) => x.portal_status !== "feito" && (rasc.has(x.nf) ? rasc.get(x.nf).v : x.decisao)).length;
-    box.querySelectorAll(".br-an-enviar").forEach((b) => { b.textContent = `Aprovar decisões (${n})`; b.disabled = !n; });
+    const b = box.querySelector(".br-an-enviar"); if (b) { b.textContent = `Aprovar decisões (${n})`; b.disabled = !n; }
   }
   function linha(x) {
     const r = x.rastreio || {}, p = x.portal || {};
@@ -268,7 +268,7 @@
     const t = e.target.closest("#br-erro-transp .br-an-mot"); if (!t) return;
     const x = L.find((y) => y.nf === t.dataset.nf); const r = rasc.get(t.dataset.nf) || { v: valDec(x) }; r.mot = t.value; rasc.set(t.dataset.nf, r); contarAnot(); });
   async function enviarAnot(box) {
-    const muda = (box._T || box._C || []).map(([, x]) => x).filter((x) => x.portal_status !== "feito" && rasc.has(x.nf) && rasc.get(x.nf).v);
+    const muda = (box._C || []).map(([, x]) => x).filter((x) => x.portal_status !== "feito" && rasc.has(x.nf) && rasc.get(x.nf).v);
     if (!muda.length) return toast("Escolha a decisão de pelo menos uma nota.", true);
     const semMot = muda.filter((x) => rasc.get(x.nf).v.startsWith("nao_barrar") && !String(motDec(x)).trim());
     if (semMot.length) return toast(`Falta o motivo em ${plural(semMot.length, "nota", "notas")} com ✗: ${semMot.map((x) => x.nf).join(", ")}.`, true);
