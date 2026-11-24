@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=287">
+  <link rel="stylesheet" href="styles.css?v=288">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -964,16 +964,20 @@
           <div class="acoes-robo"><div class="sm-modo" role="group" aria-label="Quais casos"><button type="button" data-smesc="todos">Todos</button><button type="button" data-smesc="aberto">Em andamento</button><button type="button" data-smesc="fin">Finalizados</button></div><div class="sm-modo" role="group" aria-label="Como contar o prazo"><button type="button" data-smmodo="uteis">Dias úteis</button><button type="button" data-smmodo="corridos">Dias corridos</button></div></div>
         </div>
         <section class="kpis sm-cards"></section>
+        <section class="cartao sm-evo-q"><div class="cartao-topo"><div><h2>📈 Evolução dos indicadores</h2><p class="sub">Vencidos hoje × dia anterior, quem saiu e quem entrou no vencido, cumprimento do SLA dia a dia.</p></div></div><div class="sm-evo"></div></section>
         <div class="sm-duas">
-          <section class="cartao sm-rank-q"><div class="cartao-topo"><div><h2>Ranking das filas · da mais problemática para a menos</h2><p class="sub">Ordem: tickets fora do SLA, depois % fora do SLA, depois próximos do vencimento. Clique numa fila para ver os tickets dela.</p></div>
+          <section class="cartao sm-rank-q"><div class="cartao-topo"><div><h2>Ranking das filas · da mais problemática para a menos</h2><p class="sub sm-filtro-card"></p><p class="sub">Ordem: tickets fora do SLA, depois % fora do SLA, depois próximos do vencimento. Clique numa fila para ver os tickets dela.</p></div>
             <div class="sm-legenda"><span class="sm-l v"></span>Vencido <span class="sm-l p"></span>Próximo (≥80%) <span class="sm-l d"></span>Dentro <span class="sm-l s"></span>Sem SLA</div></div>
             <div class="sm-ranks"></div>
           </section>
           <section class="cartao sm-diag-q"><div class="cartao-topo"><div><h2>🧭 Diagnóstico automático</h2><p class="sub">Escrito a partir dos números desta tela; muda com os filtros.</p></div></div><div class="sm-diag"></div></section>
         </div>
-        <section class="cartao sm-det-q"><div class="cartao-topo"><div><h2 class="sm-det-tit">Tickets</h2><p class="sub">Consumo do SLA: até 79% normal · 80% a 100% atenção · acima de 100% vencido.</p></div>
+        <section class="cartao sm-crit-q"><div class="cartao-topo"><div><h2>🔥 Criticidade das filas · gravidade, não só volume</h2><p class="sub">Índice de 0 a 100 = 40 pontos pela quantidade de vencidos (comparada à fila com mais vencidos) + 30 pelo % de vencidos sobre os com SLA + 30 pelo maior atraso (comparado ao maior atraso entre as filas). Crítico ≥ 60 · Alto ≥ 35 · Médio ≥ 15 · Baixo abaixo disso. "Posição por volume" mostra onde a fila ficaria contando só vencidos.</p><p class="sub sm-filtro-card"></p></div>
+          <div class="sm-legenda"><span class="sm-l ia"></span>Vencidos <span class="sm-l ib"></span>% vencidos <span class="sm-l ic"></span>Maior atraso</div></div><div class="sm-crit"></div></section>
+        <section class="cartao sm-resp-q"><div class="cartao-topo"><div><h2>👤 Análise por responsável</h2><p class="sub">Responsável da tabela de acompanhamento. Clique num responsável para ver os tickets dele.</p><p class="sub sm-filtro-card"></p></div></div><div class="sm-resp"></div></section>
+        <section class="cartao sm-det-q"><div class="cartao-topo"><div><h2 class="sm-det-tit">Tickets</h2><p class="sub">Consumo do SLA: até 79% normal · 80% a 100% atenção · acima de 100% vencido. <b>Dias parados</b> = desde a última movimentação do ticket; <b>dias de atraso</b> = quanto passou do prazo do SLA. São contas independentes.</p></div>
           <div class="acoes-robo"><label class="sm-ordem">Ordenar<select class="sm-ord"><option value="atraso">Mais atrasados primeiro</option><option value="antigo">Mais antigos primeiro</option><option value="vence">Mais próximos do vencimento</option><option value="parado">Mais dias parados</option></select></label><button type="button" class="btn contorno sm-excel">↓ Baixar Excel</button></div></div>
-          <div class="tabela-rolagem"><table class="tabela sm-det"><thead><tr><th>Ticket</th><th>Fila atual</th><th>Grupo</th><th>Responsável</th><th>Abertura</th><th>Última atualização</th><th class="num">Dias parados</th><th>SLA configurado</th><th>Prazo</th><th class="num">Restam / atraso</th><th class="sm-col-cons">Consumo do SLA</th><th>Situação</th></tr></thead><tbody class="sm-det-corpo"></tbody></table></div>
+          <div class="tabela-rolagem"><table class="tabela sm-det"><thead><tr><th>Ticket</th><th>Fila atual</th><th>Grupo</th><th>Responsável</th><th>Abertura</th><th>Última atualização</th><th class="num" title="Desde a última movimentação do ticket (Data da Última Atualização)">Dias parados</th><th>SLA configurado</th><th>Prazo</th><th class="num" title="Quanto passou do prazo do SLA">Dias de atraso</th><th class="num">Restam</th><th class="sm-col-cons">Consumo do SLA</th><th>Situação</th></tr></thead><tbody class="sm-det-corpo"></tbody></table></div>
           <nav class="paginacao sm-pag"></nav>
         </section>
       </div>
@@ -1644,21 +1648,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=287"></script>
-  <script src="mapa-brasil.js?v=287"></script>
-  <script src="troca-notas.js?v=287"></script>
-  <script src="app.js?v=287"></script>
-  <script src="ordenar.js?v=287"></script>
-  <script src="menu.js?v=287"></script>
-  <script src="ajuda.js?v=287"></script>
-  <script src="documentos.js?v=287"></script>
-  <script src="barrar.js?v=287"></script>
-  <script src="naoloc.js?v=287"></script>
-  <script src="faltas.js?v=287"></script>
-  <script src="motor.js?v=287"></script>
-  <script src="retornos-semana.js?v=287"></script>
-  <script src="gargalos.js?v=287"></script>
-  <script src="filas.js?v=287"></script>
-  <script src="filtros.js?v=287"></script>
+  <script src="config.js?v=288"></script>
+  <script src="mapa-brasil.js?v=288"></script>
+  <script src="troca-notas.js?v=288"></script>
+  <script src="app.js?v=288"></script>
+  <script src="ordenar.js?v=288"></script>
+  <script src="menu.js?v=288"></script>
+  <script src="ajuda.js?v=288"></script>
+  <script src="documentos.js?v=288"></script>
+  <script src="barrar.js?v=288"></script>
+  <script src="naoloc.js?v=288"></script>
+  <script src="faltas.js?v=288"></script>
+  <script src="motor.js?v=288"></script>
+  <script src="retornos-semana.js?v=288"></script>
+  <script src="gargalos.js?v=288"></script>
+  <script src="filas.js?v=288"></script>
+  <script src="filtros.js?v=288"></script>
 </body>
 </html>

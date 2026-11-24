@@ -4452,7 +4452,7 @@ ${extra}
   let smModo = "uteis"; try { const m = localStorage.getItem("painel.smModo"); if (m === "uteis" || m === "corridos") smModo = m; } catch (_) {}
   const smF = { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" };
   let smEscopo = "todos"; try { const e = localStorage.getItem("painel.smEscopo"); if (["todos", "aberto", "fin"].includes(e)) smEscopo = e; } catch (_) {}
-  let smSit = "", smFila = null, smGrp = "", smOrd = "atraso", smPag = 1, smLista = [];
+  let smSit = "", smFila = null, smGrp = "", smResp = null, smHist = null, smHistCarr = false, smOrd = "atraso", smPag = 1, smLista = [];
   const SM_SIT = { venc: "Fora do SLA", prox: "Próximo do vencimento", dentro: "Dentro do SLA", sem: "Sem SLA definido" };
   const SM_ORD_SIT = { venc: 0, prox: 1, dentro: 2, sem: 3 };
   const smUn = () => (smModo === "uteis" ? "dias úteis" : "dias corridos");
@@ -4477,10 +4477,11 @@ ${extra}
       const v = o.vivo;
       o.sit = (q != null && q > 0) || v === "venc" ? "venc" : v === "prox" ? "prox" : v === "dentro" || q === 0 ? "dentro" : "sem";
     }
+    o.atraso = o.vivo === "venc" && o.resta != null ? -o.resta : null;   // dias de atraso = quanto passou do prazo do SLA (independe dos dias parados)
     if (smModo === "uteis") { r._smK = k; r._sm = o; } return o;
   }
   function smVivo(r) {
-    const s = r._sla, h = s ? Number(s.horas) : 0, ab = abertoRep(r), parado = ab ? smDias(baseFila(r)) : null;
+    const s = r._sla, h = s ? Number(s.horas) : 0, ab = abertoRep(r), parado = ab ? smDias(r.atualizado_em || r.criado_em) : null;   // dias parados = desde a última movimentação (Data da Última Atualização)
     const idade = ab ? smDias(r.criado_em) : r.criado_em && r.finalizado_em ? (smModo === "uteis" ? duEntre(diaLocal(r.criado_em), diaLocal(r.finalizado_em)) : Math.max(0, diasEntre(diaLocal(r.criado_em), diaLocal(r.finalizado_em)))) : null;
     let o;
     if (!ab || !s || !s.inicio || !(h > 0) || /DEFINID/i.test(s.situacao || "")) o = { sit: "sem", cons: null, resta: null, prazo: null, parado, idade, naoLido: !s };
@@ -4501,14 +4502,14 @@ ${extra}
   const smCasa = (r, sem = "") => { const d = String(r.criado_em || "").slice(0, 10);
     return (sem === "grupo" || !smF.grupo.length || smF.grupo.includes(grupoRep(r))) && (sem === "fila" || !smF.fila.length || smF.fila.includes(filaRep(r) || SEM_FILA))
       && (sem === "resp" || !smF.resp.length || smF.resp.includes(respRep(r))) && (!smF.tipo || r._t === smF.tipo) && (!smF.de || (d && d >= smF.de)) && (!smF.ate || (d && d <= smF.ate)) && (!smF.per || (d && diasEntre(d, hojeISO()) < +smF.per)); };
-  function smFilas(L) {
-    return contaPor(L, (r) => filaRep(r) || SEM_FILA).map(([fila, rs]) => {
+  function smFilas(L, chave = (r) => filaRep(r) || SEM_FILA) {
+    return contaPor(L, chave).map(([fila, rs]) => {
       const cs = rs.map(smCalc), c = { venc: 0, prox: 0, dentro: 0, sem: 0 }; cs.forEach((x) => c[x.sit]++);
       const com = rs.length - c.sem, par = cs.map((x) => x.parado).filter((x) => x != null), cons = cs.filter((x) => x.cons != null).map((x) => x.cons);
       const abs = rs.filter(abertoRep), velho = abs.reduce((a, r) => (smCalc(r).idade ?? -1) > (a ? smCalc(a).idade ?? -1 : -2) ? r : a, null);
       const estouros = cs.reduce((a, x) => a + (x.qtd || 0), 0), nAb = abs.length, ids = cs.filter((x) => !x.ab && x.idade != null).map((x) => x.idade);
-      const atrasoMax = Math.max(0, ...cs.filter((x) => x.sit === "venc").map((x) => -x.resta));
-      return { fila, rs, n: rs.length, ...c, com, pv: com ? c.venc / com : 0, mPar: par.length ? par.reduce((a, b) => a + b, 0) / par.length : null, velho, mCons: cons.length ? cons.reduce((a, b) => a + b, 0) / cons.length : null, atrasoMax, estouros, nAb, mIdade: ids.length ? ids.reduce((a, b) => a + b, 0) / ids.length : null, naoLido: cs.filter((x) => x.naoLido).length };
+      const atr = cs.map((x) => x.atraso).filter((x) => x != null), atrasoMax = Math.max(0, ...atr), mAtraso = atr.length ? atr.reduce((a, b) => a + b, 0) / atr.length : null;
+      return { fila, rs, n: rs.length, ...c, com, pv: com ? c.venc / com : 0, mPar: par.length ? par.reduce((a, b) => a + b, 0) / par.length : null, velho, mCons: cons.length ? cons.reduce((a, b) => a + b, 0) / cons.length : null, atrasoMax, mAtraso, estouros, nAb, mIdade: ids.length ? ids.reduce((a, b) => a + b, 0) / ids.length : null, naoLido: cs.filter((x) => x.naoLido).length };
     }).sort((a, b) => b.venc - a.venc || b.pv - a.pv || b.prox - a.prox || b.n - a.n);
   }
   function smDiagnostico(L, F, t) {
@@ -4548,49 +4549,126 @@ ${extra}
     const lido = [...repSla.values()].map((x) => x.lido_em).filter(Boolean).sort().pop();
     box.querySelector(".sm-sub").innerHTML = `${fmt(L.length)} ${smEscopo === "todos" ? "casos de reposição (em aberto e finalizados)" : smEscopo === "fin" ? "casos de reposição finalizados (Resolvido, Encerrado ou Recuperação de crédito)" : "tickets de reposição em aberto"}${L.length !== base.length ? ` (de ${fmt(base.length)})` : ""}${smEscopo !== "aberto" ? " · finalizados: Fora do SLA quando a coluna Qtd Fora do SLA da tabela de acompanhamento é 1 ou mais" : ""} · prazo contado em <b>${smUn()}</b>${smModo === "uteis" ? " (horas SLA ÷ 24, sem sábado, domingo e feriados nacionais)" : " (início + horas SLA, igual ao 360)"} · SLA lido do Multi360${lido ? ` em ${new Date(lido).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : ": ainda não lido"}.`;
     const card = (k, rot, n, sub, cor) => `<button type="button" class="kpi kpi-info kpi-clic ${cor}${smSit === k ? " ativa" : ""}" data-smsit="${k}" title="Clique para filtrar a lista de tickets"><span class="kpi-rot">${rot}</span><b class="kpi-num">${n}</b><small>${sub}</small></button>`;
-    box.querySelector(".sm-cards").innerHTML = card("venc", "Fora do SLA", fmt(t.venc), `${pct(t.venc, t.com)} dos ${fmt(t.com)} com SLA${quebra("venc")}`, "vermelho")
+    box.querySelector(".sm-cards").innerHTML = `<button type="button" class="kpi kpi-info kpi-clic${smSit ? "" : " ativa"}" data-smsit="" title="Todos os casos do filtro (tira o filtro do card)"><span class="kpi-rot">Total de tickets</span><b class="kpi-num">${fmt(L.length)}</b><small>${smEscopo === "todos" ? `${fmt(L.filter(abertoRep).length)} em andamento · ${fmt(L.length - L.filter(abertoRep).length)} finalizados` : smEscopo === "fin" ? "finalizados" : "em andamento"} · ${fmt(t.com)} com SLA</small></button>`
+      + card("venc", "Fora do SLA", fmt(t.venc), `${pct(t.venc, t.com)} dos ${fmt(t.com)} com SLA${quebra("venc")}`, "vermelho")
       + card("prox", "Próximos do vencimento", fmt(t.prox), `em aberto, 80% ou mais do prazo consumido`, "laranja")
       + card("dentro", "Dentro do SLA", fmt(t.dentro), `${pct(t.dentro, t.com)} dos ${fmt(t.com)} com SLA${quebra("dentro")}`, "verde")
       + card("sem", "Sem SLA definido", fmt(t.sem), `${pct(t.sem, L.length)} ${smEscopo !== "aberto" ? "dos casos" : "dos em aberto"}${t.naoLido ? ` · ${fmt(t.naoLido)} não lidos pelo robô` : ""}`, "cinza")
       + `<div class="kpi kpi-info azul"><span class="kpi-rot">Cumprimento do SLA</span><b class="kpi-num">${pct(t.com - t.venc, t.com)}</b><small>${fmt(t.com - t.venc)} não vencidos ÷ ${fmt(t.com)} com SLA (sem SLA fica fora)</small></div>`;
-    const F = smFilas(L);
+    // card clicado filtra também os quadros de baixo (Brenda 24/11): ranking, criticidade e responsáveis contam só os casos do card
+    const Lk = smSit ? L.filter((r) => smCalc(r).sit === smSit) : L;
+    const F = smFilas(Lk);
     const rankHTML = (FF, g) => { const mx = Math.max(1, ...FF.map((f) => f.n)), ab = g === "ab";
       const seg = (n, k, f) => (n ? `<span class="sm-s ${k}" style="width:${(n / mx) * 100}%" title="${esc(f.fila)} · ${SM_SIT[k]}: ${fmt(n)}"></span>` : "");
       const pv = (f) => `<td class="num" title="${fmt(f.venc)} fora do SLA ÷ ${fmt(f.com)} com SLA">${f.com ? `<b class="${f.pv >= 0.5 ? "txt-vermelho" : f.pv >= 0.25 ? "txt-laranja" : ""}">${pct(f.venc, f.com)}</b><div class="s">${fmt(f.venc)}/${fmt(f.com)}</div>` : `<span class="s">sem SLA</span>`}</td>`;
       const est = (f) => `<td class="num" title="Soma da coluna Qtd Fora do SLA">${f.estouros ? fmt(f.estouros) : "·"}</td>`;
-      const cab = ab ? `<tr><th>Fila</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num" title="Fora do SLA ÷ tickets com informação de SLA (sem SLA fica fora da conta)">% fora do SLA</th>${smEscopo !== "aberto" ? `<th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th>` : ""}<th class="num">Média dias parados</th><th>Mais antigo</th><th class="num" title="Média do % do prazo já consumido, só tickets com SLA lido">Consumo médio</th></tr>`
+      const cab = ab ? `<tr><th>Fila</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num" title="Fora do SLA ÷ tickets com informação de SLA (sem SLA fica fora da conta)">% fora do SLA</th>${smEscopo !== "aberto" ? `<th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th>` : ""}<th class="num" title="Desde a última movimentação do ticket (Data da Última Atualização)">Média dias parados</th><th class="num" title="Quanto passou do prazo do SLA, no pior ticket (só em andamento)">Maior atraso</th><th>Mais antigo</th><th class="num" title="Média do % do prazo já consumido, só tickets com SLA lido">Consumo médio</th></tr>`
         : `<tr><th>Fila em que finalizou</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Dentro</th><th class="num" title="Fora do SLA ÷ tickets com a Qtd Fora do SLA na planilha">% fora do SLA</th><th class="num" title="Soma da coluna Qtd Fora do SLA: quantas vezes o SLA estourou">Estouros de SLA</th><th class="num">Tempo médio até finalizar (${smUn()})</th><th class="num">Sem SLA</th></tr>`;
       const linhas = FF.map((f, i) => `<tr class="sm-rank-l${smFila === f.fila && smGrp === g ? " sel" : ""}" data-smfila="${esc(f.fila)}" data-smgrp="${g}" title="Ver os tickets desta fila"><td><span class="sm-pos">${i + 1}</span><a href="#">${esc(f.fila)}</a></td>
         <td class="sm-col-barra"><div class="sm-barra">${seg(f.venc, "venc", f)}${seg(f.prox, "prox", f)}${seg(f.dentro, "dentro", f)}${seg(f.sem, "sem", f)}</div></td>
         <td class="num tot">${fmt(f.n)}</td><td class="num">${f.venc ? `<b class="txt-vermelho">${fmt(f.venc)}</b>` : "·"}</td>`
-        + (ab ? `<td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td>${pv(f)}${smEscopo !== "aberto" ? est(f) : ""}<td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td>${f.velho ? `${linkTicket(f.velho.ticket)}<div class="s">${smDiaTxt(smCalc(f.velho).idade)} em aberto</div>` : "–"}</td>
+        + (ab ? `<td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td>${pv(f)}${smEscopo !== "aberto" ? est(f) : ""}<td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td class="num">${f.atrasoMax ? `<b class="txt-vermelho">${smDiaTxt(f.atrasoMax)}</b>` : "·"}</td><td>${f.velho ? `${linkTicket(f.velho.ticket)}<div class="s">${smDiaTxt(smCalc(f.velho).idade)} em aberto</div>` : "–"}</td>
         <td class="num">${f.mCons == null ? "–" : `<b class="${f.mCons > 1 ? "txt-vermelho" : f.mCons >= 0.8 ? "txt-laranja" : ""}">${smPct(f.mCons)}</b>`}</td></tr>`
           : `<td class="num">${f.dentro ? fmt(f.dentro) : "·"}</td>${pv(f)}${est(f)}<td class="num">${f.mIdade == null ? "–" : dia1(f.mIdade)}</td><td class="num s">${f.sem ? fmt(f.sem) : "·"}</td></tr>`)).join("")
         || `<tr><td colspan="10" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
       const tit = smEscopo === "todos" ? `<div class="sm-rank-sub"><h3>${ab ? "🟡 Em andamento" : "✅ Finalizados"}</h3><span class="s">${fmt(FF.reduce((a, f) => a + f.n, 0))} tickets${ab ? " em aberto agora" : " (Resolvido, Encerrado ou Recuperação de crédito)"}</span></div>` : "";
-      return `${tit}<div class="tabela-rolagem"><table class="tabela sm-rank"><thead>${cab}</thead><tbody>${linhas}</tbody></table></div>`; };
-    box.querySelector(".sm-ranks").innerHTML = smEscopo === "todos" ? rankHTML(smFilas(L.filter(abertoRep)), "ab") + rankHTML(smFilas(L.filter((r) => !abertoRep(r))), "fin") : rankHTML(F, smEscopo === "fin" ? "fin" : "ab");
-    box.querySelector(".sm-diag").innerHTML = smDiagnostico(L, F, t);
+      const T = FF.reduce((o, f) => { ["n", "venc", "prox", "dentro", "sem", "com", "estouros"].forEach((k) => (o[k] += f[k] || 0)); return o; }, { n: 0, venc: 0, prox: 0, dentro: 0, sem: 0, com: 0, estouros: 0 });
+      const tot = FF.length ? `<tfoot><tr class="rp-total"><td>Total</td><td></td><td class="num">${fmt(T.n)}</td><td class="num">${fmt(T.venc)}</td>` + (ab ? `<td class="num">${fmt(T.prox)}</td><td class="num">${pct(T.venc, T.com)}</td>${smEscopo !== "aberto" ? `<td class="num">${fmt(T.estouros)}</td>` : ""}<td></td><td></td><td></td><td></td>` : `<td class="num">${fmt(T.dentro)}</td><td class="num">${pct(T.venc, T.com)}</td><td class="num">${fmt(T.estouros)}</td><td></td><td class="num">${fmt(T.sem)}</td>`) + `</tr></tfoot>` : "";
+      return `${tit}<div class="tabela-rolagem"><table class="tabela sm-rank"><thead>${cab}</thead><tbody>${linhas}</tbody>${tot}</table></div>`; };
+    box.querySelector(".sm-ranks").innerHTML = smEscopo === "todos" ? rankHTML(smFilas(Lk.filter(abertoRep)), "ab") + rankHTML(smFilas(Lk.filter((r) => !abertoRep(r))), "fin") : rankHTML(F, smEscopo === "fin" ? "fin" : "ab");
+    box.querySelector(".sm-diag").innerHTML = smDiagnostico(L, smFilas(L), t);
+    box.querySelectorAll(".sm-filtro-card").forEach((el) => (el.innerHTML = smSit ? `Contando só: <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : ""));
+    desenharCriticidade(box, F); desenharResp(box, Lk); desenharEvolucao(box);
     // lista de tickets (card e/ou fila clicados)
     if (smFila && !F.some((f) => f.fila === smFila)) { smFila = null; smGrp = ""; }
-    let D = L.filter((r) => (!smSit || smCalc(r).sit === smSit) && (!smFila || ((filaRep(r) || SEM_FILA) === smFila && (!smGrp || (smGrp === "ab") === abertoRep(r)))));
+    let D = L.filter((r) => (!smSit || smCalc(r).sit === smSit) && (!smFila || ((filaRep(r) || SEM_FILA) === smFila && (!smGrp || (smGrp === "ab") === abertoRep(r)))) && (!smResp || respRep(r) === smResp));
     const nn = (x, d) => (x == null ? d : x);
-    const ord = { atraso: (a, b) => SM_ORD_SIT[a.sit] - SM_ORD_SIT[b.sit] || nn(a.resta, 1e9) - nn(b.resta, 1e9),
+    const ord = { atraso: (a, b) => SM_ORD_SIT[a.sit] - SM_ORD_SIT[b.sit] || nn(b.atraso, -1) - nn(a.atraso, -1) || nn(a.resta, 1e9) - nn(b.resta, 1e9),
       antigo: (a, b) => nn(b.idade, -1) - nn(a.idade, -1),
       vence: (a, b) => (a.sit === "venc") - (b.sit === "venc") || (a.sit === "sem") - (b.sit === "sem") || nn(a.resta, 1e9) - nn(b.resta, 1e9),
       parado: (a, b) => nn(b.parado, -1) - nn(a.parado, -1) }[smOrd];
     D = D.slice().sort((x, y) => ord(smCalc(x), smCalc(y)) || nn(smCalc(y).idade, -1) - nn(smCalc(x).idade, -1)); smLista = D;
     box.querySelector(".sm-ord").value = smOrd;
-    box.querySelector(".sm-det-tit").innerHTML = `${fmt(D.length)} tickets` + (smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : "") + (smFila ? ` <button type="button" class="chip amarelo sm-x" data-smx="fila">${esc(smFila)}${smEscopo === "todos" && smGrp ? (smGrp === "ab" ? " · em andamento" : " · finalizados") : ""} ✕</button>` : "");
+    box.querySelector(".sm-det-tit").innerHTML = `${fmt(D.length)} tickets` + (smSit ? ` <button type="button" class="chip amarelo sm-x" data-smx="sit">${esc(SM_SIT[smSit])} ✕</button>` : "") + (smFila ? ` <button type="button" class="chip amarelo sm-x" data-smx="fila">${esc(smFila)}${smEscopo === "todos" && smGrp ? (smGrp === "ab" ? " · em andamento" : " · finalizados") : ""} ✕</button>` : "") + (smResp ? ` <button type="button" class="chip amarelo sm-x" data-smx="resp">Responsável: ${esc(smResp)} ✕</button>` : "");
     const POR = 100, pags = Math.max(1, Math.ceil(D.length / POR)); smPag = Math.min(smPag, pags);
     const quando = (c) => (!c.prazo ? "–" : smModo === "corridos" ? new Date(c.prazo).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : br(c.prazo));
     box.querySelector(".sm-det-corpo").innerHTML = D.slice((smPag - 1) * POR, smPag * POR).map((r) => { const c = smCalc(r), s = r._sla;
       return `<tr><td>${linkTicket(r.ticket)}<div class="s">${ROT_FLUXO[r._t] || ""}</div></td><td>${esc(filaRep(r) || SEM_FILA)}</td><td>${esc(grupoRep(r))}</td><td>${esc(respRep(r))}</td><td>${br(r.criado_em)}</td><td>${br(r.atualizado_em)}</td>
         <td class="num">${c.parado == null ? "–" : fmt(c.parado)}</td><td>${!c.ab ? `<span class="s">${sitRep(r) === "rec" ? "Recup. de crédito" : "finalizado"}</span>` : c.horas ? `${fmt(c.horas)} h<div class="s">${smModo === "uteis" ? `${c.n} ${c.n === 1 ? "dia útil" : "dias úteis"}` : `${String(Math.round((c.horas / 24) * 10) / 10).replace(".", ",")} dias corridos`}</div>` : `<span class="s">${c.naoLido ? "não lido pelo robô" : "não definido no 360"}</span>`}</td>
-        <td>${quando(c)}</td><td class="num">${smResta(c)}</td><td class="sm-col-cons">${smBarra(c)}</td>
+        <td>${quando(c)}</td><td class="num">${c.atraso != null ? `<b class="txt-vermelho">${smDiaTxt(c.atraso)}</b>` : "–"}</td><td class="num">${c.resta == null || c.atraso != null ? "–" : smResta(c)}</td><td class="sm-col-cons">${smBarra(c)}</td>
         <td><span class="sm-chip ${c.sit}">${SM_SIT[c.sit]}</span>${c.qtd ? `<div class="s"><b>${fmt(c.qtd)}×</b> fora do SLA</div>` : ""}${c.ab && s && s.situacao ? `<div class="s">360: ${esc(s.situacao)}</div>` : ""}<div class="s">${esc(r.status || "")}${!c.ab && r.finalizado_em ? ` em ${br(r.finalizado_em)}` : ""}</div></td></tr>`; }).join("")
-      || `<tr><td colspan="12" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
+      || `<tr><td colspan="13" class="vazio">Nenhum ticket nesse filtro.</td></tr>`;
     box.querySelector(".sm-pag").innerHTML = D.length > POR ? `<button class="btn" data-smp="-1" ${smPag === 1 ? "disabled" : ""}>‹ Anterior</button><span>Página ${smPag} de ${pags}</span><button class="btn" data-smp="1" ${smPag === pags ? "disabled" : ""}>Próxima ›</button>` : "";
+  }
+  // ---- criticidade (Brenda 24/11): volume × gravidade. Índice 0–100 = 40% vencidos (÷ maior fila) + 30% % vencidos + 30% maior atraso (÷ maior atraso)
+  const SM_NIV = [[60, "Crítico", "venc"], [35, "Alto", "prox"], [15, "Médio", "medio"], [0, "Baixo", "dentro"]];
+  function desenharCriticidade(box, F) {
+    const el = box.querySelector(".sm-crit"); if (!el) return;
+    const G = F.filter((f) => f.venc > 0);
+    if (!G.length) { el.innerHTML = `<p class="s">Nenhuma fila com tickets fora do SLA nesse filtro.</p>`; return; }
+    const mV = Math.max(...G.map((f) => f.venc)), mA = Math.max(0, ...G.map((f) => f.atrasoMax));
+    const porVol = G.slice().sort((a, b) => b.venc - a.venc).map((f) => f.fila);
+    const L = G.map((f) => { const pV = f.venc / mV, pA = mA ? f.atrasoMax / mA : 0, ind = Math.round(100 * (0.4 * pV + 0.3 * f.pv + 0.3 * pA));
+      return { f, ind, niv: SM_NIV.find(([m]) => ind >= m), partes: [Math.round(40 * pV), Math.round(30 * f.pv), Math.round(30 * pA)] }; }).sort((a, b) => b.ind - a.ind || b.f.venc - a.f.venc);
+    el.innerHTML = `<div class="tabela-rolagem"><table class="tabela sm-crit-t"><thead><tr><th>Fila</th><th>Nível</th><th class="sm-col-barra">Índice de criticidade (0 a 100)</th><th class="num">Fora do SLA</th><th class="num">% fora do SLA</th><th class="num" title="Pior atraso da fila, só tickets em andamento">Maior atraso</th><th class="num" title="Posição se o ranking fosse só pela quantidade de vencidos">Posição por volume</th></tr></thead><tbody>${L.map((x, i) => {
+      const vol = porVol.indexOf(x.f.fila) + 1;
+      return `<tr class="sm-rank-l" data-smfila="${esc(x.f.fila)}" data-smgrp="" title="Ver os tickets desta fila"><td><span class="sm-pos">${i + 1}</span><a href="#">${esc(x.f.fila)}</a></td><td><span class="sm-chip ${x.niv[2]}">${x.niv[1]}</span></td>
+        <td class="sm-col-barra"><div class="sm-ind" title="Vencidos ${x.partes[0]} + % vencidos ${x.partes[1]} + atraso ${x.partes[2]}"><span class="a" style="width:${x.partes[0]}%"></span><span class="b" style="width:${x.partes[1]}%"></span><span class="c" style="width:${x.partes[2]}%"></span></div><b class="sm-ind-n">${x.ind}</b></td>
+        <td class="num"><b class="txt-vermelho">${fmt(x.f.venc)}</b></td><td class="num">${pct(x.f.venc, x.f.com)}<div class="s">${fmt(x.f.venc)}/${fmt(x.f.com)}</div></td><td class="num">${x.f.atrasoMax ? smDiaTxt(x.f.atrasoMax) : "–"}</td>
+        <td class="num">${vol}º${vol !== i + 1 ? ` <span class="s">${vol > i + 1 ? "▲ mais grave do que o volume indica" : "▼ volume alto, gravidade menor"}</span>` : ""}</td></tr>`; }).join("")}</tbody></table></div>`;
+  }
+  // ---- análise por responsável (Brenda 24/11)
+  function desenharResp(box, L) {
+    const el = box.querySelector(".sm-resp"); if (!el) return;
+    const R = smFilas(L, respRep);
+    el.innerHTML = `<div class="tabela-rolagem"><table class="tabela sm-resp-t"><thead><tr><th>Responsável</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Atribuídos</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num">Dentro</th><th class="num">Sem SLA</th><th class="num" title="Fora do SLA ÷ tickets com informação de SLA">% vencimento</th><th class="num" title="Desde a última movimentação (só em andamento)">Média dias parados</th><th class="num" title="Média de dias além do prazo, só tickets vencidos em andamento">Média dias de atraso</th></tr></thead><tbody>${(() => {
+      const mx = Math.max(1, ...R.map((f) => f.n)), seg = (n, k) => (n ? `<span class="sm-s ${k}" style="width:${(n / mx) * 100}%"></span>` : "");
+      return R.map((f) => `<tr class="sm-rank-l${smResp === f.fila ? " sel" : ""}" data-smresp="${esc(f.fila)}" title="Ver os tickets deste responsável"><td><a href="#">${esc(f.fila)}</a></td><td class="sm-col-barra"><div class="sm-barra">${seg(f.venc, "venc")}${seg(f.prox, "prox")}${seg(f.dentro, "dentro")}${seg(f.sem, "sem")}</div></td>
+        <td class="num tot">${fmt(f.n)}</td><td class="num">${f.venc ? `<b class="txt-vermelho">${fmt(f.venc)}</b>` : "·"}</td><td class="num">${f.prox ? `<b class="txt-laranja">${fmt(f.prox)}</b>` : "·"}</td><td class="num">${f.dentro ? fmt(f.dentro) : "·"}</td><td class="num s">${f.sem ? fmt(f.sem) : "·"}</td>
+        <td class="num">${f.com ? `<b class="${f.pv >= 0.5 ? "txt-vermelho" : f.pv >= 0.25 ? "txt-laranja" : ""}">${pct(f.venc, f.com)}</b><div class="s">${fmt(f.venc)}/${fmt(f.com)}</div>` : `<span class="s">sem SLA</span>`}</td>
+        <td class="num">${f.mPar == null ? "–" : dia1(f.mPar)}</td><td class="num">${f.mAtraso == null ? "–" : dia1(f.mAtraso)}</td></tr>`).join("") || `<tr><td colspan="10" class="vazio">Nenhum ticket nesse filtro.</td></tr>`; })()}</tbody>${(() => { const T = R.reduce((o, f) => { ["n", "venc", "prox", "dentro", "sem", "com"].forEach((k) => (o[k] += f[k])); return o; }, { n: 0, venc: 0, prox: 0, dentro: 0, sem: 0, com: 0 });
+      return R.length ? `<tfoot><tr class="rp-total"><td>Total</td><td></td><td class="num">${fmt(T.n)}</td><td class="num">${fmt(T.venc)}</td><td class="num">${fmt(T.prox)}</td><td class="num">${fmt(T.dentro)}</td><td class="num">${fmt(T.sem)}</td><td class="num">${pct(T.venc, T.com)}</td><td></td><td></td></tr></tfoot>` : ""; })()}</table></div>`;
+  }
+  // ---- evolução (Brenda 24/11): só histórico real = leituras do robô guardadas em repo_sla_hist (tickets em andamento); nada é estimado
+  async function carregarSlaHist() {
+    if (smHistCarr) return; smHistCarr = true;
+    const desde = new Date(Date.now() - 62 * 864e5).toISOString(); let H = [];
+    try { for (let de = 0; ; de += 1000) { const { data, error } = await sb.from("repo_sla_hist").select("ticket,fila,situacao,inicio,horas,lido_em").gte("lido_em", desde).order("id").range(de, de + 999); if (error) throw error; H = H.concat(data || []); if (!data || data.length < 1000) break; } smHist = H; }
+    catch (_) { smHist = []; }
+    if (repAba === "sla") desenharSlaMon();
+  }
+  function smSitLeitura(h, dia) {
+    const hh = Number(h.horas); if (!h.inicio || !(hh > 0) || /DEFINID/i.test(h.situacao || "")) return "sem";
+    if (smModo === "corridos") { const ini = Date.parse(h.inicio), dur = hh * 3600e3, ag = Date.parse(h.lido_em), c = (ag - ini) / dur; return ag > ini + dur ? "venc" : c >= 0.8 ? "prox" : "dentro"; }
+    const n = Math.max(1, Math.ceil(hh / 24)), u = duEntre(diaLocal(h.inicio), dia), c = u / n; return u > n ? "venc" : c >= 0.8 ? "prox" : "dentro";
+  }
+  function desenharEvolucao(box) {
+    const el = box.querySelector(".sm-evo"); if (!el) return;
+    if (smHist === null) { el.innerHTML = `<p class="s">Carregando o histórico das leituras…</p>`; carregarSlaHist(); return; }
+    if (!smHist.length) { el.innerHTML = `<p class="s">Ainda não há histórico de leituras do SLA.</p>`; return; }
+    const rm = new Map(reps.map((r) => [String(r.ticket), r]));
+    const casa = (h) => { const r = rm.get(String(h.ticket)); const fila = h.fila || (r && filaRep(r)) || SEM_FILA;
+      if (smF.fila.length && !smF.fila.includes(fila)) return false;
+      if (!r) return !smF.grupo.length && !smF.resp.length && !smF.tipo && !smF.de && !smF.ate && !smF.per;
+      return smCasa({ ...r, fila }, "fila") && (!smResp || respRep(r) === smResp) && (!smFila || fila === smFila); };
+    const porDia = new Map();
+    smHist.forEach((h) => { if (!casa(h)) return; const d = diaLocal(h.lido_em); let m = porDia.get(d); if (!m) porDia.set(d, (m = new Map())); const a = m.get(h.ticket); if (!a || a.lido_em < h.lido_em) m.set(h.ticket, h); });
+    const dias = [...porDia.keys()].sort();
+    const D = dias.map((d) => { const c = { venc: 0, prox: 0, dentro: 0, sem: 0 }, venc = new Set(); porDia.get(d).forEach((h, tk) => { const x = smSitLeitura(h, d); c[x]++; if (x === "venc") venc.add(tk); }); const com = c.venc + c.prox + c.dentro; return { d, lidos: porDia.get(d).size, ...c, com, venc: c.venc, vs: venc, cum: com ? (com - c.venc) / com : null }; });
+    D.forEach((x, i) => { const a = D[i - 1]; if (!a) return; x.sairam = [...a.vs].filter((t) => !x.vs.has(t)); x.entraram = [...x.vs].filter((t) => !a.vs.has(t)).length;
+      x.sFin = x.sairam.filter((t) => !porDia.get(x.d).has(t)).length; x.sPrazo = x.sairam.length - x.sFin; });
+    const h = D[D.length - 1], o = D[D.length - 2], dd = (d) => br(d).slice(0, 5);
+    const cab = `<p class="s">Pelas leituras do robô no Multi360 (tickets em andamento, 2× por dia; vale a última leitura de cada dia). Histórico desde ${br(dias[0])}. Segue os filtros e a fila/responsável clicados; não usa a Qtd Fora do SLA, que não tem histórico.</p>`;
+    if (!o) { el.innerHTML = cab + `<div class="kpis sm-evo-k"><div class="kpi kpi-info vermelho"><span class="kpi-rot">Vencidos em ${dd(h.d)}</span><b class="kpi-num">${fmt(h.venc)}</b><small>${pct(h.venc, h.com)} dos ${fmt(h.com)} com SLA lidos</small></div></div><p class="s">Só há leituras de ${br(h.d)}. A comparação hoje × ontem e a evolução aparecem a partir da leitura do próximo dia útil.</p>`; return; }
+    const vr = o.venc ? (h.venc - o.venc) / o.venc : null, seta = (x, bom) => (x == null || x === 0 ? "" : `<span class="rp-var ${(x > 0) === bom ? "desce" : "sobe"}">${x > 0 ? "▲ +" : "▼ "}`);
+    const mxV = Math.max(1, ...D.map((x) => x.venc));
+    el.innerHTML = cab + `<div class="kpis sm-evo-k">
+      <div class="kpi kpi-info vermelho"><span class="kpi-rot">Vencidos ${dd(h.d)} × ${dd(o.d)}</span><b class="kpi-num">${fmt(h.venc)} <span class="sm-evo-ant">× ${fmt(o.venc)}</span></b><small>${vr == null ? "dia anterior sem vencidos" : `${seta(vr, false)}${String(Math.round(vr * 1000) / 10).replace(".", ",")}%</span> em relação a ${dd(o.d)}`}</small></div>
+      <div class="kpi kpi-info verde"><span class="kpi-rot">Saíram do vencido</span><b class="kpi-num">${fmt(h.sairam.length)}</b><small>${fmt(h.sFin)} saíram da leitura (finalizados ou mudaram de fila sem SLA) · ${fmt(h.sPrazo)} voltaram a ter prazo</small></div>
+      <div class="kpi kpi-info laranja"><span class="kpi-rot">Entraram no vencido</span><b class="kpi-num">${fmt(h.entraram)}</b><small>não estavam vencidos em ${dd(o.d)}</small></div>
+      <div class="kpi kpi-info azul"><span class="kpi-rot">Cumprimento ${dd(h.d)} × ${dd(o.d)}</span><b class="kpi-num">${h.cum == null ? "–" : smPct(h.cum)} <span class="sm-evo-ant">× ${o.cum == null ? "–" : smPct(o.cum)}</span></b><small>não vencidos ÷ com SLA lidos no dia</small></div></div>
+      <div class="tabela-rolagem"><table class="tabela sm-evo-t"><thead><tr><th>Dia</th><th class="num">Lidos</th><th class="num">Com SLA</th><th class="num">Vencidos</th><th class="num">Variação</th><th class="num">Entraram</th><th class="num">Saíram</th><th class="num">Próximos</th><th class="num">Cumprimento</th><th class="sm-col-barra">Vencidos por dia</th></tr></thead><tbody>${D.slice().reverse().slice(0, 30).map((x) => { const a = D[D.indexOf(x) - 1], v = a && a.venc ? (x.venc - a.venc) / a.venc : null;
+        return `<tr><td>${br(x.d)}</td><td class="num">${fmt(x.lidos)}</td><td class="num">${fmt(x.com)}</td><td class="num"><b class="txt-vermelho">${fmt(x.venc)}</b></td><td class="num">${v == null ? "–" : `${seta(v, false)}${String(Math.round(v * 1000) / 10).replace(".", ",")}%</span>`}</td><td class="num">${a ? fmt(x.entraram) : "–"}</td><td class="num">${a ? fmt(x.sairam.length) : "–"}</td><td class="num">${fmt(x.prox)}</td><td class="num"><b>${x.cum == null ? "–" : smPct(x.cum)}</b></td><td class="sm-col-barra"><div class="sm-barra"><span class="sm-s venc" style="width:${(x.venc / mxV) * 100}%"></span></div></td></tr>`; }).join("")}</tbody></table></div>`;
   }
   (function ligarSlaMon() {
     const box = $("rp-sla"); if (!box) return;
@@ -4599,21 +4677,22 @@ ${extra}
       if (e.target.closest(".sm-ord")) { smOrd = e.target.value; smPag = 1; desenharSlaMon(); }
     });
     box.addEventListener("click", (e) => {
-      const es = e.target.closest("[data-smesc]"); if (es) { smEscopo = es.dataset.smesc; smSit = ""; smFila = null; smGrp = ""; smPag = 1; try { localStorage.setItem("painel.smEscopo", smEscopo); } catch (_) {} desenharSlaMon(); return; }
+      const es = e.target.closest("[data-smesc]"); if (es) { smEscopo = es.dataset.smesc; smSit = ""; smFila = null; smGrp = ""; smResp = null; smPag = 1; try { localStorage.setItem("painel.smEscopo", smEscopo); } catch (_) {} desenharSlaMon(); return; }
       const m = e.target.closest("[data-smmodo]"); if (m) { smModo = m.dataset.smmodo; try { localStorage.setItem("painel.smModo", smModo); } catch (_) {} desenharSlaMon(); return; }
-      if (e.target.closest(".sm-limpar")) { Object.assign(smF, { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" }); smSit = ""; smFila = null; smPag = 1; desenharSlaMon(); return; }
-      const k = e.target.closest("[data-smsit]"); if (k) { smSit = smSit === k.dataset.smsit ? "" : k.dataset.smsit; smPag = 1; desenharSlaMon(); return; }
+      if (e.target.closest(".sm-limpar")) { Object.assign(smF, { grupo: [], fila: [], resp: [], tipo: "", per: "", de: "", ate: "" }); smSit = ""; smFila = null; smGrp = ""; smResp = null; smPag = 1; desenharSlaMon(); return; }
+      const k = e.target.closest("[data-smsit]"); if (k) { smSit = !k.dataset.smsit || smSit === k.dataset.smsit ? "" : k.dataset.smsit; smPag = 1; desenharSlaMon(); return; }
       const l = e.target.closest("tr[data-smfila]"); if (l && !e.target.closest("a[href^='http']")) { e.preventDefault(); const mesmo = smFila === l.dataset.smfila && smGrp === l.dataset.smgrp; smFila = mesmo ? null : l.dataset.smfila; smGrp = mesmo ? "" : l.dataset.smgrp; smPag = 1; desenharSlaMon(); if (smFila) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
-      const x = e.target.closest("[data-smx]"); if (x) { if (x.dataset.smx === "sit") smSit = ""; else { smFila = null; smGrp = ""; } smPag = 1; desenharSlaMon(); return; }
+      const rp = e.target.closest("tr[data-smresp]"); if (rp && !e.target.closest("a[href^='http']")) { e.preventDefault(); smResp = smResp === rp.dataset.smresp ? null : rp.dataset.smresp; smPag = 1; desenharSlaMon(); if (smResp) box.querySelector(".sm-det-q").scrollIntoView({ block: "start", behavior: "smooth" }); return; }
+      const x = e.target.closest("[data-smx]"); if (x) { if (x.dataset.smx === "sit") smSit = ""; else if (x.dataset.smx === "resp") smResp = null; else { smFila = null; smGrp = ""; } smPag = 1; desenharSlaMon(); return; }
       const p = e.target.closest("[data-smp]"); if (p) { smPag += +p.dataset.smp; desenharSlaMon(); return; }
       if (!e.target.closest(".sm-excel")) return;
       if (!smLista.length) return toast("Nenhum ticket nesse filtro.", true);
-      const cab = ["Ticket", "Pré/pós", "Fila atual", "Grupo", "Responsável", "Abertura", "Última atualização", `Dias parados na fila (${smUn()})`, `Dias em aberto (${smUn()})`, "Horas SLA", "Início do SLA", "Prazo", `Dias restantes (negativo = atraso, ${smUn()})`, "Consumo do SLA (%)", "Situação", "Qtd Fora do SLA (tabela de acompanhamento)", "Situação no 360", "Status do ticket", "Finalizado em"];
+      const cab = ["Ticket", "Pré/pós", "Fila atual", "Grupo", "Responsável", "Abertura", "Última atualização", `Dias parados: desde a última movimentação (${smUn()})`, `Dias em aberto (${smUn()})`, "Horas SLA", "Início do SLA", "Prazo", `Dias de atraso: além do prazo do SLA (${smUn()})`, `Dias restantes (negativo = atraso, ${smUn()})`, "Consumo do SLA (%)", "Situação", "Qtd Fora do SLA (tabela de acompanhamento)", "Situação no 360", "Status do ticket", "Finalizado em"];
       const linhas = [cab].concat(smLista.map((r) => { const c = smCalc(r), s = r._sla || {};
         return [r.ticket, ROT_FLUXO[r._t] || "", filaRep(r) || SEM_FILA, grupoRep(r), respRep(r), br(r.criado_em), br(r.atualizado_em), c.parado ?? "", c.idade ?? "", c.horas ?? "", s.inicio ? new Date(s.inicio).toLocaleString("pt-BR") : "",
-          c.prazo ? (smModo === "corridos" ? new Date(c.prazo).toLocaleString("pt-BR") : br(c.prazo)) : "", c.resta == null ? "" : Math.round(c.resta * 10) / 10, c.cons == null ? "" : Math.round(c.cons * 100), SM_SIT[c.sit], c.qtd ?? "", c.ab ? s.situacao || "" : "", r.status || "", br(r.finalizado_em)]; }));
+          c.prazo ? (smModo === "corridos" ? new Date(c.prazo).toLocaleString("pt-BR") : br(c.prazo)) : "", c.atraso == null ? "" : Math.round(c.atraso * 10) / 10, c.resta == null ? "" : Math.round(c.resta * 10) / 10, c.cons == null ? "" : Math.round(c.cons * 100), SM_SIT[c.sit], c.qtd ?? "", c.ab ? s.situacao || "" : "", r.status || "", br(r.finalizado_em)]; }));
       const F = smFilas(smBase().filter((r) => smCasa(r)));
-      const rk = [["Posição", "Fila", "Total", "Em aberto", "Fora do SLA", "Próximos", "Dentro", "Sem SLA", "Com SLA", "% fora do SLA (÷ com SLA)", "Estouros de SLA (soma Qtd Fora do SLA)", `Média dias parados (${smUn()})`, "Ticket mais antigo", "Consumo médio (%)"]].concat(F.map((f, i) => [i + 1, f.fila, f.n, f.nAb, f.venc, f.prox, f.dentro, f.sem, f.com, f.com ? Math.round((1000 * f.venc) / f.com) / 10 : "", f.estouros, f.mPar == null ? "" : Math.round(f.mPar * 10) / 10, f.velho ? f.velho.ticket : "", f.mCons == null ? "" : Math.round(f.mCons * 100)]));
+      const rk = [["Posição", "Fila", "Total", "Em aberto", "Fora do SLA", "Próximos", "Dentro", "Sem SLA", "Com SLA", "% fora do SLA (÷ com SLA)", "Estouros de SLA (soma Qtd Fora do SLA)", `Média dias parados (${smUn()})`, `Maior atraso (${smUn()})`, "Ticket mais antigo", "Consumo médio (%)"]].concat(F.map((f, i) => [i + 1, f.fila, f.n, f.nAb, f.venc, f.prox, f.dentro, f.sem, f.com, f.com ? Math.round((1000 * f.venc) / f.com) / 10 : "", f.estouros, f.mPar == null ? "" : Math.round(f.mPar * 10) / 10, f.atrasoMax ? Math.round(f.atrasoMax * 10) / 10 : "", f.velho ? f.velho.ticket : "", f.mCons == null ? "" : Math.round(f.mCons * 100)]));
       const ws = XLSX.utils.aoa_to_sheet(linhas); ws["!cols"] = cab.map((c) => ({ wch: Math.min(30, Math.max(10, c.length)) }));
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rk), "Ranking das filas"); XLSX.utils.book_append_sheet(wb, ws, "Tickets");
       XLSX.writeFile(wb, `monitoramento_sla_${smModo}_${hojeISO()}.xlsx`);
