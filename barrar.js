@@ -123,7 +123,6 @@
   // a pesquisa dos pendentes usa o mesmo filtro "Nota ou ticket" do topo: a nota aparece na tabela geral (Erro: verificar), onde dá para decidir (Brenda 24/11)
   function aplicarBusca(box) {
     const q = brBusca.trim();
-    box.querySelectorAll(".br-an-q, .br-et-grade").forEach((d) => { d.hidden = !!q; });
     const n = $("br-linhas") ? $("br-linhas").querySelectorAll("tr:not(:has(td.vazio))").length : 0, info = box.querySelector(".br-busca-info");
     if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): veja na tabela <b>Erro: verificar</b> abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
   }
