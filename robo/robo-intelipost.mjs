@@ -846,6 +846,8 @@ async function baixaEntregueIP(real, limite) {
   const tn = new Map((await chamar(`troca_notas?select=ticket,tipo&ticket=in.(${L.map((x) => `"${x.ticket}"`).join(",") || '""'})`).catch(() => [])).map((t) => [String(t.ticket), String(t.tipo || "")]));
   const tot = (x) => /total/i.test(x.tipo_reposicao || "") || /total/i.test(tn.get(String(x.ticket)) || "");
   const A = L.filter(tot).slice(0, limite || 50);
+  const tipos = {}; L.forEach((x) => { const k = `${x.tipo_reposicao || "(vazio)"} / troca ${tn.get(String(x.ticket)) || "-"}`; tipos[k] = (tipos[k] || 0) + 1; });
+  log("baixa-entregue: tipos " + Object.entries(tipos).map(([k, v]) => `${k}: ${v}`).join(" · "));
   log(`baixa-entregue: ${L.length} baixa(s) feitas na fila · ${A.length} de reposição total para conferir na Intelipost · ${real ? "DE VERDADE" : "TESTE (não clica em Alterar Status)"}`);
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const grava = (x, st, msg) => chamar(`aguardando_entrega?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", { ip_entregue_status: st, ip_entregue_msg: msg, ip_entregue_em: new Date().toISOString() }).catch(() => {});
@@ -870,7 +872,7 @@ async function baixaEntregueIP(real, limite) {
   };
   for (const x of A) {
     try {
-      x.pedido = await pedidoIP(x);
+      const ped0 = x.pedido; x.pedido = await pedidoIP(x); log(`  pedido: ${x.pedido === ped0 ? "o da planilha" : "achado na base pela NF"} · ${String(x.pedido).length} caracteres`);
       const rows = await buscar(x.pedido);
       if (rows.length !== 1) { soma(`busca trouxe ${rows.length} linhas`); await grava(x, "erro", `A busca do pedido trouxe ${rows.length} linhas (esperava 1): conferir à mão.`); continue; }
       if (/\bentregue\b/i.test(rows[0])) { soma("já estava entregue"); await grava(x, "ja_estava", "O pedido já estava Entregue na Intelipost."); continue; }
