@@ -21,6 +21,7 @@
   const passa = (x) => {
     if (card === "difer") { if (x.mesma_transp !== false) return false; } else if (card !== "todos" && sit(x) !== card) return false;
     const t = $("br-transp").value; if (t && (x.transp_pedido || "") !== t) return false;
+    if (brTranspP && card === "manual" && alvoTransp(x) !== brTranspP) return false;   // filtro de transportadora dos pendentes (mesmo nome dos quadrinhos)
     const q = norm($("br-busca").value).split(/[\s,;]+/).filter(Boolean);
     return !q.length || q.some((b) => norm(x.nf).includes(b) || norm(x.ticket).includes(b));
   };
@@ -119,11 +120,13 @@
     grupos.forEach(([t, xs]) => { let a = t.replace(/[\\/?*\[\]:]/g, " ").slice(0, 28).trim() || "Transp"; while (usados.has(a)) a += "_"; usados.add(a); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([CAB_ERRO].concat(linhasXls(xs))), a); });
     XLSX.writeFile(wb, `barrar_pendentes_${nome}_${new Date().toISOString().slice(0, 10)}.xlsx`);
   }
-  let brBusca = "";
+  let brBusca = "", brTranspP = "";
   // a pesquisa dos pendentes usa o mesmo filtro "Nota ou ticket" do topo: a nota aparece na tabela geral (Erro: verificar), onde dá para decidir (Brenda 24/11)
   let brSecGeral = null, brSecAncora = null;
   function aplicarBusca(box) {
-    const q = brBusca.trim();
+    const q = brBusca.trim() || brTranspP;
+    box.querySelectorAll(".br-et-q").forEach((d) => { d.hidden = !!brTranspP && d.dataset.t !== brTranspP; });
+    box.querySelectorAll(".br-an-lista tr[data-t]").forEach((tr) => { tr.hidden = !!brTranspP && tr.dataset.t !== brTranspP; });
     // pesquisando: a tabela geral (Erro: verificar, com a decisão) vem logo abaixo do campo; os quadros e quadrinhos continuam embaixo (Brenda 24/11)
     if (!brSecGeral) { brSecGeral = $("br-linhas").closest("section"); brSecAncora = document.createComment("br-geral"); brSecGeral.before(brSecAncora); }
     const linha = box.querySelector(".br-busca-linha");
@@ -131,6 +134,7 @@
     const n = $("br-linhas") ? $("br-linhas").querySelectorAll("tr:not(:has(td.vazio))").length : 0, info = box.querySelector(".br-busca-info");
     if (info) info.innerHTML = q ? (n ? `${n} encontrada(s): está logo abaixo, com o campo de decisão.` : "Nenhuma nota ou ticket com esse número aqui.") : "";
   }
+  document.addEventListener("change", (e) => { const sl = e.target.closest("#br-erro-transp .br-busca-t"); if (!sl) return; brTranspP = sl.value; desenhar(); });
   document.addEventListener("input", (e) => { const i = e.target.closest("#br-erro-transp .br-busca"); if (!i) return; brBusca = i.value; $("br-busca").value = i.value; desenhar(); });
   const diaSP = (ts) => (ts ? new Date(ts).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : "");
   const enviadoHoje = (xs) => { const h = diaSP(Date.now()); return xs.length > 0 && xs.every((x) => x.cobrado_em && diaSP(x.cobrado_em) === h); };
@@ -157,18 +161,18 @@
       .map((x) => [alvoTransp(x), x]).sort((a, b) => (diasDesde(b[1].ticket_criado) ?? -1) - (diasDesde(a[1].ticket_criado) ?? -1) || String(a[1].nf).localeCompare(String(b[1].nf)));
     const quadroAnot = `<div class="br-an-q"><div class="br-et-cab"><b>📝 Com anotação da transportadora no portal</b><span class="chip ${C.length ? "azul" : ""}">${plural(C.length, "nota", "notas")}</span>${C.length ? `<button type="button" class="btn contorno mini br-an-xls">↓ Excel</button><button type="button" class="btn lilas mini br-an-enviar" title="Salva as decisões escolhidas: as notas vão para o card Aprovadas">Aprovar decisões</button>` : ""}</div>
       ${C.length ? `<p class="s">A transportadora escreveu algo no portal, mas o robô não achou devolução no rastreio nem "não recebeu" na anotação. Escolha a decisão de cada nota na última coluna (fica em rascunho; o ✗ já vem com a anotação mais recente como motivo, dá para editar). No fim, clique em <b>Aprovar decisões</b>: elas vão para o card <b>Aprovadas</b> e você manda para o portal quando quiser. As que você não decidir continuam nos quadrinhos de cobrança abaixo.</p>
-      <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th><th>Decisão (vai para o robô)</th></tr></thead><tbody>${C.map(([t, x]) => `<tr data-busca="${esc(x.nf + " " + (x.ticket || ""))}">
+      <div class="tabela-wrap br-an-lista"><table class="tabela-pedidos"><thead><tr><th>Nota / ticket</th><th>Transportadora</th><th class="num">Dias</th><th>Anotações (mais recente primeiro)</th><th>Último status no rastreio</th><th>Decisão (vai para o robô)</th></tr></thead><tbody>${C.map(([t, x]) => `<tr data-t="${esc(t)}" data-busca="${esc(x.nf + " " + (x.ticket || ""))}">
         <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}</td>
         <td>${esc(t)}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td>
         <td>${anotsDe(x).map(anotHtml).join("")}${x.print_path ? `<a href="#" class="br-print" data-p="${esc(x.print_path)}">ver print da anotação</a>` : ""}</td>
         <td class="s">${esc(ultStatus(x))}${x.print_rastreio ? `<div><a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a></div>` : ""}</td><td class="br-an-dec">${celDecAnot(x)}</td></tr>`).join("")}</tbody></table></div>` : `<p class="s">Nenhuma nota em "Erro: verificar" tem anotação no portal.</p>`}</div>`;
     box.innerHTML = `<div class="cartao-topo"><div><h2>Pendentes de barrar por transportadora</h2><p class="sub">Sem devolução no rastreio e sem "não recebeu" no portal. Cada quadrinho tem a mensagem pronta para o WhatsApp (dá para editar antes de copiar) e o Excel só daquela transportadora.</p></div>
       ${G.length ? `<button type="button" class="btn contorno br-et-todas">↓ Excel de todas (uma aba por transportadora)</button>` : ""}</div>
-      <div class="br-busca-linha"><input type="search" class="br-busca" placeholder="🔎 Pesquisar NF ou ticket" value="${esc(brBusca)}" autocomplete="off"><span class="s br-busca-info"></span></div>
+      <div class="br-busca-linha"><input type="search" class="br-busca" placeholder="🔎 Pesquisar NF ou ticket" value="${esc(brBusca)}" autocomplete="off"><select class="br-busca-t" title="Filtrar por transportadora"><option value="">Todas as transportadoras</option>${[...new Set(G.map((g) => g[0]))].sort((a, b) => a.localeCompare(b, "pt-BR")).map((t) => `<option${t === brTranspP ? " selected" : ""}>${esc(t)}</option>`).join("")}</select><span class="s br-busca-info"></span></div>
       ${quadroAnot}
       <div class="br-et-grade">${G.map(([t, xs, env], i) => { const mx = Math.max(...xs.map((x) => diasDesde(x.ticket_criado) ?? 0));
         const ult = env ? xs.map((x) => x.cobrado_em).sort().pop() : null;
-        return `<div class="br-et-q${env ? " br-et-enviado" : ""}"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
+        return `<div class="br-et-q${env ? " br-et-enviado" : ""}" data-t="${esc(t)}"><div class="br-et-cab"><b>${esc(t)}</b><span class="chip ${mx >= 5 ? "vermelho" : mx >= 2 ? "ambar" : ""}">${plural(xs.length, "nota", "notas")} · mais antiga há ${plural(mx, "dia", "dias")}</span></div>
           <div class="br-et-lista"><table><thead><tr><th>Nota</th><th class="num">Dias</th><th>Anotações e rastreio</th></tr></thead><tbody>${xs.map((x) => `<tr data-busca="${esc(x.nf + " " + (x.ticket || ""))}"><td>${esc(x.nf)}${x.ticket ? ` <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}</td><td class="num">${diasDesde(x.ticket_criado) ?? "—"}</td><td class="s">${anotsDe(x).map((a) => `<div class="br-et-an">${a.por ? `<b>${esc(a.por)}</b> · ` : ""}${a.quando ? `<span class="s">${esc(a.quando)}</span>` : ""}${a.por || a.quando ? "<br>" : ""}${esc(a.texto)}</div>`).join("")}<div class="br-et-rast"><b>Status atual do rastreio:</b> ${esc(ultStatus(x))}${x.print_rastreio ? ` · <a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a>` : ""}</div></td></tr>`).join("")}</tbody></table></div>
           <textarea class="br-et-msg" rows="6" data-i="${i}" data-t="${esc(t)}">${esc(msgTransp(t, xs))}</textarea>
           <div class="br-et-bts"><button type="button" class="btn amarelo mini br-et-copiar" data-i="${i}">Copiar mensagem</button><button type="button" class="btn contorno mini br-et-xls" data-i="${i}">↓ Excel</button><button type="button" class="btn mini br-et-ok ${env ? "verde" : "contorno"}" data-i="${i}" title="${env ? "Clique para desfazer" : "Marque depois de mandar a mensagem para a transportadora"}">${env ? `✓ Enviado ${new Date(ult).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : "✓ OK, enviei"}</button></div></div>`; }).join("") || `<p class="vazio">Nenhuma nota em "Erro: verificar".</p>`}</div>`;

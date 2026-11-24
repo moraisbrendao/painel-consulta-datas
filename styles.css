@@ -1370,3 +1370,4 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 .cb-copia label { gap: 6px; }
 .cb-copia label .btn { align-self: flex-start; }
 .cb-copia textarea { padding: 8px; border: 1px solid var(--borda, #ccc); border-radius: 8px; font: inherit; font-size: 13px; resize: vertical; }
+.br-busca-t { padding: 8px 10px; border: 1px solid var(--borda, #ccc); border-radius: 10px; font: inherit; max-width: 100%; }
