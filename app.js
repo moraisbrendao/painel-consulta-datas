@@ -266,6 +266,13 @@
     }
   }
   async function buscarTudo(tabela, ordem, colunas = "*") {
+    // a view base_aberta_bi, pedida em páginas, faz o banco ler e ordenar a base inteira a cada página (tempo esgotado, 24/11):
+    // baixa a tabela base_pedidos pelo índice e aplica o mesmo filtro da view aqui
+    if (tabela === "base_aberta_bi" && colunas === "*" && ordem === "pedido") {
+      const [linhas, fech] = await Promise.all([buscarTudo("base_pedidos", "pedido", "*"), buscarTudo("intelipost_fechados", "pedido", "pedido")]);
+      const f = new Set(fech.map((x) => x.pedido));
+      return linhas.filter((b) => !/^(entregue|cancelado)/i.test(String(b.status_intelipost || ""))).map((b) => ({ ...b, entregue_ip: f.has(b.pedido) }));
+    }
     const PAG = 1000, JUNTAS = 8;
     const prim = await buscarPagina(tabela, ordem, colunas, 0, PAG - 1, true);
     let lista = prim.data;
