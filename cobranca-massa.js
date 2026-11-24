@@ -19,7 +19,9 @@
 
   const FORA_IP = /^(DESPACHADO|PRE-?LISTA DE POSTAGEM|FALHA AO CRIAR PEDIDO)/;   // status da Intelipost que NÃO entram
   const RUIDO = /\b(LTDA|ME|EPP|EIRELI|S\/?A|TRANSPORTES?|TRANSPORTADORA|LOGISTICA|STANDARD|EXPRESS)\b/g;
-  const chaveT = (n) => { const t = norm(n); if (!t) return "(SEM TRANSPORTADORA)"; if (/TEMPO JUSTO|^VM\b|VM TRANSPORTES/.test(t)) return "VM / TEMPO JUSTO"; return t.replace(/[.,\-/]/g, " ").replace(RUIDO, " ").replace(/\s+/g, " ").trim() || t; };
+  // junta os métodos da mesma transportadora (Dominalog - Filial SP, Sajob Express…) com o mesmo agrupamento do Barrar
+  const base1 = (n) => (window.__nomeTranspBase ? window.__nomeTranspBase(n) : n) || n;
+  const chaveT = (n0) => { const n = base1(n0); const t = norm(n); if (!t) return "(SEM TRANSPORTADORA)"; if (/TEMPO JUSTO|^VM\b|VM TRANSPORTES/.test(t)) return "VM / TEMPO JUSTO"; return t.replace(/[.,\-/]/g, " ").replace(RUIDO, " ").replace(/\s+/g, " ").trim() || t; };
 
   let R = [], O = [], E = [], U = 0, contatos = new Map(), carregado = false, ok = true, msgErro = "", transpSel = "", tipoSel = "", busca = "", fora = {};
   let enviados = new Set();
@@ -73,7 +75,7 @@
   const venceTxt = (d) => (d < 0 ? `vencido há ${-d} dia${d < -1 ? "s" : ""}` : d === 0 ? "vence hoje" : "vence amanhã");
   const cobraveis = () => [...R, ...O, ...E];
   const tot = (g) => g.rep.length + g.oc.length + g.at.length;
-  const nomeDe = (k, L) => { if (k === "VM / TEMPO JUSTO") return "VM Transportes / Tempo Justo"; const c = {}; L.forEach((x) => { if (x.k === k && x.transp) c[x.transp] = (c[x.transp] || 0) + 1; }); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || k; };
+  const nomeDe = (k, L) => { if (k === "VM / TEMPO JUSTO") return "VM Transportes / Tempo Justo"; const c = {}; L.forEach((x) => { if (x.k === k && x.transp) { const n = base1(x.transp); c[n] = (c[n] || 0) + 1; } }); return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || k; };
   function grupos() {
     const L = cobraveis(), G = new Map();
     L.forEach((x) => { const g = G.get(x.k) || { k: x.k, rep: [], oc: [], at: [] }; g[x.tipo].push(x); G.set(x.k, g); });
