@@ -8,6 +8,8 @@ import { textoPdf } from "./repo-itens.mjs";
 
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 80);
 const soNum = (t) => String(t ?? "").replace(/\D/g, "");
+// número da nova NF sem a série ("84468-4" → "84468"): é o que aparece no texto da anotação "NF 84468-4 …"
+const numNova = (x) => soNum(String(x.nf_nova || "").split("-")[0]);
 export const TXT_CHAT = "Segue PDF da NF de reposição em anexo";
 // PDFs anexados no ticket: devolve o da nova NF (número da nota lido na chave de acesso da DANFE: posições 26 a 34), com o arquivo em memória
 export async function pdfDaNovaNf(p, nfNova) {
@@ -76,11 +78,11 @@ export async function diagAnota({ chamar, log, ctx }) {
   const cel = linha.locator("td").nth(ia);
   log("Célula Anotações:", mascara(await cel.innerText()).slice(0, 60), "·", (await cel.locator("input, textarea, button, svg, a").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}${e.type ? "[" + e.type + "]" : ""}:${[e.title, e.getAttribute("aria-label"), e.placeholder, e.innerText].filter(Boolean).join("/")}`))).map(mascara).join(" | "));
   log("Botões da linha:", (await linha.locator("button").evaluateAll((es) => es.map((e) => [e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"))).map(mascara).join(" | "));
-  const tem = (await cel.innerText()).includes(soNum(x.nf_nova));
+  const tem = (await cel.innerText()).includes(numNova(x));
   log(`Texto da célula já tem a nova NF: ${tem ? "sim" : "não"}`);
   const bt = cel.locator("button[title*='Anota' i], [aria-label*='Anota' i], button").first();
   if (await bt.count()) { try { await bt.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(800);
-    log(`Janela: ${mascara((await textoModal(d)).slice(0, 60))} · já tem a nova NF: ${(await textoModal(d)).includes(soNum(x.nf_nova)) ? "sim" : "não"}`);
+    log(`Janela: ${mascara((await textoModal(d)).slice(0, 60))} · já tem a nova NF: ${(await textoModal(d)).includes(numNova(x)) ? "sim" : "não"}`);
     log("Janela campos:", (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()} "${e.placeholder || ""}"`))).map(mascara).join(" | "));
     log("Janela botões:", (await d.locator("button").evaluateAll((es) => es.map((e) => `${e.type}:${[e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"}`))).map(mascara).join(" | "));
     await p.keyboard.press("Escape"); } catch (e) { log("Janela não abriu:", mascara(e.message).slice(0, 80)); } }
@@ -151,22 +153,22 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
         const linha = await acharLinha(p, x.nf_ticket);
         if (!linha) { soma("portal: NF ainda fora da lista"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
         const cel = linha.locator("td").nth(ia), txt = textoAnotacao(x, ["feito", "ja_tinha"].includes(x.chat_pdf_status));
-        if ((await cel.innerText()).includes(soNum(x.nf_nova))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
+        if ((await cel.innerText()).includes(numNova(x))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
         let ok;
         const campo = cel.locator("input[placeholder^='Escreva uma anota']").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
         if (await campo.count() && await b.count()) {   // NF sem anotação: campo na própria linha
           await campo.click(); await campo.fill(txt); await p.waitForTimeout(300); await b.click(); await p.waitForTimeout(3000);
-          const l2 = await acharLinha(p, x.nf_ticket); ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(soNum(x.nf_nova));
-          if (!ok && l2) { const vb2 = l2.locator("td").nth(ia).locator("button:has-text('Ver Anota'), button[title*='Anota' i]").first(); if (await vb2.count()) { await vb2.click(); const d2 = p.locator("[role=dialog]").last(); await d2.waitFor({ timeout: 10000 }); await p.waitForTimeout(900); ok = (await textoModal(d2)).includes(soNum(x.nf_nova)); await p.keyboard.press("Escape"); await p.waitForTimeout(500); } }
+          const l2 = await acharLinha(p, x.nf_ticket); ok = l2 && (await l2.locator("td").nth(ia).innerText()).includes(numNova(x));
+          if (!ok && l2) { const vb2 = l2.locator("td").nth(ia).locator("button:has-text('Ver Anota'), button[title*='Anota' i]").first(); if (await vb2.count()) { await vb2.click(); const d2 = p.locator("[role=dialog]").last(); await d2.waitFor({ timeout: 10000 }); await p.waitForTimeout(900); ok = (await textoModal(d2)).includes(numNova(x)); await p.keyboard.press("Escape"); await p.waitForTimeout(500); } }
         } else {   // NF que já tem anotação: botão "Ver Anotações" → janela com "Adicione aqui a sua anotação..." + botão de enviar
           const vb = cel.locator("button:has-text('Ver Anota'), button[title*='Anota' i]").first();
           if (!(await vb.count())) throw new Error("nem campo de anotação nem Ver Anotações na linha");
           await vb.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(900);
-          if ((await textoModal(d)).includes(soNum(x.nf_nova))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); await p.keyboard.press("Escape"); await p.waitForTimeout(500); continue; }
+          if ((await textoModal(d)).includes(numNova(x))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); await p.keyboard.press("Escape"); await p.waitForTimeout(500); continue; }
           const ta = d.locator("textarea[placeholder^='Adicione aqui'], textarea").first(), env = d.locator("button[type=submit]").first();
           if (!(await ta.count()) || !(await env.count())) throw new Error("campo ou botão da janela de anotações não encontrado");
           await ta.click(); await ta.fill(txt); await p.waitForTimeout(300); await env.click(); await p.waitForTimeout(3000);
-          ok = (await textoModal(p.locator("[role=dialog]").last())).includes(soNum(x.nf_nova));
+          ok = (await textoModal(p.locator("[role=dialog]").last())).includes(numNova(x));
           await p.keyboard.press("Escape"); await p.waitForTimeout(600);
         }
         if (ok) { soma("portal: anotado"); await grava(x, "feito"); } else { soma("portal: gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na coluna Anotações depois de gravar: conferir à mão"); }
@@ -192,7 +194,7 @@ export async function diagAnota2({ chamar, log, ctx }) {
   if (!linha) return;
   const vb = linha.locator("button[title*='Anota' i], button:has-text('Ver Anota')").first();
   if (await vb.count()) { await vb.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }); await p.waitForTimeout(900);
-    log(`  janela: tem a nova NF ${(await textoModal(d)).includes(soNum(x.nf_nova)) ? "sim" : "não"} · campos:`, (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()} "${e.placeholder || ""}"`))).map(mascara).join(" | "),
+    log(`  janela: tem a nova NF ${(await textoModal(d)).includes(numNova(x)) ? "sim" : "não"} · campos:`, (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()} "${e.placeholder || ""}"`))).map(mascara).join(" | "),
       "· botões:", (await d.locator("button").evaluateAll((es) => es.map((e) => `${e.type}:${[e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"}`))).map(mascara).join(" | "));
     await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
   for (let k = 0; k < await linha.locator("td").count(); k++) { const c = linha.locator("td").nth(k); const el = await c.locator("input, textarea, button").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}:${e.placeholder || e.innerText || e.title || e.getAttribute("aria-label") || "?"}`)); if (el.length) log(`  td ${k}:`, el.map(mascara).join(" | ")); }
