@@ -538,7 +538,7 @@ if (MODO === "teste-velocidade") {   // mede quanto demora baixar a base como o 
   log("limite simultâneo:", LIM);
   const tv = Date.now();
   await Promise.all(TABS.map(async ([tab, cols]) => { const t1 = Date.now(); let n = 0, kb = 0;
-    for (let de = 0; ; de += 8000) { const partes = await Promise.all(Array.from({ length: 8 }, (_, j) => chamarL(`${tab}?select=${cols}&order=${tab === "tickets_abertos" || tab === "detalhe_nf" || tab === "ocorrencias_cadastradas" ? "nf" : /repo/.test(tab) ? "ticket" : "pedido"}&limit=1000&offset=${de + j * 1000}`).catch((e) => { log(tab, "erro", String(e.message).slice(0, 80)); return []; })));
+    for (let de = 0; ; de += 8000) { const partes = await Promise.all(Array.from({ length: 8 }, (_, j) => chamarL(`${tab}?select=${cols}&order=${tab === "tickets_abertos" || tab === "detalhe_nf" || tab === "ocorrencias_cadastradas" ? "nf" : /repo/.test(tab) ? "ticket" : "pedido"}&limit=1000&offset=${de + j * 1000}`).catch((e) => { log(tab, "erro", String(e.message).slice(0, 400)); return []; })));
       partes.forEach((p) => { n += p.length; kb += JSON.stringify(p).length / 1024; }); if (partes.some((p) => p.length < 1000)) break; }
     log(`  [tudo junto] ${tab}: ${n} linhas · ${Math.round(kb)} KB · ${((Date.now() - t1) / 1000).toFixed(1)} s`); }));
   log(`TUDO JUNTO (como o painel abre): ${((Date.now() - tv) / 1000).toFixed(1)} s`);
