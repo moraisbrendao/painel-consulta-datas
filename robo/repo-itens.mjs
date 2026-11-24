@@ -216,3 +216,23 @@ export async function rodarRepo({ chamar, log, ctx, limite = 80 }) {
   }
   log(`repo-itens: lidos ${cont.lidos} · com quadro Reposição ${cont.eventos} · PDF da nota lido ${cont.pdf} · cobrados da transportadora ${cont.cobrado} · CPF (sem cobrança) ${cont.cpf} · erros ${cont.erro}`);
 }
+
+// diagnóstico: tickets (por hash do número no input) com "Nota não lida": anexos, PDFs baixados e o que achou em cada um (só sim/não e contagens)
+export async function diagRepo2({ chamar, log, ctx, hashes }) {
+  const { createHash } = await import("node:crypto"); const hs = new Set(hashes);
+  const T = []; for (let de = 0; ; de += 1000) { const P = await chamar(`reposicoes_tk?select=ticket,tipo,fila&order=ticket&limit=1000&offset=${de}`); P.forEach((x) => { if (hs.has(createHash("sha256").update(String(x.ticket)).digest("hex").slice(0, 16))) T.push(x); }); if (P.length < 1000) break; }
+  log("achei", T.length, "de", hs.size);
+  const p = await entrarMulti360(ctx, log);
+  for (const [i, x] of T.entries()) {
+    const it = (await chamar(`repo_itens_tk?select=eventos_ok,pdf_ok,dest_doc,erro,lido_em&ticket=eq.${encodeURIComponent(x.ticket)}`).catch(() => []))[0] || {};
+    log(`[${i + 1}] fila ${x.fila} · gravado: pdf_ok=${it.pdf_ok} eventos_ok=${it.eventos_ok} doc=${it.dest_doc} lido ${String(it.lido_em || "").slice(0, 16)} erro=${(it.erro || "").replace(/\d{4,}/g, "#")}`);
+    try {
+      await abrir(p, x.ticket);
+      const an = await lerPdfs(p, 8);
+      log(`   anexos ${an.anexos} · PDFs lidos ${an.pdfs.length}`);
+      an.pdfs.forEach((pd, j) => { const d = lerDanfe(pd); log(`   pdf ${j + 1}: ${pd.txt.length} letras · DANFE ${/DANFE/i.test(pd.txt) ? "sim" : "não"} · título dest ${d.achou.titulo} · rot nome ${d.achou.rotNome} · rot doc ${d.achou.rotDoc} · doc ${d.doc} · volumes ${d.codigos.length}`); });
+      const outros = await p.evaluate(() => [...document.querySelectorAll("a[href]")].map((a) => (a.getAttribute("href") || "").split("?")[0].split(".").pop().toLowerCase()).filter((e) => /^(pdf|xml|jpg|jpeg|png|zip)$/.test(e)));
+      log(`   links com extensão: ${JSON.stringify(outros.reduce((o, e) => ((o[e] = (o[e] || 0) + 1), o), {}))}`);
+    } catch (e) { log("   erro:", String(e.message).split("\n")[0].slice(0, 100)); }
+  }
+}
