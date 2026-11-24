@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=284">
+  <link rel="stylesheet" href="styles.css?v=285">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -823,6 +823,7 @@
         <button class="btn amarelo" data-ra="geral">▦ Visão geral</button>
         <button class="btn contorno" data-ra="pre">Pré-entrega</button>
         <button class="btn contorno" data-ra="pos">Pós-entrega</button>
+        <button class="btn contorno" data-ra="sla">⏱ Monitoramento de SLA e gargalos</button>
         <button class="btn contorno" data-ra="det">☰ Detalhamento operacional</button>
         <button class="btn contorno" data-ra="faltas">📦 Inversão / Falta de volumes</button>
         <button class="btn contorno" data-ra="filasoc">🗂 Filas atualizadas e ocorrências</button>
@@ -945,6 +946,36 @@
       </div>
 
       <!-- 4) detalhamento operacional -->
+      <!-- Monitoramento de SLA e gargalos (Brenda 24/11): só tickets em aberto, SLA lido pelo robô no Multi360 -->
+      <div id="rp-sla" hidden>
+        <section class="filtros-cartao sm-filtros" aria-label="Filtros do monitoramento">
+          <span class="filtros-rot">⛉ Filtros</span>
+          <label>Grupo<select class="sm-sel" data-sm="grupo" multiple data-todos="Todos"></select></label>
+          <label>Fila atual<select class="sm-sel" data-sm="fila" multiple data-todos="Todas"></select></label>
+          <label>Responsável<select class="sm-sel" data-sm="resp" multiple data-todos="Todos"></select></label>
+          <label>Pré ou pós<select class="sm-sel" data-sm="tipo"><option value="">Pré e pós entrega</option><option value="pre">Pré-entrega</option><option value="pos">Pós-entrega</option></select></label>
+          <label>Aberto de<input class="sm-data" data-sm="de" type="date"></label>
+          <label>Até<input class="sm-data" data-sm="ate" type="date"></label>
+          <button type="button" class="link limpar sm-limpar">Limpar filtros</button>
+        </section>
+        <div class="titulo-pagina com-acoes sm-titulo">
+          <div><h1>Monitoramento de SLA e gargalos</h1><p class="sub sm-sub"></p></div>
+          <div class="acoes-robo"><div class="sm-modo" role="group" aria-label="Como contar o prazo"><button type="button" data-smmodo="uteis">Dias úteis</button><button type="button" data-smmodo="corridos">Dias corridos</button></div></div>
+        </div>
+        <section class="kpis sm-cards"></section>
+        <div class="sm-duas">
+          <section class="cartao sm-rank-q"><div class="cartao-topo"><div><h2>Ranking das filas · da mais problemática para a menos</h2><p class="sub">Ordem: tickets fora do SLA, depois % vencido, depois próximos do vencimento. Clique numa fila para ver os tickets dela.</p></div>
+            <div class="sm-legenda"><span class="sm-l v"></span>Vencido <span class="sm-l p"></span>Próximo (≥80%) <span class="sm-l d"></span>Dentro <span class="sm-l s"></span>Sem SLA</div></div>
+            <div class="tabela-rolagem"><table class="tabela sm-rank"><thead><tr><th>Fila</th><th class="sm-col-barra">Tickets por situação</th><th class="num">Total</th><th class="num">Fora do SLA</th><th class="num">Próximos</th><th class="num" title="Vencidos ÷ tickets com SLA definido (sem SLA fica fora da conta)">% vencido</th><th class="num">Média dias parados</th><th>Ticket mais antigo</th><th class="num" title="Média do % do prazo já consumido, só tickets com SLA">Consumo médio</th></tr></thead><tbody class="sm-rank-corpo"></tbody></table></div>
+          </section>
+          <section class="cartao sm-diag-q"><div class="cartao-topo"><div><h2>🧭 Diagnóstico automático</h2><p class="sub">Escrito a partir dos números desta tela; muda com os filtros.</p></div></div><div class="sm-diag"></div></section>
+        </div>
+        <section class="cartao sm-det-q"><div class="cartao-topo"><div><h2 class="sm-det-tit">Tickets</h2><p class="sub">Consumo do SLA: até 79% normal · 80% a 100% atenção · acima de 100% vencido.</p></div>
+          <div class="acoes-robo"><label class="sm-ordem">Ordenar<select class="sm-ord"><option value="atraso">Mais atrasados primeiro</option><option value="antigo">Mais antigos primeiro</option><option value="vence">Mais próximos do vencimento</option><option value="parado">Mais dias parados</option></select></label><button type="button" class="btn contorno sm-excel">↓ Baixar Excel</button></div></div>
+          <div class="tabela-rolagem"><table class="tabela sm-det"><thead><tr><th>Ticket</th><th>Fila atual</th><th>Grupo</th><th>Responsável</th><th>Abertura</th><th>Última atualização</th><th class="num">Dias parados</th><th>SLA configurado</th><th>Prazo</th><th class="num">Restam / atraso</th><th class="sm-col-cons">Consumo do SLA</th><th>Situação</th></tr></thead><tbody class="sm-det-corpo"></tbody></table></div>
+          <nav class="paginacao sm-pag"></nav>
+        </section>
+      </div>
       <div id="rp-det" hidden>
         <section class="cartao">
           <div class="cartao-topo"><div><h2 id="rpd-titulo">Tickets</h2><p class="sub">Um ticket por linha. Os filtros do topo valem aqui também.</p></div>
@@ -952,7 +983,7 @@
           <div class="tabela-wrap">
             <table class="tabela-pedidos rp-tab rp-det">
               <thead><tr><th>Ticket</th><th>NF original</th><th>Nova NF</th><th>Pedido</th><th>Pré/pós</th><th>Tipo de reposição</th><th>Transp. entrega original (c/ redesp.)</th><th>Transp. da reposição (Promob)</th>
-                <th>Motivo</th><th>Filial</th><th>Responsável</th><th>Criado</th><th>Emissão nova NF</th><th>Saída nova NF</th><th>Status</th><th>Fila atual</th><th class="num">Dias em aberto</th><th class="num">Dias na fila</th><th>Finalizado</th><th class="num">Valor do pedido</th></tr></thead>
+                <th>Motivo</th><th>Filial</th><th>Responsável</th><th>Criado</th><th>Emissão nova NF</th><th>Saída nova NF</th><th>Status</th><th>Fila atual</th><th class="num">Dias em aberto</th><th class="num">Dias na fila</th><th title="Consumo do prazo do SLA (lido do Multi360)">SLA</th><th>Finalizado</th><th class="num">Valor do pedido</th></tr></thead>
               <tbody id="rpd-linhas"></tbody>
             </table>
           </div>
@@ -1612,21 +1643,21 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=284"></script>
-  <script src="mapa-brasil.js?v=284"></script>
-  <script src="troca-notas.js?v=284"></script>
-  <script src="app.js?v=284"></script>
-  <script src="ordenar.js?v=284"></script>
-  <script src="menu.js?v=284"></script>
-  <script src="ajuda.js?v=284"></script>
-  <script src="documentos.js?v=284"></script>
-  <script src="barrar.js?v=284"></script>
-  <script src="naoloc.js?v=284"></script>
-  <script src="faltas.js?v=284"></script>
-  <script src="motor.js?v=284"></script>
-  <script src="retornos-semana.js?v=284"></script>
-  <script src="gargalos.js?v=284"></script>
-  <script src="filas.js?v=284"></script>
-  <script src="filtros.js?v=284"></script>
+  <script src="config.js?v=285"></script>
+  <script src="mapa-brasil.js?v=285"></script>
+  <script src="troca-notas.js?v=285"></script>
+  <script src="app.js?v=285"></script>
+  <script src="ordenar.js?v=285"></script>
+  <script src="menu.js?v=285"></script>
+  <script src="ajuda.js?v=285"></script>
+  <script src="documentos.js?v=285"></script>
+  <script src="barrar.js?v=285"></script>
+  <script src="naoloc.js?v=285"></script>
+  <script src="faltas.js?v=285"></script>
+  <script src="motor.js?v=285"></script>
+  <script src="retornos-semana.js?v=285"></script>
+  <script src="gargalos.js?v=285"></script>
+  <script src="filas.js?v=285"></script>
+  <script src="filtros.js?v=285"></script>
 </body>
 </html>
