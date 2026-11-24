@@ -255,6 +255,16 @@
     }
   }
 
+  // uma faixa: ordem > a e ordem <= b (b null = até o fim); até 1.000 linhas
+  async function buscarFaixa(tabela, ordem, colunas, a, b) {
+    for (let tentativa = 0; ; tentativa++) {
+      await vez();
+      let r; try { let q = sb.from(tabela).select(colunas).gt(ordem, a); if (b != null) q = q.lte(ordem, b); r = await q.order(ordem).limit(1000); } finally { libera(); }
+      if (!r.error) { if (r.data.length >= 1000 && b == null) throw new Error("faixa cheia"); return r.data; }
+      if (tentativa >= 2 || !/timeout|time out|canceling|upstream|50[0234]|fetch/i.test((r.error.message || "") + " " + (r.status || ""))) throw r.error;
+      await new Promise((ok) => setTimeout(ok, 1500 * (tentativa + 1)));
+    }
+  }
   async function buscarTudo(tabela, ordem, colunas = "*") {
     const PAG = 1000, JUNTAS = 8;
     const prim = await buscarPagina(tabela, ordem, colunas, 0, PAG - 1, true);
@@ -267,6 +277,28 @@
       }
     }
     const total = prim.count;
+    // tabela grande: em vez de "pular N linhas" (o banco lê todas as puladas: com 13 mil linhas inteiras dá tempo esgotado),
+    // baixa só a coluna da ordem (leve), divide em faixas de 1.000 e pede cada faixa por "de X até Y" (24/11)
+    if (total > 3 * PAG && colunas !== ordem && !/^base_aberta/.test(tabela) && !/[(,>]/.test(ordem)) {
+      try {
+        let chaves = lista.map((r) => r[ordem]);
+        if (chaves.every((v) => v != null)) {
+          const ini = []; for (let de = PAG; de < total; de += PAG) ini.push(de);
+          for (let i = 0; i < ini.length; i += JUNTAS) {
+            const ps = await Promise.all(ini.slice(i, i + JUNTAS).map((de) => buscarPagina(tabela, ordem, ordem, de, de + PAG - 1)));
+            ps.forEach((r) => { chaves = chaves.concat(r.data.map((x) => x[ordem])); });
+          }
+          const ult = chaves[PAG - 1], cortes = []; for (let k = 2 * PAG - 1; k < chaves.length; k += PAG) cortes.push(chaves[k]);
+          const faixas = []; let de = ult; for (const c of cortes) { faixas.push([de, c]); de = c; } faixas.push([de, null]);
+          let res = lista.slice();
+          for (let i = 0; i < faixas.length; i += JUNTAS) {
+            const ps = await Promise.all(faixas.slice(i, i + JUNTAS).map(([a, b]) => buscarFaixa(tabela, ordem, colunas, a, b)));
+            ps.forEach((d) => { res = res.concat(d); });
+          }
+          if (res.length === chaves.length) return res;
+        }
+      } catch (_) { /* se der errado, segue do jeito antigo */ }
+    }
     const inicios = []; for (let de = PAG; de < total; de += PAG) inicios.push(de);
     for (let i = 0; i < inicios.length; i += JUNTAS) {
       const partes = await Promise.all(inicios.slice(i, i + JUNTAS).map((de) => buscarPagina(tabela, ordem, colunas, de, de + PAG - 1)));
