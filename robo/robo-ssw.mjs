@@ -95,9 +95,12 @@ async function transito(itens) {
 // Bento Brasil não usa SSW: consulta no rastreio do site dela (CNPJ da Multi + número da NF), 1 por vez com pausa
 const EH_BENTO = /bento/i;
 function lerBento(txt) {
-  const m = String(txt || "").match(/dados = '([\s\S]*?)';/); let d = null; try { d = m && JSON.parse(m[1]); } catch {}
-  if (Array.isArray(d)) d = d[d.length - 1];
-  if (!d || !d.dtemissao) return { situacao: "sem cte" };
+  // o site traz 1 resultado em "dados = '...'" ou vários em "arrayDados.push('...')" (o mesmo número de NF pode ter CT-e de anos atrás).
+  // Regra da Brenda (24/11): vale o CT-e de emissão mais recente; sem emissão recente (últimos 90 dias) = ainda não tem CT-e.
+  const todos = []; const t = String(txt || "");
+  for (const m of t.matchAll(/(?:dados\s*=\s*|arrayDados\.push\(\s*)'([\s\S]*?)'\s*\)?\s*;?/g)) { try { const v = JSON.parse(m[1]); (Array.isArray(v) ? v : [v]).forEach((x) => x && todos.push(x)); } catch {} }
+  const d = todos.filter((x) => x.dtemissao).sort((a, b) => String(b.dtemissao).localeCompare(String(a.dtemissao)))[0];
+  if (!d || Date.now() - Date.parse(String(d.dtemissao).slice(0, 10) + "T12:00:00Z") > 90 * 864e5) return { situacao: "sem cte" };
   const dia = (v) => v ? String(v).slice(0, 10) : null, prev = dia(d.dtagendamentoentrega || d.dtprevisaoentrega || d.dtprevchegadaredespacho);
   const NOMES = [["dtemissao", "Emitido"], ["dtsaida", "Saiu da origem"], ["dtprevchegcarregamento", "Previsão de chegada do carregamento"], ["dtchegada", "Chegou na unidade de entrega"],
     ["dtemissaoredespacho", "Redespacho emitido"], ["dtprevchegadaredespacho", "Previsão de chegada do redespacho"], ["dtsaidadistribuicao", "Saiu para entrega"],
@@ -1247,7 +1250,7 @@ async function conferirLote() {
   // Bento Brasil e Trânsito Brasil: site próprio, uma nota por vez (com pausa). Antes só rodavam no "Conferir tudo agora";
   // agora entram em toda rodada em lote, só as não entregues que não foram olhadas nas últimas 2 h.
   const pSites = (async () => { for (const [EH, fn, nome] of [[EH_BENTO, bento, "bento"], [EH_TRANSITO, transito, "sito*brasil"]]) {
-    const F = []; for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*${nome}*&situacao=neq.entregue&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
+    const F = []; for (let de = 0; ; de += 1000) { const P = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,detalhe,consultado_em&transportadora=ilike.*${nome}*&or=(situacao.neq.entregue,data_entrega.lt.${new Date(Date.now() - 90 * 864e5).toISOString().slice(0, 10)})&order=pedido&limit=1000&offset=${de}`).catch(() => []); F.push(...P); if (P.length < 1000) break; }
     const fila = F.filter((x) => !(x.detalhe && x.detalhe.emissor) && !(x.consultado_em && Date.now() - Date.parse(x.consultado_em) < 2 * 3600000)).slice(0, 300);
     if (!fila.length) continue;
     const m = await fn(fila), linhas = fila.filter((l) => m.has(l.pedido)).map((l) => { const r = m.get(l.pedido);
