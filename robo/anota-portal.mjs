@@ -39,25 +39,29 @@ async function botaoSalvar(d) {
   return null;
 }
 
-// diagnóstico: abre a NF de 1 troca já feita, mostra só a estrutura da janela de anotações (mascarada). Não escreve nada.
+// diagnóstico: procura as NFs das últimas trocas na lista e mostra só a estrutura (mascarada) da linha e das anotações. Não escreve nada.
 export async function diagAnota({ chamar, log, ctx }) {
-  const [x] = await chamar("troca_notas?select=ticket,nf_ticket,nf_nova,serie&nf_nova=not.is.null&nf_ticket=not.is.null&order=robo_feito_em.desc.nullslast&limit=1");
-  if (!x) { log("diag-anota: nenhuma troca com nova NF"); return; }
+  const L = await chamar("troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_status&nf_nova=not.is.null&nf_ticket=not.is.null&order=robo_feito_em.desc.nullslast&limit=40");
+  if (!L.length) { log("diag-anota: nenhuma troca com nova NF"); return; }
   const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
-  log("Abas:", (await p.getByRole("tab").allTextContents()).map(mascara).join(" | "));
-  log("Colunas:", (await p.locator("table thead th").allTextContents()).map(mascara).join(" | "));
-  log("Filtros (placeholder):", (await p.locator("input").evaluateAll((es) => es.map((e) => e.placeholder).filter(Boolean))).map(mascara).join(" | "));
-  const linha = await acharLinha(p, x.nf_ticket);
-  log(`NF de teste: formato ${mascara(x.nf_ticket)} · nova ${mascara(textoAnotacao(x))} · achou na lista: ${!!linha}`);
-  if (!linha) return;
-  log("Botões da linha:", (await linha.locator("button").evaluateAll((es) => es.map((e) => [e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/")))).map(mascara).join(" | "));
-  const d = await abrirAnotacoes(p, linha);
-  const tx = await textoModal(d);
-  log(`Janela: ${mascara(tx).slice(0, 80)} · já tem a nova NF: ${tx.includes(soNum(x.nf_nova)) ? "sim" : "não"}`);
-  log("Campos:", (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}[${e.type || ""}] "${e.placeholder || e.getAttribute("aria-label") || ""}"`))).map(mascara).join(" | "));
-  log("Botões:", (await d.locator("button").evaluateAll((es) => es.map((e) => `${e.type}:${[e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/")}${e.disabled ? " (desligado)" : ""}`))).map(mascara).join(" | "));
-  const b = await botaoSalvar(d); log(`Botão de gravar reconhecido: ${b ? mascara(await b.innerText().catch(() => "") || await b.getAttribute("type")) : "NÃO"}`);
-  await p.keyboard.press("Escape");
+  log("Linhas na lista sem filtro:", await p.locator("table tbody tr").count(), "· paginação:", mascara((await p.locator("nav, [aria-label*='pagina' i], [class*='pagination' i]").allTextContents().catch(() => [])).join(" ")).slice(0, 80));
+  let achou = null, n = 0;
+  for (const x of L) { const l = await acharLinha(p, x.nf_ticket); if (l) { n++; if (!achou) achou = { x, l }; } }
+  log(`Das ${L.length} últimas trocas com nova NF, ${n} estão na lista do portal (status das trocas: ${[...new Set(L.map((x) => x.robo_status || "vazio"))].join(", ")})`);
+  if (!achou) return;
+  const { x } = achou; const linha = await acharLinha(p, x.nf_ticket);
+  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
+  const cel = linha.locator("td").nth(ia);
+  log("Célula Anotações:", mascara(await cel.innerText()).slice(0, 60), "·", (await cel.locator("input, textarea, button, svg, a").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}${e.type ? "[" + e.type + "]" : ""}:${[e.title, e.getAttribute("aria-label"), e.placeholder, e.innerText].filter(Boolean).join("/")}`))).map(mascara).join(" | "));
+  log("Botões da linha:", (await linha.locator("button").evaluateAll((es) => es.map((e) => [e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"))).map(mascara).join(" | "));
+  const tem = (await cel.innerText()).includes(soNum(x.nf_nova));
+  log(`Texto da célula já tem a nova NF: ${tem ? "sim" : "não"}`);
+  const bt = cel.locator("button[title*='Anota' i], [aria-label*='Anota' i], button").first();
+  if (await bt.count()) { try { await bt.click(); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 8000 }); await p.waitForTimeout(800);
+    log(`Janela: ${mascara((await textoModal(d)).slice(0, 60))} · já tem a nova NF: ${(await textoModal(d)).includes(soNum(x.nf_nova)) ? "sim" : "não"}`);
+    log("Janela campos:", (await d.locator("textarea, input, [contenteditable=true]").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()} "${e.placeholder || ""}"`))).map(mascara).join(" | "));
+    log("Janela botões:", (await d.locator("button").evaluateAll((es) => es.map((e) => `${e.type}:${[e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"}`))).map(mascara).join(" | "));
+    await p.keyboard.press("Escape"); } catch (e) { log("Janela não abriu:", mascara(e.message).slice(0, 80)); } }
 }
 
 // grava as anotações pendentes (troca feita, nova NF conhecida, ainda sem anotação no portal)
