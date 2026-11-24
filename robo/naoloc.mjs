@@ -106,6 +106,8 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   };
   // séries 25/34/35 dessas transportadoras: CT-e da Rajlog (milk run) não vale como rastreio (Brenda, 23/11)
   const ajustaRaj = (r, alvo, serie) => {
+    // série 35: CT-e emitido pela DLOG (first mile) não conta como rastreio (Brenda, 24/11)
+    if (String(serie || "").replace(/^0+/, "") === "35" && r && r.situacao && !/^(sem cte|sem nf|sem permissao)$/.test(r.situacao) && (/\bDLOG\b/i.test(r.transp || "") || /\bDLOG\b/i.test(r.evento || ""))) return { ...r, situacao: "sem cte", evento: "SÓ CT-E DA DLOG (FIRST MILE)" };
     if (!REGRA_RAJ(alvo, serie) || !r || !r.situacao || /^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return r;
     if (/rajlog/i.test(r.transp || "") || /rajlog|milk\s*run/i.test(r.evento || "")) return { ...r, situacao: "sem cte", evento: "SÓ CT-E DA RAJLOG (MILK RUN)" };
     return r;
