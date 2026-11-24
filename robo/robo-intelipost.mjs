@@ -863,7 +863,7 @@ async function baixaEntregueIP(real, limite) {
     await pagina.getByRole("button", { name: /^\s*buscar\s*$/i }).first().click();
     await pagina.locator("table tbody tr").first().waitFor({ timeout: 45000 }).catch(() => {});
     await pagina.waitForTimeout(2500);
-    const rows = await pagina.evaluate(() => [...document.querySelectorAll("table tbody tr")].map((r) => r.innerText.replace(/\s+/g, " ")).filter((t) => t.trim() && !/nenhum/i.test(t)));
+    const rows = await pagina.evaluate(() => [...document.querySelectorAll("table tbody tr")].map((r, i) => ({ i, t: r.innerText.replace(/\s+/g, " ") })).filter((r) => r.t.trim() && !/nenhum/i.test(r.t)));
     log(`  busca por ${por}: ${rows.length} linha(s)`);
     return rows;
   };
@@ -881,11 +881,21 @@ async function baixaEntregueIP(real, limite) {
       let rows = await buscar(x.pedido), pelaNF = false;
       // não achou pelo pedido: procura pela NF original (número), só vale se vier 1 linha
       if (!rows.length && x.nf_original) { const n = nfK(x.nf_original).split("-")[0]; rows = await buscar(n, "Nota Fiscal"); pelaNF = true; log(`  pela NF: ${rows.length} linha(s)`); }
+      // várias linhas pela NF: fica só com a que tem o pedido da planilha (ou a série da NF original)
+      const filtra = (rs) => {
+        if (rs.length <= 1) return rs;
+        const p0 = String(ped0 || "").trim(), serie = nfK(x.nf_original).split("-")[1];
+        let f = p0.length >= 5 ? rs.filter((r) => r.t.includes(p0)) : [];
+        log(`  várias linhas: ${f.length} com o pedido da planilha`);
+        if (f.length !== 1 && serie) { const n = nfK(x.nf_original).split("-")[0]; const re = new RegExp(`\\b${n}\\s*[-/ ]\\s*0*${serie}\\b`); f = rs.filter((r) => re.test(r.t)); log(`  várias linhas: ${f.length} com NF-série`); }
+        return f.length === 1 ? f : rs;
+      };
+      if (pelaNF) rows = filtra(rows);
       if (pelaNF && rows.length === 1) x._porNF = nfK(x.nf_original).split("-")[0];
       if (rows.length !== 1) { soma(`busca trouxe ${rows.length} linhas`); await grava(x, "erro", `A busca do pedido trouxe ${rows.length} linhas (esperava 1): conferir à mão.`); continue; }
-      if (/\bentregue\b/i.test(rows[0])) { soma("já estava entregue"); await grava(x, "ja_estava", "O pedido já estava Entregue na Intelipost."); continue; }
-      if (/cancelad/i.test(rows[0])) { soma("cancelado na Intelipost"); await grava(x, "erro", "O pedido está Cancelado na Intelipost: conferir à mão."); continue; }
-      await pagina.locator("table tbody tr input[type=checkbox]").first().click({ force: true }); await pagina.waitForTimeout(800);
+      if (/\bentregue\b/i.test(rows[0].t)) { soma("já estava entregue"); await grava(x, "ja_estava", "O pedido já estava Entregue na Intelipost."); continue; }
+      if (/cancelad/i.test(rows[0].t)) { soma("cancelado na Intelipost"); await grava(x, "erro", "O pedido está Cancelado na Intelipost: conferir à mão."); continue; }
+      await pagina.locator("table tbody tr").nth(rows[0].i).locator("input[type=checkbox]").first().click({ force: true }); await pagina.waitForTimeout(800);
       await pick(/^\s*Macro\s*$/, "Alterar por: Macro");
       await pick(/^\s*Entregue\s*$/, "Status Entregue");
       // data da alteração = data da entrega no rastreio (hora 12:00 quando não é hoje)
@@ -913,8 +923,21 @@ async function baixaEntregueIP(real, limite) {
         if (x.data_entrega !== hojeBR()) {
           const campoH = pagina.locator("div.field, div.control").filter({ has: pagina.locator("label", { hasText: /Hora da altera/i }) }).locator("input[type=text]").first();
           const horaIn = (await campoH.count()) ? campoH : pagina.locator("input.input[type=text]:visible").nth(2);
-          await horaIn.click(); await horaIn.fill("12:00"); await horaIn.press("Enter").catch(() => {}); await pagina.keyboard.press("Escape").catch(() => {}); await pagina.waitForTimeout(600);
-          if ((await horaIn.inputValue()) !== "12:00") throw new Error("o campo Hora da alteração não aceitou 12:00");
+          const roH = await horaIn.evaluate((e) => e.readOnly).catch(() => null);
+          log(`  hora: campo ${roH ? "só leitura (relógio)" : "editável"} · valor ${(await horaIn.inputValue().catch(() => "")).replace(/\d/g, "9") || "vazio"}`);
+          if (!roH) { await horaIn.click(); await horaIn.fill("12:00", { timeout: 8000 }); await horaIn.press("Enter").catch(() => {}); }
+          else {   // Buefy timepicker: selects de hora e minuto no menu
+            await horaIn.click(); await pagina.waitForTimeout(800);
+            const tp = pagina.locator(".timepicker .dropdown-content:visible, .timepicker .dropdown-menu:visible, .dropdown-content:visible").last();
+            const ss = tp.locator("select");
+            const info = await tp.evaluate((d) => [...d.querySelectorAll("select")].map((s) => [...s.options].map((o) => o.value + "=" + o.text).slice(0, 4).join(","))).catch(() => []);
+            log("  relógio selects: " + (info.join(" | ") || "nenhum").slice(0, 200));
+            if ((await ss.count()) >= 2) { await ss.nth(0).selectOption("12").catch(() => {}); await ss.nth(1).selectOption("0").catch(() => {}); }
+          }
+          await pagina.keyboard.press("Escape").catch(() => {}); await pagina.waitForTimeout(600);
+          const lh = await horaIn.inputValue().catch(() => "");
+          log(`  hora lida: ${lh.replace(/\d/g, "9") || "vazio"} · 12:00 ${/^12:00/.test(lh) ? "sim" : "não"}`);
+          if (!/^12:00/.test(lh)) log("  hora: não consegui pôr 12:00, segue com a hora que a Intelipost deixou");
         }
       }
       const bt = pagina.getByRole("button", { name: /^\s*alterar status\s*$/i }).first();
@@ -925,7 +948,8 @@ async function baixaEntregueIP(real, limite) {
       if (await conf.count()) { await conf.click(); await pagina.waitForTimeout(2500); }
       await pagina.waitForTimeout(3000);
       const depois = x._porNF ? await buscar(x._porNF, "Nota Fiscal") : await buscar(x.pedido);
-      if (depois.length === 1 && /\bentregue\b/i.test(depois[0])) { soma("alterado para Entregue"); await grava(x, "feito", `Status Entregue na Intelipost${x.data_entrega ? ` (data ${x.data_entrega.split("-").reverse().join("/")})` : ""}.`); }
+      const dep = x._porNF ? filtra(depois) : depois;
+      if (dep.length === 1 && /\bentregue\b/i.test(dep[0].t)) { soma("alterado para Entregue"); await grava(x, "feito", `Status Entregue na Intelipost${x.data_entrega ? ` (data ${x.data_entrega.split("-").reverse().join("/")})` : ""}.`); }
       else { soma("cliquei mas não confirmou"); await grava(x, "conferir", "Cliquei em Alterar Status, mas a busca não mostrou Entregue: conferir na Intelipost."); }
     } catch (e) { soma("erro"); log("  erro: " + String(e.message).split("\n")[0].replace(/\d{5,}/g, "#").replace(/[A-Z]{2,}\d[A-Z0-9]{4,}/g, "#").slice(0, 160)); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)); }
   }
