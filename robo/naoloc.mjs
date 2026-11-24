@@ -159,10 +159,15 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
 
 // contagem (só números) das conferências que usaram o rastreio da DLOG na série 35
 export async function diagDlog({ chamar, log }) {
-  const L = await chamar("nao_localizada?select=nf,serie,sugestao,acao,acao_status,na_planilha,rastreio&limit=5000");
+  const L = await chamar("nao_localizada?select=*&limit=5000");
   const D = L.filter((x) => String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, "") === "35" && /\bDLOG\b/i.test((x.rastreio || {}).alvo || ""));
   const c = {}; D.forEach((x) => { const k = `sugestão ${x.sugestao || "-"} · ação ${x.acao_status === "feito" ? x.acao + " feita" : x.acao_status || "nenhuma"}`; c[k] = (c[k] || 0) + 1; });
   log(`diag-dlog: ${D.length} nota(s) série 35 conferidas pelo rastreio da DLOG (de ${L.length})`); Object.entries(c).forEach(([k, v]) => log(`  ${k}: ${v}`));
+  // nomes de transportadora (não são dado pessoal): quem foi usada no rastreio, por série, e onde aparece DLOG
+  const d2 = {}; L.forEach((x) => { const sr = String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, ""); const k = `série ${sr} · rastreio por ${(x.rastreio || {}).alvo || "(nenhuma)"} · sugestão ${x.sugestao || "-"} · ação ${x.acao_status === "feito" ? x.acao : x.acao_status || "-"}`; d2[k] = (d2[k] || 0) + 1; });
+  Object.entries(d2).sort((a, b) => b[1] - a[1]).forEach(([k, v]) => log(`  ${k}: ${v}`));
+  const dl = L.filter((x) => /\bDLOG\b/i.test(JSON.stringify([x.transp_ticket, x.transp_pedido, (x.rastreio || {}).transp_ticket, (x.rastreio || {}).transp]))).length;
+  log(`  linhas com DLOG em algum campo de transportadora: ${dl}`);
 }
 
 // só olha a ação de 1 ticket da fila (sem clicar em nada além de Cancelar)
