@@ -40,7 +40,7 @@
       const [rp, tk, oc, ct] = await Promise.all([
         tudo("repo_atual", "ticket,nota_ticket,nfs_novas,fila_atual,tipo_reposicao,transp_promob,transp_redesp_promob,data_emissao_nf,data_saida_nf", "ticket"),
         tudo("reposicoes_tk", "ticket,status", "ticket"),
-        tudo("ocorrencias_tk", "id,nf,transportador,criado_em,motivo,status,mensagem_em", "id"),
+        tudo("ocorrencias_tk", "id,nf,transportador,criado_em,motivo,status,mensagem,mensagem_em,solicitante", "id"),
         sb().from("transp_contatos").select("transportadora,emails,cc").then((r) => r.data || []).catch(() => []),
       ]);
       const TK = new Map(tk.map((t) => [String(t.ticket), t.status || ""]));
@@ -63,7 +63,7 @@
         (rs || []).forEach((r) => { const transp = r.transp_redesp_promob || r.transp_promob || p.transportadora || "";
           R.push({ ...base, tipo: "rep", ticket: r.ticket, nfNova: String(r.nfs_novas), emissao: r.data_emissao_nf, saida: r.data_saida_nf, tipoRep: r.tipo_reposicao, fila: r.fila_atual, transp, k: chaveT(transp) }); });
         (os || []).forEach((o) => { const transp = o.transportador || p.transportadora || "";
-          O.push({ ...base, tipo: "oc", motivo: o.motivo, criado: o.criado_em, msgEm: o.mensagem_em, transp, k: chaveT(transp) }); });
+          O.push({ ...base, tipo: "oc", motivo: o.motivo, criado: o.criado_em, msgEm: o.mensagem_em, msg: o.mensagem, solic: o.solicitante, transp, k: chaveT(transp) }); });
         if (!rs && !os) { const transp = p.transportadora || ""; E.push({ ...base, tipo: "at", transp, k: chaveT(transp) }); }
       }
       ok = true; carregado = true;
@@ -91,7 +91,7 @@
   }
   const COMUM = (x) => ({ "Pedido": x.pedido, "NF": x.nf, "Data prometida": br(x.prom), "Nova data": br(x.nova), "Situação": venceTxt(x.diasEf), "Status Intelipost": x.st, "Micro status": x.micro, "Último retorno": x.obs || "" });
   const LIN_REP = (x) => ({ ...COMUM(x), "Ticket": x.ticket, "NF de reposição": x.nfNova, "Emissão da NF nova": br(x.emissao), "Saída da NF nova": br(x.saida), "Tipo de reposição": x.tipoRep || "" });
-  const LIN_OC = (x) => ({ ...COMUM(x), "Motivo da ocorrência": x.motivo || "", "Ocorrência aberta em": br(x.criado) });
+  const LIN_OC = (x) => ({ ...COMUM(x), "Motivo da ocorrência": x.motivo || "", "Ocorrência aberta em": br(x.criado), "Última mensagem da ocorrência": x.msg || "", "Data da última mensagem": br(x.msgEm), "Quem mandou a última": x.solic || "" });
   const limpaNome = (t) => String(t).replace(/[\\/:*?"<>|]/g, " ").replace(/\s+/g, " ").trim().slice(0, 60);
   function excel(g) {
     const wb = XLSX.utils.book_new();
@@ -139,7 +139,7 @@
     $("cm-casos").innerHTML = L.slice(0, 500).map((x) => x.tipo === "rep"
       ? `<tr><td><span class="chip azul">Reposição</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>NF nova ${esc(x.nfNova)}${x.emissao ? `<div class="s">emitida ${br(x.emissao)}${x.saida ? " · saiu " + br(x.saida) : ""}</div>` : ""}</td><td>${x.ticket ? `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a>` : ""}<div class="s">${esc(x.fila || "")}</div></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`
       : x.tipo === "at" ? `<tr><td><span class="chip">Entrega</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>${esc(x.obs || "")}</td><td></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`
-      : `<tr><td><span class="chip laranja">Ocorrência</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>${esc(x.motivo || "")}</td><td><a href="https://ccp.360multi.com/occurrences/${encodeURIComponent(x.nf)}" target="_blank" rel="noopener noreferrer">ver no portal ↗</a></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`).join("")
+      : `<tr><td><span class="chip laranja">Ocorrência</span></td><td>${esc(x.nome)}</td><td>${esc(x.nf)}<div class="s">${esc(x.pedido)}</div></td><td>${esc(x.motivo || "")}${x.msg ? `<div class="s" title="${esc(x.msg)}">última msg ${br(x.msgEm)}: ${esc(String(x.msg).slice(0, 90))}${String(x.msg).length > 90 ? "…" : ""}</div>` : ""}</td><td><a href="https://ccp.360multi.com/occurrences/${encodeURIComponent(x.nf)}" target="_blank" rel="noopener noreferrer">ver no portal ↗</a></td><td>${esc(x.st)}<div class="s">${esc(x.micro)}</div></td><td>${sit(x)}</td></tr>`).join("")
       + (L.length > 500 ? `<tr><td colspan="7" class="s">Mostrando 500 de ${fmt(L.length)}: o Excel traz todos.</td></tr>` : "");
     $("cm-casos-vazio").hidden = !!L.length;
   }
