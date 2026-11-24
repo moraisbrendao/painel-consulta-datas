@@ -2253,7 +2253,10 @@ ${extra}
       try { await navigator.clipboard.write([new ClipboardItem({ "text/html": new Blob([rtEmailHtml(tr)], { type: "text/html" }), "text/plain": new Blob([t], { type: "text/plain" }) })]); colou = true; } catch (_) {}
       corpo = colou ? `Olá, equipe ${tr}!\n\n(Ctrl+V aqui: a tabela dos ${n} pedidos já está copiada)\n` : t.slice(0, 1500) + "\n… (lista completa no Excel em anexo)";
     }
-    location.href = `mailto:${encodeURIComponent(c.emails || "").replace(/%2C/g, ",").replace(/%3B/g, ";")}?${q({ cc: c.cc || "", subject: assunto, body: corpo })}`;
+    // abre o Outlook Web (webmail da empresa) já com o e-mail pronto
+    const lista = (x) => String(x || "").split(/[;,\s]+/).filter(Boolean).join(",");
+    const url = `https://outlook.office.com/mail/deeplink/compose?${q({ to: lista(c.emails), cc: lista(c.cc), subject: assunto, body: corpo })}`;
+    if (!window.open(url, "_blank")) location.href = url;
     toast(colou ? "E-mail aberto. Cole (Ctrl+V) a tabela no corpo e confira antes de enviar." : c.emails ? "E-mail aberto: confira e envie." : "E-mail aberto sem destinatário: cadastre os e-mails da transportadora em 📇.");
   }
   function rtEditarContato(tr) {
