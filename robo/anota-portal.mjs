@@ -158,3 +158,20 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   }
   log("anota-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
 }
+
+// diagnóstico da troca que deu erro: como ficou o chat do ticket (só a forma das linhas) e a célula de anotações no portal. Não escreve nada.
+export async function diagAnota2({ chamar, log, ctx }) {
+  const [x] = await chamar("troca_notas?select=ticket,nf_ticket,nf_nova,serie,chat_pdf_status,portal_anot_status&or=(chat_pdf_status.eq.erro,portal_anot_status.eq.erro)&order=chat_pdf_em.desc.nullslast&limit=1");
+  if (!x) { log("diag-anota2: nenhuma troca com erro"); return; }
+  const forma = (l) => /^externo$/i.test(l) ? "[Externo]" : /^interno$/i.test(l) ? "[Interno]" : l.startsWith(TXT_CHAT) ? "[TEXTO DO PDF]" : /baixar anexo/i.test(l) ? "[Baixar anexo]" : /\d{2}\/\d{2}\/\d{4}/.test(l) ? "[linha com data]" : `[${l.length} letras]`;
+  const m = await entrarMulti360(ctx, log); await abrirTicket(m, x.ticket);
+  const ls = await m.evaluate(() => document.body.innerText.split("\n").map((l) => l.trim()).filter(Boolean));
+  const idx = ls.map((l, i) => (l.startsWith("Segue PDF da NF de reposição") ? i : -1)).filter((i) => i >= 0);
+  log(`360: texto do PDF aparece ${idx.length}x · jaMandouPdf=${await jaMandouPdf(m)}`);
+  idx.forEach((i) => log("  em volta:", ls.slice(Math.max(0, i - 6), i + 4).map(forma).join(" › ")));
+  const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
+  const linha = await acharLinha(p, x.nf_ticket); log(`Portal: linha ${!!linha} · coluna anotações ${ia} de ${ths.length} · tds na linha ${linha ? await linha.locator("td").count() : 0}`);
+  if (!linha) return;
+  for (let k = 0; k < await linha.locator("td").count(); k++) { const c = linha.locator("td").nth(k); const el = await c.locator("input, textarea, button").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}:${e.placeholder || e.innerText || e.title || e.getAttribute("aria-label") || "?"}`)); if (el.length) log(`  td ${k}:`, el.map(mascara).join(" | ")); }
+}
