@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=314">
+  <link rel="stylesheet" href="styles.css?v=315">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -750,7 +750,7 @@
       <div class="titulo-pagina com-acoes">
         <div>
           <h1>Cobrança em massa</h1>
-          <p class="sub">Pedidos <b>vencidos, que vencem hoje ou amanhã</b> (pela nova data, quando a transportadora já deu uma) que têm <b>nova NF de reposição</b> ou <b>ocorrência em andamento</b>, com status na Intelipost diferente de Despachado, Pré-lista de postagem e Falha ao criar pedido com a transportadora. Uma linha por transportadora: baixe o Excel, copie o texto e envie. Nada sai sozinho.</p>
+          <p class="sub">Pedidos <b>vencidos, que vencem hoje ou amanhã</b> (pela nova data, quando a transportadora já deu uma) com status na Intelipost diferente de Despachado, Pré-lista de postagem e Falha ao criar pedido com a transportadora. Não entram ocorrência "Novo" (a Multi deve o retorno) nem reposição que ainda não tem NF nova. Uma linha por transportadora: baixe o Excel, copie o texto e envie. Nada sai sozinho.</p>
           <p id="cm-info" class="info-base">Abra a página para carregar.</p>
         </div>
         <div class="acoes-robo"><button id="cm-xl-cada" class="btn amarelo" type="button" title="Um arquivo por transportadora ainda não enviada hoje">⬇ 1 Excel por transportadora</button><button id="cm-xl-todas" class="btn contorno" type="button">⬇ Excel com todas</button><button id="cm-recarregar" class="btn contorno" type="button">↻ Atualizar</button></div>
@@ -759,22 +759,25 @@
         <div class="kpi"><span class="kpi-rot">Transportadoras a cobrar</span><b class="kpi-num" id="cm-k-transp">–</b></div>
         <div class="kpi azul"><span class="kpi-rot">Reposições com nova NF</span><b class="kpi-num" id="cm-k-rep">–</b></div>
         <div class="kpi laranja"><span class="kpi-rot">Ocorrências em andamento</span><b class="kpi-num" id="cm-k-oc">–</b></div>
+        <div class="kpi vermelho"><span class="kpi-rot">Entregas vencidas / até amanhã</span><b class="kpi-num" id="cm-k-at">–</b></div>
         <div class="kpi verde"><span class="kpi-rot">Enviadas hoje</span><b class="kpi-num" id="cm-k-env">–</b></div>
       </section>
       <section class="cartao">
         <div class="cartao-topo"><div><h2>Por transportadora</h2><p class="sub">Clique no nome para ver os casos. "⧉ Texto" copia a mensagem; clique no e-mail para copiar os destinatários (cadastre no botão 📇). Marque "✓ Enviei" depois de mandar: ela desce para o fim da lista (vale para hoje, neste computador).</p></div></div>
-        <div class="tabela-wrap"><table class="tabela-range cm-tabela"><thead><tr><th>Transportadora</th><th class="num">Reposições</th><th class="num">Ocorrências</th><th class="num">Total</th><th>E-mail</th><th></th></tr></thead><tbody id="cm-linhas"></tbody></table></div>
+        <div class="tabela-wrap"><table class="tabela-range cm-tabela"><thead><tr><th>Transportadora</th><th class="num">Reposições</th><th class="num">Ocorrências</th><th class="num">Entregas</th><th class="num">Total</th><th>E-mail</th><th></th></tr></thead><tbody id="cm-linhas"></tbody></table></div>
       </section>
       <section class="cartao" id="cm-casos-cartao">
         <div class="cartao-topo"><div><h2 id="cm-casos-tit">Casos para cobrar</h2></div>
-          <div class="cm-filtros"><select id="cm-transp"></select><select id="cm-tipo"><option value="">Reposições e ocorrências</option><option value="rep">Só reposições</option><option value="oc">Só ocorrências</option></select><input id="cm-busca" type="search" placeholder="NF ou ticket"></div></div>
-        <div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr><th>Tipo</th><th>Transportadora</th><th>NF</th><th>NF nova / motivo</th><th>Ticket / portal</th><th>Status Intelipost</th><th>Situação</th></tr></thead><tbody id="cm-casos"></tbody></table>
+          <div class="cm-filtros"><select id="cm-transp"></select><select id="cm-tipo"><option value="">Todos os tipos</option><option value="rep">Só reposições</option><option value="oc">Só ocorrências</option><option value="at">Só entregas</option></select><input id="cm-busca" type="search" placeholder="NF ou ticket"></div></div>
+        <div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr><th>Tipo</th><th>Transportadora</th><th>NF</th><th>NF nova / motivo / retorno</th><th>Ticket / portal</th><th>Status Intelipost</th><th>Situação</th></tr></thead><tbody id="cm-casos"></tbody></table>
         <p id="cm-casos-vazio" class="vazio" hidden>Nenhum caso aqui. 🎉</p></div>
       </section>
       <details class="cartao c-regras"><summary>Como a lista é montada</summary>
         <p><b>Quais pedidos</b>: os da base em aberto (não entregues na Intelipost) cujo vencimento já passou, é hoje ou amanhã. O vencimento é a nova data informada pela transportadora; sem nova data, a data prometida ao cliente. Quando a nova data vence, o pedido volta para a cobrança, como no Preventivo.</p>
-        <p><b>Reposições</b>: a NF do pedido tem ticket no detalhamento (aba Reposições) com NF de reposição já emitida. Ficam de fora tickets Resolvidos/Encerrados e os da fila Recuperação de crédito. Transportadora = a de redespacho da nota de reposição; se não tiver, a da nota de reposição.</p>
-        <p><b>Ocorrências</b>: a NF do pedido tem ocorrência com status "Em andamento" (aba Ocorrências do detalhamento). Transportadora = a da ocorrência.</p>
+        <p><b>Ficam de fora</b>: pedidos com ocorrência de status "Novo" (a Multi deve retorno para a transportadora) e pedidos com reposição ainda sem NF nova (filas Aguardando faturamento, Confirmar nova data de entrega, Digitar pedido de reposição [Pós]/[Pré], Upload de arquivo (Reposições)). Tickets Resolvidos/Encerrados e da fila Recuperação de crédito não contam como reposição.</p>
+        <p><b>Reposições</b>: o ticket já tem NF de reposição emitida (detalhamento, aba Reposições). Transportadora = a de redespacho da nota de reposição; se não tiver, a da nota de reposição.</p>
+        <p><b>Ocorrências</b>: ocorrência com status "Em andamento". Transportadora = a da ocorrência.</p>
+        <p><b>Entregas</b>: os demais pedidos (sem reposição nem ocorrência). Transportadora = a da base.</p>
         <p><b>Intelipost</b>: não cobra pedido com status Despachado, Pré-lista de postagem ou Falha ao criar pedido com a transportadora. VM Transportes e Tempo Justo contam como uma só.</p>
       </details>
     </main>
@@ -1681,22 +1684,22 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=314"></script>
-  <script src="mapa-brasil.js?v=314"></script>
-  <script src="troca-notas.js?v=314"></script>
-  <script src="app.js?v=314"></script>
-  <script src="ordenar.js?v=314"></script>
-  <script src="menu.js?v=314"></script>
-  <script src="ajuda.js?v=314"></script>
-  <script src="documentos.js?v=314"></script>
-  <script src="barrar.js?v=314"></script>
-  <script src="naoloc.js?v=314"></script>
-  <script src="faltas.js?v=314"></script>
-  <script src="motor.js?v=314"></script>
-  <script src="retornos-semana.js?v=314"></script>
-  <script src="cobranca-massa.js?v=314"></script>
-  <script src="gargalos.js?v=314"></script>
-  <script src="filas.js?v=314"></script>
-  <script src="filtros.js?v=314"></script>
+  <script src="config.js?v=315"></script>
+  <script src="mapa-brasil.js?v=315"></script>
+  <script src="troca-notas.js?v=315"></script>
+  <script src="app.js?v=315"></script>
+  <script src="ordenar.js?v=315"></script>
+  <script src="menu.js?v=315"></script>
+  <script src="ajuda.js?v=315"></script>
+  <script src="documentos.js?v=315"></script>
+  <script src="barrar.js?v=315"></script>
+  <script src="naoloc.js?v=315"></script>
+  <script src="faltas.js?v=315"></script>
+  <script src="motor.js?v=315"></script>
+  <script src="retornos-semana.js?v=315"></script>
+  <script src="cobranca-massa.js?v=315"></script>
+  <script src="gargalos.js?v=315"></script>
+  <script src="filas.js?v=315"></script>
+  <script src="filtros.js?v=315"></script>
 </body>
 </html>
