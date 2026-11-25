@@ -1390,7 +1390,7 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 @keyframes ampulheta { 0%, 40% { transform: rotate(0deg); } 50%, 90% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
 a.oc-link { color: inherit; text-decoration: underline; cursor: pointer; }
 a.oc-link:hover { text-decoration: underline; }
-#rot-tickets .rot-hora { display: block; font-size: 10px; font-weight: 500; opacity: .75; line-height: 1.1; }
+#rot-base .rot-hora, #rot-ip .rot-hora, #rot-tickets .rot-hora { display: block; font-size: 10px; font-weight: 500; opacity: .75; line-height: 1.1; }
 /* Falta de volumes: tratativa no Chat do portal */
 .fv-chat { margin-top: 5px; font-size: 11px; font-weight: 600; border-radius: 5px; padding: 2px 6px; display: inline-block; max-width: 190px; line-height: 1.3; }
 .fv-chat.ok { color: #166534; background: #dcfce7; }
@@ -1409,3 +1409,4 @@ a.oc-link:hover { text-decoration: underline; }
 .u-zoom-bts .s { background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 4px; }
 .u-svg.zoom { cursor: grab; touch-action: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .u-cid-rot { fill: #f1f5f9; stroke: #0f172a; } }
+#rot-base .rot-hora.velha, #rot-ip .rot-hora.velha { color: #b4231b; opacity: 1; font-weight: 700; }

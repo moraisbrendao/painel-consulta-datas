@@ -418,14 +418,12 @@
   function desenharTopoArquivos() {
     const quando = (x) => `${new Date(x.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${x.enviado_por ? " por " + x.enviado_por : ""}`;
     const chip = (x, cls) => `<span class="arq ${cls}" title="${esc(x.arquivo || "planilha")} · enviada em ${esc(quando(x))} · compartilhada: todos os logins veem esta mesma planilha">▤ ${cls ? "Tickets" : "Base"} <b class="selo">compartilhada</b></span>`;   // nome do arquivo só no título (topo limpo, Brenda 23/11)
-    let h = info ? chip(info, "") : "";   // a data dos tickets fica no próprio botão "Tickets carregados" (Brenda 25/11)
-    if (info) {
-      const du = diasUteisDesde(diaLocal(info.enviado_em)), dt = new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
-      h += `<span class="arq-data ${du ? "velha" : "nova"}" title="Envie a base do dia para os números ficarem atualizados">planilha de ${dt} · ${du ? `${du} dia${du > 1 ? "s" : ""} út${du > 1 ? "eis" : "il"} atrás` : "de hoje"}</span>`;
-    }
-    $("topo-arquivos").innerHTML = h;
-    $("rot-base").textContent = "Carregar planilha";
-    $("rot-tickets").innerHTML = ticketsInfo ? `Tickets carregados<small class="rot-hora">planilha de ${new Date(ticketsInfo.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às")}</small>` : "Carregar tickets";
+    $("topo-arquivos").innerHTML = info ? chip(info, "") : "";   // datas/horas ficam nos próprios botões (Brenda 25/11)
+    const hora = (x) => new Date(x.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às");
+    const rot = (id, x, sim, nao, velha) => { $(id).innerHTML = x ? `${sim}<small class="rot-hora${velha ? " velha" : ""}" title="${velha ? "Envie a planilha do dia para os números ficarem atualizados" : ""}">planilha de ${hora(x)}${velha ? ` · ${velha} dia${velha > 1 ? "s" : ""} út${velha > 1 ? "eis" : "il"} atrás` : ""}</small>` : nao; };
+    rot("rot-base", info, "Planilha carregada", "Carregar planilha", info ? diasUteisDesde(diaLocal(info.enviado_em)) : 0);
+    rot("rot-ip", infoFech, "Intelipost enviada", "Enviar Intelipost", infoFech ? diasUteisDesde(diaLocal(infoFech.enviado_em)) : 0);
+    rot("rot-tickets", ticketsInfo, "Tickets carregados", "Carregar tickets", 0);
   }
 
   async function carregar() {
