@@ -1137,7 +1137,7 @@ ${extra}
     return base.filter(precisaOc).concat(extra);
   }
   function urlOc(nf, serie) { const n = semZero(String(nf || "").split("-")[0]), sr = semZero(serie != null && serie !== "" ? serie : String(nf || "").split("-")[1]); return n ? `https://ccp.360multi.com/occurrences/${encodeURIComponent(n)}${sr ? "-" + encodeURIComponent(sr) : ""}` : ""; }
-  function linkOc(nf, serie, html) { const u = urlOc(nf, serie); return u ? `<a class="oc-link" href="${u}" target="_blank" rel="noopener" title="Abrir o chat da ocorrência no portal">${html} ↗</a>` : html; }
+  function linkOc(nf, serie, html) { const u = urlOc(nf, serie); return u ? `<a class="oc-link" href="${u}" target="_blank" rel="noopener" title="Abrir o chat da ocorrência no portal">${html}</a>` : html; }
   function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
   function marcaOc(p) {
     if (!precisaOc(p)) return "";

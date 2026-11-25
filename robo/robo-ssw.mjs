@@ -1489,12 +1489,12 @@ if (MODO === "faltas" || MODO === "diag-faltas") {   // Reposições › Falta d
   catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }
-if (MODO === "anota-portal" || MODO === "diag-anota" || MODO === "diag-anota2") {   // Reposição pré-entrega: anotação "NF <nova> emitida para o pedido" no portal do transportador (robo/anota-portal.mjs)
+if (MODO === "anota-portal" || MODO === "diag-anota" || MODO === "diag-anota2" || MODO === "diag-ocurl") {   // Reposição pré-entrega: anotação "NF <nova> emitida para o pedido" no portal do transportador (robo/anota-portal.mjs)
   await entrarSupabase();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
   const A = await import("./anota-portal.mjs");
-  try { if (MODO === "anota-portal") await A.rodarAnota({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 100 }); else if (MODO === "diag-anota2") await A.diagAnota2({ chamar, log, ctx }); else await A.diagAnota({ chamar, log, ctx }); }
+  try { if (MODO === "anota-portal") await A.rodarAnota({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 100 }); else if (MODO === "diag-anota2") await A.diagAnota2({ chamar, log, ctx }); else if (MODO === "diag-ocurl") await A.diagOcUrl({ log, ctx }); else await A.diagAnota({ chamar, log, ctx }); }
   catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }

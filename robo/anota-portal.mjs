@@ -242,3 +242,25 @@ export async function diagAnota2({ chamar, log, ctx }) {
     await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
   for (let k = 0; k < await linha.locator("td").count(); k++) { const c = linha.locator("td").nth(k); const el = await c.locator("input, textarea, button").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}:${e.placeholder || e.innerText || e.title || e.getAttribute("aria-label") || "?"}`)); if (el.length) log(`  td ${k}:`, el.map(mascara).join(" | ")); }
 }
+
+// diag-ocurl: descobre o endereço que abre direto o chat de uma ocorrência no portal (link do painel). Só estrutura mascarada.
+export async function diagOcUrl({ log, ctx }) {
+  const p = await entrarPortal(ctx, log);
+  const keys = await p.evaluate(() => ({ ls: Object.keys(localStorage), ss: Object.keys(sessionStorage), ck: document.cookie.split(";").map((c) => c.split("=")[0].trim()).filter(Boolean) }));
+  log("Portal: chaves localStorage", keys.ls.join(",") || "-", "· sessionStorage", keys.ss.join(",") || "-", "· cookies", keys.ck.join(",") || "-");
+  await p.goto("https://ccp.360multi.com/occurrences"); await p.locator("table tbody tr").first().waitFor({ timeout: 45000 }).catch(() => {}); await p.waitForTimeout(2000);
+  log("Ocorrências: url", mascara(new URL(p.url()).pathname), "· colunas", (await p.locator("table thead th").allTextContents()).map((t) => t.trim()).join(" | "));
+  const linha = p.locator("table tbody tr").first(); if (!await linha.count()) { log("sem linhas"); return; }
+  const cels = (await linha.locator("td").allInnerTexts()).map((t) => t.trim());
+  log("1ª linha (mascarada):", cels.map(mascara).join(" | "));
+  log("links na linha:", (await linha.locator("a").evaluateAll((es) => es.map((e) => e.getAttribute("href")))).map(mascara).join(" | ") || "nenhum");
+  log("botões na linha:", (await linha.locator("button").evaluateAll((es) => es.map((e) => [e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"))).map(mascara).join(" | ") || "nenhum");
+  const antes = p.url(); await linha.locator("td").first().click().catch(() => {}); await p.waitForTimeout(3000);
+  log("depois de clicar na 1ª célula: url", mascara(new URL(p.url()).pathname + new URL(p.url()).search), p.url() === antes ? "(não mudou)" : "", "· diálogo aberto", await p.locator("[role=dialog]").count());
+  const destino = p.url() !== antes ? p.url() : null;
+  // abre o mesmo endereço numa aba nova (como o painel faz) e vê onde cai
+  for (const u of [destino].filter(Boolean)) {
+    const n = await ctx.newPage(); await n.goto(u); await n.waitForTimeout(5000);
+    log("aba nova com o mesmo endereço: cai em", mascara(new URL(n.url()).pathname), "· textarea", await n.locator("textarea").count()); await n.close();
+  }
+}
