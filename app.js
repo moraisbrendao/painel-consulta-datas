@@ -3257,8 +3257,10 @@ ${extra}
     andamento: (t) => t.responsavel && tnFeitas(t) < tnTam(t),
     feitos: (t) => tnFeitas(t) === tnTam(t),
     problema: (t) => t.na_planilha && tnFeitas(t) < tnTam(t) && !tnMetodo(t).ok && !tnSerie4(t),
+    portal_nao: (t) => t.portal_anot_status === "nao_achou",
+    portal_ok: (t) => t.portal_anot_status === "feito" || t.portal_anot_status === "ja_tinha",
   };
-  const TN_NOME = { fazer: "A fazer", andamento: "Em andamento", feitos: "Concluídos", problema: "Sem método (DE × PARA não casou)" };
+  const TN_NOME = { fazer: "A fazer", andamento: "Em andamento", feitos: "Concluídos", problema: "Sem método (DE × PARA não casou)", portal_nao: "Não localizado no portal (verificar)", portal_ok: "OK ajustado no portal" };
   async function carregarTrocas() {
     try {
       const [lista, inf] = await Promise.all([buscarTudo("troca_notas", "ticket"), sb.from("troca_notas_info").select("*").limit(1)]);
@@ -3281,7 +3283,7 @@ ${extra}
       const met = m.ok ? `<b>${esc(m.ok.metodo)}</b>${m.manual ? ' <span class="chip cinza">escolhido</span>' : ""}` : `<span class="txt-vermelho">⚠ ${esc(m.erro)}</span>`;
       const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span> <button class="btn mini contorno" data-voltar="${esc(t.ticket)}" title="Tira o ticket de Em andamento e volta para A fazer (o erro do robô continua aparecendo)">↩ A fazer</button>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
       const errRobo = t.robo_status === "erro" ? `<div class="tn-err-linha txt-vermelho">⚠ ${esc(String(t.robo_msg || "O robô não conseguiu.").slice(0, 140))}</div>` : "";
-      return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td>${esc(t.ticket)}</td><td><span class="chip ${tnParcial(t) ? "azul" : "cinza"}">${tnParcial(t) ? "Parcial" : "Total"}</span></td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
+      return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td>${esc(t.ticket)}</td><td><span class="chip ${tnParcial(t) ? "azul" : "cinza"}">${tnParcial(t) ? "Parcial" : "Total"}</span></td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}${t.portal_anot_status ? `<div class="s">orig. ${esc(t.nf_ticket || "")} · <span class="chip ${t.portal_anot_status === "nao_achou" ? "roxo" : t.portal_anot_status === "erro" ? "vermelho" : "verde"}">${t.portal_anot_status === "nao_achou" ? "não localizado no portal" : t.portal_anot_status === "erro" ? "erro no portal" : "✓ portal ok"}</span></div>` : ""}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
         <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span>${errRobo}</td><td class="tn-quem">${quem}</td></tr>`
         + (aberto ? `<tr class="tn-detalhe"><td colspan="8">${detalheTroca(t, m)}</td></tr>` : "");
     }).join("");
