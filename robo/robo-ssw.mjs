@@ -669,6 +669,12 @@ if (MODO === "teste-torre") {   // Torre de Controle: a função responde e recu
     const r = await fetch(U, { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: "{}" }).catch((e) => ({ status: e.message, text: async () => "" }));
     log(`Torre ${rot}:`, r.status, String(await r.text()).slice(0, 120));
   }
+  const TK = process.env.TORRE_PREVISAO_TOKEN || "";
+  if (TK) {   // pedido de teste que não existe: passa pela autenticação e só entra no histórico como pedido_nao_encontrado
+    const r = await fetch(U, { method: "POST", headers: { "Content-Type": "application/json", Authorization: "Bearer " + TK },
+      body: JSON.stringify([{ pedido: "TESTE-TORRE-0", previsao: "2026-12-01", confianca: "media", situacao: "teste", revisao: 1 }]) }).catch((e) => ({ status: e.message, text: async () => "" }));
+    log("Torre token certo:", r.status, String(await r.text()).slice(0, 200));
+  } else log("Torre: segredo TORRE_PREVISAO_TOKEN não está no GitHub");
   await entrarSupabase();
   await chamar("previsao_torre?select=pedido&limit=1").then(() => log("Torre: tabela previsao_torre existe")).catch((e) => log("Torre: tabela:", e.message.slice(0, 120)));
   process.exit(0);
