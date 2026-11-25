@@ -3424,3 +3424,21 @@ begin
 end $$;
 revoke all on function public.gravar_tk_saida(jsonb) from public;
 grant execute on function public.gravar_tk_saida(jsonb) to authenticated;
+
+-- parte 77 (25/11/2026): ao subir a planilha de UMA fila, o robô olha só essa fila (AE = Aguardando entrega, AT = Aguardando entrega (AT))
+create or replace function public.rodar_robo_aguardando_fila(p_fila text)
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text; f text := case when upper(coalesce(p_fila, '')) = 'AT' then 'AT' else 'AE' end;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', 'aguardando', 'transp', f)));
+end $$;
+revoke all on function public.rodar_robo_aguardando_fila(text) from public, anon;
+grant execute on function public.rodar_robo_aguardando_fila(text) to authenticated;

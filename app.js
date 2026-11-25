@@ -3650,7 +3650,8 @@ ${extra}
     const { error } = await sb.rpc("importar_aguardando", agFila === "AT" ? { itens, arquivo: arq.name, p_fila: "AT" } : { itens, arquivo: arq.name });
     if (error) return toast("Erro ao enviar: " + error.message + (/importar_aguardando|schema cache|p_fila/i.test(error.message) ? ` (rode a parte ${agFila === "AT" ? "26" : "24"} do supabase/schema.sql)` : ""), true);
     // Brenda 25/11: o robô roda quando ela sobe a planilha (e só aí, ou no botão "Rodar o robô agora")
-    const rr = await sb.rpc("rodar_robo_aguardando");
+    let rr = await sb.rpc("rodar_robo_aguardando_fila", { p_fila: agFila });   // só a fila desta planilha (parte 77)
+    if (rr.error && /rodar_robo_aguardando_fila|schema cache|function/i.test(rr.error.message)) rr = await sb.rpc("rodar_robo_aguardando");
     toast(`${fmt(itens.length)} ticket(s) enviados${rr.error ? "" : ". Chamei o robô: ele começa em 1 ou 2 minutos"}.`); await carregarAguardando();
   });
   $("ag-baixar").addEventListener("click", () => {

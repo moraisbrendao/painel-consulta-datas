@@ -6,7 +6,7 @@ const MODO = process.env.MODO || "diag";
 let ultimaLinha = "";
 const log = (...a) => { const t = a.map((x) => String(x).replace(/\d{5,}/g, "#####")).join(" "); ultimaLinha = t; console.log(t); };
 // aviso verde no painel: robô começou / terminou (só nome do robô, horário e a última linha do registro, que já é mascarada)
-const ANDAMENTO = { aguardando: "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", "repo-sla": "SLA dos tickets de reposição (Multi360)", barrar: "Barrar entrega: conferir", faltas: "Falta de volumes: retornos", "barrar-portal": "Barrar entrega: portal", transportadora: "Conferência de uma transportadora", naoloc: "Nota não localizada", "naoloc-teste": "Nota não localizada (teste)" }[MODO];
+const ANDAMENTO = { aguardando: process.env.TRANSP === "AT" ? "Fila Aguardando entrega AT" : process.env.TRANSP === "AE" ? "Fila Aguardando entrega" : process.env.TRANSP === "marcados" ? "Aguardando entrega: marcados como entregues" : "Fila Aguardando entrega (AE e AT)", "conferencia-tudo": "Conferir tudo agora (SSW)", "repo-itens": "Itens da reposição (Multi360)", "repo-sla": "SLA dos tickets de reposição (Multi360)", barrar: "Barrar entrega: conferir", faltas: "Falta de volumes: retornos", "barrar-portal": "Barrar entrega: portal", transportadora: "Conferência de uma transportadora", naoloc: "Nota não localizada", "naoloc-teste": "Nota não localizada (teste)" }[MODO];
 if (ANDAMENTO) {
   const inicio = new Date().toISOString(); let fechou = false;
   try { await entrarSupabase(); await gravarEstado("andamento:" + MODO, { robo: ANDAMENTO, rodando: true, inicio }); } catch (_) {}
