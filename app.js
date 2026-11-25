@@ -3497,7 +3497,7 @@ ${extra}
       if (notasNaFila().has(n.nf + "-" + n.serie)) return `<span class="chip azul">No robô do portal</span>`;
       return `<span class="chip ambar">Pronta em Ocorrências</span><div class="s">falta mandar para o robô</div>`;
     }
-    if (t.manual_entregue) return `<span class="chip verde">✓ Entregue ${br(t.manual_entregue)}</span><div class="s">marcado por ${esc(String(t.manual_por || "").split("@")[0])} · o robô dá a baixa</div><button class="link" data-ag-desmarca="${esc(t.ticket)}">desfazer</button>`;
+    if (t.manual_entregue) return `<span class="chip verde">✓ Marcado como entregue</span><div class="s">marcado por ${esc(String(t.manual_por || "").split("@")[0])} · o robô dá a baixa</div><button class="link" data-ag-desmarca="${esc(t.ticket)}">desfazer</button>`;
     if (t.baixa_status === "teste") return `<span class="chip cinza">Testado (Cancelar)</span>${q}`;
     if (t.baixa_status === "conferir") return `<span class="chip ambar">Conferir</span><div class="s">${esc(t.baixa_msg || "")}</div>`;
     if (t.baixa_status === "erro") return `<span class="txt-vermelho">⚠ ${esc(t.baixa_msg || "O robô não conseguiu.")}</span>`;
@@ -3557,12 +3557,9 @@ ${extra}
   $("ag-busca").addEventListener("input", (e) => { agBusca = e.target.value; desenharAguardando(); });
   $("ag-linhas").addEventListener("click", async (e) => {
     const be = e.target.closest("[data-ag-ent]");
-    if (be) { const box = be.parentElement; box.innerHTML = `<label class="s">Entregue em <input type="date" data-ag-ent-data max="${hojeISO()}" value="${hojeISO()}"></label> <button class="btn mini" data-ag-ent-ok="${esc(be.dataset.agEnt)}">Confirmar</button> <button class="link" data-ag-ent-x>cancelar</button>`; return; }
-    if (e.target.closest("[data-ag-ent-x]")) return desenharAguardando();
-    const ok = e.target.closest("[data-ag-ent-ok]"), dz = e.target.closest("[data-ag-desmarca]");
+    const ok = be, dz = e.target.closest("[data-ag-desmarca]");
     if (ok || dz) {
-      const tk = (ok || dz).dataset.agEntOk || (ok || dz).dataset.agDesmarca, d = ok ? ok.parentElement.querySelector("[data-ag-ent-data]").value : null;
-      if (ok && !d) return toast("Escolha a data da entrega.", true);
+      const tk = ok ? ok.dataset.agEnt : dz.dataset.agDesmarca, d = ok ? hojeISO() : null;   // sem data: só "entregue" (Brenda 25/11)
       const { error } = await sb.rpc("marcar_entregue_aguardando", { p_ticket: tk, p_data: d });
       if (error) return toast(/marcar_entregue_aguardando|schema cache|PGRST202/i.test(error.message) ? "Rode a parte 74 no Supabase para usar o botão Foi entregue." : "Não salvou: " + error.message, true);
       const t = agLista.find((x) => x.ticket === tk); if (t) Object.assign(t, { manual_entregue: d, manual_por: d ? meuEmail() : null, manual_em: d ? new Date().toISOString() : null });

@@ -132,7 +132,7 @@ export async function rodar(R) {
       let arq = null;
       if (t.situacao === "entregue" && t.nf_nova) { arq = `/tmp/ag-${Date.now()}.png`; try { await printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina }); } catch (_) { arq = null; } }
       try {
-        const msg = `Nota${t.nf_nova ? " " + t.nf_nova : ""} entregue em ${BR(t.manual_entregue)}, conforme conferência da Logística.`;
+        const msg = `Nota${t.nf_nova ? " " + t.nf_nova : ""} entregue, conforme conferência da Logística.`;
         const r = await executarAcao(p, t.ticket, { titulo: /Nota entregue\?/i, msg, print: arq, real: REAL });
         soma(REAL ? "baixa feita (marcada à mão)" : "teste da baixa marcada à mão (Cancelar)");
         loteM.push({ ticket: t.ticket, baixa_status: REAL ? "feita" : "teste", baixa_msg: REAL ? `Nota entregue → Sim (marcada pela Logística)${r.fila ? ` · fila agora: ${r.fila}` : ""}` : "Teste: marcada à mão, Cancelar." });
