@@ -123,7 +123,22 @@ export async function rodar(R) {
     await grava(linhas);
 
     // 3) entregue: print do rastreio e "Nota entregue?" → Sim
-    const ent = com.filter((t) => t.situacao === "entregue");
+    // marcados à mão pela Logística como entregues ("Foi entregue" no painel): baixa sem as travas do rastreio
+    const man = L.filter((t) => t.manual_entregue && t.baixa_status !== "feita");
+    const ent = com.filter((t) => t.situacao === "entregue" && !t.manual_entregue);
+    if (man.length && !p) p = await entrarMulti360(ctx, log);
+    const loteM = [];
+    for (const t of man) {
+      let arq = null;
+      if (t.situacao === "entregue" && t.nf_nova) { arq = `/tmp/ag-${Date.now()}.png`; try { await printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina }); } catch (_) { arq = null; } }
+      try {
+        const msg = `Nota${t.nf_nova ? " " + t.nf_nova : ""} entregue em ${BR(t.manual_entregue)}, conforme conferência da Logística.`;
+        const r = await executarAcao(p, t.ticket, { titulo: /Nota entregue\?/i, msg, print: arq, real: REAL });
+        soma(REAL ? "baixa feita (marcada à mão)" : "teste da baixa marcada à mão (Cancelar)");
+        loteM.push({ ticket: t.ticket, baixa_status: REAL ? "feita" : "teste", baixa_msg: REAL ? `Nota entregue → Sim (marcada pela Logística)${r.fila ? ` · fila agora: ${r.fila}` : ""}` : "Teste: marcada à mão, Cancelar." });
+      } catch (e) { soma("baixa marcada à mão com erro"); log("  erro na baixa:", String(e.message || e).split("\n")[0].replace(/\d{5,}/g, "#").slice(0, 200)); loteM.push({ ticket: t.ticket, baixa_status: "erro", baixa_msg: String(e.message || e).split("\n")[0].replace(/\d{5,}/g, "#").slice(0, 200) }); }
+    }
+    await grava(loteM);
     if (ent.length && !p) p = await entrarMulti360(ctx, log);
     const lote = [];
     for (const t of ent) {

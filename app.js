@@ -3456,6 +3456,7 @@ ${extra}
   const agTransp = (t) => t.transp_chat || String(t.transportadora || "").split(" / ")[0] || "";
   function agGrupo(t) {
     if (t.baixa_status === "feita") return "baixa";
+    if (t.manual_entregue) return "robo";   // marcada à mão como entregue: o robô dá a baixa
     if (t.baixa_status === "conferir" || t.baixa_status === "erro") return "conferir";
     if (t.situacao === "pendente" || t.situacao === "entregue") return "robo";
     if (t.insucesso) return "insucesso";
@@ -3496,6 +3497,7 @@ ${extra}
       if (notasNaFila().has(n.nf + "-" + n.serie)) return `<span class="chip azul">No robô do portal</span>`;
       return `<span class="chip ambar">Pronta em Ocorrências</span><div class="s">falta mandar para o robô</div>`;
     }
+    if (t.manual_entregue) return `<span class="chip verde">✓ Entregue ${br(t.manual_entregue)}</span><div class="s">marcado por ${esc(String(t.manual_por || "").split("@")[0])} · o robô dá a baixa</div><button class="link" data-ag-desmarca="${esc(t.ticket)}">desfazer</button>`;
     if (t.baixa_status === "teste") return `<span class="chip cinza">Testado (Cancelar)</span>${q}`;
     if (t.baixa_status === "conferir") return `<span class="chip ambar">Conferir</span><div class="s">${esc(t.baixa_msg || "")}</div>`;
     if (t.baixa_status === "erro") return `<span class="txt-vermelho">⚠ ${esc(t.baixa_msg || "O robô não conseguiu.")}</span>`;
@@ -3546,14 +3548,27 @@ ${extra}
         <td>${esc(t.tipo || "")}${t.tipo_reposicao ? `<div class="s">${esc(t.tipo_reposicao)}</div>` : ""}</td>
         <td class="mono">${(() => { const pi = pedidoIntelipost(t); return pi ? `${esc(pi)}${pi !== t.pedido && t.pedido ? `<div class="s">marketplace ${esc(t.pedido)}</div>` : ""}` : esc(t.pedido || ""); })()}<div class="s">NF antiga ${esc(t.nf_original || "—")}</div></td>
         <td>${t.nf_nova ? `<b>${esc(t.nf_nova)}</b>${t.nf_emitida_em ? `<div class="s">emitida ${br(t.nf_emitida_em)}</div>` : ""}` : "—"}</td>
-        <td>${esc(agTransp(t))}</td><td>${agStatus(t)}${agBotao(t)}</td><td>${agRobo(t)}</td>
+        <td>${esc(agTransp(t))}</td><td>${agStatus(t)}${agBotao(t)}</td><td>${agRobo(t)}${t.baixa_status !== "feita" && !t.manual_entregue ? `<div class="ag-ent" data-ag-ent-box="${esc(t.ticket)}"><button class="btn mini contorno" data-ag-ent="${esc(t.ticket)}" title="Conferi que foi entregue: o robô dá a baixa no ticket (Nota entregue? → Sim)">✓ Foi entregue</button></div>` : ""}</td>
         <td class="col-obs"><input data-ag-obs="${esc(t.ticket)}" value="${esc(o ? o.observacao : "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s quem">${o ? esc((o.atualizado_por || "").split("@")[0]) + " · " + new Date(o.atualizado_em).toLocaleDateString("pt-BR") : ""}</div></td></tr>`;
     }).join("") + (L.length > 500 ? `<tr><td colspan="8" class="s">Mostrando 500 de ${fmt(L.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
     $("ag-vazio").hidden = L.length > 0;
   }
   $("ag-cards").addEventListener("click", (e) => { const b = e.target.closest("[data-ag]"); if (!b) return; agCard = b.dataset.ag; desenharAguardando(); });
   $("ag-busca").addEventListener("input", (e) => { agBusca = e.target.value; desenharAguardando(); });
-  $("ag-linhas").addEventListener("click", (e) => {
+  $("ag-linhas").addEventListener("click", async (e) => {
+    const be = e.target.closest("[data-ag-ent]");
+    if (be) { const box = be.parentElement; box.innerHTML = `<label class="s">Entregue em <input type="date" data-ag-ent-data max="${hojeISO()}" value="${hojeISO()}"></label> <button class="btn mini" data-ag-ent-ok="${esc(be.dataset.agEnt)}">Confirmar</button> <button class="link" data-ag-ent-x>cancelar</button>`; return; }
+    if (e.target.closest("[data-ag-ent-x]")) return desenharAguardando();
+    const ok = e.target.closest("[data-ag-ent-ok]"), dz = e.target.closest("[data-ag-desmarca]");
+    if (ok || dz) {
+      const tk = (ok || dz).dataset.agEntOk || (ok || dz).dataset.agDesmarca, d = ok ? ok.parentElement.querySelector("[data-ag-ent-data]").value : null;
+      if (ok && !d) return toast("Escolha a data da entrega.", true);
+      const { error } = await sb.rpc("marcar_entregue_aguardando", { p_ticket: tk, p_data: d });
+      if (error) return toast(/marcar_entregue_aguardando|schema cache|PGRST202/i.test(error.message) ? "Rode a parte 74 no Supabase para usar o botão Foi entregue." : "Não salvou: " + error.message, true);
+      const t = agLista.find((x) => x.ticket === tk); if (t) Object.assign(t, { manual_entregue: d, manual_por: d ? meuEmail() : null, manual_em: d ? new Date().toISOString() : null });
+      if (ok) { toast("Marcado como entregue. Chamei o robô: ele dá a baixa no ticket em alguns minutos."); sb.rpc("rodar_robo_aguardando").then(() => {}, () => {}); }
+      return desenharAguardando();
+    }
     const b = e.target.closest("[data-ag-rastreio]"); if (!b) return;
     const t = agLista.find((x) => x.ticket === b.dataset.agRastreio); if (!t) return;
     const tr = t.fonte && t.fonte !== "SSW" ? t.fonte : agTransp(t);

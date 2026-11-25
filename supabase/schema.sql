@@ -3348,3 +3348,24 @@ begin
 end $$;
 revoke all on function public.fechar_conferencia_lote(timestamptz) from public, anon;
 grant execute on function public.fechar_conferencia_lote(timestamptz) to authenticated;
+-- parte 74: Fila Aguardando entrega › "Foi entregue": a Logística confere à mão e o robô dá a baixa (Nota entregue? → Sim)
+set lock_timeout = '15s';
+alter table public.aguardando_entrega add column if not exists manual_entregue date;
+alter table public.aguardando_entrega add column if not exists manual_por text;
+alter table public.aguardando_entrega add column if not exists manual_em timestamptz;
+create or replace function public.marcar_entregue_aguardando(p_ticket text, p_data date)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  if p_data is not null and p_data > (now() at time zone 'America/Sao_Paulo')::date then raise exception 'A data da entrega não pode ser no futuro.'; end if;
+  update public.aguardando_entrega
+     set manual_entregue = p_data, manual_por = case when p_data is null then null else auth.jwt() ->> 'email' end,
+         manual_em = case when p_data is null then null else now() end,
+         baixa_status = case when baixa_status in ('erro', 'conferir') and p_data is not null then null else baixa_status end
+   where ticket = p_ticket and coalesce(baixa_status, '') <> 'feita';
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.marcar_entregue_aguardando(text, date) from public, anon;
+grant execute on function public.marcar_entregue_aguardando(text, date) to authenticated;

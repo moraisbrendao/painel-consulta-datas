@@ -1382,3 +1382,4 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 .btn.pequeno { padding: 4px 10px; font-size: 12px; }
 .chip.roxo { background: #f1e8ff; color: #6b21a8; }
 .tn-tk { font-weight: 600; white-space: nowrap; }
+.ag-ent { margin-top: 6px; } .ag-ent input[type=date] { padding: 2px 4px; font-size: 12px; }
