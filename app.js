@@ -3531,7 +3531,24 @@ ${extra}
     if (ped.length >= 8) { const f = fonte.find((r) => String(r.pedido || "").endsWith(ped)); if (f) return f.pedido; }
     return null;
   }
+  // botão de subir: ampulheta enquanto o robô confere a fila; verde com o horário da última planilha quando termina (Brenda 25/11)
+  let agEstado = null, agEstadoTimer = null;
+  async function agChecarRobo() {
+    const r = await sb.from("robo_estado").select("valor").eq("nome", "andamento:aguardando").limit(1).catch(() => ({}));
+    agEstado = (r && r.data && r.data[0] && r.data[0].valor) || null; agBotaoSubir();
+  }
+  function agBotaoSubir() {
+    const bt = $("ag-subir"), tx = $("ag-subir-txt"); if (!bt || !tx) return;
+    const hm = (d) => new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    const rodando = agEstado && agEstado.rodando && agEstado.inicio && Date.now() - Date.parse(agEstado.inicio) < 3 * 3600e3;
+    bt.classList.toggle("ag-validando", !!rodando); bt.classList.toggle("ag-ok", !rodando && !!agInfo);
+    tx.innerHTML = rodando ? `<span class="ampulheta" aria-hidden="true">⏳</span> Validando… desde ${new Date(agEstado.inicio).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`
+      : agInfo ? `✓ Planilha de ${hm(agInfo.enviado_em)}${agEstado && agEstado.fim && Date.parse(agEstado.fim) > Date.parse(agInfo.enviado_em) ? ` · conferida às ${new Date(agEstado.fim).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}` : ""} · ⇪ subir outra`
+      : "⇪ Subir relatório (Excel)";
+    if (!agEstadoTimer) agEstadoTimer = setInterval(() => { if (!document.hidden && bt.offsetParent) agChecarRobo(); }, 15000);
+  }
   function desenharAguardando() {
+    agChecarRobo();
     $("ag-info").textContent = agInfo ? `${agInfo.arquivo || "relatório"} · enviado em ${new Date(agInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${agInfo.enviado_por ? " por " + agInfo.enviado_por : ""} · ${fmt(agLista.length)} tickets`
       : "Suba o relatório de tickets da fila Aguardando entrega para começar.";
     const ult = agLista.reduce((m, t) => (t.consultado_em && t.consultado_em > m ? t.consultado_em : m), "");

@@ -1383,3 +1383,8 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 .chip.roxo { background: #f1e8ff; color: #6b21a8; }
 .tn-tk { font-weight: 600; white-space: nowrap; }
 .ag-ent { margin-top: 6px; } .ag-ent input[type=date] { padding: 2px 4px; font-size: 12px; }
+/* Fila Aguardando: botão de subir com ampulheta / verde */
+#ag-subir.ag-validando { background: #fff7d6; border-color: #e0b400; color: #7a5b00; }
+#ag-subir.ag-ok { background: #1f9d55; border-color: #1f9d55; color: #fff; }
+#ag-subir .ampulheta { display: inline-block; animation: ampulheta 1.6s ease-in-out infinite; }
+@keyframes ampulheta { 0%, 40% { transform: rotate(0deg); } 50%, 90% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
