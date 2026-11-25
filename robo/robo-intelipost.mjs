@@ -547,7 +547,8 @@ async function retornoUpload(nomeParte) {
 //    sales_order_number (pedido Intelipost) → Enviar. Registro só com contagens.
 async function ajusteTp(limite) {
   const XLSX = (await import("xlsx")).default;
-  const pend = await chamar(`ajuste_tp?status=eq.aprovado&id_metodo=not.is.null&select=pedido,id_metodo&order=aprovado_em&limit=${limite}`);
+  const st = /^r/i.test(process.env.TICKET || "") ? "in.(aprovado,erro)" : "eq.aprovado";   // disparo manual "r1": tenta de novo também os que deram erro
+  const pend = await chamar(`ajuste_tp?status=${st}&id_metodo=not.is.null&select=pedido,id_metodo&order=aprovado_em&limit=${limite}`);
   const salva = (peds, campos) => peds.length ? chamar(`ajuste_tp?pedido=in.(${peds.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")})`, "PATCH", { ...campos, atualizado_em: new Date().toISOString() }) : null;
   log(`Ajuste de transportadora: ${pend.length} aprovado(s) para a Intelipost.`);
   if (pend.length) {
@@ -557,11 +558,14 @@ async function ajusteTp(limite) {
     let wb = null;
     try { const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx"); if (r.ok()) wb = XLSX.read(await r.body(), { type: "buffer" }); } catch (_) {}
     const aoa = [["Dados para atualizar", "", "", ""], ["Pedido", "Método Novo", "Resultado", "Observação"], ["so_order_number", "so_delivery_method_id", "", ""]];
-    let ws;
-    if (wb) { ws = wb.Sheets[wb.SheetNames[0]]; const cab = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }).slice(0, 3); ws = XLSX.utils.aoa_to_sheet(cab.length === 3 ? cab : aoa); }
-    else ws = XLSX.utils.aoa_to_sheet(aoa);
-    XLSX.utils.sheet_add_aoa(ws, pend.map((x) => [x.pedido, Number(x.id_metodo)]), { origin: "A4" });
-    const novo = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(novo, ws, wb ? wb.SheetNames[0] : "Planilha1"); XLSX.writeFile(novo, arq);
+    // escreve no PRÓPRIO modelo (mesma aba, mesclagens e cabeçalho): a 1ª tentativa com planilha nova deu "Erro no Processamento"
+    if (wb) {
+      const ws = wb.Sheets[wb.SheetNames[0]], rg = XLSX.utils.decode_range(ws["!ref"] || "A1:D4");
+      for (let R = 3; R <= rg.e.r; R++) for (let C = 0; C <= rg.e.c; C++) delete ws[XLSX.utils.encode_cell({ r: R, c: C })];   // tira a linha de exemplo
+      pend.forEach((x, i) => { ws[XLSX.utils.encode_cell({ r: 3 + i, c: 0 })] = { t: "s", v: String(x.pedido) }; ws[XLSX.utils.encode_cell({ r: 3 + i, c: 1 })] = { t: "n", v: Number(x.id_metodo) }; });
+      ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 3 + pend.length - 1, c: Math.max(3, rg.e.c) } });
+      XLSX.writeFile(wb, arq, { bookType: "xlsx" });
+    } else { const ws = XLSX.utils.aoa_to_sheet(aoa); XLSX.utils.sheet_add_aoa(ws, pend.map((x) => [x.pedido, Number(x.id_metodo)]), { origin: "A4" }); const novo = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(novo, ws, "Planilha1"); XLSX.writeFile(novo, arq); }
     log(`  planilha: ${pend.length} linha(s), modelo da Intelipost ${wb ? "usado" : "não baixou (montei igual)"}`);
     try {
       await abrirUploadMetodo();
@@ -1195,7 +1199,7 @@ try {
   else if (MODO === "diag-ajtp-ret") { await abrirUploadMetodo(); const ret = await retornoUpload("ajuste_transportadora_").catch((e) => { log("retorno falhou:", e.message.slice(0, 100)); return null; });
     log("Retorno do último envio do robô:", ret ? ret.map((x) => mascara(`${x.resultado} · ${x.obs}`).slice(0, 150)).join(" | ") || "(sem linhas)" : "não consegui baixar");
     log("Linha na lista:", mascara(await pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first().innerText().catch(() => "?")).replace(/ajuste_transportadora_\d+/g, "<arquivo>").replace(/\s+/g, " ").slice(0, 200)); }
-  else if (MODO === "ajuste-tp") await ajusteTp(Number(process.env.LIMITE || process.env.TICKET || 0) || 300);   // disparo manual: o campo "ticket" leva o limite
+  else if (MODO === "ajuste-tp") await ajusteTp(Number(process.env.LIMITE || String(process.env.TICKET || "").replace(/^r/i, "") || 0) || 300);   // disparo manual: o campo "ticket" leva o limite
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
   else if (MODO === "diag-troca") await diagTroca();
