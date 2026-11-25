@@ -1372,8 +1372,17 @@ ${extra}
     montarGerencial();
   }
   let gAvisoColunas = false;
+  // mesma cidade escrita com e sem acento ("São Paulo" / "Sao Paulo") vira uma só (Brenda 25/11): fica o nome com acento mais usado
+  const chaveCid = (t) => norm(t).replace(/[^A-Z0-9]+/g, " ").trim();
+  function unirCidades(L) {
+    const m = new Map();
+    L.forEach((r) => { if (!r.cidade) return; const k = String(r.uf || "").trim().toUpperCase() + "|" + chaveCid(r.cidade); let c = m.get(k); if (!c) m.set(k, (c = new Map())); c.set(r.cidade, (c.get(r.cidade) || 0) + 1); });
+    const nome = new Map(); m.forEach((c, k) => { const v = [...c.entries()].sort((a, b) => (/[^\x00-\x7f]/.test(b[0]) - /[^\x00-\x7f]/.test(a[0])) || b[1] - a[1])[0][0]; nome.set(k, v); });
+    L.forEach((r) => { if (!r.cidade) return; const k = String(r.uf || "").trim().toUpperCase() + "|" + chaveCid(r.cidade); r._cidK = k; r.cidade = nome.get(k) || r.cidade; });
+  }
   function prepararG() {
     const hoje = hojeISO();
+    unirCidades(gDados);
     gDados.forEach((r) => {
       const st = norm(r.status), rg = norm(r.range);
       r._prom = r.prevOrig || r.prev || null;
@@ -2993,6 +3002,51 @@ ${extra}
       }
     });
     rot.innerHTML = h;
+    cidadesNoMapa(svg);
+  }
+  // bolinhas nas cidades com atraso (Brenda 25/11): no Brasil, a cidade com mais atrasados de cada estado;
+  // clicando no estado, zoom nele e todas as cidades com atraso. Clique na bolinha = filtra a cidade.
+  let uFit = null, uVB = null;
+  function ajusteMapa(svg) {
+    const C = window.CIDADES_BR; if (!C) return null;
+    const lim = {}; for (const [k, [lo, la]] of Object.entries(C)) { const u = k.slice(0, 2), x = lim[u] || (lim[u] = [180, -180, 90, -90]); x[0] = Math.min(x[0], lo); x[1] = Math.max(x[1], lo); x[2] = Math.min(x[2], la); x[3] = Math.max(x[3], la); }
+    const px = [], py = [];
+    svg.querySelectorAll("path[data-uf]").forEach((p) => { const u = p.dataset.uf, l = lim[u]; if (!l || u === "DF") return; const b = p.getBBox();
+      px.push([l[0], b.x], [l[1], b.x + b.width]); py.push([l[3], b.y], [l[2], b.y + b.height]); });
+    const reta = (P) => { const n = P.length, mx = P.reduce((a, p) => a + p[0], 0) / n, my = P.reduce((a, p) => a + p[1], 0) / n;
+      const a = P.reduce((s, p) => s + (p[0] - mx) * (p[1] - my), 0) / P.reduce((s, p) => s + (p[0] - mx) ** 2, 0); return [a, my - a * mx]; };
+    return px.length > 4 ? { x: reta(px), y: reta(py) } : null;
+  }
+  function cidadesNoMapa(svg) {
+    const C = window.CIDADES_BR; if (!C) return;
+    if (!uFit) uFit = ajusteMapa(svg); if (!uFit) return;
+    const pos = (k) => { const c = C[k]; return c ? [uFit.x[0] * c[0] + uFit.x[1], uFit.y[0] * c[1] + uFit.y[1]] : null; };
+    // cidades com atraso (seguem a transportadora escolhida; a cidade escolhida fica destacada)
+    const m = new Map();
+    uFiltrados.forEach((r) => { if (r._fechado || !r._atraso || !r._cidK || (uT !== null && uTDe(r) !== uT)) return; const x = m.get(r._cidK) || { k: r._cidK, uf: r._cidK.slice(0, 2), n: r.cidade, atr: 0 }; x.atr++; m.set(r._cidK, x); });
+    let C2 = [...m.values()];
+    if (uUF) C2 = C2.filter((x) => x.uf === uUF);
+    else { const top = new Map(); C2.forEach((x) => { const t = top.get(x.uf); if (!t || x.atr > t.atr) top.set(x.uf, x); }); C2 = [...top.values()]; }
+    C2 = C2.map((x) => ({ ...x, p: pos(x.k) })).filter((x) => x.p).sort((a, b) => b.atr - a.atr);
+    const M = window.MAPA_BR.viewBox.split(" ").map(Number);
+    let alvo = M;
+    if (uUF) { const p = svg.querySelector(`path[data-uf="${uUF}"]`); if (p) { const b = p.getBBox(), pad = Math.max(b.width, b.height) * 0.12 + 4; alvo = [b.x - pad, b.y - pad, b.width + 2 * pad, b.height + 2 * pad]; } }
+    const k = Math.max(alvo[2], alvo[3]) / Math.max(M[2], M[3]), max = Math.max(1, ...C2.map((x) => x.atr));
+    let g = "";
+    C2.slice().reverse().forEach((x, i) => { const r = (uUF ? 2.5 + 11 * Math.sqrt(x.atr / max) : 2.5 + 7 * Math.sqrt(x.atr / max)) * k;
+      g += `<circle cx="${x.p[0].toFixed(1)}" cy="${x.p[1].toFixed(1)}" r="${r.toFixed(2)}" class="u-cid${uC === x.n ? " sel" : ""}" data-ucid="${esc(x.n)}" data-ucuf="${x.uf}" style="stroke-width:${(1.2 * k).toFixed(2)}"><title>${esc(x.n)} (${x.uf}): ${fmt(x.atr)} atrasado${x.atr === 1 ? "" : "s"} · clique para filtrar a cidade</title></circle>`; });
+    // nomes: no zoom, as 8 cidades com mais atraso; no Brasil, só a maior de cada estado grande aparece na dica (passar o mouse)
+    if (uUF) C2.slice(0, 8).forEach((x) => { const r = (2.5 + 11 * Math.sqrt(x.atr / max)) * k;
+      g += `<text x="${(x.p[0] + r + 2 * k).toFixed(1)}" y="${(x.p[1] + 3.5 * k).toFixed(1)}" class="u-cid-rot" style="font-size:${(10.5 * k).toFixed(2)}px;stroke-width:${(3 * k).toFixed(2)}px">${esc(x.n)} · ${fmt(x.atr)}</text>`; });
+    const gr = document.createElementNS("http://www.w3.org/2000/svg", "g"); gr.setAttribute("class", "u-cidades"); gr.innerHTML = g; svg.appendChild(gr);
+    svg.classList.toggle("zoom", !!uUF);
+    // zoom suave do enquadramento anterior até o novo
+    const de = uVB || M; uVB = alvo; const t0 = performance.now();
+    const passo = (t) => { const f = Math.min(1, (t - t0) / 450), e = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
+      svg.setAttribute("viewBox", de.map((v, i) => (v + (alvo[i] - v) * e).toFixed(2)).join(" ")); if (f < 1) requestAnimationFrame(passo); };
+    if (de.join() !== alvo.join()) requestAnimationFrame(passo); else svg.setAttribute("viewBox", alvo.join(" "));
+    const box = $("u-mapa"); box.querySelector(".u-voltar")?.remove();
+    if (uUF) box.insertAdjacentHTML("beforeend", `<button type="button" class="btn mini contorno u-voltar" data-uvoltar="1">⤺ Ver o Brasil inteiro</button>`);
   }
   function desenharQuadrados() {
     $("u-mapa").innerHTML = `<div class="u-quad">${Object.entries(UF_QUAD).map(([u, [l, c]]) => { const x = uDados.get(u);
@@ -3033,7 +3087,11 @@ ${extra}
   });
   $("u-sel").addEventListener("click", (e) => { const b = e.target.closest("[data-ux]"); if (!b) return; const k = b.dataset.ux;
     if (k === "t" || k === "tudo") uT = null; if (k === "c" || k === "tudo") uC = null; desenharUF(); });
-  $("u-mapa").addEventListener("click", (e) => { const el = e.target.closest("[data-uf]"); if (el) escolherUF(el.dataset.uf); });
+  $("u-mapa").addEventListener("click", (e) => {
+    if (e.target.closest("[data-uvoltar]")) { if (uUF) escolherUF(uUF); return; }
+    const c = e.target.closest("[data-ucid]");
+    if (c) { if (uUF !== c.dataset.ucuf) { uUF = c.dataset.ucuf; } uC = uC === c.dataset.ucid ? null : c.dataset.ucid; desenharUF(); desenharDetalheUF(true); return; }
+    const el = e.target.closest("[data-uf]"); if (el) escolherUF(el.dataset.uf); });
   $("u-ranking").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-uf]"); if (tr) escolherUF(tr.dataset.uf); });
   $("u-forma").addEventListener("click", (e) => { const b = e.target.closest("button[data-f]"); if (!b) return; uForma = b.dataset.f;
     $("u-forma").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharUF(); });

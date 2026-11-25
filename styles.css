@@ -1396,3 +1396,14 @@ a.oc-link:hover { text-decoration: underline; }
 .fv-chat.ok { color: #166534; background: #dcfce7; }
 .fv-chat.urgente { color: #fff; background: #dc2626; animation: fv-pisca 1s ease-in-out infinite; }
 @media (prefers-reduced-motion: reduce) { .fv-chat.urgente { animation: none; } }
+/* Atrasos por UF: bolinhas nas cidades e zoom no estado */
+#u-mapa { position: relative; }
+.u-svg.zoom { overflow: hidden; }
+.u-svg.zoom .uf-rotulos { display: none; }
+.u-svg.zoom .uf-forma:not(.sel) { opacity: .35; }
+.u-cid { fill: #b91c1c; fill-opacity: .82; stroke: #fff; cursor: pointer; }
+.u-cid:hover { fill: #7f1d1d; fill-opacity: 1; }
+.u-cid.sel { fill: #f5b800; stroke: #0f1f3d; fill-opacity: 1; }
+.u-cid-rot { fill: #0f1f3d; font-weight: 700; paint-order: stroke; stroke: #fff; pointer-events: none; }
+.u-voltar { position: absolute; top: 6px; left: 6px; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .u-cid-rot { fill: #f1f5f9; stroke: #0f172a; } }
