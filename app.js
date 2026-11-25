@@ -425,7 +425,7 @@
     }
     $("topo-arquivos").innerHTML = h;
     $("rot-base").textContent = "Carregar planilha";
-    $("rot-tickets").textContent = ticketsInfo ? "Tickets carregados" : "Carregar tickets";
+    $("rot-tickets").innerHTML = ticketsInfo ? `Tickets carregados<small class="rot-hora">planilha de ${new Date(ticketsInfo.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às")}</small>` : "Carregar tickets";
   }
 
   async function carregar() {

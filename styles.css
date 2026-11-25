@@ -1390,3 +1390,4 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 @keyframes ampulheta { 0%, 40% { transform: rotate(0deg); } 50%, 90% { transform: rotate(180deg); } 100% { transform: rotate(360deg); } }
 a.oc-link { color: inherit; text-decoration: underline; cursor: pointer; }
 a.oc-link:hover { text-decoration: underline; }
+#rot-tickets .rot-hora { display: block; font-size: 10px; font-weight: 500; opacity: .75; line-height: 1.1; }
