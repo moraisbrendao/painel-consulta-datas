@@ -1218,6 +1218,10 @@ try {
     const ok = pagina.locator("tr", { hasText: /Sucesso/ }).filter({ hasNotText: "ajuste_transportadora_" }).first();
     log("Envio com Sucesso (Brenda):", await estrutura(ok));
     log("Envio do robô:", await estrutura(pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first()));
+    log("Primeiras linhas da lista:", (await pagina.locator("tbody tr").evaluateAll((rs) => rs.slice(0, 4).map((r) => r.innerText.replace(/\s+/g, " ")))).map((t) => t.replace(/\d{6,}/g, "#")).join(" || "));
+    { const bt = pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first().getByText(/Baixar Arquivo/i).first();
+      const dl = await Promise.all([pagina.waitForEvent("download", { timeout: 30000 }), bt.click()]).then(([d]) => d).catch(() => null);
+      if (dl) { const f = "/tmp/err.xlsx"; await dl.saveAs(f); const wb = XLSX.readFile(f); for (const n of wb.SheetNames) log("Arquivo de erro, aba", n.replace(/\d/g, "#"), ":", JSON.stringify(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" }).slice(0, 8)).replace(/\d{5,}/g, "#").slice(0, 600)); } }
     const a = (await chamar("ajuste_tp?status=eq.erro&select=pedido,id_metodo,para_h&limit=3"));
     log("Na tabela (erro):", a.map((x) => `id ${x.id_metodo} · ${x.para_h} · pedido formato ${String(x.pedido).replace(/\d/g, "9").replace(/[a-z]/gi, "x")}`).join(" | "));
   }
