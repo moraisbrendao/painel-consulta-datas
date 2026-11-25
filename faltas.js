@@ -19,7 +19,12 @@
   let L = [], info = null, ok = true, card = "todos", carregou = false;
   const sit = (x) => (x.erro && !x.tem_retorno ? "erro" : !x.conferido_em ? "robo" : x.tem_retorno ? "com" : "sem");
   const CARDS = [["com", "Com retorno", "a transportadora respondeu (360 ou portal)", "verde"], ["sem", "Sem retorno", "nada da transportadora: cobrar", "vermelho"],
-    ["robo", "Aguardando o robô", "ainda não conferidos", ""], ["erro", "Erro na leitura", "o robô não conseguiu abrir", "laranja"], ["todos", "Todos", "da última planilha", ""]];
+    ["semchat", "⚠ Fora do chat do portal", "NF sem tratativa no Chat: urgente", "vermelho"], ["robo", "Aguardando o robô", "ainda não conferidos", ""], ["erro", "Erro na leitura", "o robô não conseguiu abrir", "laranja"], ["todos", "Todos", "da última planilha", ""]];
+  const foraChat = (x) => !!(x.chat && x.chat.achou === false);
+  // tratativa no Chat do portal do transportador (robô busca a NF em ccp › Chat; Brenda 25/11)
+  const chipChat = (x) => !x.chat ? "" : x.chat.achou
+    ? `<div class="fv-chat ok" title="A NF tem conversa no Chat do portal do transportador">✓ tratativa ok no chat${x.chat.status ? ` · ${esc(x.chat.status)}` : ""}${x.chat.ultima ? ` · últ. ${br(x.chat.ultima)}` : ""}</div>`
+    : `<div class="fv-chat urgente" title="O robô buscou a NF no Chat do portal e não achou: olhar com urgência">⚠ Não está no chat do portal · urgente</div>`;
   const transpDe = (x) => ((x.portal || {}).transp || x.transp || "").trim() || "(sem transportadora)";
   const motivoDe = (x) => (x.motivo || x.motivo_ticket || "").trim() || "(sem motivo)";
   const abertoEm = (x) => dPortal((x.portal || {}).solicitado) || x.ticket_criado;   // data da solicitação no portal, senão a criação do ticket
@@ -30,7 +35,7 @@
   const retornos = (x) => [...(x.retorno_360 || []).map((m) => ({ ...m, onde: "360" })), ...(((x.portal || {}).anotacoes) || []).map((a) => ({ ...a, onde: "portal" }))]
     .sort((a, b) => String(b.quando || "").localeCompare(String(a.quando || "")));
   const passa = (x) => {
-    if (card !== "todos" && sit(x) !== card) return false;
+    if (card === "semchat" ? !foraChat(x) : card !== "todos" && sit(x) !== card) return false;
     const t = $("fv-transp").value; if (t && transpDe(x) !== t) return false;
     const m = $("fv-motivo").value; if (m && motivoDe(x) !== m) return false;
     const q = norm($("fv-busca").value).split(/[\s,;]+/).filter(Boolean);
@@ -53,7 +58,7 @@
     $("fv-info").textContent = info ? `Planilha: ${info.arquivo || ""} · ${hora(info.enviado_em)}${info.enviado_por ? " por " + info.enviado_por.split("@")[0] : ""} · ${fmt(L.length)} tickets${conf ? ` · robô olhou por último em ${hora(conf)}` : ""}` : "Nenhuma planilha enviada ainda.";
     const pt = (a, b) => a.localeCompare(b, "pt-BR");
     opcoes("fv-transp", [...new Set(L.map(transpDe))].sort(pt), "Todas"); opcoes("fv-motivo", [...new Set(L.map(motivoDe))].sort(pt), "Todos");
-    const n = (k) => (k === "todos" ? L.length : L.filter((x) => sit(x) === k).length);
+    const n = (k) => (k === "todos" ? L.length : k === "semchat" ? L.filter(foraChat).length : L.filter((x) => sit(x) === k).length);
     $("fv-cards").innerHTML = CARDS.map(([k, rot, sub, cor]) => `<button type="button" class="kpi ${cor}${card === k ? " ativa" : ""}" data-fv="${k}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${fmt(n(k))}</b><small>${sub}</small><i>↗</i></button>`).join("");
     const V = L.filter(passa).sort((a, b) => (dias(desdeEm(b)) ?? -1) - (dias(desdeEm(a)) ?? -1));
     $("fv-titulo").textContent = `${CARDS.find((c) => c[0] === card)[1]} (${fmt(V.length)})`;
@@ -84,7 +89,7 @@
       ? `<div class="fv-conversa">${R.slice().reverse().map((r) => `<div class="fv-ret"><span class="chip ${r.onde === "360" ? "azul" : "lilas"}">${r.onde === "360" ? "360 · externo" : "portal · anotação"}</span>${quem(r)}${r.quando ? ` <span class="s">${hora(r.quando)}</span>` : ""}<div>${esc(limpaTexto(r.texto))}</div></div>`).join("")}</div>${R.length > 1 ? `<div class="s">${fmt(R.length)} mensagens · a mais nova embaixo</div>` : ""}`
       : `<span class="txt-vermelho">Sem retorno da transportadora</span>${p.achou === false ? `<div class="s">NF não está na aba Faltas / Inversões do portal</div>` : ""}`;
     const ed = x.editado_em ? `<div class="s">gravado${x.editado_por ? " por " + esc(String(x.editado_por).split("@")[0]) : ""} em ${hora(x.editado_em)}</div>` : "";
-    return `<tr><td><b>${esc(x.nf || "—")}</b><div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>${x.fila ? `<div class="s">${esc(x.fila)}</div>` : ""}</td>
+    return `<tr><td><b>${esc(x.nf || "—")}</b><div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>${x.fila ? `<div class="s">${esc(x.fila)}</div>` : ""}${chipChat(x)}</td>
       <td>${esc(transpDe(x))}</td><td>${esc(motivoDe(x))}${avisoMotivo(x, R)}</td>
       <td class="num">${d ?? "—"}${desdeEm(x) ? `<div class="s">desde ${br(desdeEm(x))}</div>` : ""}</td>
       <td>${p.prazo ? `${esc(p.prazo)}${pv ? ` <span class="chip vermelho">vencido</span>` : ""}` : "—"}</td>
@@ -127,9 +132,9 @@
     return `Olá, ${t}! Estamos com ${plural(xs.length, "caso", "casos")} de ${mot}. Precisamos do retorno de vocês para seguir com as tratativas. Conseguem verificar?\n\n`
       + xs.map((x) => { const d = dias(desdeEm(x)), pv = prazoVencido(x); return `• NF ${x.nf || "—"} · ${motivoDe(x)}${d === null ? "" : d === 0 ? " · hoje" : ` · há ${plural(d, "dia", "dias")}`}${pv ? ` · prazo limite ${br(pv)} vencido` : ""}`; }).join("\n");
   }
-  const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Nossa última cobrança (360 externo)", "Dias sem retorno", "Prazo limite (portal)", "Prazo vencido", "Data prometida pela transportadora", "Promessa vencida", "Anotações", "Com retorno", "Último retorno em", "Onde", "Quem retornou", "Texto do último retorno", "Todos os retornos"];
+  const CAB = ["Transportadora", "Nota", "Ticket", "Motivo", "Fila", "Aberto em", "Nossa última cobrança (360 externo)", "Dias sem retorno", "Prazo limite (portal)", "Prazo vencido", "Data prometida pela transportadora", "Promessa vencida", "Anotações", "Tratativa no chat do portal", "Com retorno", "Último retorno em", "Onde", "Quem retornou", "Texto do último retorno", "Todos os retornos"];
   const linhasXls = (xs) => xs.map((x) => { const R = retornos(x), u = R[0] || {}, pv = prazoVencido(x);
-    return [transpDe(x), x.nf || "", x.ticket, motivoDe(x), x.fila || "", br(abertoEm(x)), x.cobrado_em ? hora(x.cobrado_em) : "", dias(desdeEm(x)) ?? "", (x.portal || {}).prazo || "", pv ? "Sim" : "", br(x.data_prometida), promVencida(x) ? "Sim" : "", x.anotacao || "", !x.conferido_em ? "Não conferido" : x.tem_retorno ? "Sim" : "Não",
+    return [transpDe(x), x.nf || "", x.ticket, motivoDe(x), x.fila || "", br(abertoEm(x)), x.cobrado_em ? hora(x.cobrado_em) : "", dias(desdeEm(x)) ?? "", (x.portal || {}).prazo || "", pv ? "Sim" : "", br(x.data_prometida), promVencida(x) ? "Sim" : "", x.anotacao || "", !x.chat ? "" : x.chat.achou ? "OK" + (x.chat.status ? " · " + x.chat.status : "") : "NÃO ESTÁ NO CHAT (urgente)", !x.conferido_em ? "Não conferido" : x.tem_retorno ? "Sim" : "Não",
       u.quando ? hora(u.quando) : "", u.onde === "360" ? "Ticket 360 (externo)" : u.onde === "portal" ? "Portal (anotação)" : "", u.por || "", limpaTexto(u.texto), R.slice().reverse().map((r) => `${r.quando ? hora(r.quando) + " " : ""}[${r.onde}${r.por ? " · " + r.por : ""}] ${limpaTexto(r.texto)}`).join(" | ")]; });
   function baixar(G, nome) {
     const wb = XLSX.utils.book_new(), usados = new Set();

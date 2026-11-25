@@ -3442,3 +3442,6 @@ begin
 end $$;
 revoke all on function public.rodar_robo_aguardando_fila(text) from public, anon;
 grant execute on function public.rodar_robo_aguardando_fila(text) to authenticated;
+
+-- parte 78 (25/11/2026): Falta de volumes / Inversão — o robô confere se a NF do ticket tem tratativa no Chat do portal do transportador
+alter table public.falta_volumes add column if not exists chat jsonb;

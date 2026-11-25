@@ -101,6 +101,22 @@ async function lerPortalFalta(p, nf) {
   return out;
 }
 
+// Chat do portal do transportador (/chat): busca a NF em "Buscar por NF"; achou = a tratativa foi para o chat (Brenda 25/11).
+// Clica na nota e lê só o status (Pendente…) e a data da última mensagem. Nada é escrito.
+async function abrirChat(ctx) { const c = await ctx.newPage(); await c.goto("https://ccp.360multi.com/chat"); await c.locator("input[placeholder*='NF' i]").first().waitFor({ timeout: 30000 }); await c.waitForTimeout(1500); return c; }
+async function lerChat(c, nf) {
+  const busca = c.locator("input[placeholder*='NF' i]").first();
+  await busca.fill(""); await busca.fill(nf); await c.waitForTimeout(2800);
+  const item = c.getByText(nf, { exact: true });
+  if (!(await item.count())) { const vazio = /nenhuma nota encontrada/i.test(await c.locator("body").innerText()); return { achou: false, certo: vazio }; }
+  await item.first().click().catch(() => {}); await c.waitForTimeout(3000);
+  const ls = (await c.locator("body").innerText()).split("\n").map((l) => l.trim()).filter(Boolean);
+  const i0 = Math.max(0, ls.findIndex((l) => l.includes(nf)));
+  const status = (ls.slice(i0, i0 + 8).find((l) => /^(pendente|respondid|resolvid|finalizad|fechad|em andamento|aguardando|aberto)/i.test(l)) || null);
+  const datas = ls.slice(i0).map((l) => isoBR(l)).filter(Boolean).sort();
+  return { achou: true, status: status ? status.slice(0, 30) : null, ultima: datas.length ? datas[datas.length - 1] : null };
+}
+
 export async function conferirFaltas({ chamar, log, ctx, limite = 300 }) {
   const L = await chamar(`falta_volumes?select=ticket,nf,motivo&na_planilha=eq.true&order=conferido_em.asc.nullsfirst&limit=${limite}`);
   log(`faltas: ${L.length} ticket(s) para olhar`);
@@ -109,15 +125,20 @@ export async function conferirFaltas({ chamar, log, ctx, limite = 300 }) {
   let diagN = 0; const temCobrado = await chamar("falta_volumes?select=cobrado_em&limit=1").then(() => true, () => { log("faltas: coluna cobrado_em não existe (parte 61): sigo sem a data da nossa cobrança"); return false; });
   const p360 = await entrarMulti360(ctx, log);
   let pp = null; try { pp = await entrarPortal(ctx, log); await abrirFaltasPortal(pp, log); } catch (e) { log("faltas: portal indisponível (" + mascara(e.message) + ") — sigo só com o 360"); pp = null; }
+  const temChat = await chamar("falta_volumes?select=chat&limit=1").then(() => true, () => { log("faltas: coluna chat não existe (parte 78): sigo sem conferir o Chat do portal"); return false; });
+  let pc = null; if (pp && temChat) { try { pc = await abrirChat(ctx); } catch (e) { log("faltas: Chat do portal não abriu (" + mascara(e.message) + ")"); pc = null; } }
   for (const x of L) {
     try {
       const t = await lerTicket(p360, x.ticket);
       let pt = null;
       if (pp && x.nf) { try { pt = await lerPortalFalta(pp, x.nf); } catch (e) { soma("portal: erro"); pt = { achou: null, erro: true }; } }
+      let ch = null;
+      if (pc && x.nf) { try { ch = { ...(await lerChat(pc, x.nf)), em: new Date().toISOString() }; soma(ch.achou ? "chat: tratativa ok" : "chat: NÃO está no chat"); } catch (e) { soma("chat: erro"); ch = null; } }
       const datas = [...t.msgs.map((m) => m.quando), ...((pt && pt.anotacoes) || []).map((a) => a.quando)].filter(Boolean).sort();
       const tem = t.msgs.length > 0 || !!(pt && pt.anotacoes && pt.anotacoes.length);
       await chamar(`falta_volumes?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", {
         retorno_360: t.msgs, portal: pt, motivo_ticket: t.motivo, ...(t.fila ? { fila: t.fila } : {}), tem_retorno: tem, ...(temCobrado ? { cobrado_em: t.cobrado } : {}),
+        ...(ch ? { chat: ch } : {}),
         ultimo_retorno_em: datas.length ? datas[datas.length - 1] : null, conferido_em: new Date().toISOString(), erro: null });
       soma(tem ? "com retorno" : "sem retorno"); if (t.msgs.length) soma("retorno no 360"); if (t.cobrado) { soma("com cobrança nossa"); if (t.cobrado.slice(0, 10) === new Date().toISOString().slice(0, 10)) soma("cobrança de hoje"); } if (pt && pt.anotacoes && pt.anotacoes.length) soma("anotação no portal"); if (pt && pt.achou === false) soma("NF fora da lista do portal");
     } catch (e) {
