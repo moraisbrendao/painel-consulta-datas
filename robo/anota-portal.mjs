@@ -40,6 +40,11 @@ async function abrirRepoPre(p, log) {
   if (await aba.count()) await aba.click(); else await p.getByText(/Reposi[cç][oõ]es\s*\(Pr[eé]/i).first().click().catch(() => {});
   await p.locator("table tbody tr").first().waitFor({ timeout: 45000 }).catch(() => {});
   await p.waitForTimeout(1500);
+  // sem filtro de Status/Transportadora (a Brenda viu NFs que só aparecem sem filtro)
+  const limpar = p.getByRole("button", { name: /limpar filtros/i }).first();
+  if (await limpar.count()) { await limpar.click().catch(() => {}); await p.waitForTimeout(2000); log("Portal: Limpar Filtros clicado"); }
+  const chips = await p.locator("button:has-text('Status'), button:has-text('Transportadora')").allInnerTexts().catch(() => []);
+  log("Portal: botões de filtro " + chips.map((t) => t.replace(/\s+/g, " ").replace(/\d/g, "9")).join(" | "));
   log(`Portal: Reposições (Pré Entrega) aberta (${mascara(new URL(p.url()).pathname)})`);
 }
 // filtra a NF original e devolve a linha (primeira coluna igual à NF)
@@ -53,7 +58,8 @@ async function acharLinha(p, nf) {
   if (await lupa.count()) await lupa.click({ timeout: 5000 }).catch(() => {});
   await p.waitForTimeout(3000);
   const linhas = p.locator("table tbody tr");
-  if (acharLinha.log) acharLinha.log(`  portal: pesquisa trouxe ${await linhas.count()} linha(s)`);
+  if (acharLinha.log) { const txt = ((await linhas.first().innerText().catch(() => "")) || "").replace(/\s+/g, " ").slice(0, 60);
+    acharLinha.log(`  portal: pesquisa trouxe ${await linhas.count()} linha(s) · caixa ${((await filtro.inputValue().catch(() => "")) || "").replace(/\d/g, "9")} · 1ª linha ${txt.replace(/\d/g, "9").replace(/[A-Za-zÀ-ú]{3,}/g, (w) => (/nenhum|resultado|encontrad|extravio|avaria|andamento|novo/i.test(w) ? w : "x"))}`); }
   for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim(); if (t === nf || t === nfL || soNum(t) === soNum(nfL)) return linhas.nth(i); }
   return null;
 }
@@ -129,6 +135,11 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
     L.splice(0, L.length, ...A.filter((x) => x.robo_status === "feito" && x.nf_nova && x.nf_ticket));
     L.forEach((x) => { if (x.portal_anot_status === "nao_achou") x.portal_anot_status = null; });
   }
+  if (process.env.TRANSP === "naoachou") {   // depois de corrigir a pesquisa: tenta de novo todas as "não localizada no portal"
+    const N = await chamar(`troca_notas?select=ticket,nf_ticket,nf_nova,serie,robo_feito_em,chat_pdf_status,chat_pdf_msg,portal_anot_status,portal_anot_em&portal_anot_status=eq.nao_achou&nf_nova=not.is.null&nf_ticket=not.is.null&limit=200`);
+    N.forEach((x) => { x.portal_anot_status = null; x._forca = true; }); L.splice(0, L.length, ...N.map((x) => ({ ...x, chat_pdf_status: x.chat_pdf_status || "feito_antes" })));
+    log(`anota-portal: refazendo ${N.length} não localizada(s) no portal`);
+  }
   // envio da 1ª versão marcado como erro "Comentário enviado…": só conferir, nunca reenviar
   L.forEach((x) => { if (x.chat_pdf_status === "erro" && /^Coment[aá]rio enviado/.test(x.chat_pdf_msg || "")) x.chat_pdf_status = "conferir"; });
   log(`anota-portal: ${L.length} troca(s) para olhar`);
@@ -158,7 +169,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   }
   // 2) anotação no portal (depois do chat; sem PDF, espera até 3 dias da troca antes de anotar só a NF)
   const tres = Date.now() - 3 * 864e5;
-  const anota = L.filter((x) => (!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres));
+  const anota = L.filter((x) => x._forca || ((!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres)));
   if (anota.length) {
     const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log); acharLinha.log = log;
     const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
