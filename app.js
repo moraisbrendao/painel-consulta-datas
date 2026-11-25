@@ -1521,7 +1521,8 @@ ${extra}
     L.forEach((r) => { const k = CZ[d](r), x = m.get(k) || { k, q: 0, a: 0, pa: 0, ta: 0 }; x.q++; if (r._atraso) x.a++; if (r.trocas) { x.pa++; x.ta += r.trocas; } m.set(k, x); });
     return [...m.values()].sort((a, b) => b.a - a.a || b.q - a.q || String(a.k).localeCompare(String(b.k), "pt-BR"));
   }
-  const czIfa = (x) => (x.a ? (x.q / x.a).toFixed(2).replace(".", ",") : "—");
+  // IFA = índice de frequência de atraso: a cada 100 pedidos, quantos atrasam (Brenda 25/11; quanto menor, melhor)
+  const czIfa = (x) => (x.q ? ((x.a / x.q) * 100).toFixed(2).replace(".", ",") : "—");
   function czPerf(x, meta) { const pf = x.q ? 1 - x.a / x.q : 1, ok = pf >= meta; return `<td class="num ${ok ? "ok" : "ruim"}">${ok ? "●" : "↘"} ${(pf * 100).toFixed(2).replace(".", ",")}%</td>`; }
   function czTotal(xs) { return xs.reduce((t, x) => ({ q: t.q + x.q, a: t.a + x.a, pa: t.pa + x.pa, ta: t.ta + x.ta }), { q: 0, a: 0, pa: 0, ta: 0 }); }
   function desenharCruz() {
