@@ -3483,7 +3483,7 @@ ${extra}
     return `<div><button class="btn mini contorno" data-ag-rastreio="${esc(t.ticket)}" title="Abre o rastreio dessa nota agora">${r ? "Ver na " + esc(r[1]) : "Ver no SSW"} ↗</button></div>`;
   }
   function agStatus(t) { const sx = agSaida.get(String(t.ticket));
-    const sai = sx ? (sx.data_saida ? `<div class="s">NF nova saiu da expedição ${br(String(sx.data_saida).slice(0, 10))}</div>` : `<div><span class="chip roxo">Sem saída da expedição</span></div>`) : "";
+    const sai = sx ? (sx.data_saida ? "" : `<div><span class="chip roxo">Sem saída da expedição</span></div>`) : "";
     return agStatus0(t) + sai; }
   function agStatus0(t) {
     const ev = t.ultimo_evento ? esc(t.ultimo_evento) + (t.data_evento ? ` <span class="s">${br(t.data_evento)}</span>` : "") : "";
@@ -3580,7 +3580,7 @@ ${extra}
       return `<tr><td><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}" target="_blank" rel="noopener">${esc(t.ticket)}</a>${t.ticket_criado ? `<div class="s">${br(t.ticket_criado)}</div>` : ""}</td>
         <td>${esc(t.tipo || "")}${t.tipo_reposicao ? `<div class="s">${esc(t.tipo_reposicao)}</div>` : ""}</td>
         <td class="mono">${(() => { const pi = pedidoIntelipost(t); return pi ? `${esc(pi)}${pi !== t.pedido && t.pedido ? `<div class="s">marketplace ${esc(t.pedido)}</div>` : ""}` : esc(t.pedido || ""); })()}<div class="s">NF antiga ${esc(t.nf_original || "—")}</div></td>
-        <td>${t.nf_nova ? `<b>${esc(t.nf_nova)}</b>${t.nf_emitida_em ? `<div class="s">emitida ${br(t.nf_emitida_em)}</div>` : ""}` : "—"}</td>
+        <td>${t.nf_nova ? `<b>${esc(t.nf_nova)}</b>${t.nf_emitida_em ? `<div class="s">emitida ${br(t.nf_emitida_em)}</div>` : ""}${(() => { const sx = agSaida.get(String(t.ticket)); return sx && sx.data_saida ? `<div class="s txt-verde">saída ${br(String(sx.data_saida).slice(0, 10))}</div>` : ""; })()}` : "—"}</td>
         <td>${esc(agTransp(t))}</td><td>${agStatus(t)}${agBotao(t)}</td><td>${agRobo(t)}${t.baixa_status !== "feita" && !t.manual_entregue ? `<div class="ag-ent" data-ag-ent-box="${esc(t.ticket)}"><button class="btn mini contorno" data-ag-ent="${esc(t.ticket)}" title="Conferi que foi entregue: o robô dá a baixa no ticket (Nota entregue? → Sim)">✓ Foi entregue</button></div>` : ""}</td>
         <td class="col-obs"><input data-ag-obs="${esc(t.ticket)}" value="${esc(o ? o.observacao : "")}" placeholder="O que foi feito…" maxlength="1000"><div class="s quem">${o ? esc((o.atualizado_por || "").split("@")[0]) + " · " + new Date(o.atualizado_em).toLocaleDateString("pt-BR") : ""}</div></td></tr>`;
     }).join("") + (L.length > 500 ? `<tr><td colspan="8" class="s">Mostrando 500 de ${fmt(L.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
