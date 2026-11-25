@@ -67,6 +67,7 @@ jobs:
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
           EMAIL_TRANSIGA: ${{ secrets.EMAIL_TRANSIGA }}
+          TORRE_PREVISAO_TOKEN: ${{ secrets.TORRE_PREVISAO_TOKEN }}
           SENHA_TRANSIGA: ${{ secrets.SENHA_TRANSIGA }}
       - name: Diagnóstico Formato
         if: ${{ github.event.inputs.modo == 'diag-formato' }}
