@@ -36,6 +36,7 @@
     ], ""],
 
     ["uf", "Atrasos por UF", "Mapa do Brasil com o percentual de atraso por estado, cidades e transportadoras de cada estado.", "Para descobrir onde está o atraso e quem atende cada região.", [
+      "No mapa, a <b>bolinha vermelha</b> marca a cidade com mais atrasados de cada estado (maior = mais atrasos). Clique num estado: o mapa dá <b>zoom</b> nele e mostra todas as cidades com atraso, com o nome das 8 maiores. Clique numa bolinha para filtrar a cidade; <b>⤺ Ver o Brasil inteiro</b> volta. Cidades escritas com e sem acento contam juntas.",
       "Clique num estado no mapa (ou use <b>Ranking e tabela</b>).",
       "Embaixo aparecem <b>Quem atende e por quais séries</b> e <b>Cidades</b>.",
       "Clique numa <b>transportadora</b>: as cidades e o mapa passam a mostrar só ela. Clique numa <b>cidade</b>: as transportadoras mostram só quem atende ali. Clique de novo (ou no ✕) para tirar.",
