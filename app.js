@@ -1398,11 +1398,14 @@ ${extra}
       else r._sit = r._atraso ? "ab_atraso" : r._d === 0 || r._d === 1 ? "ab_risco" : "ab_prazo";
     });
   }
+  // dias sem movimento do card "Parados no rastreio" (Visão Gerencial): a Logística escolhe (✎), fica salvo neste navegador
+  let gParadoDias = 5;
+  try { const v = parseInt(localStorage.getItem("painel.gParadoDias"), 10); if (v >= 1 && v <= 365) gParadoDias = v; } catch (_) {}
   const G_CARD = {
     abertos: (r) => !r._fechado,
     atrasados: (r) => r._atraso > 0,
     risco: (r) => !r._fechado && (r._d === 0 || r._d === 1),
-    parados: (r) => !r._fechado && r._parado !== null && r._parado >= 5,
+    parados: (r) => !r._fechado && r._parado !== null && r._parado >= gParadoDias,
     vencem: (r) => !r._fechado && r._d !== null && r._d >= 0 && r._d <= 5,
   };
 
@@ -1731,6 +1734,16 @@ ${extra}
   }
 
   // cliques
+  const gParadoTxt = () => { const el = $("g-parado-dias"); if (el) el.textContent = gParadoDias; };
+  gParadoTxt();
+  $("g-cards").addEventListener("click", (e) => {
+    if (!e.target.closest("#g-parado-ed")) return;
+    e.stopImmediatePropagation(); e.preventDefault();
+    const v = parseInt(prompt("Parados no rastreio: mostrar pedidos sem movimento há quantos dias ou mais?", String(gParadoDias)), 10);
+    if (!(v >= 1 && v <= 365)) return;
+    gParadoDias = v; try { localStorage.setItem("painel.gParadoDias", String(v)); } catch (_) {}
+    gParadoTxt(); montarGerencial();
+  }, true);
   $("g-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-g]"); if (!b) return; gCard = b.dataset.g; gSelecao = null; gPagina = 1; desenharGLista(!!e.target.closest(".kpi > i")); });   // só o ↗ abre a lista
   $("g-atr").addEventListener("click", (e) => { const b = e.target.closest("[data-atr]"); if (!b) return;
     const nomes = { fato: "Atrasados de fato da transportadora (para cobrar)", ocrep: "Atrasados com ocorrência ou reposição (fora da cobrança)", sairam: "Atrasados que saíram daqui depois da data prometida", semexp: "Atrasados que nem foram expedidos" };

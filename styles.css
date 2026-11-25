@@ -1411,3 +1411,5 @@ a.oc-link:hover { text-decoration: underline; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .u-cid-rot { fill: #f1f5f9; stroke: #0f172a; } }
 #rot-base .rot-hora.velha, #rot-ip .rot-hora.velha { color: #b4231b; opacity: 1; font-weight: 700; }
 .dv-arq { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
+.kpi-ed { cursor: pointer; padding: 0 4px; border-radius: 4px; background: rgba(0,0,0,.08); font-style: normal; }
+.kpi-ed:hover { background: rgba(0,0,0,.18); }
