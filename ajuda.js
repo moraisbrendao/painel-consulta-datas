@@ -49,6 +49,7 @@
       "Na lista, preencha a <b>Nova data</b> e a <b>Observação</b> ali mesmo (vale também no Preventivo). Clique na linha para ver o detalhe do pedido.",
       "Para Amazon/ML: abra <b>Ver análise completa</b> (no fim da página) e use <b>Enviar impactos</b> com a planilha de impactos do canal (Amazon: aba Impactos; ML: Baixar vendas afetadas). No ✎ informe as vendas dos últimos 60 dias.",
       "<b>Copiar resumo</b> copia um texto pronto para e-mail ou WhatsApp.",
+      "Pedidos que o último arquivo da Intelipost (botão <b>Enviar Intelipost</b>) já mostra como entregues ou cancelados ficam fora da página, mesmo que a base ainda não tenha atualizado.",
     ], ""],
 
     ["drop", "Dropshipping", "Controle só dos pedidos com origem Dropshipping na base: em aberto, atrasados, parados no rastreio, provável extravio, reposição, ocorrência e outros problemas.", "Todo dia, para cobrar a transportadora e o fornecedor do dropshipping.", [

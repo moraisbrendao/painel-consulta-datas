@@ -1814,8 +1814,9 @@ ${extra}
     return { fx, tr, media, score, comImp, periodo: periodo.length };
   }
 
+  const ipFechado = (r) => !r._fechado && !!(cBaseMapa().get(r.pedido) || {}).entregue_ip;
   function cBase() {   // pedidos do canal (todos os status), já com os filtros do topo
-    const L = gFiltrados();
+    const L = gFiltrados().filter((r) => !ipFechado(r));   // entregue/cancelado no último arquivo da Intelipost: fora da Análise de canais (Brenda 25/11)
     return cSel.canal ? L.filter((r) => (r.canal || "(sem canal)") === cSel.canal) : L;
   }
   const C_CARD = { abertos: (r) => !r._fechado, atrasados: (r) => r._atraso > 0, repo: (r) => r._atraso > 0 && !!(detDe(r) || {}).tem_repo,
@@ -1840,7 +1841,7 @@ ${extra}
     const pct = (a, b) => (b ? ((a / b) * 100).toFixed(1).replace(".", ",") + "%" : "—"), pct0 = (a, b) => (b ? Math.round((a / b) * 100) + "%" : "—");
     // select de canais (por volume em aberto)
     const todos = gFiltrados(), porC = new Map();
-    todos.forEach((r) => { if (r._fechado) return; const c = r.canal || "(sem canal)", x = porC.get(c) || { c, ab: 0, at: 0, sn: 0 }; x.ab++; if (r._atraso) { x.at++; if (semNova(r)) x.sn++; } porC.set(c, x); });
+    todos.forEach((r) => { if (r._fechado || ipFechado(r)) return; const c = r.canal || "(sem canal)", x = porC.get(c) || { c, ab: 0, at: 0, sn: 0 }; x.ab++; if (r._atraso) { x.at++; if (semNova(r)) x.sn++; } porC.set(c, x); });
     const canais = [...porC.values()].sort((a, b) => b.ab - a.ab);
     if (cSel.canal && !porC.has(cSel.canal)) cSel.canal = "";
     $("c-canal").innerHTML = `<option value="">Todos os canais</option>` + canais.map((x) => `<option value="${esc(x.c)}" ${x.c === cSel.canal ? "selected" : ""}>${esc(x.c)} (${fmt(x.ab)})</option>`).join("");
@@ -1922,7 +1923,7 @@ ${extra}
     cLista._risco = risco;
     $("c-lista-titulo").textContent = `${cSel.canal || "Todos os canais"} · ${sel.length ? sel.map((k) => nomes[k](cSel[k])).join(" · ") : "Pedidos em aberto"} (${fmt(cLista.length)})`;
     const idxTxt = mK && !$("c-metodo").hidden && cImpCarregado[mK] && cImpCarregado[mK].lista && cImpCarregado[mK].lista.length ? ` · ${$("c-m-indice-rot").textContent}: <b>${$("c-m-indice").querySelector(".kpi-num").textContent}</b> (meta abaixo de 1%)` : "";
-    $("c-info").innerHTML = `${esc(cSel.canal || "Todos os canais")} · ${fmt(cont.abertos)} em aberto · ${fmt(cont.atrasados)} atrasados (${pct(cont.atrasados, cont.abertos)})${idxTxt} · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}`;
+    $("c-info").innerHTML = `${esc(cSel.canal || "Todos os canais")} · ${fmt(cont.abertos)} em aberto · ${fmt(cont.atrasados)} atrasados (${pct(cont.atrasados, cont.abertos)})${idxTxt}${(() => { const n = gFiltrados().filter((r) => ipFechado(r) && (!cSel.canal || (r.canal || "(sem canal)") === cSel.canal)).length; return n ? ` · ${fmt(n)} já entregues/cancelados na Intelipost ficam fora` : ""; })()} · base de ${info ? new Date(info.enviado_em).toLocaleDateString("pt-BR") : "—"}`;
     desenharCLista();
   }
   function desenharCLista() {
