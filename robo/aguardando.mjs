@@ -97,6 +97,14 @@ export async function rodar(R) {
             const det = r.situacao === "entregue" && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
             if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det).catch(() => null);
               r.emissor = d && ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null; }
+            // séries 35, 34 e 25 (first/last mile): entrega feita por outra transportadora (ex.: a de first mile) NÃO é a entrega ao cliente.
+            // Fica como não entregue pela transportadora do ticket, igual à Conferência SSW (Brenda 25/11).
+            const serL = String(ser || "").replace(/^0+/, "");
+            if (r.situacao === "entregue" && r.emissor && ["35", "34", "25"].includes(serL) && !mesmaTransp(r.emissor, l.transportadora)) {
+              r.ultimo_evento = `ENTREGUE PELA ${r.emissor.toUpperCase()} (FIRST MILE, NÃO É A TRANSPORTADORA DO TICKET)`.slice(0, 120);
+              r.data_evento = r.data_entrega || r.data_evento || null; r.situacao = "nao entregue"; r.data_entrega = null;
+              soma("SSW: entregue pela first mile → não entregue");
+            }
             // não entregue: guarda a previsão de entrega do SSW (na página do resultado ou, se não tiver, no detalhe)
             if (r.situacao === "nao entregue" && lerResultado) {
               r.previsao = lerResultado(pg.txt).previsao || null;
@@ -133,7 +141,8 @@ export async function rodar(R) {
       if (r.fonte === "SSW" && r.chave != null) detalhe = { ...(detalhe || {}), ssw_sem_senha: r.chave === "", ...(r.chave_de ? { ssw_chave_de: r.chave_de } : {}) };
       Object.assign(t, { situacao: r.situacao, fonte: r.fonte || null, ultimo_evento: ev || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, insucesso: ins, detalhe, _r: r });
       soma(`rastreio: ${r.situacao}${r.fonte ? " (" + r.fonte + ")" : ""}`); if (ins) soma("insucesso na entrega → Ocorrências");
-      linhas.push({ ticket: t.ticket, situacao: t.situacao, fonte: t.fonte, ultimo_evento: t.ultimo_evento, data_evento: t.data_evento, data_entrega: t.data_entrega, insucesso: ins, detalhe: t.detalhe });
+      linhas.push({ ticket: t.ticket, situacao: t.situacao, fonte: t.fonte, ultimo_evento: t.ultimo_evento, data_evento: t.data_evento, data_entrega: t.data_entrega, insucesso: ins, detalhe: t.detalhe,
+        ...(t.baixa_status === "conferir" && t.situacao !== "entregue" ? { baixa_status: null } : {}) });   // "Conferir" antigo some quando deixa de estar entregue
     }
     await grava(linhas);
 
