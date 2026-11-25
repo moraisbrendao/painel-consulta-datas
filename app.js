@@ -4250,12 +4250,14 @@ ${extra}
       : `<div class="s sem-tk">Sem ticket</div>`;
   }
   async function carregarTickets() {
+    let inf = null;
     try {
-      const inf = await sb.from("tickets_info").select("*").limit(1);
-      const lista = await buscarComCache("tickets_abertos", "nf", "*", inf.data && inf.data[0] ? inf.data[0].enviado_em : "");
+      inf = await sb.from("tickets_info").select("*").limit(1);
+      ticketsInfo = (inf.data && inf.data[0]) || null;   // a data da planilha aparece no botão mesmo se a lista demorar/falhar
+      const lista = await buscarComCache("tickets_abertos", "nf", "*", ticketsInfo ? ticketsInfo.enviado_em : "");
       tickets = new Map(lista.map((t) => [chaveNF(t.nf), t]));
-      ticketsInfo = (inf.data && inf.data[0]) || null; ticketsOk = true;
-    } catch (_) { ticketsOk = false; ticketsInfo = null; }
+      ticketsOk = true;
+    } catch (err) { ticketsOk = !!(inf && !inf.error); if (!inf || inf.error) ticketsInfo = null; console.warn("tickets:", err && err.message); }
   }
   $("arquivo-tickets").addEventListener("change", async (e) => {
     const arq = e.target.files[0]; e.target.value = "";
