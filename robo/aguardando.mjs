@@ -28,6 +28,8 @@ export async function rodar(R) {
   await carregarSenhasDB();
   let L = [];
   for (let de = 0; ; de += 1000) { const P = await chamar(`aguardando_entrega?select=*&na_planilha=eq.true${FILA ? `&fila_rel=eq.${FILA}` : ""}&or=(baixa_status.is.null,baixa_status.neq.feita)&order=ticket_criado.asc.nullslast,ticket&limit=1000&offset=${de}`); L.push(...P); if (P.length < 1000) break; }
+  const SO_MARCADOS = process.env.TRANSP === "marcados";   // botão "Foi entregue": só os marcados à mão, sem conferir a fila toda
+  if (SO_MARCADOS) L = L.filter((t) => t.manual_entregue);
   if (LIMITE) L = L.slice(0, LIMITE);
   log(`Aguardando entrega${FILA ? " " + FILA : ""}: ${L.length} ticket(s) para olhar · ${REAL ? "DE VERDADE (clica Sim)" : "TESTE (clica Cancelar)"}`);
   if (!L.length) return;
@@ -38,7 +40,7 @@ export async function rodar(R) {
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   try {
     // 1) nova NF no chat do ticket (só de quem ainda não tem)
-    const ler = L.filter((t) => !t.nf_nova);
+    const ler = SO_MARCADOS ? [] : L.filter((t) => !t.nf_nova);
     let p = null;
     if (ler.length) {
       p = await entrarMulti360(ctx, log);
@@ -59,7 +61,7 @@ export async function rodar(R) {
     }
 
     // 2) rastreio da nova NF: primeiro pela transportadora do ticket, depois procura nas outras
-    const com = L.filter((t) => t.nf_nova);
+    const com = SO_MARCADOS ? [] : L.filter((t) => t.nf_nova);
     const tp = (t) => `${t.transp_chat || ""} / ${t.transportadora || ""}`;
     const fontes = {
       jadlog: { nome: "Jadlog", fn: process.env.JADLOG_TOKEN ? (it) => jadlog(it) : null },

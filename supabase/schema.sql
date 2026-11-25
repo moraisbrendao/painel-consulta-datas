@@ -3369,3 +3369,21 @@ begin
 end $$;
 revoke all on function public.marcar_entregue_aguardando(text, date) from public, anon;
 grant execute on function public.marcar_entregue_aguardando(text, date) to authenticated;
+-- parte 75: "Foi entregue" chama o robô só para os tickets marcados (não confere a fila inteira de novo)
+set lock_timeout = '15s';
+create or replace function public.rodar_robo_aguardando_marcados()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := '{"ref":"main","inputs":{"modo":"aguardando","transp":"marcados"}}'::jsonb);
+end $$;
+revoke all on function public.rodar_robo_aguardando_marcados() from public, anon;
+grant execute on function public.rodar_robo_aguardando_marcados() to authenticated;

@@ -3563,7 +3563,7 @@ ${extra}
       const { error } = await sb.rpc("marcar_entregue_aguardando", { p_ticket: tk, p_data: d });
       if (error) return toast(/marcar_entregue_aguardando|schema cache|PGRST202/i.test(error.message) ? "Rode a parte 74 no Supabase para usar o botão Foi entregue." : "Não salvou: " + error.message, true);
       const t = agLista.find((x) => x.ticket === tk); if (t) Object.assign(t, { manual_entregue: d, manual_por: d ? meuEmail() : null, manual_em: d ? new Date().toISOString() : null });
-      if (ok) { toast("Marcado como entregue. Chamei o robô: ele dá a baixa no ticket em alguns minutos."); sb.rpc("rodar_robo_aguardando").then(() => {}, () => {}); }
+      if (ok) { toast("Marcado como entregue. O robô dá a baixa só nos marcados, em alguns minutos."); sb.rpc("rodar_robo_aguardando_marcados").then((r) => { if (r.error) toast(/rodar_robo_aguardando_marcados|PGRST202|schema cache/i.test(r.error.message) ? "Rode a parte 75 no Supabase para o robô dar a baixa dos marcados." : "Robô não chamado: " + r.error.message, true); }, () => {}); }
       return desenharAguardando();
     }
     const b = e.target.closest("[data-ag-rastreio]"); if (!b) return;
@@ -3616,7 +3616,9 @@ ${extra}
     if (!confirm(`${arq.name}\n\n${fmt(itens.length)} ticket(s) na fila ${agFila === "AT" ? "Aguardando entrega (AT)" : "Aguardando entrega"}${foraFila ? ` (${fmt(foraFila)} linha(s) de outra fila ficam de fora)` : ""}.\n\nO robô vai abrir os tickets, conferir o rastreio da nova NF e dar baixa nos entregues. As observações continuam salvas. Enviar?`)) return;
     const { error } = await sb.rpc("importar_aguardando", agFila === "AT" ? { itens, arquivo: arq.name, p_fila: "AT" } : { itens, arquivo: arq.name });
     if (error) return toast("Erro ao enviar: " + error.message + (/importar_aguardando|schema cache|p_fila/i.test(error.message) ? ` (rode a parte ${agFila === "AT" ? "26" : "24"} do supabase/schema.sql)` : ""), true);
-    toast(`${fmt(itens.length)} ticket(s) enviados. Clique em "Rodar o robô agora" quando quiser que ele confira.`); await carregarAguardando();
+    // Brenda 25/11: o robô roda quando ela sobe a planilha (e só aí, ou no botão "Rodar o robô agora")
+    const rr = await sb.rpc("rodar_robo_aguardando");
+    toast(`${fmt(itens.length)} ticket(s) enviados${rr.error ? "" : ". Chamei o robô: ele começa em 1 ou 2 minutos"}.`); await carregarAguardando();
   });
   $("ag-baixar").addEventListener("click", () => {
     const L = agLista.filter((t) => agCard === "todos" || agGrupo(t) === agCard); if (!L.length) return toast("Nada para exportar.", true);
