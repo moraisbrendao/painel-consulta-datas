@@ -1325,7 +1325,7 @@ ${extra}
   let gDados = null, gCarregando = false, gCard = "abertos", gSelecao = null, gLista = [], gPagina = 1, gTodos = false, gJanela = 14, gPtModo = "sit";
   const gSel = { canal: new Set(), uf: new Set(), transp: new Set(), serie: new Set(), origem: new Set(), status: new Set(), micro: new Set() };
   const G_CAMPOS = { canal: (r) => r.canal, uf: (r) => r.uf, transp: (r) => r.transp, serie: (r) => r.serie, origem: (r) => r.origem, status: (r) => r.status, micro: (r) => r.micro };
-  const G_NOME = { abertos: "Pedidos em aberto", atrasados: "Atrasados (em aberto)", risco: "Em risco (vencendo)", parados: "Parados no rastreio", vencem: "Vencem em até 5 dias" };
+  const G_NOME = { abertos: "Pedidos em aberto", atrasados: "Atrasados (em aberto)", risco: "Em risco (vencendo)", parados: "Parados no rastreio", vencem: "Vencem em até 5 dias", semtrat: "Parados sem ticket e sem ocorrência" };
   const SIT = [["ent_prazo", "Entregue no prazo", "#16a34a"], ["ent_atraso", "Entregue c/ atraso", "#dc2626"], ["ab_prazo", "Aberto no prazo", "#0ea5e9"],
     ["ab_risco", "Aberto em risco", "#f59e0b"], ["ab_atraso", "Aberto atrasado", "#b91c1c"], ["cancelado", "Cancelado", "#94a3b8"]];
   const FAIXAS = [["≥ 30 dias", (d) => d >= 30], ["≥ 20 dias", (d) => d >= 20 && d < 30], ["≥ 10 dias", (d) => d >= 10 && d < 20], ["≥ 5 dias", (d) => d >= 5 && d < 10],
@@ -1407,7 +1407,15 @@ ${extra}
     risco: (r) => !r._fechado && (r._d === 0 || r._d === 1),
     parados: (r) => !r._fechado && r._parado !== null && r._parado >= gParadoDias,
     vencem: (r) => !r._fechado && r._d !== null && r._d >= 0 && r._d <= 5,
+    // parados sem tratativa (Brenda 25/11): parado ≥ X dias, status fora de Despachado/Criado/Falha ao criar pedido/Pré lista de postagem,
+    // sem ticket (detalhamento de tickets: fila, reposição, AT) e sem ocorrência
+    semtrat: (r) => G_CARD.parados(r) && !G_ST_INICIO.test(norm(r.status)) && !G_ST_INICIO.test(norm(r.micro)) && !temTkOuOc(r),
   };
+  const G_ST_INICIO = /^(DESPACHADO|CRIADO|FALHA AO CRIAR|PRE[ -]?LISTA DE POSTAGEM)/;
+  function temTkOuOc(r) {
+    const k = r.serie ? `${r.nf}-${r.serie}` : r.nf, d = detNF && detNF.get(chaveNF(k));
+    return !!((d && (d.tem_ocorr || d.tem_repo || d.tem_at)) || tickets.get(chaveNF(k)));
+  }
 
   // filtros com várias opções (mesmo visual dos filtros do Preventivo)
   function montarFiltrosG() {
@@ -1475,6 +1483,7 @@ ${extra}
   function desenharGerencial() {
     if (!gDados) return;
     const L = gFiltrados(), hoje = hojeISO();
+    if (!detNF) carregarDetNF().then((m) => { if (m && m.size && G_PAGINAS.includes(paginaAtual)) desenharGAtual(); });   // ocorrência/reposição do card "sem ticket e sem ocorrência"
     const cont = Object.fromEntries(Object.entries(G_CARD).map(([k, f]) => [k, L.filter(f).length]));
     document.querySelectorAll("#g-cards .kpi[data-g]").forEach((b) => { b.classList.toggle("ativa", !gSelecao && b.dataset.g === gCard); b.querySelector(".kpi-num").textContent = fmt(cont[b.dataset.g]); });
     // performance
@@ -1734,10 +1743,10 @@ ${extra}
   }
 
   // cliques
-  const gParadoTxt = () => { const el = $("g-parado-dias"); if (el) el.textContent = gParadoDias; };
+  const gParadoTxt = () => document.querySelectorAll(".g-parado-dias").forEach((el) => (el.textContent = gParadoDias));
   gParadoTxt();
   $("g-cards").addEventListener("click", (e) => {
-    if (!e.target.closest("#g-parado-ed")) return;
+    if (!e.target.closest(".kpi-ed")) return;
     e.stopImmediatePropagation(); e.preventDefault();
     const v = parseInt(prompt("Parados no rastreio: mostrar pedidos sem movimento há quantos dias ou mais?", String(gParadoDias)), 10);
     if (!(v >= 1 && v <= 365)) return;

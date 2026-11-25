@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=361">
+  <link rel="stylesheet" href="styles.css?v=362">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -118,7 +118,8 @@
         <button class="kpi ativa" data-g="abertos"><span class="kpi-rot">Pedidos em aberto</span><b class="kpi-num"></b><small>ainda não entregues nem cancelados</small><i>↗</i></button>
         <button class="kpi vermelho" data-g="atrasados"><span class="kpi-rot">Atrasados (em aberto)</span><b class="kpi-num"></b><small>range "Vencido" na planilha</small><i>↗</i></button>
         <button class="kpi laranja" data-g="risco"><span class="kpi-rot">Em risco (vencendo)</span><b class="kpi-num"></b><small>vencem hoje ou amanhã · ação preventiva</small><i>↗</i></button>
-        <button class="kpi roxo" data-g="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>sem movimento ≥ <b id="g-parado-dias">5</b> dias <span id="g-parado-ed" class="kpi-ed" title="Mudar os dias sem movimento">✎</span></small><i>↗</i></button>
+        <button class="kpi roxo" data-g="parados"><span class="kpi-rot">Parados no rastreio</span><b class="kpi-num"></b><small>sem movimento ≥ <b class="g-parado-dias">5</b> dias <span class="kpi-ed" title="Mudar os dias sem movimento">✎</span></small><i>↗</i></button>
+        <button class="kpi vermelho" data-g="semtrat"><span class="kpi-rot">Parados sem ticket e sem ocorrência</span><b class="kpi-num"></b><small>≥ <b class="g-parado-dias">5</b> dias sem movimento <span class="kpi-ed" title="Mudar os dias sem movimento">✎</span> · fora de Despachado, Criado, Falha ao criar e Pré lista</small><i>↗</i></button>
         <button class="kpi azul" data-g="vencem"><span class="kpi-rot">Vencem em até 5 dias</span><b class="kpi-num"></b><small>preventivo: dá para evitar o atraso</small><i>↗</i></button>
         <div class="kpi kpi-fixo" id="g-perf"><span class="kpi-rot">Performance</span><b class="kpi-num"></b><small id="g-perf-sub"></small></div>
       </section>
@@ -1693,23 +1694,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=361"></script>
-  <script src="mapa-brasil.js?v=361"></script>
-  <script src="cidades-br.js?v=361"></script>
-  <script src="troca-notas.js?v=361"></script>
-  <script src="app.js?v=361"></script>
-  <script src="ordenar.js?v=361"></script>
-  <script src="menu.js?v=361"></script>
-  <script src="ajuda.js?v=361"></script>
-  <script src="documentos.js?v=361"></script>
-  <script src="barrar.js?v=361"></script>
-  <script src="naoloc.js?v=361"></script>
-  <script src="faltas.js?v=361"></script>
-  <script src="motor.js?v=361"></script>
-  <script src="retornos-semana.js?v=361"></script>
-  <script src="cobranca-massa.js?v=361"></script>
-  <script src="gargalos.js?v=361"></script>
-  <script src="filas.js?v=361"></script>
-  <script src="filtros.js?v=361"></script>
+  <script src="config.js?v=362"></script>
+  <script src="mapa-brasil.js?v=362"></script>
+  <script src="cidades-br.js?v=362"></script>
+  <script src="troca-notas.js?v=362"></script>
+  <script src="app.js?v=362"></script>
+  <script src="ordenar.js?v=362"></script>
+  <script src="menu.js?v=362"></script>
+  <script src="ajuda.js?v=362"></script>
+  <script src="documentos.js?v=362"></script>
+  <script src="barrar.js?v=362"></script>
+  <script src="naoloc.js?v=362"></script>
+  <script src="faltas.js?v=362"></script>
+  <script src="motor.js?v=362"></script>
+  <script src="retornos-semana.js?v=362"></script>
+  <script src="cobranca-massa.js?v=362"></script>
+  <script src="gargalos.js?v=362"></script>
+  <script src="filas.js?v=362"></script>
+  <script src="filtros.js?v=362"></script>
 </body>
 </html>

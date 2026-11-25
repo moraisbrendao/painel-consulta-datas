@@ -18,6 +18,7 @@
     ["gerencial", "Visão Gerencial", "Mostra a foto geral dos pedidos: em aberto, atrasados, em risco, parados e a performance contra a meta.", "Para saber como está a operação e para tirar listas por transportadora, UF, cidade ou canal.", [
       "Use o cartão <b>Filtros</b> (canal, UF, transportadora, série, origem, status, micro status, nota fiscal, datas). Pode escolher mais de um em cada filtro.",
       "Clique nos cards (Atrasados, Em risco, Parados…) para ver a lista daquele grupo.",
+      "No card <b>Parados no rastreio</b>, o <b>✎</b> muda os dias sem movimento. O card <b>Parados sem ticket e sem ocorrência</b> usa os mesmos dias e tira os status Despachado, Criado, Falha ao criar pedido e Pré lista de postagem e os pedidos com ticket, reposição, AT ou ocorrência no detalhamento de tickets.",
       "No quadro <b>Atraso por transportadora, UF, cidade e canal</b>: clique numa transportadora para ver só os estados, cidades e canais dela (filtro cruzado). Clique de novo para tirar.",
       "A lista de pedidos aparece embaixo. Use <b>Baixar Excel</b> ou <b>Extrair tabelas</b> para levar para a planilha.",
     ], "Clique no título de qualquer coluna para ordenar (maior → menor → original)."],
