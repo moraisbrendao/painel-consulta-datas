@@ -57,7 +57,7 @@
       // atualização automática (a cada 30 s): se nada mudou, não redesenha (não mexe na rolagem de quem está lendo)
       const sig = JSON.stringify([out, H, (inf.data || [])[0] || null]);
       if (auto && sig === assinatura && ok) return; assinatura = sig;
-      L = out; info = (inf.data || [])[0] || null; ok = true;
+      L = out; info = (inf.data || [])[0] || null; ok = true; checarRobo();
     } catch (e) { ok = false; L = []; $("br-info").textContent = /barrar_entrega|does not exist|schema cache/i.test(e.message || "") ? "Para usar esta aba, rode a parte 49 no Supabase." : "Não consegui carregar: " + (e.message || e); }
     carregou = true; desenhar();
   }
@@ -334,9 +334,33 @@
       if (!mp.size) throw new Error("Nenhuma nota válida (formato 1234-35) na planilha.");
       const { data, error } = await sb().rpc("importar_barrar", { linhas: [...mp.values()], arquivo: arq.name });
       if (error) throw error;
-      toast(`${fmt(data)} notas na lista. Clique em "Conferir agora" para o robô olhar.`); await carregar();
+      await carregar();
+      // Brenda 25/11: o robô confere sozinho quando a planilha sobe (igual à Fila Aguardando entrega)
+      const rr = await sb().rpc("rodar_robo_barrar", { modo: "barrar" });
+      toast(`${fmt(data)} notas na lista.${rr.error ? ' Não consegui chamar o robô: ' + rr.error.message : " Chamei o robô: ele começa em 1 ou 2 minutos (ampulheta no botão)."}`, !!rr.error);
+      estado = { rodando: true, inicio: new Date().toISOString(), _local: true }; botaoSubir();
     } catch (err) { toast(/importar_barrar|function/i.test(err.message || "") ? "Rode a parte 49 no Supabase antes de enviar a planilha." : err.message || String(err), true); }
   });
+  // botão de subir: ⏳ enquanto o robô confere, verde com a hora da planilha quando termina
+  let estado = null, estadoTimer = null;
+  async function checarRobo() {
+    let r = null; try { r = await sb().from("robo_estado").select("valor").eq("nome", "andamento:barrar").limit(1); } catch (_) {}
+    const v = (r && r.data && r.data[0] && r.data[0].valor) || null;
+    // logo depois de subir, o robô ainda não gravou que começou: mantém a ampulheta por até 5 min
+    const local = estado && estado._local && Date.now() - Date.parse(estado.inicio) < 5 * 60e3 && !(v && v.inicio && Date.parse(v.inicio) >= Date.parse(estado.inicio) - 60e3);
+    if (!local) estado = v;
+    botaoSubir();
+  }
+  function botaoSubir() {
+    const bt = $("br-subir"), tx = $("br-subir-txt"); if (!bt || !tx) return;
+    const hm = (d) => new Date(d).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }), hh = (d) => new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    const rodando = estado && estado.rodando && estado.inicio && Date.now() - Date.parse(estado.inicio) < 3 * 3600e3;
+    bt.classList.toggle("ag-validando", !!rodando); bt.classList.toggle("ag-ok", !rodando && !!info); bt.classList.toggle("amarelo", !rodando && !info);
+    tx.innerHTML = rodando ? `<span class="ampulheta" aria-hidden="true">⏳</span> Conferindo… desde ${hh(estado.inicio)}`
+      : info ? `✓ Planilha de ${hm(info.enviado_em)}${estado && estado.fim && Date.parse(estado.fim) > Date.parse(info.enviado_em) ? ` · conferida às ${hh(estado.fim)}` : ""} · ⇪ subir outra`
+      : "⇪ Enviar planilha";
+    if (!estadoTimer) estadoTimer = setInterval(() => { if (!document.hidden && bt.offsetParent) checarRobo(); }, 15000);
+  }
   $("br-excel").addEventListener("click", () => {
     const V = L.filter(passa); if (!V.length) return toast("Nada para exportar.", true);
     const cab = ["Nota", "Ticket", "Transportadora (pedido)", "Transportadora (portal)", "Transportadora (rastreio)", "Mesma transportadora", "Rastreio", "Fonte", "Último evento", "Data do evento", "Segregado/devolução", "Anotação no portal", "Sugestão", "Opção sugerida", "Motivo sugerido", "Decisão", "Opção", "Motivo", "Aprovado por", "Portal", "Mensagem do portal"];

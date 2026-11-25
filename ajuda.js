@@ -113,7 +113,7 @@
 
     ["barrar", "Barrar entrega (em Severino)", "Confere as notas que o Multi pediu para barrar: rastreio (status atual em devolução) e anotações da transportadora no portal.", "Quando chega a planilha de tickets Barrar entrega.", [
       "Clique em <b>Enviar planilha</b> e escolha a planilha de tickets <b>Barrar entrega</b>.",
-      "Clique em <b>Conferir agora</b>: o robô olha o rastreio e as anotações do portal e tira print da anotação.",
+      "Ao subir a planilha o robô já começa a conferir sozinho (olha o rastreio e as anotações do portal e tira print da anotação). O botão mostra ⏳ enquanto ele confere e fica verde com a hora da planilha quando termina.",
       "Confira a <b>Sugestão do robô</b>, marque as notas e clique em <b>Aprovar sugestão</b> (ou escolha a decisão na linha).",
       "Clique em <b>Mandar para o portal</b>: o robô aperta o ✓ (barrado) ou o ✗ (não barrado, com opção e motivo) só nas aprovadas.",
       "Card <b>Erro: verificar</b>: mostra um quadrinho por transportadora com as notas que ela ainda não atuou (dias pendentes e último status). Use <b>Copiar mensagem</b> ou <b>WhatsApp</b> para cobrar e <b>Excel</b> para mandar a lista. Acima dos quadrinhos, o quadro <b>Com anotação da transportadora no portal</b> mostra as notas em que a transportadora escreveu algo no portal (todas as anotações, mais recente primeiro, com o print) para você ler e escolher a <b>Decisão</b> de cada uma (fica em rascunho; ✗ já vem com a anotação como motivo). No fim, clique em <b>Aprovar decisões</b>: elas vão para o card <b>Aprovadas</b> e saem dos quadrinhos de cobrança; depois use <b>Mandar para o portal</b>. As que você não decidir continuam nos quadrinhos para cobrar.",
