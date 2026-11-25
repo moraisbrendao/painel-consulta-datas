@@ -276,7 +276,8 @@
   $("br-aprovar").addEventListener("click", async () => {
     const sel = L.filter((x) => marcadas.has(x.nf) && x.portal_status !== "feito");
     const comSug = sel.filter((x) => x.sugestao === "barrar" || x.sugestao === "nao_barrar"), sem = sel.length - comSug.length;
-    if (!comSug.length) return toast("As notas marcadas não têm sugestão de ✓ ou ✗. Escolha a decisão na própria linha.", true);
+    if (!comSug.length) { const jaDec = sel.filter((x) => x.decisao).length;
+      return toast(jaDec === sel.length && sel.length ? `As ${sel.length} nota(s) marcadas já estão com a decisão escolhida na linha (gravada). Não precisa aprovar: elas vão no próximo envio ao portal.` : "As notas marcadas não têm sugestão de ✓ ou ✗. Escolha a decisão na própria linha.", !(jaDec === sel.length && sel.length)); }
     if (!confirm(`Aprovar a sugestão do robô em ${comSug.length} nota(s)?${sem ? `\n${sem} marcada(s) sem sugestão ficam de fora (escolha na linha).` : ""}\n\nNada vai para o portal até alguém clicar em "Mandar para o portal".`)) return;
     for (const x of comSug) await salvarDecisao([x.nf], x.sugestao, x.sugestao_opcao, x.sugestao === "nao_barrar" ? x.sugestao_motivo || "" : null);
     marcadas.clear(); desenhar(); toast(`${comSug.length} aprovada(s).`);
