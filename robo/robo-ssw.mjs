@@ -1481,12 +1481,12 @@ if (MODO === "naoloc" || MODO === "naoloc-teste" || MODO === "diag-naoloc") {   
   } catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }
-if (MODO === "faltas" || MODO === "diag-faltas") {   // Reposições › Falta de volumes: a transportadora retornou? (só lê: ticket do 360 + anotações do portal)
+if (MODO === "faltas" || MODO === "diag-faltas" || MODO === "diag-chat") {   // Reposições › Falta de volumes: a transportadora retornou? (só lê: ticket do 360 + anotações do portal)
   await entrarSupabase();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
   const F = await import("./faltas.mjs");
-  try { if (MODO === "faltas") await F.conferirFaltas({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 300 }); else await F.diagFaltas({ chamar, log, ctx }); }
+  try { if (MODO === "faltas") await F.conferirFaltas({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 300 }); else if (MODO === "diag-chat") await F.diagChat({ chamar, log, ctx }); else await F.diagFaltas({ chamar, log, ctx }); }
   catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }

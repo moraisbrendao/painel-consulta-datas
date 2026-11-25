@@ -144,3 +144,32 @@ export async function diagFaltas({ chamar, log, ctx }) {
   const r = await lerPortalFalta(pp, x.nf);
   log(`Portal: achou ${r.achou} · anotações ${(r.anotacoes || []).length}${r.parcial ? " (só o texto da coluna)" : ""} · prazo ${r.prazo ? "sim" : "não"}`);
 }
+
+// diag-chat: mapeia o módulo Chat do portal do transportador (Notas › busca pela NF › clica na nota). Só estrutura mascarada.
+export async function diagChat({ chamar, log, ctx }) {
+  const L = await chamar("falta_volumes?select=nf&na_planilha=eq.true&nf=not.is.null&limit=4");
+  const p = await entrarPortal(ctx, log);
+  await p.goto("https://ccp.360multi.com/home"); await p.waitForTimeout(2500);
+  const card = p.locator("a, button, [role=link]").filter({ hasText: /^\s*Chat\b/i });
+  log("home: links com 'Chat'", await card.count(), "· hrefs", (await p.locator("a[href*='chat' i]").evaluateAll((es) => es.map((e) => e.getAttribute("href")))).map(mascara).join(" | ") || "-");
+  const href = await p.locator("a[href*='chat' i]").first().getAttribute("href").catch(() => null);
+  if (href) await p.goto(new URL(href, "https://ccp.360multi.com").href); else await p.goto("https://ccp.360multi.com/chat");
+  await p.waitForTimeout(4000);
+  log("chat: url", mascara(new URL(p.url()).pathname), "· inputs", (await p.locator("input, textarea").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}[${e.type || ""}] "${e.placeholder || ""}"`))).map(mascara).join(" | "));
+  log("chat: títulos", (await p.locator("h1,h2,h3").allInnerTexts()).map(mascara).join(" | "));
+  const busca = p.locator("input:not([type=hidden])").first();
+  for (const x of L) {
+    const nf = String(x.nf || "").trim(); if (!nf) continue;
+    await busca.fill(""); await busca.fill(nf); await p.waitForTimeout(3000);
+    const itens = p.locator("text=" + nf);
+    log(`busca: ocorrências do texto da NF ${await itens.count()}`);
+    if (!(await itens.count())) { const vazio = (await p.locator("body").innerText()).match(/nenhum[^\n]{0,60}/i); log("  sem item; aviso:", vazio ? mascara(vazio[0]) : "-"); continue; }
+    await itens.first().click().catch(() => {}); await p.waitForTimeout(3500);
+    const ls = (await p.locator("body").innerText()).split("\n").map((l) => l.trim()).filter(Boolean);
+    const i0 = ls.findIndex((l) => l.includes(nf));
+    log(`  depois do clique: url ${mascara(new URL(p.url()).pathname)} · linhas ${ls.length} · textarea ${await p.locator("textarea").count()}`);
+    // forma das linhas depois da NF (tamanho + se tem data), sem conteúdo
+    log("  forma:", ls.slice(Math.max(0, i0 - 3), i0 + 40).map((l) => /\d{2}\/\d{2}\/\d{4}/.test(l) ? "[data]" : /^(pendente|resolvid|respondid|aberto|fechad|em andamento|aguardando)/i.test(l) ? `[${l.slice(0, 20)}]` : /^(enviar|anexar|digite|escreva)/i.test(l) ? `[${l.slice(0, 20)}]` : `[${l.length}]`).join(" "));
+    log("  palavras-chave:", ["Pendente", "Respondido", "Resolvido", "Nenhuma mensagem", "Sem mensagens", "Transportador", "Multimóveis", "Você"].map((w) => `${w}:${ls.filter((l) => l.toLowerCase().includes(w.toLowerCase())).length}`).join(" "));
+  }
+}
