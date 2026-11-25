@@ -2749,6 +2749,42 @@ ${extra}
       dvPromob = new Map(L.map((x) => [x.pedido, x])); dvGer = gGeracao; return true;
     } catch (err) { dvPromob = new Map(); dvGer = gGeracao; $("dv-info").textContent = /extra/i.test(err.message || "") ? "Falta rodar a parte 32 do schema.sql e enviar a base de novo." : "Não consegui ler: " + err.message; return false; }
   }
+  // planilha própria só com os pedidos em aberto (botão "Subir pedidos em aberto", Brenda 25/11): fica guardada neste navegador
+  let dvArq = null;
+  try { dvArq = JSON.parse(localStorage.getItem("painel.dvArquivo") || "null"); } catch (_) { dvArq = null; }
+  function dvArqInfo() {
+    $("dv-arq-rot").innerHTML = dvArq ? `Pedidos em aberto carregados<small class="rot-hora">${esc(new Date(dvArq.em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às"))}</small>` : "Subir pedidos em aberto";
+    $("dv-arq-info").textContent = dvArq ? `${dvArq.nome} · ${fmt(dvArq.linhas.length)} pedidos${dvArq.soPedidos ? " (transportadoras da base)" : ""}` : "Sem arquivo: usa os pedidos em aberto da base.";
+    $("dv-arq-limpar").hidden = !dvArq;
+  }
+  dvArqInfo();
+  $("dv-arquivo").addEventListener("change", async (e) => {
+    const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+    try {
+      const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", ...LEITURA_RAPIDA });
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: null });
+      const iCab = rows.slice(0, 15).findIndex((r) => (r || []).some((v) => /^PEDIDO( INTELIPOST)?$/.test(norm(v))));
+      if (iCab < 0) throw new Error('Não achei a coluna "Pedido Intelipost" nas primeiras linhas da planilha.');
+      const cab = rows[iCab].map(norm), c = (re) => cab.findIndex((x) => re.test(x));
+      const cP = cab.indexOf("PEDIDO INTELIPOST") >= 0 ? cab.indexOf("PEDIDO INTELIPOST") : cab.indexOf("PEDIDO"),
+        cH = cab.indexOf("TRANSPORTADORA"), cBD = cab.indexOf("TRANSPORTADORA PROMOB"), cBE = cab.indexOf("TRANSPORTADORA REDESPACHO PROMOB"),
+        cPr = cab.indexOf("PEDIDO PROMOB"), cNf = c(/^NOTA$|^NOTA FISCAL$|^NF$/), cSt = c(/^MICRO STATUS INTELIPOST$|^STATUS INTELIPOST$|^STATUS$/);
+      const soPedidos = cH < 0 || (cBD < 0 && cBE < 0);
+      const vist = new Set(), linhas = [];
+      for (const r of rows.slice(iCab + 1)) {
+        const ped = String((r || [])[cP] ?? "").trim(); if (!ped || vist.has(ped) || LINHA_RODAPE.test(ped)) continue; vist.add(ped);
+        const v = (i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : "");
+        linhas.push(soPedidos ? { p: ped } : { p: ped, h: v(cH), bd: v(cBD), rd: v(cBE), pr: v(cPr), nf: v(cNf), st: v(cSt) });
+      }
+      if (!linhas.length) throw new Error("A planilha não tem pedidos.");
+      if (!confirm(`${arq.name}\n\n${fmt(linhas.length)} pedido(s) em aberto.${soPedidos ? '\n\nA planilha não tem as colunas "Transportadora" e "Transportadora Promob": as transportadoras vêm da base.' : ""}\n\nO comparativo da Transportadora divergente passa a usar só estes pedidos. Usar?`)) return;
+      dvArq = { nome: arq.name, em: new Date().toISOString(), soPedidos, linhas };
+      try { localStorage.setItem("painel.dvArquivo", JSON.stringify(dvArq)); } catch (_) { toast("A planilha vale até você atualizar a página (grande demais para guardar no navegador)."); }
+      dvArqInfo(); dvGrupo = null; desenharDivTP(); toast(`${fmt(linhas.length)} pedidos em aberto carregados.`);
+    } catch (err) { toast(err.message, true); }
+  });
+  $("dv-arq-limpar").addEventListener("click", () => { dvArq = null; try { localStorage.removeItem("painel.dvArquivo"); } catch (_) {} dvArqInfo(); dvGrupo = null; desenharDivTP(); });
+
   const DV_CARD = { div: (x) => x.sit === "div", ok: (x) => x.sit === "ok", sem: (x) => x.sit === "sem", todos: () => true };
   const DV_NOME = { div: "Divergente", ok: "OK", sem: "Sem apelido cadastrado" };
   const dvChave = (x) => `${x.r.transp || ""}\u0001${x.promob}`;
@@ -2766,9 +2802,13 @@ ${extra}
     const todos = [];
     // em aberto = o que está no Preventivo: sem entregue/cancelado na base E sem entregue/cancelado no arquivo da Intelipost
     const abertos = base && base.length ? new Set(base.map((p) => p.pedido)) : null;
-    gDados.forEach((r) => {
-      if (r._fechado || (abertos && !abertos.has(r.pedido))) return;
-      const p = dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "", promob = rd || bd;
+    const porPed = dvArq ? new Map(gDados.map((r) => [r.pedido, r])) : null;
+    const fonte = !dvArq ? gDados
+      : dvArq.soPedidos ? dvArq.linhas.map((x) => porPed.get(x.p)).filter(Boolean)
+      : dvArq.linhas.map((x) => { const b = porPed.get(x.p) || {}; return { ...b, pedido: x.p, transp: x.h, nf: x.nf || b.nf || "", serie: x.nf ? "" : b.serie, status: x.st || b.status || "", _atraso: b._atraso || 0, _arq: x }; });
+    fonte.forEach((r) => {
+      if (!dvArq && (r._fechado || (abertos && !abertos.has(r.pedido)))) return;   // com a planilha própria, vale o que ela trouxe
+      const p = r._arq ? { tp: r._arq.bd, rd: r._arq.rd, pr: r._arq.pr || (dvPromob.get(r.pedido) || {}).pr } : dvPromob.get(r.pedido) || {}, bd = p.tp || "", rd = p.rd || "", promob = rd || bd;
       if (!r.transp && !promob) return;
       const ap = ajPorH.get(norm(r.transp));
       const sit = !ap ? "sem" : ajTem(ap.chave, promob) ? "ok" : "div";
@@ -2778,9 +2818,10 @@ ${extra}
     document.querySelectorAll("#dv-cards .kpi[data-dv]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(n(b.dataset.dv)); b.classList.toggle("ativa", b.dataset.dv === dvCard); });
     $("dv-pct").textContent = `${nOk + nDiv ? ((nDiv / (nOk + nDiv)) * 100).toFixed(2).replace(".", ",") : "0"}% divergente`;
     const nTp = [...dvPromob.values()].filter((x) => x.tp).length;
-    $("dv-info").textContent = !temPromob
+    $("dv-info").textContent = !temPromob && !(dvArq && !dvArq.soPedidos)
       ? ([...dvPromob.values()].some((x) => x.cep) ? 'A base atual foi enviada com a versão antiga do painel, que ainda não guardava a coluna "Transportadora Promob". Aperte Ctrl+F5 e carregue a planilha de novo.'
         : 'A base ainda não tem a coluna "Transportadora Promob" (BD): aperte Ctrl+F5 e carregue a planilha de novo.')
+      : dvArq ? `Usando a planilha "${dvArq.nome}": ${fmt(todos.length)} pedidos em aberto${dvArq.soPedidos && todos.length < dvArq.linhas.length ? ` (${fmt(dvArq.linhas.length - todos.length)} não estão na base)` : ""}`
       : `Transportadora Promob na base: ${fmt(nTp)} de ${fmt(dvPromob.size)} pedidos · ${fmt(todos.length)} pedidos em aberto (sem entregues e cancelados da base e do arquivo da Intelipost)`;
     // resumo: transportadora (H) × transportadora Promob, só os divergentes (como a aba "Divergências")
     const g = new Map();

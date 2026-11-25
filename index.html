@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=358">
+  <link rel="stylesheet" href="styles.css?v=359">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1399,6 +1399,11 @@
               <h2>Transportadora divergente</h2>
               <p class="sub">Comparativo da Transportadora (coluna H) × Transportadora Promob (coluna BD) da base, igual à planilha "Ajuste_Transportadoras": pela tabela de apelidos, o nome da coluna H tem que aparecer na transportadora do Promob. Se a coluna BE (redespacho) estiver preenchida, vale o redespacho. Só pedidos em trânsito: entregues e cancelados ficam de fora.</p>
               <p id="dv-info" class="info-base">Carregando…</p>
+              <div class="dv-arq">
+                <label class="btn amarelo" title="Planilha só com os pedidos em aberto (mesmas colunas da base: Pedido Intelipost, Transportadora, Transportadora Promob, Transportadora Redespacho Promob). Ou só a coluna Pedido Intelipost: aí as transportadoras vêm da base.">⇪ <span id="dv-arq-rot">Subir pedidos em aberto</span><input id="dv-arquivo" type="file" accept=".xlsx,.xlsm,.xls,.csv" hidden></label>
+                <span id="dv-arq-info" class="s"></span>
+                <button id="dv-arq-limpar" class="link" hidden>voltar a usar a base</button>
+              </div>
             </div>
           </div>
         </section>
@@ -1688,23 +1693,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=358"></script>
-  <script src="mapa-brasil.js?v=358"></script>
-  <script src="cidades-br.js?v=358"></script>
-  <script src="troca-notas.js?v=358"></script>
-  <script src="app.js?v=358"></script>
-  <script src="ordenar.js?v=358"></script>
-  <script src="menu.js?v=358"></script>
-  <script src="ajuda.js?v=358"></script>
-  <script src="documentos.js?v=358"></script>
-  <script src="barrar.js?v=358"></script>
-  <script src="naoloc.js?v=358"></script>
-  <script src="faltas.js?v=358"></script>
-  <script src="motor.js?v=358"></script>
-  <script src="retornos-semana.js?v=358"></script>
-  <script src="cobranca-massa.js?v=358"></script>
-  <script src="gargalos.js?v=358"></script>
-  <script src="filas.js?v=358"></script>
-  <script src="filtros.js?v=358"></script>
+  <script src="config.js?v=359"></script>
+  <script src="mapa-brasil.js?v=359"></script>
+  <script src="cidades-br.js?v=359"></script>
+  <script src="troca-notas.js?v=359"></script>
+  <script src="app.js?v=359"></script>
+  <script src="ordenar.js?v=359"></script>
+  <script src="menu.js?v=359"></script>
+  <script src="ajuda.js?v=359"></script>
+  <script src="documentos.js?v=359"></script>
+  <script src="barrar.js?v=359"></script>
+  <script src="naoloc.js?v=359"></script>
+  <script src="faltas.js?v=359"></script>
+  <script src="motor.js?v=359"></script>
+  <script src="retornos-semana.js?v=359"></script>
+  <script src="cobranca-massa.js?v=359"></script>
+  <script src="gargalos.js?v=359"></script>
+  <script src="filas.js?v=359"></script>
+  <script src="filtros.js?v=359"></script>
 </body>
 </html>
