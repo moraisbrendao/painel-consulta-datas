@@ -429,8 +429,10 @@
   async function carregar() {
     $("info-base").textContent = "Carregando…";
     try {
-      const [i, fi] = await Promise.all([sb.from("base_info").select("*").limit(1), sb.from("fechados_info").select("*").limit(1)]);
+      const [i, fi, ti] = await Promise.all([sb.from("base_info").select("*").limit(1), sb.from("fechados_info").select("*").limit(1), sb.from("tickets_info").select("*").limit(1)]);
+      if (ti && !ti.error && ti.data && ti.data[0]) ticketsInfo = ti.data[0];
       const vBase = i.data && i.data[0] ? i.data[0].enviado_em : "", vFech = fi.data && fi.data[0] ? fi.data[0].enviado_em : "";
+      info = i.data && i.data[0]; infoFech = fi.data && fi.data[0]; desenharTopoArquivos();   // horas nos botões já aparecem enquanto a base carrega
       const [b, t, tot] = await Promise.all([
         // em aberto pela BASE (igual à Visão Gerencial); entregue_ip marca o que a Intelipost já deu como entregue/cancelado (parte 40)
         buscarComCache("base_aberta_bi", "pedido", "*", vBase && `bi|${vBase}|${vFech}`).catch(() => buscarComCache("base_aberta", "pedido", "*", vBase && `${vBase}|${vFech}`)),
@@ -4344,6 +4346,7 @@ ${extra}
     try {
       inf = await sb.from("tickets_info").select("*").limit(1);
       ticketsInfo = (inf.data && inf.data[0]) || null;   // a data da planilha aparece no botão mesmo se a lista demorar/falhar
+      desenharTopoArquivos();
       const lista = await buscarComCache("tickets_abertos", "nf", "*", ticketsInfo ? ticketsInfo.enviado_em : "");
       tickets = new Map(lista.map((t) => [chaveNF(t.nf), t]));
       ticketsOk = true;
