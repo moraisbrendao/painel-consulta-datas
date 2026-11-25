@@ -3084,23 +3084,25 @@ ${extra}
   }
   function desenharDetalheUF(rolar) {
     const caixa = $("u-detalhe");
-    if (!uUF) { caixa.hidden = true; return; }
-    const L = uFiltrados.filter((r) => ufDe(r) === uUF && !r._fechado), x = uDados.get(uUF);
+    // sempre visível (Brenda 25/11): sem estado escolhido mostra o Brasil todo (cidades com a UF do lado)
+    const L = uFiltrados.filter((r) => (!uUF || ufDe(r) === uUF) && !r._fechado);
+    const x = uUF ? uDados.get(uUF) : [...uDados.values()].reduce((a, y) => ({ ab: a.ab + y.ab, atr: a.atr + y.atr }), { ab: 0, atr: 0 });
+    if (x && !uUF) x.pct = x.ab ? x.atr / x.ab : 0;
     caixa.hidden = false;
     const sufixo = [uT, uC].filter((v) => v !== null).join(" · ");
-    $("u-det-titulo").textContent = `${UF_NOME[uUF] || uUF} (${uUF})${sufixo ? " · " + sufixo : ""}`;
-    $("u-det-sub").textContent = (x ? `${fmt(x.atr)} atrasados de ${fmt(x.ab)} pedidos em aberto · ${pctBR(x.pct)} de atraso` : "Nenhum pedido em aberto nessa seleção.") + " · clique numa transportadora ou cidade para cruzar; clique de novo para tirar";
+    $("u-det-titulo").textContent = `${uUF ? `${UF_NOME[uUF] || uUF} (${uUF})` : "Brasil · todos os estados"}${sufixo ? " · " + sufixo : ""}`;
+    $("u-det-sub").textContent = (x && x.ab ? `${fmt(x.atr)} atrasados de ${fmt(x.ab)} pedidos em aberto · ${pctBR(x.pct)} de atraso` : "Nenhum pedido em aberto nessa seleção.") + (uUF ? "" : " · clique num estado no mapa para ver só ele") + " · clique numa transportadora ou cidade para cruzar; clique de novo para tirar";
     const porT = new Map(), porC = new Map();
     // filtro cruzado: transportadoras seguem a cidade escolhida; cidades seguem a transportadora escolhida
     L.forEach((r) => {
       const t = uTDe(r), c = uCDe(r);
       if (uC === null || c === uC) { const a = porT.get(t) || { n: t, ab: 0, atr: 0, series: new Set() }; a.ab++; if (r._atraso) a.atr++; if (r.serie) a.series.add(r.serie); porT.set(t, a); }
-      if (uT === null || t === uT) { const b = porC.get(c) || { n: c, ab: 0, atr: 0 }; b.ab++; if (r._atraso) b.atr++; porC.set(c, b); }
+      if (uT === null || t === uT) { const ck = uUF ? c : c + "|" + ufDe(r); const b = porC.get(ck) || { n: c, uf: ufDe(r), ab: 0, atr: 0 }; b.ab++; if (r._atraso) b.atr++; porC.set(ck, b); }
     });
     const ord = (a, b) => b.atr - a.atr || b.ab - a.ab;
     $("u-det-transp").innerHTML = [...porT.values()].sort(ord).map((a) => `<tr class="clic${uT === a.n ? " sel" : ""}" data-ut="${esc(a.n)}"><td>${esc(a.n)}</td><td>${[...a.series].sort((p, q) => p.localeCompare(q, "pt-BR", { numeric: true })).map(esc).join(", ") || "—"}</td>
       <td class="num">${fmt(a.ab)}</td><td class="num txt-vermelho">${fmt(a.atr)}</td><td class="num">${pctBR(a.atr / a.ab)}</td></tr>`).join("") || `<tr><td colspan="5" class="s">Nenhum pedido.</td></tr>`;
-    $("u-det-cidades").innerHTML = [...porC.values()].sort(ord).map((b) => `<tr class="clic${uC === b.n ? " sel" : ""}" data-uc="${esc(b.n)}"><td>${esc(b.n)}</td><td class="num">${fmt(b.ab)}</td><td class="num txt-vermelho">${fmt(b.atr)}</td><td class="num">${pctBR(b.atr / b.ab)}</td></tr>`).join("") || `<tr><td colspan="4" class="s">Nenhum pedido.</td></tr>`;
+    $("u-det-cidades").innerHTML = [...porC.values()].sort(ord).map((b) => `<tr class="clic${uC === b.n ? " sel" : ""}" data-uc="${esc(b.n)}"><td>${esc(b.n)}${uUF ? "" : ` <span class="s">${esc(b.uf)}</span>`}</td><td class="num">${fmt(b.ab)}</td><td class="num txt-vermelho">${fmt(b.atr)}</td><td class="num">${pctBR(b.atr / b.ab)}</td></tr>`).join("") || `<tr><td colspan="4" class="s">Nenhum pedido.</td></tr>`;
     uAtrasadosUF = L.filter((r) => r._atraso && (uT === null || uTDe(r) === uT) && (uC === null || uCDe(r) === uC));
     if (rolar) caixa.scrollIntoView({ behavior: "smooth", block: "start" });
   }
@@ -3133,8 +3135,8 @@ ${extra}
     if (!uAtrasadosUF.length) return toast("Nenhum atrasado neste estado.", true);
     const linhas = [["Pedido", "NF", "Série", "Canal", "Transportadora", "UF", "Cidade", "Micro status", "Criado", "Despacho", "Prometido", "Dias de atraso"]]
       .concat(uAtrasadosUF.map((r) => [r.pedido, r.nf, r.serie, r.canal, r.transp, r.uf, r.cidade, r.micro, br(r.criado), br(r.despacho), br(r._prom), r._atraso]));
-    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Atrasados " + uUF);
-    XLSX.writeFile(wb, `atrasados_${uUF}_${hojeISO()}.xlsx`);
+    const ws = XLSX.utils.aoa_to_sheet(linhas); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Atrasados " + (uUF || "BR"));
+    XLSX.writeFile(wb, `atrasados_${uUF || "BR"}_${hojeISO()}.xlsx`);
   });
 
   // ---------------- alterar pedidos: nova previsão de entrega na Intelipost ----------------
