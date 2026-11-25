@@ -445,12 +445,27 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
   } else await tela.keyboard.press("Escape").catch(() => {});
   await tela.waitForTimeout(1500);
 }
+// abre Alterar Pedidos › Upload › Método de entrega; se a tela disser "Esta sessão expirou", entra de novo (pode pedir o código no painel)
+async function abrirUploadMetodo() {
+  for (let t = 1; t <= 2; t++) {
+    await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
+    await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {}); await pagina.waitForTimeout(4000);
+    if (await sessaoExpirou(pagina)) { log("Alterar Pedidos: a sessão expirou; vou entrar de novo."); await pagina.context().clearCookies().catch(() => {}); await entrar(true); continue; }
+    await pagina.getByText(/^\s*Upload\s*$/).first().click(); await pagina.waitForTimeout(2000);
+    const sel = pagina.locator("select:visible").first(); const alvo = (await sel.evaluate((e) => [...e.options].map((o) => o.text.trim()))).find((o) => /m[eé]todo de entrega/i.test(o));
+    if (!alvo) throw new Error("não achei a opção Método de entrega");
+    await sel.selectOption({ label: alvo }); await pagina.waitForTimeout(3000);
+    if (await sessaoExpirou(pagina)) { log("Alterar Pedidos: a sessão expirou; vou entrar de novo."); await pagina.context().clearCookies().catch(() => {}); await entrar(true); continue; }
+    return;
+  }
+  throw new Error("A sessão da Intelipost expirou (Alterar Pedidos) e não consegui entrar de novo.");
+}
+
 // Ajuste de transportadora (Transportadora divergente): só OLHA as telas de upload da Intelipost e do Multi360, sem enviar nada
 async function diagAjtp() {
   const XLSX = (await import("xlsx")).default;
   const cabTemplate = (arq) => { try { const wb = XLSX.readFile(arq); return wb.SheetNames.map((n) => `${n}: ` + XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" }).slice(0, 3).map((r) => r.map((v) => String(v).slice(0, 30)).join(" ¦ ")).join(" // ")).join(" || "); } catch (e) { return "não li: " + e.message.slice(0, 60); } };
-  await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
-  await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {}); await pagina.waitForTimeout(3000);
+  await abrirUploadMetodo();
   const up = pagina.getByText(/^\s*Upload\s*$/).first();
   log("Intelipost: aba Upload achada:", await up.count());
   if (await up.count()) { await up.click(); await pagina.waitForTimeout(2000); }
@@ -534,12 +549,7 @@ async function ajusteTp(limite) {
     const novo = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(novo, ws, wb ? wb.SheetNames[0] : "Planilha1"); XLSX.writeFile(novo, arq);
     log(`  planilha: ${pend.length} linha(s), modelo da Intelipost ${wb ? "usado" : "não baixou (montei igual)"}`);
     try {
-      await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
-      await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {}); await pagina.waitForTimeout(3000);
-      await pagina.getByText(/^\s*Upload\s*$/).first().click(); await pagina.waitForTimeout(2000);
-      const sel = pagina.locator("select:visible").first(); const alvo = (await sel.evaluate((e) => [...e.options].map((o) => o.text.trim()))).find((o) => /m[eé]todo de entrega/i.test(o));
-      if (!alvo) throw new Error("não achei a opção Método de entrega");
-      await sel.selectOption({ label: alvo }); await pagina.waitForTimeout(2000);
+      await abrirUploadMetodo();
       await pagina.locator("input[type=file]").first().setInputFiles(arq);
       log("  arquivo enviado na Intelipost; esperando o processamento…");
       let st = "";
