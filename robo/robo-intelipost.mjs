@@ -577,8 +577,8 @@ async function ajusteTp(limite) {
       for (let R = 3; R <= rg.e.r; R++) for (let C = 0; C <= rg.e.c; C++) delete ws[XLSX.utils.encode_cell({ r: R, c: C })];   // tira a linha de exemplo
       pend.forEach((x, i) => { ws[XLSX.utils.encode_cell({ r: 3 + i, c: 0 })] = { t: "s", v: String(x.pedido) }; ws[XLSX.utils.encode_cell({ r: 3 + i, c: 1 })] = { t: "n", v: Number(x.id_metodo) }; });
       ws["!ref"] = XLSX.utils.encode_range({ s: { r: 0, c: 0 }, e: { r: 3 + pend.length - 1, c: Math.max(3, rg.e.c) } });
-      XLSX.writeFile(wb, arq, { bookType: "xlsx" });
-    } else { const ws = XLSX.utils.aoa_to_sheet(aoa); XLSX.utils.sheet_add_aoa(ws, pend.map((x) => [x.pedido, Number(x.id_metodo)]), { origin: "A4" }); const novo = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(novo, ws, "Planilha1"); XLSX.writeFile(novo, arq); }
+      XLSX.writeFile(wb, arq, { bookType: "xlsx", bookSST: true })   // texto em sharedStrings, como o Excel salva;
+    } else { const ws = XLSX.utils.aoa_to_sheet(aoa); XLSX.utils.sheet_add_aoa(ws, pend.map((x) => [x.pedido, Number(x.id_metodo)]), { origin: "A4" }); const novo = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(novo, ws, "Planilha1"); XLSX.writeFile(novo, arq, { bookSST: true }); }
     log(`  planilha: ${pend.length} linha(s), modelo da Intelipost ${wb ? "usado" : "não baixou (montei igual)"}`);
     try {
       await abrirUploadMetodo();
