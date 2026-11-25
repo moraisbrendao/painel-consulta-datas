@@ -467,7 +467,15 @@ async function diagAjtp() {
     if (dl) { const f = "/tmp/ip-modelo.xlsx"; await dl.saveAs(f); log("  modelo Intelipost:", dl.suggestedFilename(), "·", cabTemplate(f)); }
   }
   log("  link do exemplo:", await ex.evaluate((e) => { const a = e.closest("a") || e; return `${a.tagName} href=${(a.getAttribute("href") || "").slice(0, 80)} target=${a.getAttribute("target") || ""} click=${(a.getAttribute("ng-click") || a.getAttribute("@click") || "").slice(0, 60)}`; }).catch(() => "?"));
-  await pagina.getByText(/Atualizar lista/i).first().click().catch(() => {}); await pagina.waitForTimeout(4000);
+  const resps = [];
+  const ouvir = async (r) => { try { const ct = r.headers()["content-type"] || ""; if (!/json/.test(ct)) return; const j = await r.json().catch(() => null); if (!j) return;
+    const amostra = Array.isArray(j) ? j[0] : (j.content || j.data || j.items || j.result || [])[0] || j;
+    resps.push(`${r.request().method()} ${new URL(r.url()).host}${new URL(r.url()).pathname.replace(/\d{4,}/g, "#")} · chaves: ${Object.keys(amostra || {}).slice(0, 15).join(",")}${amostra && (amostra.status || amostra.status_envio) ? " · status=" + String(amostra.status || amostra.status_envio).slice(0, 30) : ""}`); } catch (_) {} };
+  pagina.on("response", ouvir);
+  await pagina.getByText(/Atualizar lista/i).first().click().catch(() => {}); await pagina.waitForTimeout(10000);
+  pagina.off("response", ouvir);
+  log("  respostas JSON depois de Atualizar lista:"); resps.slice(0, 12).forEach((x) => log("   ", x));
+  log("  shadow roots:", await pagina.evaluate(() => [...document.querySelectorAll("*")].filter((e) => e.shadowRoot).map((e) => e.tagName).slice(0, 5).join(",")));
   log("  textos com Sucesso/Erro:", await pagina.evaluate(() => [...document.querySelectorAll("*")].filter((e) => !e.children.length && /^\s*(Sucesso|Erro no Processamento|Processando|Aguardando)/i.test(e.textContent)).slice(0, 4).map((e) => `${e.tagName}.${(e.className || "").toString().slice(0, 30)}:${e.textContent.trim()} ← linha ${(e.closest("tr,[role=row],li,div[class*=row i]") || {}).tagName || "?"}`).join(" | ")));
   log("  frames:", pagina.frames().map((f) => { try { return new URL(f.url()).pathname.slice(0, 50); } catch (_) { return "?"; } }).join(" ; "));
   for (const f of pagina.frames()) { const t = await f.evaluate(() => document.body ? document.body.innerText : "").catch(() => ""); const i = t.search(/Nome do Arquivo/i);
@@ -496,6 +504,74 @@ async function diagAjtp() {
     break;
   }
   log("diag-ajtp: nada foi enviado.");
+}
+
+// Ajuste de transportadora (parte 80): pedidos aprovados na Transportadora divergente.
+// 1) Intelipost › Alterar Pedidos › Upload › Método de entrega: planilha do modelo (linha 4 em diante: A = pedido, B = ID do método)
+//    → espera o envio aparecer como Sucesso na lista. 2) Multi360 › Hub › Pedidos › Atualizar transportadora: template com
+//    sales_order_number (pedido Intelipost) → Enviar. Registro só com contagens.
+async function ajusteTp(limite) {
+  const XLSX = (await import("xlsx")).default;
+  const pend = await chamar(`ajuste_tp?status=eq.aprovado&id_metodo=not.is.null&select=pedido,id_metodo&order=aprovado_em&limit=${limite}`);
+  const salva = (peds, campos) => peds.length ? chamar(`ajuste_tp?pedido=in.(${peds.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")})`, "PATCH", { ...campos, atualizado_em: new Date().toISOString() }) : null;
+  log(`Ajuste de transportadora: ${pend.length} aprovado(s) para a Intelipost.`);
+  if (pend.length) {
+    await salva(pend.map((x) => x.pedido), { status: "enviando", msg: null });
+    const nome = `ajuste_transportadora_${Date.now()}.xlsx`, arq = "/tmp/" + nome;
+    // modelo da própria Intelipost (mesmo cabeçalho de 3 linhas); se não baixar, monta igual
+    let wb = null;
+    try { const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx"); if (r.ok()) wb = XLSX.read(await r.body(), { type: "buffer" }); } catch (_) {}
+    const aoa = [["Dados para atualizar", "", "", ""], ["Pedido", "Método Novo", "Resultado", "Observação"], ["so_order_number", "so_delivery_method_id", "", ""]];
+    let ws;
+    if (wb) { ws = wb.Sheets[wb.SheetNames[0]]; const cab = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" }).slice(0, 3); ws = XLSX.utils.aoa_to_sheet(cab.length === 3 ? cab : aoa); }
+    else ws = XLSX.utils.aoa_to_sheet(aoa);
+    XLSX.utils.sheet_add_aoa(ws, pend.map((x) => [x.pedido, Number(x.id_metodo)]), { origin: "A4" });
+    const novo = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(novo, ws, wb ? wb.SheetNames[0] : "Planilha1"); XLSX.writeFile(novo, arq);
+    log(`  planilha: ${pend.length} linha(s), modelo da Intelipost ${wb ? "usado" : "não baixou (montei igual)"}`);
+    try {
+      await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
+      await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {}); await pagina.waitForTimeout(3000);
+      await pagina.getByText(/^\s*Upload\s*$/).first().click(); await pagina.waitForTimeout(2000);
+      const sel = pagina.locator("select:visible").first(); const alvo = (await sel.evaluate((e) => [...e.options].map((o) => o.text.trim()))).find((o) => /m[eé]todo de entrega/i.test(o));
+      if (!alvo) throw new Error("não achei a opção Método de entrega");
+      await sel.selectOption({ label: alvo }); await pagina.waitForTimeout(2000);
+      await pagina.locator("input[type=file]").first().setInputFiles(arq);
+      log("  arquivo enviado na Intelipost; esperando o processamento…");
+      let st = "";
+      for (let i = 0; i < 24 && !/sucesso|erro/i.test(st); i++) {
+        await pagina.waitForTimeout(10000);
+        await pagina.getByText(/Atualizar lista/i).first().click().catch(() => {}); await pagina.waitForTimeout(3000);
+        st = await pagina.evaluate((n) => { for (const f of [document]) { const el = [...f.querySelectorAll("tr, [role=row]")].find((r) => (r.innerText || "").includes(n)); if (el) return el.innerText.replace(/\s+/g, " "); } return ""; }, nome);
+        if (!st) for (const f of pagina.frames()) { st = await f.evaluate((n) => { const el = [...document.querySelectorAll("tr, [role=row]")].find((r) => (r.innerText || "").includes(n)); return el ? el.innerText.replace(/\s+/g, " ") : ""; }, nome).catch(() => ""); if (st) break; }
+      }
+      const res = /sucesso/i.test(st) ? "Sucesso" : /erro/i.test(st) ? "Erro no Processamento" : st ? "ainda processando" : "envio não apareceu na lista";
+      log("  Intelipost:", res);
+      if (res === "Sucesso") await salva(pend.map((x) => x.pedido), { status: "ip_ok", ip_em: new Date().toISOString(), msg: "Intelipost: Sucesso" });
+      else await salva(pend.map((x) => x.pedido), { status: "erro", msg: "Intelipost: " + res + " (confira em Alterar Pedidos › Upload)" });
+    } catch (e) { log("  erro na Intelipost:", String(e.message).split("\n")[0].slice(0, 150)); await salva(pend.map((x) => x.pedido), { status: "erro", msg: "Intelipost: " + String(e.message).split("\n")[0].slice(0, 150) }); }
+  }
+  // 2) Multi360: os que já deram Sucesso na Intelipost
+  const m = await chamar(`ajuste_tp?status=eq.ip_ok&select=pedido&order=ip_em&limit=${limite}`);
+  log(`Multi360: ${m.length} pedido(s) para atualizar a transportadora.`);
+  if (!m.length) return;
+  const arq2 = `/tmp/atualizar_transportadora_${Date.now()}.xlsx`;
+  const w2 = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(w2, XLSX.utils.aoa_to_sheet([["sales_order_number"], ...m.map((x) => [x.pedido])]), "pedidos_template"); XLSX.writeFile(w2, arq2);
+  try {
+    const p = await entrarMulti360(ctx, log);
+    await p.goto("https://appv2.360multi.com/pedidos/hub", { waitUntil: "domcontentloaded" }); await p.waitForTimeout(4000);
+    await p.getByText(/Atualizar transportadora/i).first().click(); await p.waitForTimeout(2000);
+    const campo = p.locator("input[type=file]:visible").first();   // o do "Upload de transportadora" é o único visível (diag 25/11)
+    if (!(await campo.count())) throw new Error("não achei o campo do arquivo no Upload de transportadora");
+    await campo.setInputFiles(arq2); await p.waitForTimeout(1500);
+    const enviar = p.locator("button:visible", { hasText: /^\s*Enviar\s*$/i }).last();
+    const resp = p.waitForResponse((r) => r.request().method() === "POST", { timeout: 60000 }).catch(() => null);
+    await enviar.click();
+    const r = await resp; await p.waitForTimeout(4000);
+    const aviso = await p.evaluate(() => [...document.querySelectorAll("[role=alert], [class*=toast i], [class*=Toastify], [class*=notification i], [class*=alert i]")].map((e) => e.innerText.trim()).filter(Boolean).join(" | ").slice(0, 200));
+    log("  Multi360: resposta", r ? r.status() : "?", "· aviso:", mascara(aviso).replace(/\S+@\S+/g, "<e-mail>"));
+    if ((r && r.status() >= 400) || /erro|falh|inv[aá]lid/i.test(aviso)) await salva(m.map((x) => x.pedido), { status: "erro", msg: "Multi360: " + (aviso || `resposta ${r && r.status()}`).slice(0, 150) });
+    else await salva(m.map((x) => x.pedido), { status: "feito", m360_em: new Date().toISOString(), msg: "Intelipost e Multi360 atualizados" });
+  } catch (e) { log("  erro no Multi360:", String(e.message).split("\n")[0].slice(0, 150)); await salva(m.map((x) => x.pedido), { status: "erro", msg: "Multi360: " + String(e.message).split("\n")[0].slice(0, 150) }); }
 }
 
 async function diagStatus() {   // confere, sem salvar nada, como ficou o pedido da última troca com erro
@@ -1081,6 +1157,7 @@ try {
     if (entrou !== false && BAIXA_ENTREGUE_AUTO) await baixaEntregueIP(true, 30).catch((e) => log("baixa-entregue: " + String(e.message).split("\n")[0].slice(0, 120))); }
   else if (MODO === "entregue-teste" || MODO === "entregue-real") await baixaEntregueIP(MODO === "entregue-real", Number(process.env.LIMITE || process.env.TICKET || 0) || 1);   // no disparo manual, o campo "ticket" leva o limite
   else if (MODO === "diag-ajtp") await diagAjtp();
+  else if (MODO === "ajuste-tp") await ajusteTp(Number(process.env.LIMITE || process.env.TICKET || 0) || 300);   // disparo manual: o campo "ticket" leva o limite
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
   else if (MODO === "diag-troca") await diagTroca();
