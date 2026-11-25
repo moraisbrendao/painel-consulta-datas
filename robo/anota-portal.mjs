@@ -47,6 +47,7 @@ async function abrirRepoPre(p, log) {
   log("Portal: botões de filtro " + chips.map((t) => t.replace(/\s+/g, " ").replace(/\d/g, "9")).join(" | "));
   log(`Portal: Reposições (Pré Entrega) aberta (${mascara(new URL(p.url()).pathname)})`);
 }
+const CHAT_PDF = false;   // PDF da nova NF no chat do ticket: desligado (Brenda 25/11, conflito no chat do portal)
 // ticket com Situação FECHADO no 360: o caso acabou, não precisa de PDF nem anotação (Brenda 25/11)
 const ticketFechado = async (m) => /Situa[cç][aã]o:?\s*FECHADO/i.test(((await m.locator("body").innerText().catch(() => "")) || "").replace(/\s+/g, " "));
 // filtra a NF original e devolve a linha (primeira coluna igual à NF)
@@ -149,7 +150,8 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const patch = (x, o) => chamar(`troca_notas?ticket=eq.${encodeURIComponent(x.ticket)}`, "PATCH", o);
   // 1) chat do ticket
-  const chat = L.filter((x) => !x.chat_pdf_status || x.chat_pdf_status === "sem_pdf" || x.chat_pdf_status === "conferir");
+  // Brenda 25/11: o PDF no chat deu conflito no portal → desligado; só a anotação "NF … emitida para o pedido"
+  const chat = !CHAT_PDF ? [] : L.filter((x) => !x.chat_pdf_status || x.chat_pdf_status === "sem_pdf" || x.chat_pdf_status === "conferir");
   if (chat.length) {
     const m = await entrarMulti360(ctx, log);
     for (const x of chat) {
@@ -172,7 +174,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   }
   // 2) anotação no portal (depois do chat; sem PDF, espera até 3 dias da troca antes de anotar só a NF)
   const tres = Date.now() - 3 * 864e5;
-  const anota = L.filter((x) => !x._fechado).filter((x) => x._forca || ((!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres)));
+  const anota = L.filter((x) => !x._fechado).filter((x) => x._forca || ((!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (!CHAT_PDF || ["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres)));
   if (anota.length) {
     const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log); acharLinha.log = log;
     const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
@@ -182,7 +184,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
       try {
         const linha = await acharLinha(p, x.nf_ticket);
         if (!linha) { soma("portal: NF ainda fora da lista"); x._naoAchou = true; await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
-        const cel = linha.locator("td").nth(ia), txt = textoAnotacao(x, ["feito", "ja_tinha"].includes(x.chat_pdf_status));
+        const cel = linha.locator("td").nth(ia), txt = textoAnotacao(x, CHAT_PDF && ["feito", "ja_tinha"].includes(x.chat_pdf_status));
         if ((await cel.innerText()).includes(numNova(x))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
         let ok;
         const campo = cel.locator("input[placeholder^='Escreva uma anota']").first(), b = cel.getByRole("button", { name: /criar anota/i }).first();
