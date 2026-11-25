@@ -553,7 +553,8 @@ async function ajusteTp(limite) {
   log(`Ajuste de transportadora: ${pend.length} aprovado(s) para a Intelipost.`);
   if (pend.length) {
     await salva(pend.map((x) => x.pedido), { status: "enviando", msg: null });
-    const nome = `arquivo_exemplo_alterar_pedido_delivery_method_robo${Date.now()}.xlsx`   // a Intelipost recusou "ajuste_transportadora_…" (file.invalid.import): mantém o nome do modelo, arq = "/tmp/" + nome;
+    // a Intelipost recusou "ajuste_transportadora_…" (file.invalid.import): mantém o nome do modelo
+    const nome = `arquivo_exemplo_alterar_pedido_delivery_method_robo${Date.now()}.xlsx`, arq = "/tmp/" + nome;
     // modelo da própria Intelipost (mesmo cabeçalho de 3 linhas); se não baixar, monta igual
     let wb = null;
     try { const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx"); if (r.ok()) wb = XLSX.read(await r.body(), { type: "buffer" }); } catch (_) {}
