@@ -526,6 +526,21 @@ async function diagAjtp() {
   log("diag-ajtp: nada foi enviado.");
 }
 
+// baixa o arquivo de retorno do último envio do robô (linha com o nome dado) e devolve Resultado/Observação de cada pedido
+async function retornoUpload(nomeParte) {
+  const XLSX = (await import("xlsx")).default;
+  const linha = pagina.locator("tr", { hasText: nomeParte }).first();
+  if (!(await linha.count())) return null;
+  const bt = linha.getByText(/Baixar Arquivo/i).first();
+  const dl = await Promise.all([pagina.waitForEvent("download", { timeout: 30000 }), bt.click()]).then(([d]) => d).catch(() => null);
+  let buf = null;
+  if (dl) { const f = `/tmp/ret-${Date.now()}.xlsx`; await dl.saveAs(f); buf = (await import("node:fs")).readFileSync(f); }
+  else { const href = await bt.evaluate((e) => (e.closest("a") || e).getAttribute("href")).catch(() => null); if (href) { const r = await pagina.request.get(new URL(href, BASE).href); if (r.ok()) buf = await r.body(); } }
+  if (!buf) return null;
+  const wb = XLSX.read(buf, { type: "buffer" }); const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, defval: "" });
+  return rows.slice(3).filter((r) => r[0]).map((r) => ({ pedido: String(r[0]).trim(), resultado: String(r[2] || "").trim(), obs: String(r[3] || "").trim() }));
+}
+
 // Ajuste de transportadora (parte 80): pedidos aprovados na Transportadora divergente.
 // 1) Intelipost › Alterar Pedidos › Upload › Método de entrega: planilha do modelo (linha 4 em diante: A = pedido, B = ID do método)
 //    → espera o envio aparecer como Sucesso na lista. 2) Multi360 › Hub › Pedidos › Atualizar transportadora: template com
@@ -562,7 +577,12 @@ async function ajusteTp(limite) {
       const res = /sucesso/i.test(st) ? "Sucesso" : /erro/i.test(st) ? "Erro no Processamento" : st ? "ainda processando" : "envio não apareceu na lista";
       log("  Intelipost:", res);
       if (res === "Sucesso") await salva(pend.map((x) => x.pedido), { status: "ip_ok", ip_em: new Date().toISOString(), msg: "Intelipost: Sucesso" });
-      else await salva(pend.map((x) => x.pedido), { status: "erro", msg: "Intelipost: " + res + " (confira em Alterar Pedidos › Upload)" });
+      else {
+        const ret = await retornoUpload(nome).catch(() => null);
+        if (ret && ret.length) { log("  retorno:", ret.map((x) => mascara(`${x.resultado} · ${x.obs}`).slice(0, 120)).join(" | "));
+          for (const x of ret) await salva([x.pedido], { status: "erro", msg: ("Intelipost: " + [x.resultado, x.obs].filter(Boolean).join(" · ")).slice(0, 200) }); }
+        await salva(pend.map((x) => x.pedido).filter((pd) => !(ret || []).some((x) => x.pedido === pd)), { status: "erro", msg: "Intelipost: " + res + " (confira em Alterar Pedidos › Upload)" });
+      }
     } catch (e) { log("  erro na Intelipost:", String(e.message).split("\n")[0].slice(0, 150)); await salva(pend.map((x) => x.pedido), { status: "erro", msg: "Intelipost: " + String(e.message).split("\n")[0].slice(0, 150) }); }
   }
   // 2) Multi360: os que já deram Sucesso na Intelipost
@@ -1172,6 +1192,9 @@ try {
     if (entrou !== false && BAIXA_ENTREGUE_AUTO) await baixaEntregueIP(true, 30).catch((e) => log("baixa-entregue: " + String(e.message).split("\n")[0].slice(0, 120))); }
   else if (MODO === "entregue-teste" || MODO === "entregue-real") await baixaEntregueIP(MODO === "entregue-real", Number(process.env.LIMITE || process.env.TICKET || 0) || 1);   // no disparo manual, o campo "ticket" leva o limite
   else if (MODO === "diag-ajtp") await diagAjtp();
+  else if (MODO === "diag-ajtp-ret") { await abrirUploadMetodo(); const ret = await retornoUpload("ajuste_transportadora_").catch((e) => { log("retorno falhou:", e.message.slice(0, 100)); return null; });
+    log("Retorno do último envio do robô:", ret ? ret.map((x) => mascara(`${x.resultado} · ${x.obs}`).slice(0, 150)).join(" | ") || "(sem linhas)" : "não consegui baixar");
+    log("Linha na lista:", mascara(await pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first().innerText().catch(() => "?")).replace(/ajuste_transportadora_\d+/g, "<arquivo>").replace(/\s+/g, " ").slice(0, 200)); }
   else if (MODO === "ajuste-tp") await ajusteTp(Number(process.env.LIMITE || process.env.TICKET || 0) || 300);   // disparo manual: o campo "ticket" leva o limite
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
