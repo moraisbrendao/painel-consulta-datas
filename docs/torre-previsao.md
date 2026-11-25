@@ -3,7 +3,7 @@
 A previsão é uma **estimativa logística**, não uma promessa de entrega. Ela não substitui a promessa original do pedido.
 
 ## Endereço e autenticação
-- `POST https://<projeto>.supabase.co/functions/v1/torre-previsao`
+- `POST https://qncselfuymeximgmetjp.supabase.co/functions/v1/torre-previsao`
 - Cabeçalhos: `Authorization: Bearer <TORRE_PREVISAO_TOKEN>` e `Content-Type: application/json`
 - Token errado ou ausente → `401`.
 
