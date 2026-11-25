@@ -84,15 +84,15 @@ export async function rodar(R) {
           // série 35 (first/last mile): só a transportadora do ticket. Outras séries: não achou com a senha dela → tenta sem senha e com as senhas das outras (Brenda 25/11)
           const ssw = (ch) => pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: ch || "" }).toString() });
           let pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: l.chave || "" }).toString() }).catch(() => null);
-          let chUsada = l.chave || "";
+          let chUsada = l.chave || "", chNome = null;
           if (pg && pg.status === 200 && semAchar(lerEntrega(pg.txt)) && String(ser).replace(/^0+/, "") !== "35") {
-            for (const ch of ["", ...todasChaves()].filter((x) => x !== (l.chave || ""))) {
+            for (const o of [{ s: "", nome: "" }, ...todasChaves()].filter((x) => x.s !== (l.chave || ""))) {
               await new Promise((ok) => setTimeout(ok, 2000));
-              const p2 = await ssw(ch).catch(() => null);
-              if (p2 && p2.status === 200 && !semAchar(lerEntrega(p2.txt))) { pg = p2; chUsada = ch; soma("SSW: achou com outra senha/sem senha"); break; }
+              const p2 = await ssw(o.s).catch(() => null);
+              if (p2 && p2.status === 200 && !semAchar(lerEntrega(p2.txt))) { pg = p2; chUsada = o.s; chNome = o.nome; soma("SSW: achou com outra senha/sem senha"); break; }
             }
           }
-          if (pg && pg.status === 200) { const r = lerEntrega(pg.txt); r.chave = chUsada;
+          if (pg && pg.status === 200) { const r = lerEntrega(pg.txt); r.chave = chUsada; r.chave_de = chNome;
             // entregue: quem emitiu o CT-e no SSW (para não dar baixa com a entrega da transportadora de first mile)
             const det = r.situacao === "entregue" && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
             if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det).catch(() => null);
@@ -128,7 +128,9 @@ export async function rodar(R) {
       const ev = r.ultimo_evento || (r.detalhe && r.detalhe.eventos && r.detalhe.eventos.length ? r.detalhe.eventos[r.detalhe.eventos.length - 1].status : null);
       const ins = r.situacao === "nao entregue" ? insucessoDe(ev) : null;
       const pv = r.previsao || (r.detalhe && r.detalhe.previsao) || null;   // previsão de entrega do rastreio (aparece no painel)
-      const detalhe = r.detalhe ? { ...r.detalhe, previsao: pv } : pv ? { fonte: r.fonte || null, previsao: pv } : null;
+      let detalhe = r.detalhe ? { ...r.detalhe, previsao: pv } : pv ? { fonte: r.fonte || null, previsao: pv } : null;
+      // SSW: guarda com qual senha o robô achou (sem senha / senha de outra transportadora) para o "Ver no SSW" do painel abrir igual
+      if (r.fonte === "SSW" && r.chave != null) detalhe = { ...(detalhe || {}), ssw_sem_senha: r.chave === "", ...(r.chave_de ? { ssw_chave_de: r.chave_de } : {}) };
       Object.assign(t, { situacao: r.situacao, fonte: r.fonte || null, ultimo_evento: ev || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, insucesso: ins, detalhe, _r: r });
       soma(`rastreio: ${r.situacao}${r.fonte ? " (" + r.fonte + ")" : ""}`); if (ins) soma("insucesso na entrega → Ocorrências");
       linhas.push({ ticket: t.ticket, situacao: t.situacao, fonte: t.fonte, ultimo_evento: t.ultimo_evento, data_evento: t.data_evento, data_entrega: t.data_entrega, insucesso: ins, detalhe: t.detalhe });

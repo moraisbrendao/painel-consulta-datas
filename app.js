@@ -3687,6 +3687,11 @@ ${extra}
     const b = e.target.closest("[data-ag-rastreio]"); if (!b) return;
     const t = agLista.find((x) => x.ticket === b.dataset.agRastreio); if (!t) return;
     const tr = t.fonte && t.fonte !== "SSW" ? t.fonte : agTransp(t);
+    if (!/jadlog|formato|transiga/i.test(tr) && (!t.fonte || t.fonte === "SSW")) {   // SSW: mesma senha com que o robô achou a nota
+      const d = t.detalhe || {}, outra = t.baixa_status === "conferir" && /O SSW mostra a entrega pela/i.test(t.baixa_msg || "");
+      const senha = d.ssw_sem_senha || (outra && !d.ssw_chave_de) ? "" : d.ssw_chave_de ? senhaDe(d.ssw_chave_de) : senhaDe(t.transp_chat) || senhaDe(t.transportadora);
+      return abrirSSW(t.nf_nova, tr, null, { detalhe: { sem_senha: !senha }, _senha: senha });
+    }
     abrirSSW(t.nf_nova, tr, null, /jadlog|formato|transiga/i.test(tr) ? { titulo: `Ticket ${t.ticket}`, pedido: t.pedido, nf: t.nf_nova, transportadora: /formato/i.test(tr) ? "Formato" : /transiga/i.test(tr) ? "Transiga" : "Jadlog", situacao: t.situacao, ultimo_evento: t.ultimo_evento,
       data_entrega: t.data_entrega, consultado_em: t.consultado_em, detalhe: t.detalhe } : null);
   });
@@ -3854,7 +3859,7 @@ ${extra}
     const c = outro || cnpjDaSerie(ser);
     if (!num || !c) return toast("Essa NF não tem série com CNPJ conhecido.", true);
     const f = document.createElement("form"); f.method = "POST"; f.action = "https://ssw.inf.br/2/ssw_resultSSW"; f.target = "_blank"; f.rel = "noopener";
-    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", d.sem_senha ? "" : senhaDe(transp)], ["urlori", "https://ssw.inf.br/ajuda/rastreamento.html"]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
+    for (const [k, v] of [["cnpj", c], ["NR", num], ["chave", x && x._senha != null ? x._senha : d.sem_senha ? "" : senhaDe(transp)], ["urlori", "https://ssw.inf.br/ajuda/rastreamento.html"]]) { const i = document.createElement("input"); i.type = "hidden"; i.name = k; i.value = v; f.appendChild(i); }
     document.body.appendChild(f); f.submit(); f.remove();
   }
   const cfEntregueIP = (x) => /^entregue/i.test(String(x.status_intelipost || "").trim());

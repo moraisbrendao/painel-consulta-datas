@@ -35,11 +35,13 @@ const normT = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g
 async function carregarSenhasDB() {
   if (carregarSenhasDB.ok) return; carregarSenhasDB.ok = true;
   const L = await chamar("senhas_rastreio?select=transportadora,senha").catch(() => []);
-  for (const x of L || []) { const k = normT(x.transportadora); if (k && x.senha) SENHAS.push([{ test: (t) => { const n = normT(t); return !!n && (n.includes(k) || k.includes(n)); } }, x.senha]); }
+  for (const x of L || []) { const k = normT(x.transportadora); if (k && x.senha) SENHAS.push([{ nome: x.transportadora, test: (t) => { const n = normT(t); return !!n && (n.includes(k) || k.includes(n)); } }, x.senha]); }
   if ((L || []).length) log("Senhas de rastreio do painel:", L.length);
 }
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
-const todasChaves = () => [...new Set(SENHAS.map(([, s]) => s).filter(Boolean))];
+// todas as senhas com o nome de quem é (o painel abre o SSW com a mesma senha que o robô usou)
+const NOMES_ENV = ["Trans Sua", "VM Transportes", "Aceville", "Dominalog", "Flog"];
+const todasChaves = () => { const vistos = new Set(), out = []; SENHAS.forEach(([re, s], i) => { if (!s || vistos.has(s)) return; vistos.add(s); out.push({ s, nome: i < NOMES_ENV.length ? NOMES_ENV[i] : re.nome || "" }); }); return out; };
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
 const FORA_SSW = /transiga/i;   // Transiga: rastreio chega por webhook. A Formato tem rastreio próprio (função formato), nunca SSW
 // Trânsito Brasil não usa SSW: consulta no rastreio dela (Senior), pela NF + CNPJ (série 35 → ...1083, outras → ...0192); só vale se a série bater
