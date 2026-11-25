@@ -3485,3 +3485,98 @@ begin
 end $$;
 revoke all on function public.rodar_robo_ajuste_tp() from public, anon;
 grant execute on function public.rodar_robo_ajuste_tp() to authenticated;
+-- 79) Torre de Controle: recebimento de PREVISÕES LOGÍSTICAS (MVP, só administradores veem).
+--     A previsão é uma ESTIMATIVA logística, não substitui a promessa original (base_pedidos.prev_original não é tocada).
+--     Pedido é achado pelo Pedido Intelipost (chave do E-loggia); se não vier, pela NF "numero-serie".
+--     Mesma revisão de novo = duplicada (não muda nada); revisão menor que a atual = antiga (ignorada).
+--     Todo recebimento fica no histórico previsao_torre_hist (log básico).
+create table if not exists public.previsao_torre (
+  pedido             text primary key,            -- Pedido Intelipost (mesmo da base_pedidos)
+  nf                 text,
+  promessa_original  date,                        -- cópia da promessa original no momento do recebimento (só para comparar)
+  previsao           date not null,               -- previsão logística da Torre (estimativa)
+  confianca          text,                        -- alta | media | baixa
+  situacao           text,                        -- texto curto da Torre (ex.: "em rota", "atraso na transferência")
+  revisao            integer not null default 1,
+  calculada_em       timestamptz,                 -- quando a Torre calculou
+  recebida_em        timestamptz not null default now(),
+  atualizacoes       integer not null default 1
+);
+create table if not exists public.previsao_torre_hist (
+  id           bigint generated always as identity primary key,
+  recebida_em  timestamptz not null default now(),
+  pedido       text,
+  nf           text,
+  revisao      integer,
+  previsao     date,
+  confianca    text,
+  situacao     text,
+  calculada_em timestamptz,
+  resultado    text not null                      -- nova | atualizada | duplicada | antiga | pedido_nao_encontrado | invalida
+);
+create index if not exists previsao_torre_hist_pedido on public.previsao_torre_hist (pedido, recebida_em desc);
+create index if not exists base_pedidos_chave_nf on public.base_pedidos ((public.chave_nf(nf)));
+
+alter table public.previsao_torre enable row level security;
+alter table public.previsao_torre_hist enable row level security;
+drop policy if exists "admins leem" on public.previsao_torre;
+create policy "admins leem" on public.previsao_torre for select to authenticated using (public.e_admin());
+drop policy if exists "admins leem" on public.previsao_torre_hist;
+create policy "admins leem" on public.previsao_torre_hist for select to authenticated using (public.e_admin());
+revoke all on public.previsao_torre, public.previsao_torre_hist from anon;
+grant select on public.previsao_torre, public.previsao_torre_hist to authenticated;
+
+create or replace function public.receber_torre(itens jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare
+  r record; ped text; nfk text; prom date; atual public.previsao_torre%rowtype; res text; conf text;
+  saida jsonb := '[]'::jsonb;
+begin
+  for r in select * from jsonb_to_recordset(itens) as x(pedido text, nf text, previsao text, confianca text, situacao text, revisao text, calculada_em text) loop
+    ped := nullif(trim(coalesce(r.pedido, '')), ''); nfk := nullif(public.chave_nf(r.nf), ''); res := null;
+    conf := lower(translate(trim(coalesce(r.confianca, '')), 'áéíóúâêôãõç', 'aeiouaeoaoc'));
+    begin   -- qualquer erro de formato (ex.: data 2026-02-31) vira 'invalida' sem derrubar o lote
+    if coalesce(r.previsao, '') !~ '^\d{4}-\d{2}-\d{2}$' or coalesce(r.revisao, '') !~ '^\d{1,9}$'
+       or (conf <> '' and conf not in ('alta', 'media', 'baixa')) or (ped is null and nfk is null) then
+      res := 'invalida';
+    else
+      -- acha o pedido: primeiro pelo Pedido Intelipost; senão pela NF (só se houver UM pedido com essa NF)
+      if ped is not null then
+        select b.pedido, b.prev_original, b.nf into ped, prom, nfk from public.base_pedidos b where b.pedido = ped;
+        if not found then ped := null; end if;
+      elsif nfk is not null then
+        select min(b.pedido), min(b.prev_original), min(b.nf) into ped, prom, nfk from public.base_pedidos b
+          where public.chave_nf(b.nf) = nfk having count(*) = 1;
+      end if;
+      if ped is null then res := 'pedido_nao_encontrado'; end if;
+    end if;
+    if res is null then
+      select * into atual from public.previsao_torre where pedido = ped;
+      if not found then
+        insert into public.previsao_torre (pedido, nf, promessa_original, previsao, confianca, situacao, revisao, calculada_em)
+        values (ped, nfk, prom, r.previsao::date, nullif(conf, ''), left(nullif(trim(r.situacao), ''), 120), r.revisao::int, nullif(r.calculada_em, '')::timestamptz);
+        res := 'nova';
+      elsif r.revisao::int = atual.revisao then res := 'duplicada';
+      elsif r.revisao::int < atual.revisao then res := 'antiga';
+      else
+        update public.previsao_torre set nf = nfk, promessa_original = coalesce(prom, promessa_original), previsao = r.previsao::date,
+          confianca = nullif(conf, ''), situacao = left(nullif(trim(r.situacao), ''), 120), revisao = r.revisao::int,
+          calculada_em = nullif(r.calculada_em, '')::timestamptz, recebida_em = now(), atualizacoes = atualizacoes + 1
+        where pedido = ped;
+        res := 'atualizada';
+      end if;
+    end if;
+    exception when others then res := 'invalida';
+    end;
+    insert into public.previsao_torre_hist (pedido, nf, revisao, previsao, confianca, situacao, calculada_em, resultado)
+    values (coalesce(ped, left(r.pedido, 40)), coalesce(nfk, left(r.nf, 30)),
+            case when coalesce(r.revisao, '') ~ '^\d{1,9}$' then r.revisao::int end,
+            case when res not in ('invalida', 'pedido_nao_encontrado') then r.previsao::date end,
+            left(nullif(conf, ''), 10), left(nullif(trim(r.situacao), ''), 120),
+            case when res not in ('invalida', 'pedido_nao_encontrado') then nullif(r.calculada_em, '')::timestamptz end, res);
+    saida := saida || jsonb_build_object('pedido', coalesce(r.pedido, ''), 'nf', coalesce(r.nf, ''), 'resultado', res);
+  end loop;
+  return saida;
+end $$;
+revoke all on function public.receber_torre(jsonb) from public, anon, authenticated;
+grant execute on function public.receber_torre(jsonb) to service_role;
