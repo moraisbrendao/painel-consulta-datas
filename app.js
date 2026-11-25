@@ -1137,7 +1137,11 @@ ${extra}
     return base.filter(precisaOc).concat(extra);
   }
   function urlOc(nf, serie) { const n = semZero(String(nf || "").split("-")[0]), sr = semZero(serie != null && serie !== "" ? serie : String(nf || "").split("-")[1]); return n ? `https://ccp.360multi.com/occurrences/${encodeURIComponent(n)}${sr ? "-" + encodeURIComponent(sr) : ""}` : ""; }
-  function linkOc(nf, serie, html) { const u = urlOc(nf, serie); return u ? `<a class="oc-link" href="${u}" target="portal360" title="Abrir o chat da ocorrência no portal">${html}</a>` : html; }
+  function linkOc(nf, serie, html) { const u = urlOc(nf, serie); return u ? `<a class="oc-link" href="${u}" title="Copia o link do chat da ocorrência: cole na barra de endereço da aba do portal">${html}</a>` : html; }
+  // o portal usa cookie SameSite=Strict: clique vindo do painel cai no login/início. Então o clique copia o link para colar na aba do portal.
+  document.addEventListener("click", (e) => { const a = e.target.closest && e.target.closest("a.oc-link"); if (!a) return; e.preventDefault(); e.stopPropagation();
+    const ok = () => toast("Link da ocorrência copiado. Na aba do portal: Ctrl+L, Ctrl+V e Enter.", true);
+    try { navigator.clipboard.writeText(a.href).then(ok, () => window.prompt("Copie o link (Ctrl+C) e cole na aba do portal:", a.href)); } catch { window.prompt("Copie o link (Ctrl+C) e cole na aba do portal:", a.href); } }, true);
   function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
   function marcaOc(p) {
     if (!precisaOc(p)) return "";
