@@ -663,6 +663,16 @@ if (MODO === "teste-velocidade") {   // mede quanto demora baixar a base como o 
   }
   process.exit(0);
 }
+if (MODO === "teste-torre") {   // Torre de Controle: a função responde e recusa token errado? (não grava nada)
+  const U = "https://qncselfuymeximgmetjp.supabase.co/functions/v1/torre-previsao";
+  for (const [rot, h] of [["sem token", {}], ["token errado", { Authorization: "Bearer teste-errado" }]]) {
+    const r = await fetch(U, { method: "POST", headers: { "Content-Type": "application/json", ...h }, body: "{}" }).catch((e) => ({ status: e.message, text: async () => "" }));
+    log(`Torre ${rot}:`, r.status, String(await r.text()).slice(0, 120));
+  }
+  await entrarSupabase();
+  await chamar("previsao_torre?select=pedido&limit=1").then(() => log("Torre: tabela previsao_torre existe")).catch((e) => log("Torre: tabela:", e.message.slice(0, 120)));
+  process.exit(0);
+}
 if (MODO === "teste-scallia") {   // conta os eventos do Scallia que já chegaram (só contagens) e testa se a função responde
   await entrarSupabase();
   // tira o pedido de teste que o admin do Scallia gravou (TESTE-1)
