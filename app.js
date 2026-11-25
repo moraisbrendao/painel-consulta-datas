@@ -1136,10 +1136,12 @@ ${extra}
       .map((t) => ({ nf: t.nf_nova, micro_status: t.insucesso, transportadora: t.transp_chat || String(t.transportadora || "").split(" / ")[0], _faixa: "ag", _ag: t.ticket }));
     return base.filter(precisaOc).concat(extra);
   }
+  function urlOc(nf, serie) { const n = semZero(String(nf || "").split("-")[0]), sr = semZero(serie != null && serie !== "" ? serie : String(nf || "").split("-")[1]); return n ? `https://ccp.360multi.com/occurrences/${encodeURIComponent(n)}${sr ? "-" + encodeURIComponent(sr) : ""}` : ""; }
+  function linkOc(nf, serie, html) { const u = urlOc(nf, serie); return u ? `<a class="oc-link" href="${u}" target="_blank" rel="noopener" title="Abrir o chat da ocorrência no portal">${html} ↗</a>` : html; }
   function ocCadastrada(p) { const { nf, serie } = nfSerie(p); return ocKeys.has(nf + "-" + serie) || ocSoNF.has(nf); }
   function marcaOc(p) {
     if (!precisaOc(p)) return "";
-    return ocCadastrada(p) ? `<div class="tag-oc ok">✓ ocorrência cadastrada</div>` : `<div class="tag-oc pend">ocorrência a cadastrar</div>`;
+    return ocCadastrada(p) ? `<div class="tag-oc ok">${linkOc(p.nf, null, "✓ ocorrência cadastrada")}</div>` : `<div class="tag-oc pend">ocorrência a cadastrar</div>`;
   }
 
   async function carregarOcorrencias() {
@@ -1925,7 +1927,7 @@ ${extra}
     $("c-linhas").innerHTML = cLista.slice((cPagina - 1) * POR_PAGINA, cPagina * POR_PAGINA).map((r) => {
       const t = trat.get(r.pedido) || {}, d = detDe(r) || {}, x = risco ? risco.score.get(r.pedido) : null;
       const at = [x && x.nivel !== "Baixo" ? `<span class="chip ${x.nivel === "Alto" ? "vermelho" : "ambar"}">risco ${x.nivel.toLowerCase()}</span>` : "", x && x.imp ? '<span class="chip vermelho">já reclamou</span>' : "",
-        d.tem_repo ? '<span class="chip roxo">reposição</span>' : "", d.tem_ocorr ? '<span class="chip laranja">ocorrência</span>' : "",
+        d.tem_repo ? '<span class="chip roxo">reposição</span>' : "", d.tem_ocorr ? linkOc(r.nf, r.serie, '<span class="chip laranja">ocorrência</span>') : "",
         !r._atraso && r._d === 0 ? '<span class="chip laranja">vence hoje</span>' : !r._atraso && r._d === 1 ? '<span class="chip ambar">vence amanhã</span>' : "",
         t.nova_data && t.nova_data < hojeISO() ? '<span class="chip vermelho">nova data vencida</span>' : ""].filter(Boolean).join(" ");
       const p = cBaseMapa().get(r.pedido);
@@ -3493,7 +3495,7 @@ ${extra}
       return `<span class="chip verde">✓ Baixa feita</span>${q}${ipTxt}`; }
     if (t.insucesso && t.situacao !== "entregue" && t.nf_nova) {   // onde está a ocorrência desse insucesso
       const n = nfSerie({ nf: t.nf_nova });
-      if (ocCadastrada({ nf: t.nf_nova })) return `<span class="chip verde">✓ Ocorrência cadastrada</span>`;
+      if (ocCadastrada({ nf: t.nf_nova })) return linkOc(t.nf_nova, null, `<span class="chip verde">✓ Ocorrência cadastrada</span>`);
       if (notasNaFila().has(n.nf + "-" + n.serie)) return `<span class="chip azul">No robô do portal</span>`;
       return `<span class="chip ambar">Pronta em Ocorrências</span><div class="s">falta mandar para o robô</div>`;
     }
