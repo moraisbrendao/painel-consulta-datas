@@ -3461,23 +3461,30 @@ ${extra}
   // O robô (modo "aguardando" do Robô do SSW) lê a nova NF no chat do ticket, confere no rastreio e dá a baixa ("Nota entregue?" → Sim).
   let agLista = [], agObs = new Map(), agInfo = null, agCard = "tratar", agBusca = "", agFila = "AE";   // AE = Aguardando entrega · AT = Aguardando entrega (AT)
   const agTransp = (t) => t.transp_chat || String(t.transportadora || "").split(" / ")[0] || "";
+  let agSaida = new Map();
+  // NF nova sem data de saída do Promob no detalhamento de tickets (abas Reposições / Assistência Técnica): ainda não saiu da expedição
+  const agSemSaida = (t) => { const x = agSaida.get(String(t.ticket)); return !!(x && !x.data_saida); };
   function agGrupo(t) {
     if (t.baixa_status === "feita") return "baixa";
     if (t.manual_entregue) return "robo";   // marcada à mão como entregue: o robô dá a baixa
+    if (t.situacao !== "entregue" && !t.insucesso && agSemSaida(t)) return "semsaida";
     if (t.baixa_status === "conferir" || t.baixa_status === "erro") return "conferir";
     if (t.situacao === "pendente" || t.situacao === "entregue") return "robo";
     if (t.insucesso) return "insucesso";
     if (t.situacao === "nao entregue" || t.situacao === "sem cte") return "tratar";
     return "conferir";
   }
-  const AG_NOME = { tratar: "Não entregues — para tratar", insucesso: "Insucesso na entrega (vão para Ocorrências)", conferir: "Conferir à mão", baixa: "Entregues · baixa feita", robo: "Aguardando o robô", todos: "Todos" };
+  const AG_NOME = { tratar: "Não entregues — para tratar", insucesso: "Insucesso na entrega (vão para Ocorrências)", conferir: "Conferir à mão", semsaida: "Sem saída da expedição (NF nova sem data de saída no Promob)", baixa: "Entregues · baixa feita", robo: "Aguardando o robô", todos: "Todos" };
   // mesmo botão da Conferência SSW: abre o rastreio da NF nova (no site de quem achou a nota, se o robô achou em outro)
   function agBotao(t) {
     if (!t.nf_nova) return "";
     const tr = t.fonte && t.fonte !== "SSW" ? t.fonte : agTransp(t), r = rastreioDe(tr);
     return `<div><button class="btn mini contorno" data-ag-rastreio="${esc(t.ticket)}" title="Abre o rastreio dessa nota agora">${r ? "Ver na " + esc(r[1]) : "Ver no SSW"} ↗</button></div>`;
   }
-  function agStatus(t) {
+  function agStatus(t) { const sx = agSaida.get(String(t.ticket));
+    const sai = sx ? (sx.data_saida ? `<div class="s">NF nova saiu da expedição ${br(String(sx.data_saida).slice(0, 10))}</div>` : `<div><span class="chip roxo">Sem saída da expedição</span></div>`) : "";
+    return agStatus0(t) + sai; }
+  function agStatus0(t) {
     const ev = t.ultimo_evento ? esc(t.ultimo_evento) + (t.data_evento ? ` <span class="s">${br(t.data_evento)}</span>` : "") : "";
     const pv = t.situacao === "nao entregue" && t.detalhe && t.detalhe.previsao ? String(t.detalhe.previsao).slice(0, 10) : null;
     const prev = pv ? `<div class="ag-prev ${pv < hojeISO() ? "vencida" : ""}">Previsão de entrega: <b>${br(pv)}</b>${pv < hojeISO() ? " (já passou)" : ""}</div>` : "";
@@ -3512,7 +3519,8 @@ ${extra}
   }
   async function carregarAguardando() {
     try {
-      const [lista, obs, inf] = await Promise.all([buscarTudo("aguardando_entrega", "ticket"), buscarTudo("aguardando_obs", "ticket"), sb.from("aguardando_info").select("*")]);
+      const [lista, obs, inf, sai] = await Promise.all([buscarTudo("aguardando_entrega", "ticket"), buscarTudo("aguardando_obs", "ticket"), sb.from("aguardando_info").select("*"), buscarTudo("tk_saida", "ticket").catch(() => [])]);
+      agSaida = new Map(sai.map((x) => [x.ticket, x]));
       const ativos = lista.filter((t) => t.na_planilha);
       agLista = ativos.filter((t) => (t.fila_rel || "AE") === agFila); agObs = new Map(obs.map((o) => [o.ticket, o]));
       agInfo = ((inf.data || []).find((x) => x.id === (agFila === "AT" ? 2 : 1))) || null;
@@ -4297,7 +4305,8 @@ ${extra}
     }
     carregando("");
     const avisoOc = wbDet && window.__ocorr ? await window.__ocorr.enviar(wbDet, arq.name).catch((err) => " · ocorrências: " + err.message) : "";
-    const avisoHist = (wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "") + avisoOc;
+    const avisoSai = wbDet ? await guardarSaidasTk(wbDet).catch((err) => " · saídas: " + err.message) : "";
+    const avisoHist = (wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "") + avisoOc + avisoSai;
     carregando("Atualizando o painel…");
     try { await carregar(); } finally { carregando(""); }   // o histórico deixava a janela "Enviando…" aberta para sempre
     if (avisoHist && /guardados/.test(avisoHist)) carregarReposicoes();
@@ -5338,6 +5347,31 @@ ${extra}
       if (!a) m.set(k, x); else for (const f of Object.keys(x)) if (x[f] != null && x[f] !== "" && (a[f] == null || a[f] === "" || (/^data_/.test(f) && x[f] > a[f]))) a[f] = x[f];
     });
     return { linhas: [...m.values()], lidas };
+  }
+  // data de saída (Promob) da NF nova por ticket, abas Reposições e Assistência Técnica (parte 76): quadro "Sem saída da expedição" nas filas AE/AT
+  function lerSaidasTk(wb) {
+    const iso = (v) => { if (v == null || v === "") return null; if (v instanceof Date) return v.toISOString();
+      if (typeof v === "number") { const d = XLSX.SSF.parse_date_code(v); return d ? new Date(d.y, d.m - 1, d.d, d.H, d.M, d.S).toISOString() : null; }
+      const t = dataCelula(v, true); return t || null; };
+    const m = new Map();
+    for (const [nomeAba, origem] of [["REPOSICOES", "REP"], ["ASSISTENCIA TECNICA", "AT"]]) {
+      const n = wb.SheetNames.find((x) => norm(x) === nomeAba); if (!n) continue;
+      const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }); if (!rows.length) continue;
+      const cab = rows[0].map(norm), c = (...xs) => cab.findIndex((h) => xs.includes(h));
+      const cT = c("ID TICKET", "ID DO TICKET"), cN = c("NF EMITIDA PROMOB"), cE = c("DATA EMISSAO PROMOB"), cS = c("DATA SAIDA PROMOB");
+      if (cT < 0 || cS < 0) continue;
+      rows.slice(1).forEach((r) => { if (!r) return; const tk = String(r[cT] ?? "").trim().replace(/\.0+$/, ""); if (!tk) return;
+        const x = { ticket: tk, origem, nf_nova: cN >= 0 && r[cN] != null ? String(r[cN]).trim().replace(/\.0+$/, "") : null, data_emissao: cE >= 0 ? iso(r[cE]) : null, data_saida: iso(r[cS]) };
+        const a = m.get(tk);   // várias linhas do ticket: fica a NF nova emitida por último
+        if (!a || (x.nf_nova && (!a.nf_nova || String(x.data_emissao || "") > String(a.data_emissao || "")))) m.set(tk, a && !x.data_saida && a.nf_nova === x.nf_nova ? { ...x, data_saida: a.data_saida } : x); });
+    }
+    return [...m.values()];
+  }
+  async function guardarSaidasTk(wb) {
+    const L = lerSaidasTk(wb); if (!L.length) return "";
+    try { await enviarLotes("gravar_tk_saida", L, 2000, (lote) => ({ linhas: lote }), 0); }
+    catch (err) { return /gravar_tk_saida|function|schema cache/i.test(err.message) ? " · saídas da NF nova: falta rodar a parte 76 no Supabase" : " · saídas: " + err.message; }
+    return "";
   }
   async function guardarHistRepo(arq, wb) {
     const { linhas, lidas } = lerHistRepo(wb);

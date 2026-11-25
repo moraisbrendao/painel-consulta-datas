@@ -3387,3 +3387,40 @@ begin
 end $$;
 revoke all on function public.rodar_robo_aguardando_marcados() from public, anon;
 grant execute on function public.rodar_robo_aguardando_marcados() to authenticated;
+
+-- parte 76 (25/11/2026): data de saída (Promob) da NF nova por ticket, lida das abas Reposições e Assistência Técnica
+-- do detalhamento de tickets. Usada na Fila Aguardando entrega / AT (quadro "Sem saída da expedição").
+create table if not exists public.tk_saida (
+  ticket text primary key,
+  origem text,
+  nf_nova text,
+  data_emissao timestamptz,
+  data_saida timestamptz,
+  atualizado_em timestamptz default now()
+);
+alter table public.tk_saida enable row level security;
+drop policy if exists tk_saida_ler on public.tk_saida;
+create policy tk_saida_ler on public.tk_saida for select to authenticated using (true);
+grant select on public.tk_saida to authenticated;
+
+create or replace function public.gravar_tk_saida(linhas jsonb)
+returns integer language plpgsql security definer set search_path = public as $$
+declare n integer;
+begin
+  insert into public.tk_saida as s (ticket, origem, nf_nova, data_emissao, data_saida, atualizado_em)
+  select x ->> 'ticket', x ->> 'origem', nullif(x ->> 'nf_nova', ''),
+         nullif(x ->> 'data_emissao', '')::timestamptz, nullif(x ->> 'data_saida', '')::timestamptz, now()
+  from jsonb_array_elements(linhas) x where coalesce(x ->> 'ticket', '') <> ''
+  on conflict (ticket) do update set
+    origem = excluded.origem,
+    nf_nova = coalesce(excluded.nf_nova, s.nf_nova),
+    data_emissao = coalesce(excluded.data_emissao, s.data_emissao),
+    -- NF nova diferente: vale a saída da NF nova; mesma NF: guarda a saída que já tinha se o arquivo vier sem
+    data_saida = case when excluded.nf_nova is not null and excluded.nf_nova is distinct from s.nf_nova then excluded.data_saida
+                      else coalesce(excluded.data_saida, s.data_saida) end,
+    atualizado_em = now();
+  get diagnostics n = row_count;
+  return n;
+end $$;
+revoke all on function public.gravar_tk_saida(jsonb) from public;
+grant execute on function public.gravar_tk_saida(jsonb) to authenticated;
