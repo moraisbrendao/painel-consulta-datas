@@ -47,6 +47,8 @@ async function abrirRepoPre(p, log) {
   log("Portal: botões de filtro " + chips.map((t) => t.replace(/\s+/g, " ").replace(/\d/g, "9")).join(" | "));
   log(`Portal: Reposições (Pré Entrega) aberta (${mascara(new URL(p.url()).pathname)})`);
 }
+// ticket com Situação FECHADO no 360: o caso acabou, não precisa de PDF nem anotação (Brenda 25/11)
+const ticketFechado = async (m) => /Situa[cç][aã]o:?\s*FECHADO/i.test(((await m.locator("body").innerText().catch(() => "")) || "").replace(/\s+/g, " "));
 // filtra a NF original e devolve a linha (primeira coluna igual à NF)
 async function acharLinha(p, nf) {
   const filtro = p.locator("input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]").first();
@@ -153,6 +155,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
     for (const x of chat) {
       try {
         await abrirTicket(m, x.ticket);
+        if (await ticketFechado(m)) { x._fechado = true; soma("ticket fechado (sem ação)"); await patch(x, { chat_pdf_status: "fechado", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: null, portal_anot_status: "fechado", portal_anot_em: new Date().toISOString(), portal_anot_msg: "Ticket fechado no 360: caso encerrado" }); continue; }
         // já enviado numa rodada anterior e não confirmado: só confere, NUNCA envia de novo
         if (x.chat_pdf_status === "conferir") { let ok = false; for (let k = 0; k < 3 && !ok; k++) { if (k) { await m.waitForTimeout(4000); await abrirTicket(m, x.ticket); } ok = await jaMandouPdf(m); }
           x.chat_pdf_status = ok ? "feito" : "conferir"; soma(ok ? "chat: envio anterior confirmado" : "chat: envio anterior ainda sem confirmação"); if (ok) await patch(x, { chat_pdf_status: "feito", chat_pdf_em: new Date().toISOString(), chat_pdf_msg: null }); continue; }
@@ -169,7 +172,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   }
   // 2) anotação no portal (depois do chat; sem PDF, espera até 3 dias da troca antes de anotar só a NF)
   const tres = Date.now() - 3 * 864e5;
-  const anota = L.filter((x) => x._forca || ((!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres)));
+  const anota = L.filter((x) => !x._fechado).filter((x) => x._forca || ((!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres)));
   if (anota.length) {
     const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log); acharLinha.log = log;
     const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
@@ -178,7 +181,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
     for (const x of anota) {
       try {
         const linha = await acharLinha(p, x.nf_ticket);
-        if (!linha) { soma("portal: NF ainda fora da lista"); await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
+        if (!linha) { soma("portal: NF ainda fora da lista"); x._naoAchou = true; await grava(x, "nao_achou", "NF original não aparece em Reposições (Pré Entrega) do portal"); continue; }
         const cel = linha.locator("td").nth(ia), txt = textoAnotacao(x, ["feito", "ja_tinha"].includes(x.chat_pdf_status));
         if ((await cel.innerText()).includes(numNova(x))) { soma("portal: já tinha a anotação"); await grava(x, "ja_tinha"); continue; }
         let ok;
@@ -200,6 +203,17 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
         }
         if (ok) { soma("portal: anotado"); await grava(x, "feito"); } else { soma("portal: gravei mas não confirmei"); await grava(x, "erro", "Não apareceu na coluna Anotações depois de gravar: conferir à mão"); }
       } catch (e) { soma("portal: erro"); log("  portal erro:", mascara(String(e.message).split("\n")[0])); await grava(x, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); }
+    }
+  }
+  // NF fora da lista do portal: olha o ticket no 360; fechado = caso encerrado, sai da lista "não localizado"
+  const fora = L.filter((x) => x._naoAchou);
+  if (fora.length) {
+    const m = await entrarMulti360(ctx, log);
+    for (const x of fora) {
+      try { await abrirTicket(m, x.ticket);
+        if (await ticketFechado(m)) { soma("não localizada: ticket fechado (sem ação)"); await patch(x, { portal_anot_status: "fechado", portal_anot_em: new Date().toISOString(), portal_anot_msg: "Ticket fechado no 360: caso encerrado" }); }
+        else soma("não localizada: ticket ainda aberto");
+      } catch (e) { log("  360 erro:", mascara(String(e.message).split("\n")[0])); }
     }
   }
   log("anota-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
