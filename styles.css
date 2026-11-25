@@ -1381,3 +1381,4 @@ body.fundo-escuro #rp-sla .sm-titulo .sub b { color: #fff; }
 .cm-filtros select, .cm-filtros input { padding: 6px 8px; border: 1px solid #d0d7e2; border-radius: 8px; }
 .btn.pequeno { padding: 4px 10px; font-size: 12px; }
 .chip.roxo { background: #f1e8ff; color: #6b21a8; }
+.tn-tk { font-weight: 600; white-space: nowrap; }
