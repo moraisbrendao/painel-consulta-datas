@@ -104,6 +104,13 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
     return alvo;
   };
   // séries 25/34/35 dessas transportadoras: CT-e da Rajlog (milk run) não vale como rastreio (Brenda, 23/11)
+  // série 35 fora do RJ: CT-e emitido pela TSL é a first mile, não vale como rastreio da entrega (Brenda 25/11, mesma regra da Conferência SSW)
+  const ajustaTsl = async (r, x) => {
+    if (String(x.serie || String(x.nf).split("-")[1] || "").replace(/^0+/, "") !== "35" || !r || !r.situacao || /^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return r;
+    if (!(/\btsl\b/i.test(r.transp || "") || /\btsl\b/i.test(r.evento || "") || /\btsl\b/i.test(r.emissor || ""))) return r;
+    const b = await daBase(x.nf); if (String(b.uf || "").trim().toUpperCase() === "RJ") return r;
+    soma("TSL 35: CT-e da first mile descartado"); return { ...r, situacao: "sem cte", evento: "SÓ CT-E DA TSL (FIRST MILE)" };
+  };
   const ajustaRaj = (r, alvo, serie) => {
     // série 35: CT-e emitido pela DLOG (first mile) não conta como rastreio (Brenda, 24/11)
     if (String(serie || "").replace(/^0+/, "") === "35" && r && r.situacao && !/^(sem cte|sem nf|sem permissao)$/.test(r.situacao) && (/\bDLOG\b/i.test(r.transp || "") || /\bDLOG\b/i.test(r.evento || ""))) return { ...r, situacao: "sem cte", evento: "SÓ CT-E DA DLOG (FIRST MILE)" };
@@ -115,7 +122,7 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   for (const x of vigiar) {
     try {
       const alvo = await alvoDe(x); if (!alvo || alvo.semAlvo) continue;
-      const r = ajustaRaj(await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R), alvo, x.serie); r.alvo = alvo;
+      const r = await ajustaTsl(ajustaRaj(await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R), alvo, x.serie), x); r.alvo = alvo;
       const campos = { conferido_em: new Date().toISOString() };
       if (r.situacao && !FORA.test(r.situacao)) { campos.cte_depois = { ...r }; campos.cte_alerta_em = new Date().toISOString(); soma("CT-e depois do cancelamento"); }
       await chamar(`nao_localizada?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", campos);
@@ -125,7 +132,7 @@ export async function rodarNaoloc({ chamar, log, ctx, R, subirArquivo, teste, li
   for (const x of fila) {
     try {
       const a0 = await alvoDe(x), alvo = a0 && a0.semAlvo ? null : a0;
-      const r = alvo ? ajustaRaj(await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R), alvo, x.serie) : { situacao: null, fonte: null };
+      const r = alvo ? await ajustaTsl(ajustaRaj(await B.rastrear({ nf: x.nf, transp_pedido: alvo }, R), alvo, x.serie), x) : { situacao: null, fonte: null };
       r.alvo = alvo;
       const s = alvo ? sugerir(x, r) : { sugestao: "manual", motivo: (a0 && a0.semAlvo) || "Sem transportadora no ticket nem na planilha" };
       let print_rastreio = x.print_rastreio || null, png = null;
