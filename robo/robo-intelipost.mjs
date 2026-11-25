@@ -561,7 +561,7 @@ async function ajusteTp(limite) {
     const aoa = [["Dados para atualizar", "", "", ""], ["Pedido", "Método Novo", "Resultado", "Observação"], ["so_order_number", "so_delivery_method_id", "", ""]];
     // escreve no PRÓPRIO modelo com o ExcelJS (arquivo igual ao salvo pelo Excel): as planilhas feitas com o SheetJS deram "Erro no Processamento"
     let feito = false;
-    try {
+    if (process.env.AJTP_EXCELJS) try {
       const ExcelJS = (await import("exceljs")).default;
       const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx");
       if (r.ok()) {
@@ -583,7 +583,8 @@ async function ajusteTp(limite) {
     try {
       await abrirUploadMetodo();
       await pagina.locator("input[type=file]").first().setInputFiles(arq);
-      log("  arquivo enviado na Intelipost; esperando o processamento…");
+      await pagina.waitForTimeout(4000);
+      log("  arquivo enviado na Intelipost; caixa do arquivo:", mascara(await pagina.locator(".filepond--root, [class*=filepond]").first().innerText().catch(() => "?")).replace(/delivery_method_robo\d+/g, "<arquivo>").replace(/\s+/g, " ").slice(0, 150), "· esperando o processamento…");
       let st = "";
       for (let i = 0; i < 24 && !/sucesso|erro/i.test(st); i++) {
         await pagina.waitForTimeout(10000);
