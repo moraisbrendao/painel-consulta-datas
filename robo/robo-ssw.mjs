@@ -39,6 +39,7 @@ async function carregarSenhasDB() {
   if ((L || []).length) log("Senhas de rastreio do painel:", L.length);
 }
 const chaveDe = (transp) => (SENHAS.find(([re, s]) => s && re.test(transp || "")) || [, ""])[1];
+const todasChaves = () => [...new Set(SENHAS.map(([, s]) => s).filter(Boolean))];
 // transportadoras que não usam SSW (regra da Brenda): nem consulta; nas outras, "Informação não disponível" = CT-e ainda não emitido
 const FORA_SSW = /transiga/i;   // Transiga: rastreio chega por webhook. A Formato tem rastreio próprio (função formato), nunca SSW
 // Trânsito Brasil não usa SSW: consulta no rastreio dela (Senior), pela NF + CNPJ (série 35 → ...1083, outras → ...0192); só vale se a série bater
@@ -1506,5 +1507,5 @@ if (MODO === "repo-itens") {   // Reposição: itens/volumes e cobrança à tran
 }
 if (MODO === "aguardando" || MODO === "aguardando-teste") {   // aba Alterar pedidos → Fila Aguardando entrega (robo/aguardando.mjs)
   await entrarSupabase();
-  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
+  await (await import("./aguardando.mjs")).rodar({ chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, todasChaves, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO });
 }

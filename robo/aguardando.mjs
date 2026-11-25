@@ -15,13 +15,14 @@ const FORA = /transiga|formato/i;   // não usam SSW (regra da Brenda); a Format
 // a transportadora que emitiu o CT-e no SSW é a do ticket? (compara as palavras do nome, sem as genéricas)
 const GEN = /^(TRANS|TRANSPORTES?|TRANSPORTADORA|LOGISTICA|LOG|LTDA|EIRELI|EXPRESS|EXPRESSO|CARGAS?|FILIAL|MATRIZ|STANDARD|SERVICOS|E|DE|DO|DA|ME|SA|S\/A)$/;
 const palavras = (x) => String(x || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase().split(/[^A-Z0-9]+/).filter((w) => w.length >= 3 && !GEN.test(w));
+const semAchar = (r) => !r || /^(sem cte|sem nf|sem permissao)$/.test(r.situacao || "");
 const mesmaTransp = (emissor, tp) => { const a = palavras(emissor), b = new Set(palavras(tp)); return a.some((w) => b.has(w)); };
 const LIBERADO = true;   // Brenda liberou o Sim para todos em 13/11/2026 ("pode rodar todos")
 const BR = (iso) => iso ? iso.split("-").reverse().join("/") : "";
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
 export async function rodar(R) {
-  const { chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
+  const { chamar, log, jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, lerResultado, cnpjDaSerie, chaveDe, todasChaves, carregarSenhasDB, sohTexto, EH_JADLOG, EH_BENTO, EH_TRANSITO, MODO } = R;
   const REAL = MODO === "aguardando" && LIBERADO;
   const LIMITE = Number(process.env.SSW_LIMITE || 0);
   const FILA = /^(AE|AT)$/i.test(process.env.TRANSP || "") ? process.env.TRANSP.toUpperCase() : "";   // teste: só uma fila (AE = Aguardando entrega, AT = Aguardando entrega (AT))
@@ -80,8 +81,18 @@ export async function rodar(R) {
       ssw: { nome: "SSW", fn: async (it) => { const out = new Map();
         for (const l of it) { const [num, ser] = String(l.nf || "").split("-").map((x) => (x || "").trim()), c = cnpjDaSerie(ser);
           if (!num || !c) { out.set(l.pedido, { situacao: "sem nf" }); continue; }
-          const pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: l.chave || "" }).toString() }).catch(() => null);
-          if (pg && pg.status === 200) { const r = lerEntrega(pg.txt);
+          // série 35 (first/last mile): só a transportadora do ticket. Outras séries: não achou com a senha dela → tenta sem senha e com as senhas das outras (Brenda 25/11)
+          const ssw = (ch) => pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: ch || "" }).toString() });
+          let pg = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: c, NR: num, chave: l.chave || "" }).toString() }).catch(() => null);
+          let chUsada = l.chave || "";
+          if (pg && pg.status === 200 && semAchar(lerEntrega(pg.txt)) && String(ser).replace(/^0+/, "") !== "35") {
+            for (const ch of ["", ...todasChaves()].filter((x) => x !== (l.chave || ""))) {
+              await new Promise((ok) => setTimeout(ok, 2000));
+              const p2 = await ssw(ch).catch(() => null);
+              if (p2 && p2.status === 200 && !semAchar(lerEntrega(p2.txt))) { pg = p2; chUsada = ch; soma("SSW: achou com outra senha/sem senha"); break; }
+            }
+          }
+          if (pg && pg.status === 200) { const r = lerEntrega(pg.txt); r.chave = chUsada;
             // entregue: quem emitiu o CT-e no SSW (para não dar baixa com a entrega da transportadora de first mile)
             const det = r.situacao === "entregue" && (pg.txt.match(/opx\('(\/2\/ssw_SSWDetalhado\?[^']+)'\)/) || [])[1];
             if (det) { await new Promise((ok) => setTimeout(ok, 2500)); const d = await pagina("https://ssw.inf.br" + det).catch(() => null);
@@ -146,7 +157,9 @@ export async function rodar(R) {
     for (const t of ent) {
       const emi = t.nf_emitida_em ? t.nf_emitida_em.slice(0, 10) : null;
       if (!t.data_entrega || (emi && t.data_entrega < emi)) { soma("entregue sem data confiável (conferir à mão)"); lote.push({ ticket: t.ticket, baixa_status: "conferir", baixa_msg: !t.data_entrega ? "O rastreio diz entregue, mas sem a data da entrega." : "A data de entrega do rastreio é de antes da emissão da nova NF." }); continue; }
-      if (t.fonte === "SSW" && !(t._r.emissor && mesmaTransp(t._r.emissor, tp(t)))) { soma("entregue no SSW por outra transportadora (conferir à mão)"); lote.push({ ticket: t.ticket, baixa_status: "conferir", baixa_msg: t._r.emissor ? `O SSW mostra a entrega pela ${t._r.emissor}, que não é a transportadora do ticket (pode ser a de first mile).` : "Não consegui ver no SSW qual transportadora fez a entrega." }); continue; }
+      const serNova = String(t.nf_nova || "").split("-")[1]?.trim().replace(/^0+/, "") || "";
+      const exigeMesma = serNova === "35" || (["25", "34"].includes(serNova) && /dominalog|tempo\s*justo|\bvm\b|trans\s*sua|transvanio/i.test(tp(t)));   // first/last mile (Brenda 25/11: só série 35; regra Dominalog 25/34)
+      if (t.fonte === "SSW" && exigeMesma && !(t._r.emissor && mesmaTransp(t._r.emissor, tp(t)))) { soma("entregue no SSW por outra transportadora (conferir à mão)"); lote.push({ ticket: t.ticket, baixa_status: "conferir", baixa_msg: t._r.emissor ? `O SSW mostra a entrega pela ${t._r.emissor}, que não é a transportadora do ticket (pode ser a de first mile).` : "Não consegui ver no SSW qual transportadora fez a entrega." }); continue; }
       const arq = `/tmp/ag-${Date.now()}.png`;
       try {
         await printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina });
@@ -174,7 +187,7 @@ async function printRastreio(ctx, t, arq, { cnpjDaSerie, chaveDe, pagina }) {
     };
     if (t.fonte === "SSW") {
       // a mesma página que o robô leu (o navegador do runner não abre o SSW igual): HTML do resultado com os estilos do SSW
-      const r = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: chaveDe(t.transp_chat) || chaveDe(t.transportadora) || "" }).toString() });
+      const r = await pagina("https://ssw.inf.br/2/resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ cnpj: cnpjDaSerie(ser), NR: num, chave: (t._r && t._r.chave != null ? t._r.chave : chaveDe(t.transp_chat) || chaveDe(t.transportadora)) || "" }).toString() });
       if (!/MERCADORIA ENTREGUE|ENTREGA REALIZADA/i.test(r.txt)) throw new Error("a página do SSW não mostrou a entrega para o print");
       await pg.setViewportSize({ width: 1100, height: 700 });
       await pg.setContent(r.txt.replace(/<head[^>]*>/i, (h) => h + '<base href="https://ssw.inf.br/2/">'), { waitUntil: "load", timeout: 30000 }).catch(() => {});
