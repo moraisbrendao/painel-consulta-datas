@@ -1413,3 +1413,7 @@ a.oc-link:hover { text-decoration: underline; }
 .dv-arq { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 8px; }
 .kpi-ed { cursor: pointer; padding: 0 4px; border-radius: 4px; background: rgba(0,0,0,.08); font-style: normal; }
 .kpi-ed:hover { background: rgba(0,0,0,.18); }
+/* Preventivo: lista com rolagem própria (roda do mouse) e cabeçalho fixo (Brenda 25/11) */
+.rolo-lista { max-height: 70vh; overflow: auto; }
+.rolo-lista thead th { position: sticky; top: 0; z-index: 3; }
+@media (max-width: 760px) { .rolo-lista { max-height: none; overflow: visible; } }
