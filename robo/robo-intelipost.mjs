@@ -471,10 +471,15 @@ async function diagAjtp() {
   const ouvir = async (r) => { try { const ct = r.headers()["content-type"] || ""; if (!/json/.test(ct)) return; const j = await r.json().catch(() => null); if (!j) return;
     const amostra = Array.isArray(j) ? j[0] : (j.content || j.data || j.items || j.result || [])[0] || j;
     resps.push(`${r.request().method()} ${new URL(r.url()).host}${new URL(r.url()).pathname.replace(/\d{4,}/g, "#")} · chaves: ${Object.keys(amostra || {}).slice(0, 15).join(",")}${amostra && (amostra.status || amostra.status_envio) ? " · status=" + String(amostra.status || amostra.status_envio).slice(0, 30) : ""}`); } catch (_) {} };
-  pagina.on("response", ouvir);
-  await pagina.getByText(/Atualizar lista/i).first().click().catch(() => {}); await pagina.waitForTimeout(10000);
+  const reqs = []; const ouvirReq = (q) => { if (!/\.(js|css|png|svg|woff2?|ico)(\?|$)/.test(q.url())) reqs.push(`${q.method()} ${new URL(q.url()).host}${new URL(q.url()).pathname.replace(/\d{4,}/g, "#")}`); };
+  pagina.on("response", ouvir); pagina.on("request", ouvirReq);
+  await pagina.locator("button:visible", { hasText: /Atualizar lista/i }).first().click().catch((e) => log("  clique Atualizar lista falhou:", e.message.slice(0, 80))); await pagina.waitForTimeout(10000);
+  pagina.off("request", ouvirReq); log("  pedidos de rede:", [...new Set(reqs)].slice(0, 15).join(" ; "));
   pagina.off("response", ouvir);
   log("  respostas JSON depois de Atualizar lista:"); resps.slice(0, 12).forEach((x) => log("   ", x));
+  log("  'Atualizar lista' elementos:", await pagina.evaluate(() => [...document.querySelectorAll("button, a, span, div")].filter((e) => /^\s*Atualizar lista\s*$/i.test(e.textContent) && !e.querySelector("button,a")).map((e) => `${e.tagName} vis=${e.getBoundingClientRect().width > 0}`).slice(0, 4).join(", ")));
+  const corpo = await pagina.evaluate(() => document.body.innerText); const i0 = corpo.search(/Atualizar lista/i);
+  log("  texto depois do botão:", (i0 >= 0 ? corpo.slice(i0, i0 + 400) : corpo.slice(-300)).replace(/\n+/g, " | ").replace(/arquivo_[^|]*/gi, "<arquivo>").replace(/\d{2}\/\d{2}\/\d{4}/g, "<data>"));
   log("  shadow roots:", await pagina.evaluate(() => [...document.querySelectorAll("*")].filter((e) => e.shadowRoot).map((e) => e.tagName).slice(0, 5).join(",")));
   log("  textos com Sucesso/Erro:", await pagina.evaluate(() => [...document.querySelectorAll("*")].filter((e) => !e.children.length && /^\s*(Sucesso|Erro no Processamento|Processando|Aguardando)/i.test(e.textContent)).slice(0, 4).map((e) => `${e.tagName}.${(e.className || "").toString().slice(0, 30)}:${e.textContent.trim()} ← linha ${(e.closest("tr,[role=row],li,div[class*=row i]") || {}).tagName || "?"}`).join(" | ")));
   log("  frames:", pagina.frames().map((f) => { try { return new URL(f.url()).pathname.slice(0, 50); } catch (_) { return "?"; } }).join(" ; "));
