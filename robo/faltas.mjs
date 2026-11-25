@@ -107,7 +107,7 @@ async function abrirChat(ctx) { const c = await ctx.newPage(); await c.goto("htt
 async function lerChat(c, nf) {
   const busca = c.locator("input[placeholder*='NF' i]").first();
   await busca.fill(""); await busca.fill(nf); await c.waitForTimeout(2800);
-  const item = c.getByText(nf, { exact: true });
+  const item = c.locator("text=" + nf);   // o item da lista traz "NF · ID … · status": busca por pedaço de texto (igual ao diag-chat)
   if (!(await item.count())) { const vazio = /nenhuma nota encontrada/i.test(await c.locator("body").innerText()); return { achou: false, certo: vazio }; }
   await item.first().click().catch(() => {}); await c.waitForTimeout(3000);
   const ls = (await c.locator("body").innerText()).split("\n").map((l) => l.trim()).filter(Boolean);
