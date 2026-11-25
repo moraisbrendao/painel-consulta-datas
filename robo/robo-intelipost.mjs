@@ -553,7 +553,7 @@ async function ajusteTp(limite) {
   log(`Ajuste de transportadora: ${pend.length} aprovado(s) para a Intelipost.`);
   if (pend.length) {
     await salva(pend.map((x) => x.pedido), { status: "enviando", msg: null });
-    const nome = `ajuste_transportadora_${Date.now()}.xlsx`, arq = "/tmp/" + nome;
+    const nome = `arquivo_exemplo_alterar_pedido_delivery_method_robo${Date.now()}.xlsx`   // a Intelipost recusou "ajuste_transportadora_…" (file.invalid.import): mantém o nome do modelo, arq = "/tmp/" + nome;
     // modelo da própria Intelipost (mesmo cabeçalho de 3 linhas); se não baixar, monta igual
     let wb = null;
     try { const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx"); if (r.ok()) wb = XLSX.read(await r.body(), { type: "buffer" }); } catch (_) {}
@@ -1215,19 +1215,19 @@ try {
       const f = `/tmp/c-${Date.now()}.xlsx`; await dl.saveAs(f); const wb = XLSX.readFile(f); const ws = wb.Sheets[wb.SheetNames[0]];
       const c = (a) => { const x = ws[a]; return x ? `${x.t}${x.t === "n" ? ":" + x.v : x.t === "s" && /^[ABCD][123]$/.test(a) ? ":" + String(x.v).slice(0, 25) : ":" + String(x.v).replace(/\d/g, "9").replace(/[a-z]/gi, "x").slice(0, 40)}` : "-"; };
       return `abas=${wb.SheetNames.join("/")} ref=${ws["!ref"]} merges=${(ws["!merges"] || []).map((m) => XLSX.utils.encode_range(m)).join(",")} A1=${c("A1")} A2=${c("A2")} B2=${c("B2")} A3=${c("A3")} B3=${c("B3")} A4=${c("A4")} B4=${c("B4")} C4=${c("C4")} D4=${c("D4")}`; };
-    const ok = pagina.locator("tr", { hasText: /Sucesso/ }).filter({ hasNotText: "ajuste_transportadora_" }).first();
+    const ok = pagina.locator("tr", { hasText: /Sucesso/ }).filter({ hasNotText: "delivery_method_robo" }).first();
     log("Envio com Sucesso (Brenda):", await estrutura(ok));
-    log("Envio do robô:", await estrutura(pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first()));
+    log("Envio do robô:", await estrutura(pagina.locator("tr", { hasText: "delivery_method_robo" }).first()));
     log("Primeiras linhas da lista:", (await pagina.locator("tbody tr").evaluateAll((rs) => rs.slice(0, 4).map((r) => r.innerText.replace(/\s+/g, " ")))).map((t) => t.replace(/\d{6,}/g, "#")).join(" || "));
-    { const bt = pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first().getByText(/Baixar Arquivo/i).first();
+    { const bt = pagina.locator("tr", { hasText: "delivery_method_robo" }).first().getByText(/Baixar Arquivo/i).first();
       const dl = await Promise.all([pagina.waitForEvent("download", { timeout: 30000 }), bt.click()]).then(([d]) => d).catch(() => null);
       if (dl) { const f = "/tmp/err.xlsx"; await dl.saveAs(f); const wb = XLSX.readFile(f); for (const n of wb.SheetNames) log("Arquivo de erro, aba", n.replace(/\d/g, "#"), ":", JSON.stringify(XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" }).slice(0, 8)).replace(/\d{5,}/g, "#").slice(0, 600)); } }
     const a = (await chamar("ajuste_tp?status=eq.erro&select=pedido,id_metodo,para_h&limit=3"));
     log("Na tabela (erro):", a.map((x) => `id ${x.id_metodo} · ${x.para_h} · pedido formato ${String(x.pedido).replace(/\d/g, "9").replace(/[a-z]/gi, "x")}`).join(" | "));
   }
-  else if (MODO === "diag-ajtp-ret") { await abrirUploadMetodo(); const ret = await retornoUpload("ajuste_transportadora_").catch((e) => { log("retorno falhou:", e.message.slice(0, 100)); return null; });
+  else if (MODO === "diag-ajtp-ret") { await abrirUploadMetodo(); const ret = await retornoUpload("delivery_method_robo").catch((e) => { log("retorno falhou:", e.message.slice(0, 100)); return null; });
     log("Retorno do último envio do robô:", ret ? ret.map((x) => mascara(`${x.resultado} · ${x.obs}`).slice(0, 150)).join(" | ") || "(sem linhas)" : "não consegui baixar");
-    log("Linha na lista:", mascara(await pagina.locator("tr", { hasText: "ajuste_transportadora_" }).first().innerText().catch(() => "?")).replace(/ajuste_transportadora_\d+/g, "<arquivo>").replace(/\s+/g, " ").slice(0, 200)); }
+    log("Linha na lista:", mascara(await pagina.locator("tr", { hasText: "delivery_method_robo" }).first().innerText().catch(() => "?")).replace(/delivery_method_robo\d+/g, "<arquivo>").replace(/\s+/g, " ").slice(0, 200)); }
   else if (MODO === "ajuste-tp") await ajusteTp(Number(process.env.LIMITE || String(process.env.TICKET || "").replace(/^r/i, "") || 0) || 300);   // disparo manual: o campo "ticket" leva o limite
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
