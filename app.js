@@ -2785,6 +2785,50 @@ ${extra}
   });
   $("dv-arq-limpar").addEventListener("click", () => { dvArq = null; try { localStorage.removeItem("painel.dvArquivo"); } catch (_) {} dvArqInfo(); dvGrupo = null; desenharDivTP(); });
 
+  // ajuste de transportadora (parte 80): ✓ Alterar / ✕ Excluir por pedido; o robô faz Intelipost + Multi360
+  let ajtp = new Map(), ajtpOk = true;
+  async function carregarAjtp() {
+    const r = await sb.from("ajuste_tp").select("pedido,status,msg,id_metodo,para_h,aprovado_por,atualizado_em").limit(20000);
+    ajtpOk = !r.error; ajtp = new Map((r.data || []).map((x) => [x.pedido, x]));
+  }
+  const AJTP_ST = { aprovado: ["azul", "Aprovado · aguardando o robô"], enviando: ["ambar", "Robô alterando…"], ip_ok: ["ambar", "Intelipost ok · falta Multi360"], feito: ["verde", "✓ Alterado (Intelipost e Multi360)"], erro: ["vermelho", "Erro"], excluido: ["cinza", "Excluído (não alterar)"] };
+  function celAjtp(x) {
+    if (x.sit !== "div") return "";
+    const a = ajtp.get(x.r.pedido);
+    if (a) { const [c, t] = AJTP_ST[a.status] || ["cinza", a.status];
+      return `<span class="chip ${c}" title="${esc([a.msg, a.aprovado_por ? "por " + a.aprovado_por : ""].filter(Boolean).join(" · "))}">${t}</span>${a.status === "erro" && a.msg ? `<div class="s">${esc(a.msg)}</div>` : ""}${["aprovado", "excluido", "erro"].includes(a.status) ? ` <button class="link" data-ajtp-des="${esc(x.r.pedido)}">desfazer</button>` : ""}`; }
+    if (!x.idp) return '<span class="s">cadastre a transportadora do Promob</span>';
+    return `<button class="btn mini amarelo" data-ajtp-ok="${esc(x.r.pedido)}" title="Trocar na Intelipost para ${esc(x.idp.h)} (ID ${x.idp.id}) e atualizar no Multi360">✓ Alterar</button> <button class="btn mini contorno" data-ajtp-x="${esc(x.r.pedido)}" title="Não alterar este pedido">✕ Excluir</button>`;
+  }
+  async function marcarAjtp(lista, status) {
+    if (!ajtpOk) return toast("Rode a parte 80 do schema.sql no Supabase primeiro.", true);
+    const quem = (await sb.auth.getUser()).data.user?.email || "";
+    const linhas = lista.map((x) => ({ pedido: x.r.pedido, transp_h: x.r.transp || "", transp_promob: x.promob || "", para_h: x.idp ? x.idp.h : null, id_metodo: x.idp ? x.idp.id : null,
+      status, msg: null, aprovado_por: quem, aprovado_em: new Date().toISOString(), atualizado_em: new Date().toISOString() }));
+    for (let i = 0; i < linhas.length; i += 500) { const { error } = await sb.from("ajuste_tp").upsert(linhas.slice(i, i + 500), { onConflict: "pedido" }); if (error) return toast("Não consegui salvar: " + error.message, true); }
+    await carregarAjtp(); desenharDivTP();
+  }
+  $("dv-linhas").addEventListener("click", async (e) => {
+    const ok = e.target.closest("[data-ajtp-ok]"), x = e.target.closest("[data-ajtp-x]"), des = e.target.closest("[data-ajtp-des]");
+    const achar = (ped) => dvLista.find((y) => y.r.pedido === ped);
+    if (ok) { const y = achar(ok.dataset.ajtpOk); if (y) await marcarAjtp([y], "aprovado"); }
+    if (x) { const y = achar(x.dataset.ajtpX); if (y) await marcarAjtp([y], "excluido"); }
+    if (des) { const { error } = await sb.from("ajuste_tp").delete().eq("pedido", des.dataset.ajtpDes); if (error) return toast("Não consegui desfazer: " + error.message, true); await carregarAjtp(); desenharDivTP(); }
+  });
+  $("dv-ajtp-todos").addEventListener("click", async () => {
+    const L = dvLista.filter((y) => y.sit === "div" && y.idp && !ajtp.has(y.r.pedido));
+    if (!L.length) return toast("Nenhum pedido divergente desta lista para aprovar.");
+    if (!confirm(`Aprovar a alteração de ${fmt(L.length)} pedido(s) desta lista?\n\nO robô troca o método na Intelipost (ID da tabela de apelidos) e atualiza a transportadora no Multi360 quando você clicar em "Enviar para o robô".`)) return;
+    await marcarAjtp(L, "aprovado"); toast(`${fmt(L.length)} pedido(s) aprovados.`);
+  });
+  $("dv-ajtp-robo").addEventListener("click", async () => {
+    const n = [...ajtp.values()].filter((a) => a.status === "aprovado").length;
+    if (!n) return toast("Nenhum pedido aprovado esperando o robô.");
+    if (!confirm(`Enviar ${fmt(n)} pedido(s) aprovados para o robô?\n\nEle sobe a planilha na Intelipost (Alterar Pedidos › Upload › Método de entrega), confere o Sucesso e depois atualiza a transportadora no Multi360.`)) return;
+    const { error } = await sb.rpc("rodar_robo_ajuste_tp"); if (error) return toast("Não consegui chamar o robô: " + error.message, true);
+    toast("Robô chamado. Leva alguns minutos; atualize a página para ver o resultado.");
+  });
+
   const DV_CARD = { div: (x) => x.sit === "div", ok: (x) => x.sit === "ok", sem: (x) => x.sit === "sem", todos: () => true };
   const DV_NOME = { div: "Divergente", ok: "OK", sem: "Sem apelido cadastrado" };
   const dvChave = (x) => `${x.r.transp || ""}\u0001${x.promob}`;
@@ -2797,6 +2841,7 @@ ${extra}
     }
     prepararG();
     if (!ajCarregado) await carregarApelidos();
+    await carregarAjtp().catch(() => {});
     if (!dvPromob || dvGer !== gGeracao) { $("dv-info").textContent = "Lendo a transportadora do Promob…"; if (!(await carregarDvPromob())) return; }
     const temPromob = [...dvPromob.values()].some((x) => x.tp);
     const todos = [];
@@ -2840,9 +2885,11 @@ ${extra}
     $("dv-linhas").innerHTML = dvLista.slice(0, 500).map((x) => {
       const st = x.sit === "ok" ? '<span class="chip verde">OK</span>' : x.sit === "div" ? '<span class="chip vermelho">Divergente</span>' : '<span class="chip laranja">Sem apelido cadastrado</span>';
       return `<tr><td class="mono">${esc(x.ped)}</td><td class="mono">${esc(x.r.pedido)}</td><td>${esc(x.r.nf)}${x.r.serie ? "-" + esc(x.r.serie) : ""}</td><td><span class="ms">${esc(x.r.status || "")}</span>${x.r._atraso ? `<div><span class="chip vermelho">atrasado ${x.r._atraso} d</span></div>` : ""}</td>
-        <td>${esc(x.r.transp || "—")}</td><td>${esc(x.promob || "—")}${x.rd ? `<div class="s">redespacho · nota: ${esc(x.bd || "—")}</div>` : ""}</td><td>${x.idp ? x.idp.id : '<span class="s">Não cadastrada</span>'}</td><td>${st}</td></tr>`;
-    }).join("") + (dvLista.length > 500 ? `<tr><td colspan="8" class="s">Mostrando 500 de ${fmt(dvLista.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
+        <td>${esc(x.r.transp || "—")}</td><td>${esc(x.promob || "—")}${x.rd ? `<div class="s">redespacho · nota: ${esc(x.bd || "—")}</div>` : ""}</td><td>${x.idp ? x.idp.id : '<span class="s">Não cadastrada</span>'}</td><td>${st}</td><td class="nowrap">${celAjtp(x)}</td></tr>`;
+    }).join("") + (dvLista.length > 500 ? `<tr><td colspan="9" class="s">Mostrando 500 de ${fmt(dvLista.length)} — use a busca ou baixe o Excel.</td></tr>` : "");
     $("dv-vazio").hidden = dvLista.length > 0;
+    const nAp = [...ajtp.values()].filter((a) => a.status === "aprovado").length;
+    $("dv-ajtp-robo").textContent = `▶ Enviar para o robô (${fmt(nAp)})`; $("dv-ajtp-robo").disabled = !nAp;
   }
   $("dv-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-dv]"); if (!b) return; dvCard = b.dataset.dv; dvGrupo = null; desenharDivTP(); });
   if ($("dv-resumo")) $("dv-resumo").addEventListener("click", (e) => { const tr = e.target.closest("tr[data-dvg]"); if (!tr) return; dvGrupo = dvGrupo === tr.dataset.dvg ? null : tr.dataset.dvg; dvCard = "div"; desenharDivTP(); });

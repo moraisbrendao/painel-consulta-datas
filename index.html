@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=359">
+  <link rel="stylesheet" href="styles.css?v=360">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -1436,11 +1436,11 @@
         <section class="cartao">
           <div class="cartao-topo">
             <div><h2 id="dv-titulo">Pedidos</h2><p class="sub" id="dv-sub-lista"></p></div>
-            <div class="acoes-robo"><input id="dv-busca" type="search" placeholder="Procurar pedido, NF ou transportadora"><button id="dv-exportar" class="btn contorno">Baixar Excel</button></div>
+            <div class="acoes-robo"><input id="dv-busca" type="search" placeholder="Procurar pedido, NF ou transportadora"><button id="dv-ajtp-todos" class="btn contorno" title="Aprova todos os divergentes desta lista que têm a transportadora do Promob cadastrada">✓ Aprovar todos desta lista</button><button id="dv-ajtp-robo" class="btn amarelo">▶ Enviar para o robô</button><button id="dv-exportar" class="btn contorno">Baixar Excel</button></div>
           </div>
           <div class="tabela-wrap">
             <table class="tabela-pedidos">
-              <thead><tr><th>Pedido Promob</th><th>Pedido Intelipost</th><th>Nota</th><th>Status</th><th>Transportadora (H)</th><th>Transportadora Promob</th><th>ID Transportadora Promob</th><th>Situação</th></tr></thead>
+              <thead><tr><th>Pedido Promob</th><th>Pedido Intelipost</th><th>Nota</th><th>Status</th><th>Transportadora (H)</th><th>Transportadora Promob</th><th>ID Transportadora Promob</th><th>Situação</th><th>Ajuste</th></tr></thead>
               <tbody id="dv-linhas"></tbody>
             </table>
             <p id="dv-vazio" class="vazio" hidden>Nenhum pedido.</p>
@@ -1693,23 +1693,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=359"></script>
-  <script src="mapa-brasil.js?v=359"></script>
-  <script src="cidades-br.js?v=359"></script>
-  <script src="troca-notas.js?v=359"></script>
-  <script src="app.js?v=359"></script>
-  <script src="ordenar.js?v=359"></script>
-  <script src="menu.js?v=359"></script>
-  <script src="ajuda.js?v=359"></script>
-  <script src="documentos.js?v=359"></script>
-  <script src="barrar.js?v=359"></script>
-  <script src="naoloc.js?v=359"></script>
-  <script src="faltas.js?v=359"></script>
-  <script src="motor.js?v=359"></script>
-  <script src="retornos-semana.js?v=359"></script>
-  <script src="cobranca-massa.js?v=359"></script>
-  <script src="gargalos.js?v=359"></script>
-  <script src="filas.js?v=359"></script>
-  <script src="filtros.js?v=359"></script>
+  <script src="config.js?v=360"></script>
+  <script src="mapa-brasil.js?v=360"></script>
+  <script src="cidades-br.js?v=360"></script>
+  <script src="troca-notas.js?v=360"></script>
+  <script src="app.js?v=360"></script>
+  <script src="ordenar.js?v=360"></script>
+  <script src="menu.js?v=360"></script>
+  <script src="ajuda.js?v=360"></script>
+  <script src="documentos.js?v=360"></script>
+  <script src="barrar.js?v=360"></script>
+  <script src="naoloc.js?v=360"></script>
+  <script src="faltas.js?v=360"></script>
+  <script src="motor.js?v=360"></script>
+  <script src="retornos-semana.js?v=360"></script>
+  <script src="cobranca-massa.js?v=360"></script>
+  <script src="gargalos.js?v=360"></script>
+  <script src="filas.js?v=360"></script>
+  <script src="filtros.js?v=360"></script>
 </body>
 </html>

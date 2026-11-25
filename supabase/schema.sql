@@ -3445,3 +3445,43 @@ grant execute on function public.rodar_robo_aguardando_fila(text) to authenticat
 
 -- parte 78 (25/11/2026): Falta de volumes / Inversão — o robô confere se a NF do ticket tem tratativa no Chat do portal do transportador
 alter table public.falta_volumes add column if not exists chat jsonb;
+-- 80) Ajuste de transportadora (Severino › Transportadora divergente): a Logística aprova (✓ Alterar) ou exclui (✕) cada pedido
+--     divergente; o robô sobe a planilha "Método de entrega" na Intelipost (pedido + ID do método) e depois a de
+--     "Atualizar transportadora" no Multi360 (Hub › Pedidos). Só a Logística (não SAC) mexe.
+create table if not exists public.ajuste_tp (
+  pedido         text primary key,              -- Pedido Intelipost
+  transp_h       text,                          -- transportadora que estava na Intelipost (coluna H)
+  transp_promob  text,                          -- transportadora do Promob (redespacho, senão BD)
+  para_h         text,                          -- nome da transportadora certa (tabela de apelidos)
+  id_metodo      integer,                       -- ID do método na Intelipost
+  status         text not null default 'aprovado',   -- aprovado | excluido | enviando | ip_ok | feito | erro
+  msg            text,
+  aprovado_por   text,
+  aprovado_em    timestamptz default now(),
+  ip_em          timestamptz,
+  m360_em        timestamptz,
+  atualizado_em  timestamptz default now()
+);
+alter table public.ajuste_tp enable row level security;
+revoke all on public.ajuste_tp from anon;
+grant select, insert, update, delete on public.ajuste_tp to authenticated;
+drop policy if exists "logistica cuida" on public.ajuste_tp;
+create policy "logistica cuida" on public.ajuste_tp for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- robô do ajuste: chama o "Robô da Intelipost" no modo ajuste-tp (mesmo token do cofre da parte 13)
+create or replace function public.rodar_robo_ajuste_tp()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-intelipost.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := '{"ref":"main","inputs":{"modo":"ajuste-tp"}}'::jsonb);
+end $$;
+revoke all on function public.rodar_robo_ajuste_tp() from public, anon;
+grant execute on function public.rodar_robo_ajuste_tp() to authenticated;
