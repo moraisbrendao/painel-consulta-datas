@@ -255,6 +255,14 @@ export async function diagOcUrl({ log, ctx }) {
   log("1ª linha (mascarada):", cels.map(mascara).join(" | "));
   log("links na linha:", (await linha.locator("a").evaluateAll((es) => es.map((e) => e.getAttribute("href")))).map(mascara).join(" | ") || "nenhum");
   log("botões na linha:", (await linha.locator("button").evaluateAll((es) => es.map((e) => [e.title, e.getAttribute("aria-label"), e.innerText].filter(Boolean).join("/") || "(ícone)"))).map(mascara).join(" | ") || "nenhum");
+  const hrefs = await p.locator("table tbody tr a[href^='/occurrences/']").evaluateAll((es) => es.map((e) => e.getAttribute("href")));
+  log("séries nos links:", [...new Set(hrefs.map((h) => (h.split("-")[1] || "").replace(/\d/g, (d, i) => (i === 0 && d === "0" ? "0" : "#"))))].join(" , "), "· barras/sufixos:", [...new Set(hrefs.map((h) => mascara(h.replace(/^\/occurrences\/\d+-\d+/, ""))))].join(","));
+  if (hrefs[0]) for (const modo of ["mesma aba", "aba nova"]) {
+    const n = modo === "aba nova" ? await ctx.newPage() : p;
+    await n.goto("https://ccp.360multi.com" + hrefs[0]); await n.waitForTimeout(6000);
+    log(`${modo}, endereço direto: cai em`, mascara(new URL(n.url()).pathname), "· textarea", await n.locator("textarea").count(), "· título", mascara((await n.locator("h1,h2").first().innerText().catch(() => "")) || "-"));
+    if (modo === "aba nova") await n.close();
+  }
   const antes = p.url(); await linha.locator("td").first().click().catch(() => {}); await p.waitForTimeout(3000);
   log("depois de clicar na 1ª célula: url", mascara(new URL(p.url()).pathname + new URL(p.url()).search), p.url() === antes ? "(não mudou)" : "", "· diálogo aberto", await p.locator("[role=dialog]").count());
   const destino = p.url() !== antes ? p.url() : null;
