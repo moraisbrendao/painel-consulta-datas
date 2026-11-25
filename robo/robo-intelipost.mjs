@@ -547,7 +547,7 @@ async function retornoUpload(nomeParte) {
 //    sales_order_number (pedido Intelipost) → Enviar. Registro só com contagens.
 async function ajusteTp(limite) {
   const XLSX = (await import("xlsx")).default;
-  const st = /^r/i.test(process.env.TICKET || "") ? "in.(aprovado,erro)" : "eq.aprovado";   // disparo manual "r1": tenta de novo também os que deram erro
+  const st = /^r/i.test(process.env.TICKET || "") ? "in.(aprovado,erro,enviando)" : "eq.aprovado";   // disparo manual "r1": tenta de novo também os que deram erro
   const pend = await chamar(`ajuste_tp?status=${st}&id_metodo=not.is.null&select=pedido,id_metodo&order=aprovado_em&limit=${limite}`);
   const salva = (peds, campos) => peds.length ? chamar(`ajuste_tp?pedido=in.(${peds.map((x) => `"${String(x).replace(/"/g, '""')}"`).join(",")})`, "PATCH", { ...campos, atualizado_em: new Date().toISOString() }) : null;
   log(`Ajuste de transportadora: ${pend.length} aprovado(s) para a Intelipost.`);
