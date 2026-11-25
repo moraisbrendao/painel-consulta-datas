@@ -45,9 +45,16 @@ async function abrirRepoPre(p, log) {
 // filtra a NF original e devolve a linha (primeira coluna igual à NF)
 async function acharLinha(p, nf) {
   const filtro = p.locator("input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]").first();
-  await filtro.fill(""); await filtro.fill(nf); await p.waitForTimeout(2200);
+  const nfL = String(nf).trim().split("-").map((t) => t.trim().replace(/^0+(?=\d)/, "")).join("-");   // "09873-034" → "9873-34", como no portal
+  await filtro.fill(""); await filtro.fill(nfL); await p.waitForTimeout(400);
+  // a pesquisa só roda com Enter / botão da lupa ao lado (sem isso a tabela fica na 1ª página sem filtro)
+  await filtro.press("Enter").catch(() => {});
+  const lupa = filtro.locator("xpath=following::button[1]");
+  if (await lupa.count()) await lupa.click({ timeout: 5000 }).catch(() => {});
+  await p.waitForTimeout(3000);
   const linhas = p.locator("table tbody tr");
-  for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim(); if (t === nf || soNum(t) === soNum(nf)) return linhas.nth(i); }
+  if (acharLinha.log) acharLinha.log(`  portal: pesquisa trouxe ${await linhas.count()} linha(s)`);
+  for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim(); if (t === nf || t === nfL || soNum(t) === soNum(nfL)) return linhas.nth(i); }
   return null;
 }
 async function abrirAnotacoes(p, linha) {
@@ -153,7 +160,7 @@ export async function rodarAnota({ chamar, log, ctx, limite = 100 }) {
   const tres = Date.now() - 3 * 864e5;
   const anota = L.filter((x) => (!x.portal_anot_status || ["nao_achou", "erro"].includes(x.portal_anot_status)) && (["feito", "ja_tinha"].includes(x.chat_pdf_status) || Date.parse(x.robo_feito_em) < tres));
   if (anota.length) {
-    const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+    const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log); acharLinha.log = log;
     const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim().toLowerCase()), ia = ths.findIndex((h) => /anota/.test(h));
     if (ia < 0) throw new Error("coluna Anotações não encontrada");
     const grava = (x, st, msg = null) => patch(x, { portal_anot_status: st, portal_anot_em: new Date().toISOString(), portal_anot_msg: msg });
