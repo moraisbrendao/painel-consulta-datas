@@ -445,6 +445,50 @@ async function abrirEFechar(tela, alvo, titulo, semFechar) {
   } else await tela.keyboard.press("Escape").catch(() => {});
   await tela.waitForTimeout(1500);
 }
+// Ajuste de transportadora (Transportadora divergente): só OLHA as telas de upload da Intelipost e do Multi360, sem enviar nada
+async function diagAjtp() {
+  const XLSX = (await import("xlsx")).default;
+  const cabTemplate = (arq) => { try { const wb = XLSX.readFile(arq); return wb.SheetNames.map((n) => `${n}: ` + XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: "" }).slice(0, 3).map((r) => r.map((v) => String(v).slice(0, 30)).join(" ¦ ")).join(" // ")).join(" || "); } catch (e) { return "não li: " + e.message.slice(0, 60); } };
+  await pagina.goto(BASE + "/order/change-order", { waitUntil: "domcontentloaded" });
+  await pagina.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {}); await pagina.waitForTimeout(3000);
+  const up = pagina.getByText(/^\s*Upload\s*$/).first();
+  log("Intelipost: aba Upload achada:", await up.count());
+  if (await up.count()) { await up.click(); await pagina.waitForTimeout(2000); }
+  await esqueleto("Alterar Pedidos › Upload");
+  const sel = pagina.locator("select:visible").first();
+  if (await sel.count()) { const ops = await sel.evaluate((e) => [...e.options].map((o) => o.text.trim())); log("  select:", ops.join(" / "));
+    const alvo = ops.find((o) => /m[eé]todo de entrega/i.test(o)); if (alvo) { await sel.selectOption({ label: alvo }); await pagina.waitForTimeout(2000); } }
+  else { const dd = pagina.getByText(/^\s*Selecione\s*$/).first(); if (await dd.count()) { await dd.click(); await pagina.waitForTimeout(800); const m = pagina.getByText(/M[eé]todo de entrega/i).first(); if (await m.count()) { await m.click(); await pagina.waitForTimeout(2000); } } }
+  await esqueleto("Alterar Pedidos › Upload › Método de entrega");
+  log("  input file:", await pagina.locator("input[type=file]").count(), "· 'clique aqui':", await pagina.getByText(/clique aqui/i).count(), "· 'Atualizar lista':", await pagina.getByText(/Atualizar lista/i).count());
+  const ex = pagina.getByText(/clique aqui/i).first();
+  if (await ex.count()) {
+    const dl = await Promise.all([pagina.waitForEvent("download", { timeout: 20000 }), ex.click()]).then(([d]) => d).catch((e) => { log("  download do exemplo falhou:", e.message.slice(0, 80)); return null; });
+    if (dl) { const f = "/tmp/ip-modelo.xlsx"; await dl.saveAs(f); log("  modelo Intelipost:", dl.suggestedFilename(), "·", cabTemplate(f)); }
+  }
+  const lista = await pagina.evaluate(() => { const t = [...document.querySelectorAll("table")].pop(); if (!t) return null;
+    return { cab: [...t.querySelectorAll("th")].map((e) => e.innerText.trim()).join(" | "), status: [...t.querySelectorAll("tbody tr")].slice(0, 3).map((tr) => (tr.children[3] || {}).innerText || "").join(" | ") }; });
+  log("  lista de envios:", JSON.stringify(lista));
+
+  const p = await entrarMulti360(ctx, log);
+  const links = await p.evaluate(() => [...document.querySelectorAll("a")].map((a) => `${(a.innerText || "").trim().slice(0, 30)} -> ${(a.getAttribute("href") || "").slice(0, 60)}`).filter((x) => /pedido|hub|order/i.test(x)).slice(0, 20));
+  log("Multi360 links:", links.join(" ; "));
+  for (const cam of ["/hub/orders", "/orders", "/hub/pedidos", "/pedidos"]) {
+    await p.goto("https://appv2.360multi.com" + cam, { waitUntil: "domcontentloaded" }).catch(() => {}); await p.waitForTimeout(4000);
+    const n = await p.getByText(/Atualizar transportadora/i).count(); log(`  ${cam} → ${new URL(p.url()).pathname} · botão Atualizar transportadora: ${n}`);
+    if (!n) continue;
+    await p.getByText(/Atualizar transportadora/i).first().click(); await p.waitForTimeout(2000);
+    const modal = await p.evaluate(() => { const d = [...document.querySelectorAll("[role=dialog], .modal, [class*=modal i]")].find((e) => e.getBoundingClientRect().width > 0); const r = d || document.body;
+      return { titulo: (r.querySelector("h1,h2,h3,h4,h5,[class*=title i]") || {}).innerText || "", botoes: [...r.querySelectorAll("button, a")].map((b) => b.innerText.trim()).filter(Boolean).slice(0, 10).join(" / "), file: r.querySelectorAll("input[type=file]").length }; });
+    log("  modal:", JSON.stringify(modal));
+    const tp = p.getByRole("button", { name: /^\s*Template\s*$/i }).first();
+    if (await tp.count()) { const dl = await Promise.all([p.waitForEvent("download", { timeout: 20000 }), tp.click()]).then(([d]) => d).catch((e) => { log("  template Multi360 falhou:", e.message.slice(0, 80)); return null; });
+      if (dl) { const f = "/tmp/m360-modelo.xlsx"; await dl.saveAs(f); log("  modelo Multi360:", dl.suggestedFilename(), "·", cabTemplate(f)); } }
+    break;
+  }
+  log("diag-ajtp: nada foi enviado.");
+}
+
 async function diagStatus() {   // confere, sem salvar nada, como ficou o pedido da última troca com erro
   const t = await ultimaTrocaComErro();
   if (!t) { log("Nenhuma troca com erro."); return; }
@@ -1027,6 +1071,7 @@ try {
   if (MODO === "manter") { await gravarEstado("intelipost_manter", { em: new Date().toISOString(), ok: entrou !== false }).catch(() => {}); log(entrou !== false ? "Sessão da Intelipost mantida viva." : "Sessão não estava viva.");
     if (entrou !== false && BAIXA_ENTREGUE_AUTO) await baixaEntregueIP(true, 30).catch((e) => log("baixa-entregue: " + String(e.message).split("\n")[0].slice(0, 120))); }
   else if (MODO === "entregue-teste" || MODO === "entregue-real") await baixaEntregueIP(MODO === "entregue-real", Number(process.env.LIMITE || process.env.TICKET || 0) || 1);   // no disparo manual, o campo "ticket" leva o limite
+  else if (MODO === "diag-ajtp") await diagAjtp();
   else if (MODO === "diag-sim") await diagSim();
   else if (MODO === "diag-entregue") await diagEntregue();
   else if (MODO === "diag-troca") await diagTroca();
