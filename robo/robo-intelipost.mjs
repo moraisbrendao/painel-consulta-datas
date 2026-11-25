@@ -558,8 +558,20 @@ async function ajusteTp(limite) {
     let wb = null;
     try { const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx"); if (r.ok()) wb = XLSX.read(await r.body(), { type: "buffer" }); } catch (_) {}
     const aoa = [["Dados para atualizar", "", "", ""], ["Pedido", "Método Novo", "Resultado", "Observação"], ["so_order_number", "so_delivery_method_id", "", ""]];
-    // escreve no PRÓPRIO modelo (mesma aba, mesclagens e cabeçalho): a 1ª tentativa com planilha nova deu "Erro no Processamento"
-    if (wb) {
+    // escreve no PRÓPRIO modelo com o ExcelJS (arquivo igual ao salvo pelo Excel): as planilhas feitas com o SheetJS deram "Erro no Processamento"
+    let feito = false;
+    try {
+      const ExcelJS = (await import("exceljs")).default;
+      const r = await pagina.request.get(BASE + "/static/examples/arquivo_exemplo_alterar_pedido_delivery_method.xlsx");
+      if (r.ok()) {
+        const ew = new ExcelJS.Workbook(); await ew.xlsx.load(await r.body()); const ws = ew.worksheets[0];
+        for (let R = ws.rowCount; R >= 4; R--) ws.spliceRows(R, 1);
+        pend.forEach((x, i) => { const row = ws.getRow(4 + i); row.getCell(1).value = String(x.pedido); row.getCell(2).value = Number(x.id_metodo); row.commit(); });
+        await ew.xlsx.writeFile(arq); feito = true; log("  planilha feita com o ExcelJS no modelo da Intelipost");
+      }
+    } catch (e) { log("  ExcelJS falhou:", String(e.message).slice(0, 100)); }
+    if (feito) {}
+    else if (wb) {
       const ws = wb.Sheets[wb.SheetNames[0]], rg = XLSX.utils.decode_range(ws["!ref"] || "A1:D4");
       for (let R = 3; R <= rg.e.r; R++) for (let C = 0; C <= rg.e.c; C++) delete ws[XLSX.utils.encode_cell({ r: R, c: C })];   // tira a linha de exemplo
       pend.forEach((x, i) => { ws[XLSX.utils.encode_cell({ r: 3 + i, c: 0 })] = { t: "s", v: String(x.pedido) }; ws[XLSX.utils.encode_cell({ r: 3 + i, c: 1 })] = { t: "n", v: Number(x.id_metodo) }; });
