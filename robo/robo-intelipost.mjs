@@ -469,6 +469,9 @@ async function diagAjtp() {
   log("  link do exemplo:", await ex.evaluate((e) => { const a = e.closest("a") || e; return `${a.tagName} href=${(a.getAttribute("href") || "").slice(0, 80)} target=${a.getAttribute("target") || ""} click=${(a.getAttribute("ng-click") || a.getAttribute("@click") || "").slice(0, 60)}`; }).catch(() => "?"));
   await pagina.getByText(/Atualizar lista/i).first().click().catch(() => {}); await pagina.waitForTimeout(4000);
   log("  textos com Sucesso/Erro:", await pagina.evaluate(() => [...document.querySelectorAll("*")].filter((e) => !e.children.length && /^\s*(Sucesso|Erro no Processamento|Processando|Aguardando)/i.test(e.textContent)).slice(0, 4).map((e) => `${e.tagName}.${(e.className || "").toString().slice(0, 30)}:${e.textContent.trim()} ← linha ${(e.closest("tr,[role=row],li,div[class*=row i]") || {}).tagName || "?"}`).join(" | ")));
+  log("  frames:", pagina.frames().map((f) => { try { return new URL(f.url()).pathname.slice(0, 50); } catch (_) { return "?"; } }).join(" ; "));
+  for (const f of pagina.frames()) { const t = await f.evaluate(() => document.body ? document.body.innerText : "").catch(() => ""); const i = t.search(/Nome do Arquivo/i);
+    if (i >= 0) log("  lista achada no frame", (() => { try { return new URL(f.url()).pathname.slice(0, 50); } catch (_) { return "?"; } })(), "· trecho:", t.slice(i, i + 300).replace(/\n+/g, " | ").replace(/arquivo_[^|]*/gi, "<arquivo>")); }
   log("  cabeçalhos:", await pagina.evaluate(() => [...document.querySelectorAll("th,[role=columnheader]")].map((e) => e.innerText.trim()).filter(Boolean).slice(0, 10).join(" | ")));
   const lista = await pagina.evaluate(() => { const t = [...document.querySelectorAll("table")].pop(); if (!t) return null;
     return { cab: [...t.querySelectorAll("th")].map((e) => e.innerText.trim()).join(" | "), status: [...t.querySelectorAll("tbody tr")].slice(0, 3).map((tr) => (tr.children[3] || {}).innerText || "").join(" | ") }; });
@@ -485,6 +488,8 @@ async function diagAjtp() {
     const modal = await p.evaluate(() => { const d = [...document.querySelectorAll("[role=dialog], .modal, [class*=modal i]")].find((e) => e.getBoundingClientRect().width > 0); const r = d || document.body;
       return { titulo: (r.querySelector("h1,h2,h3,h4,h5,[class*=title i]") || {}).innerText || "", botoes: [...r.querySelectorAll("button, a")].map((b) => b.innerText.trim()).filter(Boolean).slice(0, 10).join(" / "), file: r.querySelectorAll("input[type=file]").length }; });
     log("  modal:", JSON.stringify(modal));
+    log("  inputs file:", await p.evaluate(() => [...document.querySelectorAll("input[type=file]")].map((e) => { const r = e.getBoundingClientRect(); const d = e.closest("[role=dialog], .modal, [class*=modal i], [class*=Dialog]"); return `${r.width > 0 ? "visível" : "oculto"} dialog=${d ? (d.innerText || "").slice(0, 30).replace(/\n/g, " ") : "-"} accept=${e.accept}`; }).join(" ; ")));
+    log("  botões visíveis:", await p.evaluate(() => [...document.querySelectorAll("button")].filter((b) => b.getBoundingClientRect().width > 0).map((b) => b.innerText.trim()).filter(Boolean).slice(-12).join(" / ")));
     const tp = p.getByRole("button", { name: /^\s*Template\s*$/i }).first();
     if (await tp.count()) { const dl = await Promise.all([p.waitForEvent("download", { timeout: 20000 }), tp.click()]).then(([d]) => d).catch((e) => { log("  template Multi360 falhou:", e.message.slice(0, 80)); return null; });
       if (dl) { const f = "/tmp/m360-modelo.xlsx"; await dl.saveAs(f); log("  modelo Multi360:", dl.suggestedFilename(), "·", cabTemplate(f)); } }
