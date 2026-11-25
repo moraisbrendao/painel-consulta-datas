@@ -158,7 +158,7 @@ export async function rodar(R) {
       const emi = t.nf_emitida_em ? t.nf_emitida_em.slice(0, 10) : null;
       if (!t.data_entrega || (emi && t.data_entrega < emi)) { soma("entregue sem data confiável (conferir à mão)"); lote.push({ ticket: t.ticket, baixa_status: "conferir", baixa_msg: !t.data_entrega ? "O rastreio diz entregue, mas sem a data da entrega." : "A data de entrega do rastreio é de antes da emissão da nova NF." }); continue; }
       const serNova = String(t.nf_nova || "").split("-")[1]?.trim().replace(/^0+/, "") || "";
-      const exigeMesma = serNova === "35";   // first/last mile só na série 35 (Brenda 25/11)
+      const exigeMesma = ["35", "34", "25"].includes(serNova);   // first/last mile: séries 35, 34 e 25 só aceitam entrega da transportadora do ticket (Brenda 25/11)
       if (t.fonte === "SSW" && exigeMesma && !(t._r.emissor && mesmaTransp(t._r.emissor, tp(t)))) { soma("entregue no SSW por outra transportadora (conferir à mão)"); lote.push({ ticket: t.ticket, baixa_status: "conferir", baixa_msg: t._r.emissor ? `O SSW mostra a entrega pela ${t._r.emissor}, que não é a transportadora do ticket (pode ser a de first mile).` : "Não consegui ver no SSW qual transportadora fez a entrega." }); continue; }
       const arq = `/tmp/ag-${Date.now()}.png`;
       try {
