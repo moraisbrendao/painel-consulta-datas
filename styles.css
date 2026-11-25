@@ -1409,3 +1409,9 @@ a.oc-link:hover { text-decoration: underline; }
 .u-zoom-bts .s { background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 4px; }
 .u-svg.zoom { cursor: grab; touch-action: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .u-cid-rot { fill: #f1f5f9; stroke: #0f172a; } }
+/* Torre de Controle (MVP, só administradores): previsão logística embaixo da promessa original */
+.sac-torre { margin-top: 6px; padding: 4px 6px; border-left: 3px solid #6b7fa8; background: #f3f5fa; border-radius: 4px; font-size: 12px; line-height: 1.35; }
+.sac-torre .conf { font-size: 10.5px; font-weight: 700; padding: 0 5px; border-radius: 8px; background: #e3e7ef; }
+.sac-torre .conf.alta { background: #dcf2e3; color: #1d6b3a; }
+.sac-torre .conf.media { background: #fff1c9; color: #7a5a00; }
+.sac-torre .conf.baixa { background: #fde0dd; color: #a2261c; }

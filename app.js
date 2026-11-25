@@ -5626,12 +5626,41 @@ ${extra}
     return h;
   }
 
+  // Torre de Controle (MVP, só administradores): previsão LOGÍSTICA, é estimativa e não substitui a promessa original.
+  // A tabela previsao_torre só devolve linhas para administradores (RLS), então para os demais fica vazia.
+  let torrePrev = null, torreCarregando = false;
+  async function carregarTorre() {
+    if (!document.body.dataset.admin || torreCarregando) return;
+    torreCarregando = true;
+    try {
+      const m = new Map();
+      for (let de = 0; de < 50000; de += 1000) {
+        const r = await sb.from("previsao_torre").select("pedido,previsao,confianca,situacao,revisao,recebida_em").order("pedido").range(de, de + 999);
+        if (r.error) { torrePrev = new Map(); return; }   // tabela ainda não criada (parte 79): não mostra nada
+        r.data.forEach((x) => m.set(x.pedido, x));
+        if (r.data.length < 1000) break;
+      }
+      torrePrev = m;
+      if (paginaAtual === "sac" && m.size) desenharSac();
+    } finally { torreCarregando = false; }
+  }
+  function celTorre(ped) {
+    const t = document.body.dataset.admin && torrePrev && torrePrev.get(ped);
+    if (!t) return "";
+    const conf = { alta: "Alta", media: "Média", baixa: "Baixa" }[t.confianca] || "";
+    const quando = t.recebida_em ? new Date(t.recebida_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
+    return `<div class="sac-torre" title="Previsão logística da Torre de Controle (revisão ${esc(t.revisao)}). É uma estimativa, não substitui a promessa original.">
+      <div class="s">Previsão logística (Torre)</div><b>${br(t.previsao)}</b>${conf ? ` <span class="conf ${esc(t.confianca)}">${conf}</span>` : ""}
+      ${t.situacao ? `<div class="s">${esc(t.situacao)}</div>` : ""}${quando ? `<div class="s">atualizada ${quando}</div>` : ""}</div>`;
+  }
+
   // SAC vê só os vencidos, os que vencem hoje e os que vencem amanhã
   const limiteSac = () => { const d = new Date(Date.parse(hojeISO()) + DIA); return d.toISOString().slice(0, 10); };
   function montarSac(lista) {
     const lim = limiteSac();
     lista = lista.filter((l) => (l.prometido && String(l.prometido).slice(0, 10) <= lim) || (l.nova_data && String(l.nova_data).slice(0, 10) <= lim));
     sacLinhas = lista;
+    if (document.body.dataset.admin) carregarTorre();
     $("sac-info").textContent = `${fmt(lista.length)} pedidos vencidos ou que vencem hoje ou amanhã · atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
     const preencher = (id, valores, rotulo) => {
       const sel = $(id), atual = sel.value;
@@ -5678,7 +5707,7 @@ ${extra}
     $("sac-linhas").innerHTML = sacFiltrados.slice((sacPagina - 1) * POR_PAGINA, sacPagina * POR_PAGINA).map((l) => `<tr>
         <td><b>${esc(l.nf || "—")}</b></td><td>${esc(l.pedido)}${marcasSac(l)}</td><td>${esc(l.canal || "")}</td><td>${esc(l.transportadora || "—")}</td>
         <td><span class="ms">${esc(l.micro_status || "—")}</span></td>
-        <td>${br(l.prometido) || "—"}<div>${chipData(l.prometido)}</div></td>
+        <td>${br(l.prometido) || "—"}<div>${chipData(l.prometido)}</div>${celTorre(l.pedido)}</td>
         <td>${l.nova_data ? `<b>${br(l.nova_data)}</b><div>${chipData(l.nova_data)}</div>` : `<span class="s">—</span>`}</td>
         <td class="col-obs">${l.observacao ? esc(l.observacao) : `<span class="s">—</span>`}${l.observacao && l.atualizado_em ? `<div class="s">${new Date(l.atualizado_em).toLocaleDateString("pt-BR")}</div>` : ""}</td>
         <td class="sac-rastreio">${l.nf ? `<button class="btn mini contorno" data-ssw="${esc(l.nf)}" data-transp="${esc(l.transportadora || "")}" data-pedido="${esc(l.pedido)}" title="Abre o rastreio dessa nota na transportadora">${rastreioDe(l.transportadora) ? "Ver na " + esc(rastreioDe(l.transportadora)[1]) : "Ver rastreio"} ↗</button>` : ""}
