@@ -5359,7 +5359,9 @@ ${extra}
       const n = wb.SheetNames.find((x) => norm(x) === nomeAba); if (!n) continue;
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null }); if (!rows.length) continue;
       const cab = rows[0].map(norm), c = (...xs) => cab.findIndex((h) => xs.includes(h));
-      const cT = c("ID TICKET", "ID DO TICKET"), cN = c("NF EMITIDA PROMOB"), cE = c("DATA EMISSAO PROMOB"), cS = c("DATA SAIDA PROMOB");
+      let cT = c("ID TICKET", "ID DO TICKET"), cN = c("NF EMITIDA PROMOB"), cE = c("DATA EMISSAO PROMOB"), cS = c("DATA SAIDA PROMOB");
+      if (cT < 0) cT = cab.findIndex((h) => /\bTICKET\b/.test(h) && /\bID\b/.test(h));
+      if (origem === "AT") { cS = 8; if (cN < 0) cN = cab.findIndex((h) => /NF/.test(h) && /PROMOB|EMITIDA|NOVA/.test(h)); }   // aba AT: data de saída na coluna I (Brenda 25/11)
       if (cT < 0 || cS < 0) continue;
       rows.slice(1).forEach((r) => { if (!r) return; const tk = String(r[cT] ?? "").trim().replace(/\.0+$/, ""); if (!tk) return;
         const x = { ticket: tk, origem, nf_nova: cN >= 0 && r[cN] != null ? String(r[cN]).trim().replace(/\.0+$/, "") : null, data_emissao: cE >= 0 ? iso(r[cE]) : null, data_saida: iso(r[cS]) };
