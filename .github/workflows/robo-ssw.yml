@@ -67,7 +67,6 @@ jobs:
           ROBO_EMAIL: ${{ secrets.ROBO_EMAIL }}
           ROBO_SENHA: ${{ secrets.ROBO_SENHA }}
           EMAIL_TRANSIGA: ${{ secrets.EMAIL_TRANSIGA }}
-          TORRE_PREVISAO_TOKEN: ${{ secrets.TORRE_PREVISAO_TOKEN }}
           SENHA_TRANSIGA: ${{ secrets.SENHA_TRANSIGA }}
       - name: Diagnóstico Formato
         if: ${{ github.event.inputs.modo == 'diag-formato' }}
@@ -86,6 +85,7 @@ jobs:
         env:
           MODO: ${{ github.event.inputs.modo || 'lote' }}
           AUTO: ${{ (github.event_name == 'schedule' || github.event.inputs.auto == '1') && '1' || '' }}
+          TORRE_PREVISAO_TOKEN: ${{ github.event.inputs.modo == 'teste-torre' && secrets.TORRE_PREVISAO_TOKEN || '' }}
           SSW_LIMITE: ${{ github.event.inputs.limite || '' }}
           TRANSP: ${{ github.event.inputs.transp || '' }}
           SSW_PARALELO: ${{ github.event.inputs.paralelo || '' }}
