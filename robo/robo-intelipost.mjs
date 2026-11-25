@@ -466,6 +466,10 @@ async function diagAjtp() {
     const dl = await Promise.all([pagina.waitForEvent("download", { timeout: 20000 }), ex.click()]).then(([d]) => d).catch((e) => { log("  download do exemplo falhou:", e.message.slice(0, 80)); return null; });
     if (dl) { const f = "/tmp/ip-modelo.xlsx"; await dl.saveAs(f); log("  modelo Intelipost:", dl.suggestedFilename(), "·", cabTemplate(f)); }
   }
+  log("  link do exemplo:", await ex.evaluate((e) => { const a = e.closest("a") || e; return `${a.tagName} href=${(a.getAttribute("href") || "").slice(0, 80)} target=${a.getAttribute("target") || ""} click=${(a.getAttribute("ng-click") || a.getAttribute("@click") || "").slice(0, 60)}`; }).catch(() => "?"));
+  await pagina.getByText(/Atualizar lista/i).first().click().catch(() => {}); await pagina.waitForTimeout(4000);
+  log("  textos com Sucesso/Erro:", await pagina.evaluate(() => [...document.querySelectorAll("*")].filter((e) => !e.children.length && /^\s*(Sucesso|Erro no Processamento|Processando|Aguardando)/i.test(e.textContent)).slice(0, 4).map((e) => `${e.tagName}.${(e.className || "").toString().slice(0, 30)}:${e.textContent.trim()} ← linha ${(e.closest("tr,[role=row],li,div[class*=row i]") || {}).tagName || "?"}`).join(" | ")));
+  log("  cabeçalhos:", await pagina.evaluate(() => [...document.querySelectorAll("th,[role=columnheader]")].map((e) => e.innerText.trim()).filter(Boolean).slice(0, 10).join(" | ")));
   const lista = await pagina.evaluate(() => { const t = [...document.querySelectorAll("table")].pop(); if (!t) return null;
     return { cab: [...t.querySelectorAll("th")].map((e) => e.innerText.trim()).join(" | "), status: [...t.querySelectorAll("tbody tr")].slice(0, 3).map((tr) => (tr.children[3] || {}).innerText || "").join(" | ") }; });
   log("  lista de envios:", JSON.stringify(lista));
@@ -473,7 +477,7 @@ async function diagAjtp() {
   const p = await entrarMulti360(ctx, log);
   const links = await p.evaluate(() => [...document.querySelectorAll("a")].map((a) => `${(a.innerText || "").trim().slice(0, 30)} -> ${(a.getAttribute("href") || "").slice(0, 60)}`).filter((x) => /pedido|hub|order/i.test(x)).slice(0, 20));
   log("Multi360 links:", links.join(" ; "));
-  for (const cam of ["/hub/orders", "/orders", "/hub/pedidos", "/pedidos"]) {
+  for (const cam of ["/pedidos/hub"]) {
     await p.goto("https://appv2.360multi.com" + cam, { waitUntil: "domcontentloaded" }).catch(() => {}); await p.waitForTimeout(4000);
     const n = await p.getByText(/Atualizar transportadora/i).count(); log(`  ${cam} → ${new URL(p.url()).pathname} · botão Atualizar transportadora: ${n}`);
     if (!n) continue;
