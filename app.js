@@ -3534,7 +3534,7 @@ ${extra}
   // botão de subir: ampulheta enquanto o robô confere a fila; verde com o horário da última planilha quando termina (Brenda 25/11)
   let agEstado = null, agEstadoTimer = null;
   async function agChecarRobo() {
-    const r = await sb.from("robo_estado").select("valor").eq("nome", "andamento:aguardando").limit(1).catch(() => ({}));
+    let r = null; try { r = await sb.from("robo_estado").select("valor").eq("nome", "andamento:aguardando").limit(1); } catch (_) {}
     agEstado = (r && r.data && r.data[0] && r.data[0].valor) || null; agBotaoSubir();
   }
   function agBotaoSubir() {
