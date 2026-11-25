@@ -1405,5 +1405,7 @@ a.oc-link:hover { text-decoration: underline; }
 .u-cid:hover { fill: #7f1d1d; fill-opacity: 1; }
 .u-cid.sel { fill: #f5b800; stroke: #0f1f3d; fill-opacity: 1; }
 .u-cid-rot { fill: #0f1f3d; font-weight: 700; paint-order: stroke; stroke: #fff; pointer-events: none; }
-.u-voltar { position: absolute; top: 6px; left: 6px; }
+.u-zoom-bts { position: absolute; top: 6px; left: 6px; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; max-width: calc(100% - 12px); }
+.u-zoom-bts .s { background: rgba(255,255,255,.85); padding: 1px 6px; border-radius: 4px; }
+.u-svg.zoom { cursor: grab; touch-action: none; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .u-cid-rot { fill: #f1f5f9; stroke: #0f172a; } }

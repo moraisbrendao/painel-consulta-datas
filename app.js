@@ -3031,23 +3031,48 @@ ${extra}
     const M = window.MAPA_BR.viewBox.split(" ").map(Number);
     let alvo = M;
     if (uUF) { const p = svg.querySelector(`path[data-uf="${uUF}"]`); if (p) { const b = p.getBBox(), pad = Math.max(b.width, b.height) * 0.12 + 4; alvo = [b.x - pad, b.y - pad, b.width + 2 * pad, b.height + 2 * pad]; } }
+    uZoomBase = alvo;
     const k = Math.max(alvo[2], alvo[3]) / Math.max(M[2], M[3]), max = Math.max(1, ...C2.map((x) => x.atr));
     let g = "";
     C2.slice().reverse().forEach((x, i) => { const r = (uUF ? 2.5 + 11 * Math.sqrt(x.atr / max) : 2.5 + 7 * Math.sqrt(x.atr / max)) * k;
-      g += `<circle cx="${x.p[0].toFixed(1)}" cy="${x.p[1].toFixed(1)}" r="${r.toFixed(2)}" class="u-cid${uC === x.n ? " sel" : ""}" data-ucid="${esc(x.n)}" data-ucuf="${x.uf}" style="stroke-width:${(1.2 * k).toFixed(2)}"><title>${esc(x.n)} (${x.uf}): ${fmt(x.atr)} atrasado${x.atr === 1 ? "" : "s"} · clique para filtrar a cidade</title></circle>`; });
+      g += `<circle cx="${x.p[0].toFixed(1)}" cy="${x.p[1].toFixed(1)}" r="${r.toFixed(2)}" data-r0="${(r / k).toFixed(3)}" class="u-cid${uC === x.n ? " sel" : ""}" data-ucid="${esc(x.n)}" data-ucuf="${x.uf}" style="stroke-width:${(1.2 * k).toFixed(2)}"><title>${esc(x.n)} (${x.uf}): ${fmt(x.atr)} atrasado${x.atr === 1 ? "" : "s"} · clique para filtrar a cidade</title></circle>`; });
     // nomes: no zoom, as 8 cidades com mais atraso; no Brasil, só a maior de cada estado grande aparece na dica (passar o mouse)
     if (uUF) C2.slice(0, 8).forEach((x) => { const r = (2.5 + 11 * Math.sqrt(x.atr / max)) * k;
-      g += `<text x="${(x.p[0] + r + 2 * k).toFixed(1)}" y="${(x.p[1] + 3.5 * k).toFixed(1)}" class="u-cid-rot" style="font-size:${(10.5 * k).toFixed(2)}px;stroke-width:${(3 * k).toFixed(2)}px">${esc(x.n)} · ${fmt(x.atr)}</text>`; });
+      g += `<text x="${(x.p[0] + r + 2 * k).toFixed(1)}" y="${(x.p[1] + 3.5 * k).toFixed(1)}" data-cx="${x.p[0].toFixed(1)}" data-cy="${x.p[1].toFixed(1)}" data-r0="${(r / k).toFixed(3)}" class="u-cid-rot" style="font-size:${(10.5 * k).toFixed(2)}px;stroke-width:${(3 * k).toFixed(2)}px">${esc(x.n)} · ${fmt(x.atr)}</text>`; });
     const gr = document.createElementNS("http://www.w3.org/2000/svg", "g"); gr.setAttribute("class", "u-cidades"); gr.innerHTML = g; svg.appendChild(gr);
     svg.classList.toggle("zoom", !!uUF);
     // zoom suave do enquadramento anterior até o novo
     const de = uVB || M; uVB = alvo; const t0 = performance.now();
     const passo = (t) => { const f = Math.min(1, (t - t0) / 450), e = f < 0.5 ? 2 * f * f : 1 - (-2 * f + 2) ** 2 / 2;
       svg.setAttribute("viewBox", de.map((v, i) => (v + (alvo[i] - v) * e).toFixed(2)).join(" ")); if (f < 1) requestAnimationFrame(passo); };
-    if (de.join() !== alvo.join()) requestAnimationFrame(passo); else svg.setAttribute("viewBox", alvo.join(" "));
-    const box = $("u-mapa"); box.querySelector(".u-voltar")?.remove();
-    if (uUF) box.insertAdjacentHTML("beforeend", `<button type="button" class="btn mini contorno u-voltar" data-uvoltar="1">⤺ Ver o Brasil inteiro</button>`);
+    if (uUF && uZoomUser && uZoomUser.uf === uUF) { uVB = uZoomUser.vb; svg.setAttribute("viewBox", uVB.join(" ")); escalaCidades(svg); }   // mantém a aproximação feita com a rodinha
+    else { uZoomUser = null; if (de.join() !== alvo.join()) requestAnimationFrame(passo); else svg.setAttribute("viewBox", alvo.join(" ")); }
+    const box = $("u-mapa"); box.querySelector(".u-zoom-bts")?.remove();
+    if (uUF) box.insertAdjacentHTML("beforeend", `<div class="u-zoom-bts"><button type="button" class="btn mini contorno" data-uvoltar="1">⤺ Ver o Brasil inteiro</button><button type="button" class="btn mini contorno" data-uzoom="1.6" title="Aproximar">＋</button><button type="button" class="btn mini contorno" data-uzoom="0.625" title="Afastar">－</button><span class="s">role a rodinha do mouse para aproximar · arraste para mover</span></div>`);
   }
+  // mais zoom dentro do estado: rodinha do mouse (no ponto do cursor), botões ＋/－ e arrastar para mover (Brenda 25/11)
+  let uZoomBase = null, uZoomUser = null;
+  function escalaCidades(svg) {
+    if (!uZoomBase) return; const vb = svg.getAttribute("viewBox").split(" ").map(Number), M = window.MAPA_BR.viewBox.split(" ").map(Number);
+    const kk = Math.max(vb[2], vb[3]) / Math.max(M[2], M[3]), kb = Math.max(uZoomBase[2], uZoomBase[3]) / Math.max(M[2], M[3]), f = Math.max(kk, kb * 0.35) ;
+    svg.querySelectorAll("circle.u-cid").forEach((c) => { c.setAttribute("r", (c.dataset.r0 * f).toFixed(3)); c.style.strokeWidth = (1.2 * f).toFixed(3); });
+    svg.querySelectorAll("text.u-cid-rot").forEach((t) => { const r = t.dataset.r0 * f; t.setAttribute("x", (+t.dataset.cx + r + 2 * kk).toFixed(2)); t.setAttribute("y", (+t.dataset.cy + 3.5 * kk).toFixed(2)); t.style.fontSize = (10.5 * kk).toFixed(3) + "px"; t.style.strokeWidth = (3 * kk).toFixed(3) + "px"; });
+  }
+  function zoomMapa(fator, cx, cy) {
+    const svg = $("u-mapa").querySelector("svg.u-svg.zoom"); if (!svg || !uZoomBase) return;
+    const vb = svg.getAttribute("viewBox").split(" ").map(Number);
+    const w = Math.min(uZoomBase[2], Math.max(uZoomBase[2] / 25, vb[2] / fator)), h = w * (vb[3] / vb[2]);
+    const px = cx ?? vb[0] + vb[2] / 2, py = cy ?? vb[1] + vb[3] / 2;
+    const nx = px - (px - vb[0]) * (w / vb[2]), ny = py - (py - vb[1]) * (h / vb[3]);
+    uVB = [nx, ny, w, h]; uZoomUser = { uf: uUF, vb: uVB }; svg.setAttribute("viewBox", uVB.map((v) => v.toFixed(2)).join(" ")); escalaCidades(svg);
+  }
+  const pontoSvg = (svg, ev) => { const p = svg.createSVGPoint(); p.x = ev.clientX; p.y = ev.clientY; const q = p.matrixTransform(svg.getScreenCTM().inverse()); return [q.x, q.y]; };
+  $("u-mapa").addEventListener("wheel", (e) => { const svg = e.target.closest("svg.u-svg.zoom"); if (!svg) return; e.preventDefault(); const [x, y] = pontoSvg(svg, e); zoomMapa(e.deltaY < 0 ? 1.25 : 0.8, x, y); }, { passive: false });
+  let uArraste = null;
+  $("u-mapa").addEventListener("pointerdown", (e) => { const svg = e.target.closest("svg.u-svg.zoom"); if (!svg || e.button !== 0) return; uArraste = { svg, x: e.clientX, y: e.clientY, vb: svg.getAttribute("viewBox").split(" ").map(Number), moveu: false }; });
+  window.addEventListener("pointermove", (e) => { if (!uArraste) return; const a = uArraste, dx = e.clientX - a.x, dy = e.clientY - a.y; if (!a.moveu && Math.hypot(dx, dy) < 4) return; a.moveu = true;
+    const r = a.svg.getBoundingClientRect(), s = Math.max(a.vb[2] / r.width, a.vb[3] / r.height); uVB = [a.vb[0] - dx * s, a.vb[1] - dy * s, a.vb[2], a.vb[3]]; uZoomUser = { uf: uUF, vb: uVB }; a.svg.setAttribute("viewBox", uVB.map((v) => v.toFixed(2)).join(" ")); });
+  window.addEventListener("pointerup", () => { if (uArraste && uArraste.moveu) { uArraste.svg.addEventListener("click", (ev) => ev.stopPropagation(), { capture: true, once: true }); } uArraste = null; });
   function desenharQuadrados() {
     $("u-mapa").innerHTML = `<div class="u-quad">${Object.entries(UF_QUAD).map(([u, [l, c]]) => { const x = uDados.get(u);
       return `<button class="uf-quad ${faixaUF(x)}${uUF === u ? " sel" : ""}" data-uf="${u}" style="grid-row:${l + 1};grid-column:${c + 1}" title="${esc(dicaUF(u, x))}"><b>${u}</b><span>${x ? fmt(x.atr) : "—"}</span><small>${x && x.ab ? pctBR(x.pct) : ""}</small></button>`; }).join("")}</div>`;
@@ -3088,7 +3113,8 @@ ${extra}
   $("u-sel").addEventListener("click", (e) => { const b = e.target.closest("[data-ux]"); if (!b) return; const k = b.dataset.ux;
     if (k === "t" || k === "tudo") uT = null; if (k === "c" || k === "tudo") uC = null; desenharUF(); });
   $("u-mapa").addEventListener("click", (e) => {
-    if (e.target.closest("[data-uvoltar]")) { if (uUF) escolherUF(uUF); return; }
+    if (e.target.closest("[data-uvoltar]")) { if (uUF) { uZoomUser = null; escolherUF(uUF); } return; }
+    const zb = e.target.closest("[data-uzoom]"); if (zb) { zoomMapa(Number(zb.dataset.uzoom)); return; }
     const c = e.target.closest("[data-ucid]");
     if (c) { if (uUF !== c.dataset.ucuf) { uUF = c.dataset.ucuf; } uC = uC === c.dataset.ucid ? null : c.dataset.ucid; desenharUF(); desenharDetalheUF(true); return; }
     const el = e.target.closest("[data-uf]"); if (el) escolherUF(el.dataset.uf); });
