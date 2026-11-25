@@ -418,7 +418,7 @@
   function desenharTopoArquivos() {
     const quando = (x) => `${new Date(x.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${x.enviado_por ? " por " + x.enviado_por : ""}`;
     const chip = (x, cls) => `<span class="arq ${cls}" title="${esc(x.arquivo || "planilha")} · enviada em ${esc(quando(x))} · compartilhada: todos os logins veem esta mesma planilha">▤ ${cls ? "Tickets" : "Base"} <b class="selo">compartilhada</b></span>`;   // nome do arquivo só no título (topo limpo, Brenda 23/11)
-    let h = (info ? chip(info, "") : "") + (ticketsInfo ? chip(ticketsInfo, "tk") : "");
+    let h = info ? chip(info, "") : "";   // a data dos tickets fica no próprio botão "Tickets carregados" (Brenda 25/11)
     if (info) {
       const du = diasUteisDesde(diaLocal(info.enviado_em)), dt = new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
       h += `<span class="arq-data ${du ? "velha" : "nova"}" title="Envie a base do dia para os números ficarem atualizados">planilha de ${dt} · ${du ? `${du} dia${du > 1 ? "s" : ""} út${du > 1 ? "eis" : "il"} atrás` : "de hoje"}</span>`;
