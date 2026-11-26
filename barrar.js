@@ -12,6 +12,7 @@
   const sb = () => { const c = window.__sb; if (!c) throw new Error("Entre no painel de novo (sessão expirada)."); return c; };
   const OP = ["Entregue", "Avaria", "Extravio", "Falta Parcial", "Sem Emissão em Sistema / Material Não Recebido"];
 
+  let velha = false, verVelha = false;
   let L = [], H = [], info = null, ok = true, card = "todos", marcadas = new Set(), urls = new Map(), carregou = false;
   const SUG = { barrar: "Barrar ✓", nao_barrar: "Não barrar ✗", manual: "Erro: verificar" };
   const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao === "nao_barrar" ? (x.sugestao_opcao === "Entregue" ? "nb_entregue" : "nb_naorec") : x.sugestao || "manual");
@@ -55,15 +56,20 @@
       H = hs.error ? [] : hs.data || [];
       const inf = await sb().from("barrar_info").select("*").limit(1);
       // atualização automática (a cada 30 s): se nada mudou, não redesenha (não mexe na rolagem de quem está lendo)
-      const sig = JSON.stringify([out, H, (inf.data || [])[0] || null]);
+      const sig = JSON.stringify([out, H, (inf.data || [])[0] || null, diaSP(Date.now()), verVelha]);
       if (auto && sig === assinatura && ok) return; assinatura = sig;
-      L = out; info = (inf.data || [])[0] || null; ok = true; checarRobo();
+      info = (inf.data || [])[0] || null; ok = true;
+      // virou o dia: planilha de dia anterior = quadros limpos até subir a nova (Brenda 26/11); "ver mesmo assim" mostra a antiga
+      velha = !!(info && info.enviado_em && diaSP(info.enviado_em) < diaSP(Date.now()));
+      L = velha && !verVelha ? [] : out; checarRobo();
     } catch (e) { ok = false; L = []; $("br-info").textContent = /barrar_entrega|does not exist|schema cache/i.test(e.message || "") ? "Para usar esta aba, rode a parte 49 no Supabase." : "Não consegui carregar: " + (e.message || e); }
     carregou = true; desenhar();
   }
+  document.addEventListener("click", (e) => { if (e.target.id === "br-ver-velha") { verVelha = true; assinatura = ""; carregar(); } });
   function desenhar() {
     if (!ok) return;
-    $("br-info").textContent = info ? `Planilha: ${info.arquivo || ""} · ${hora(info.enviado_em)}${info.enviado_por ? " por " + info.enviado_por.split("@")[0] : ""} · ${fmt(L.length)} notas` : "Nenhuma planilha enviada ainda.";
+    if (velha && !verVelha) $("br-info").innerHTML = `<b>Quadros limpos:</b> a última planilha é de ${esc(hora(info.enviado_em))}. Suba a planilha de hoje para ver as notas. <button type="button" class="link" id="br-ver-velha">ver a de ${esc(new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }))} mesmo assim</button>`;
+    else $("br-info").textContent = info ? `Planilha: ${info.arquivo || ""} · ${hora(info.enviado_em)}${info.enviado_por ? " por " + info.enviado_por.split("@")[0] : ""} · ${fmt(L.length)} notas${velha ? " (de um dia anterior)" : ""}` : "Nenhuma planilha enviada ainda.";
     const tps = [...new Set(L.map((x) => x.transp_pedido || ""))].filter(Boolean).sort((a, b) => a.localeCompare(b, "pt-BR")), atual = $("br-transp").value;
     $("br-transp").innerHTML = `<option value="">Todas</option>` + tps.map((t) => `<option${t === atual ? " selected" : ""}>${esc(t)}</option>`).join("");
     const n = (k) => (k === "todos" ? L.length : k === "difer" ? L.filter((x) => x.mesma_transp === false).length : L.filter((x) => sit(x) === k).length);
