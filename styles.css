@@ -1417,3 +1417,5 @@ a.oc-link:hover { text-decoration: underline; }
 .rolo-lista { max-height: 70vh; overflow: auto; }
 .rolo-lista thead th { position: sticky; top: 0; z-index: 3; }
 @media (max-width: 760px) { .rolo-lista { max-height: none; overflow: visible; } }
+.fx-pop { position: fixed; z-index: 60; background: #fff; border: 1px solid #d8dee8; border-radius: 10px; box-shadow: 0 8px 24px rgba(15,23,42,.18); padding: 10px 12px; display: flex; flex-direction: column; gap: 6px; max-width: 320px; font-size: 13px; }
+.fx-pop div { display: flex; gap: 6px; align-items: center; }

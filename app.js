@@ -1781,7 +1781,23 @@ ${extra}
   $("g-janela").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (!b) return; gJanela = +b.dataset.j;
     $("g-janela").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));
-  document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx]"); if (!c) return;
+  // clique num número/cabeçalho do quadro de faixas: janelinha com "Baixar Excel" só daqueles pedidos ou "Ver lista" (Brenda 26/11)
+  function popFaixa(ev, titulo, filtro) {
+    document.querySelectorAll(".fx-pop").forEach((x) => x.remove());
+    const n = filtro(gFiltradosCache).length;
+    const d = document.createElement("div"); d.className = "fx-pop";
+    d.innerHTML = `<b>${esc(titulo)}</b><span class="s">${fmt(n)} pedido${n === 1 ? "" : "s"}</span><div><button class="btn mini amarelo" data-fxp="xls">⤓ Baixar Excel</button> <button class="btn mini contorno" data-fxp="ver">Ver lista</button> <button class="link" data-fxp="x">✕</button></div>`;
+    document.body.appendChild(d);
+    const r = d.getBoundingClientRect(), x = Math.min(ev.clientX + 8, innerWidth - r.width - 8), y = Math.min(ev.clientY + 8, innerHeight - r.height - 8);
+    d.style.left = Math.max(8, x) + "px"; d.style.top = Math.max(8, y) + "px";
+    d.addEventListener("click", (e2) => { const b = e2.target.closest("[data-fxp]"); if (!b) return; d.remove();
+      if (b.dataset.fxp === "xls") { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(false); baixarGLista(); }
+      else if (b.dataset.fxp === "ver") selecionar(titulo, filtro); });
+  }
+  document.addEventListener("click", (e) => { if (!e.target.closest(".fx-pop, .tabela-faixa")) document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
+  document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx],[data-fv]"); if (!c) return;
+    const selecionar = (titulo, filtro) => popFaixa(e, titulo, filtro);
     const fd = G_DIM[$("g-faixa-dim").value][1], lin = c.dataset.lin, fx = c.dataset.fx !== undefined ? +c.dataset.fx : null;
     if (c.dataset.fv !== undefined || (!c.dataset.fx && c.closest("td") && c.closest("td").classList.contains("av"))) { const fv = c.dataset.fv !== undefined ? +c.dataset.fv : null;
       return selecionar(`A vencer${lin ? " · " + lin : ""}${fv !== null ? " · " + (fv < 2 ? "vence " + G_VENCER[fv][0].toLowerCase() : "em " + G_VENCER[fv][0]) : ""}`, (L) => L.filter((r) => vencerDe(r) >= 0 && (!lin || fd(r) === lin) && (fv === null || vencerDe(r) === fv))); }
