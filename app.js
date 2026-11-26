@@ -1794,7 +1794,7 @@ ${extra}
       if (b.dataset.fxp === "xls") { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(false); baixarGLista(); }
       else if (b.dataset.fxp === "ver") selecionar(titulo, filtro); });
   }
-  document.addEventListener("click", (e) => { if (!e.target.closest(".fx-pop, .tabela-faixa, .tabela-cap")) document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".fx-pop, .tabela-faixa, .tabela-cap, .tabela-efaixa")) document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
   document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx],[data-fv]"); if (!c) return;
     const selecionar = (titulo, filtro) => popFaixa(e, titulo, filtro);
@@ -3046,7 +3046,33 @@ ${extra}
     eLinhasTransp = linhas;
     desenharELista(false);
     desenharCapacidade(gFiltrados());
+    desenharEFaixas();
   }
+  // entregues por transportadora × dias de atraso na entrega (entrega − data prometida), mesmas faixas da Visão Gerencial (Brenda 26/11)
+  const eAtrDe = (r) => (r._sit === "ent_atraso" ? (r._prom && r.entrega && r.entrega > r._prom ? diasEntre(r._prom, r.entrega) : 1) : 0);
+  const eFaixaDe = (r) => { const d = eAtrDe(r); return d ? FAIXAS.findIndex(([, f]) => f(d)) : -1; };
+  function desenharEFaixas() {
+    const [nomeDim, fd] = G_DIM[$("e-faixa-dim").value]; $("e-faixa-dim-nome").textContent = nomeDim;
+    const porL = new Map();
+    eEntregues.forEach((r) => { const k = fd(r); const x = porL.get(k) || { a: new Array(FAIXAS.length).fill(0), ok: 0, t: 0 }; x.t++; const i = eFaixaDe(r); if (i >= 0) x.a[i]++; else if (r._sit === "ent_prazo") x.ok++; porL.set(k, x); });
+    const soma = (xs) => xs.reduce((a, b) => a + b, 0), tot = FAIXAS.map((_, i) => [...porL.values()].reduce((s, x) => s + x.a[i], 0));
+    $("e-faixa-cab").innerHTML = `<tr class="fx-grupo"><th></th><th colspan="${FAIXAS.length + 1}" class="fx-g-atr">Entregues com atraso</th><th colspan="3"></th></tr>
+      <tr><th>Rótulos de linha</th>${FAIXAS.map(([n], i) => `<th class="num clic" data-efx="${i}">${n}</th>`).join("")}<th class="num">Total atraso</th><th class="num clic fx-sep" data-efx="ok">No prazo</th><th class="num">Entregues</th><th class="num">% atraso</th></tr>`;
+    const cel = (n, k, f, cls = "") => `<td class="num ${cls} ${n ? "clic" : "vazio-c"}" ${n ? `data-elin="${esc(k)}" data-efx="${f}"` : ""}>${n ? fmt(n) : "·"}</td>`;
+    $("e-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, soma(x.a)]).sort((a, b) => b[2] - a[2] || b[1].t - a[1].t)
+      .map(([k, x, ta]) => `<tr><td class="clic" data-elin="${esc(k)}">${esc(k)}</td>${x.a.map((n, i) => cel(n, k, i)).join("")}${cel(ta, k, "atr", "tot")}${cel(x.ok, k, "ok", "fx-sep txt-verde")}<td class="num tot">${fmt(x.t)}</td><td class="num">${x.t ? pctBR(ta / x.t) : "—"}</td></tr>`).join("")
+      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${tot.map((n) => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(soma(tot))}</td><td class="num fx-sep">${fmt([...porL.values()].reduce((s, x) => s + x.ok, 0))}</td><td class="num">${fmt(eEntregues.length)}</td><td class="num">${eEntregues.length ? pctBR(soma(tot) / eEntregues.length) : "—"}</td></tr>`
+        : `<tr><td colspan="${FAIXAS.length + 5}" class="s">Nenhuma entrega com esses filtros.</td></tr>`);
+  }
+  $("e-faixa-dim").addEventListener("change", desenharEFaixas);
+  document.querySelector(".tabela-efaixa").addEventListener("click", (e) => {
+    const c = e.target.closest("[data-elin],[data-efx]"); if (!c) return;
+    const fd = G_DIM[$("e-faixa-dim").value][1], lin = c.dataset.elin, f = c.dataset.efx;
+    const pf = f === undefined ? null : f === "ok" ? "ok" : f === "atr" ? "atr" : +f;
+    const nome = pf === null ? "Entregues" : pf === "ok" ? "Entregues no prazo" : pf === "atr" ? "Entregues com atraso" : `Entregues com atraso ${FAIXAS[pf][0]}`;
+    popFaixa(e, `${nome}${lin ? " · " + lin : ""}`, (L) => L.filter((r) => (r._sit === "ent_prazo" || r._sit === "ent_atraso") && (!lin || fd(r) === lin)
+      && (pf === null || (pf === "ok" ? r._sit === "ent_prazo" : pf === "atr" ? eFaixaDe(r) >= 0 : eFaixaDe(r) === pf))), true);
+  });
   // "Entregue e previsto para entregar por transportadora" (Brenda 26/11): ● verde = entregues no dia (dias passados e hoje);
   // ○ = em aberto previstos para o dia (previsão atual da Intelipost, senão a prometida); número vermelho = mais do que a
   // transportadora entrega por dia (média dos últimos 10 dias com entrega, contando zero nos dias em que ela não entregou)

@@ -24,6 +24,7 @@
     ], "Clique no título de qualquer coluna para ordenar (maior → menor → original)."],
 
     ["entregas", "Entregas e SLA", "Só os pedidos já entregues: SLA, entregues no prazo e com atraso por transportadora.", "Para reunião com transportadora e para medir o SLA.", [
+      "Quadro <b>Entregues com atraso por transportadora e faixa</b>: igual ao da Visão Gerencial, só com os entregues (≥ 30, ≥ 20, ≥ 10, ≥ 5 dias… de atraso na entrega), no prazo, total e % de atraso. Troque para UF, canal ou micro status no seletor; clique no número para baixar.",
       "Quadro <b>Entregue e previsto para entregar por transportadora</b>: bolinha verde = entregues no dia; bolinha branca = em aberto previstos para o dia; número vermelho = previstos acima da média de entregas por dia da transportadora (últimos 10 dias com entrega). Clique no número para baixar os pedidos em Excel.",
       "Escolha os filtros no topo (mesmos da Visão Gerencial).",
       "Clique numa transportadora para ver as entregas com atraso dela.",

@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=367">
+  <link rel="stylesheet" href="styles.css?v=368">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -231,6 +231,17 @@
       <section id="e-alerta" class="alerta" hidden>
         <span class="alerta-ic">📦</span>
         <div><b id="e-alerta-titulo"></b><p id="e-alerta-texto"></p></div>
+      </section>
+
+      <section class="cartao">
+        <div class="cartao-topo">
+          <div>
+            <h2>▦ Entregues com atraso por <span id="e-faixa-dim-nome">transportadora</span> e faixa</h2>
+            <p class="sub">Só os pedidos entregues: dias de atraso = data da entrega − data prometida. Clique num número para baixar aqueles pedidos.</p>
+          </div>
+          <div class="acoes-robo"><select id="e-faixa-dim"><option value="transp">Transportadora</option><option value="uf">UF</option><option value="canal">Canal</option><option value="micro">Micro status</option></select></div>
+        </div>
+        <div class="tabela-wrap"><table class="tabela-range tabela-faixa tabela-efaixa"><thead id="e-faixa-cab"></thead><tbody id="e-faixa-linhas"></tbody></table></div>
       </section>
 
       <section class="cartao">
@@ -1706,23 +1717,23 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=367"></script>
-  <script src="mapa-brasil.js?v=367"></script>
-  <script src="cidades-br.js?v=367"></script>
-  <script src="troca-notas.js?v=367"></script>
-  <script src="app.js?v=367"></script>
-  <script src="ordenar.js?v=367"></script>
-  <script src="menu.js?v=367"></script>
-  <script src="ajuda.js?v=367"></script>
-  <script src="documentos.js?v=367"></script>
-  <script src="barrar.js?v=367"></script>
-  <script src="naoloc.js?v=367"></script>
-  <script src="faltas.js?v=367"></script>
-  <script src="motor.js?v=367"></script>
-  <script src="retornos-semana.js?v=367"></script>
-  <script src="cobranca-massa.js?v=367"></script>
-  <script src="gargalos.js?v=367"></script>
-  <script src="filas.js?v=367"></script>
-  <script src="filtros.js?v=367"></script>
+  <script src="config.js?v=368"></script>
+  <script src="mapa-brasil.js?v=368"></script>
+  <script src="cidades-br.js?v=368"></script>
+  <script src="troca-notas.js?v=368"></script>
+  <script src="app.js?v=368"></script>
+  <script src="ordenar.js?v=368"></script>
+  <script src="menu.js?v=368"></script>
+  <script src="ajuda.js?v=368"></script>
+  <script src="documentos.js?v=368"></script>
+  <script src="barrar.js?v=368"></script>
+  <script src="naoloc.js?v=368"></script>
+  <script src="faltas.js?v=368"></script>
+  <script src="motor.js?v=368"></script>
+  <script src="retornos-semana.js?v=368"></script>
+  <script src="cobranca-massa.js?v=368"></script>
+  <script src="gargalos.js?v=368"></script>
+  <script src="filas.js?v=368"></script>
+  <script src="filtros.js?v=368"></script>
 </body>
 </html>
