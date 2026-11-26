@@ -3094,7 +3094,9 @@ ${extra}
     const cel = (n, t, d, tipo, alem) => n ? `<td class="num clic" data-cap="${tipo}" data-t="${esc(t)}" data-d="${d}" title="${tipo === "ent" ? `${n} entregue(s)` : `${n} previsto(s)${alem ? " · acima da média da transportadora" : ""}`} · clique para baixar"><span class="cap-b ${tipo === "ent" ? "v" : "b"}"></span><span class="${alem ? "cap-red" : ""}">${fmt(n)}</span></td>` : `<td></td>`;
     $("cap-linhas").innerHTML = linhas.map((x) => { const c = Math.round(x.cap);
       return `<tr><td>${esc(x.t)}</td>${passados.map((d) => cel(x.e.get(d) || 0, x.t, d, "ent")).join("")}${cel(x.e.get(hoje) || 0, x.t, hoje, "ent")}${futuros.map((d) => { const n = x.p.get(d) || 0; return cel(n, x.t, d, "prev", n > c); }).join("")}<td class="num s">${x.cap ? x.cap.toFixed(1).replace(".", ",") : "—"}</td></tr>`; }).join("")
-      || `<tr><td colspan="${passados.length + futuros.length + 3}" class="s">Sem entregas nem previsões com esses filtros.</td></tr>`;
+      + (linhas.length ? (() => { const sE = (d) => linhas.reduce((a, x) => a + (x.e.get(d) || 0), 0), sP = (d) => linhas.reduce((a, x) => a + (x.p.get(d) || 0), 0), mT = linhas.reduce((a, x) => a + x.cap, 0);
+        return `<tr class="tot-linha"><td>Total</td>${passados.map((d) => `<td class="num">${fmt(sE(d))}</td>`).join("")}<td class="num">${fmt(sE(hoje))}</td>${futuros.map((d) => `<td class="num">${fmt(sP(d))}</td>`).join("")}<td class="num">${mT ? mT.toFixed(1).replace(".", ",") : "—"}</td></tr>`; })()
+        : `<tr><td colspan="${passados.length + futuros.length + 3}" class="s">Sem entregas nem previsões com esses filtros.</td></tr>`);
     $("cap-info").textContent = media10.length ? `Capacidade = média de entregas por dia nos últimos ${media10.length} dias com entrega (${dd(media10[0])} a ${dd(media10[media10.length - 1])}). Número vermelho: previstos acima dessa média.` : "A base não tem entregas para calcular a média.";
   }
   document.querySelector(".tabela-cap").addEventListener("click", (e) => {
