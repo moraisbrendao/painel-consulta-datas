@@ -24,6 +24,7 @@
     ], "Clique no título de qualquer coluna para ordenar (maior → menor → original)."],
 
     ["entregas", "Entregas e SLA", "Só os pedidos já entregues: SLA, entregues no prazo e com atraso por transportadora.", "Para reunião com transportadora e para medir o SLA.", [
+      "Quadro <b>Entregue e previsto para entregar por transportadora</b>: bolinha verde = entregues no dia; bolinha branca = em aberto previstos para o dia; número vermelho = previstos acima da média de entregas por dia da transportadora (últimos 10 dias com entrega). Clique no número para baixar os pedidos em Excel.",
       "Escolha os filtros no topo (mesmos da Visão Gerencial).",
       "Clique numa transportadora para ver as entregas com atraso dela.",
       "Use <b>Baixar Excel</b> para mandar a lista para a transportadora.",

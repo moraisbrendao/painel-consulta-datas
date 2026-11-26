@@ -1782,11 +1782,11 @@ ${extra}
     $("g-janela").querySelectorAll("button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharProdutividade(gFiltradosCache, hojeISO()); });
   $("g-faixa-dim").addEventListener("change", () => desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)));
   // clique num número/cabeçalho do quadro de faixas: janelinha com "Baixar Excel" só daqueles pedidos ou "Ver lista" (Brenda 26/11)
-  function popFaixa(ev, titulo, filtro) {
+  function popFaixa(ev, titulo, filtro, semVer) {
     document.querySelectorAll(".fx-pop").forEach((x) => x.remove());
     const n = filtro(gFiltradosCache).length;
     const d = document.createElement("div"); d.className = "fx-pop";
-    d.innerHTML = `<b>${esc(titulo)}</b><span class="s">${fmt(n)} pedido${n === 1 ? "" : "s"}</span><div><button class="btn mini amarelo" data-fxp="xls">⤓ Baixar Excel</button> <button class="btn mini contorno" data-fxp="ver">Ver lista</button> <button class="link" data-fxp="x">✕</button></div>`;
+    d.innerHTML = `<b>${esc(titulo)}</b><span class="s">${fmt(n)} pedido${n === 1 ? "" : "s"}</span><div><button class="btn mini amarelo" data-fxp="xls">⤓ Baixar Excel</button> ${semVer ? "" : '<button class="btn mini contorno" data-fxp="ver">Ver lista</button> '}<button class="link" data-fxp="x">✕</button></div>`;
     document.body.appendChild(d);
     const r = d.getBoundingClientRect(), x = Math.min(ev.clientX + 8, innerWidth - r.width - 8), y = Math.min(ev.clientY + 8, innerHeight - r.height - 8);
     d.style.left = Math.max(8, x) + "px"; d.style.top = Math.max(8, y) + "px";
@@ -1794,7 +1794,7 @@ ${extra}
       if (b.dataset.fxp === "xls") { gSelecao = { titulo, filtro }; gPagina = 1; desenharGLista(false); baixarGLista(); }
       else if (b.dataset.fxp === "ver") selecionar(titulo, filtro); });
   }
-  document.addEventListener("click", (e) => { if (!e.target.closest(".fx-pop, .tabela-faixa")) document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
+  document.addEventListener("click", (e) => { if (!e.target.closest(".fx-pop, .tabela-faixa, .tabela-cap")) document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") document.querySelectorAll(".fx-pop").forEach((x) => x.remove()); });
   document.querySelector(".tabela-faixa").addEventListener("click", (e) => { const c = e.target.closest("[data-lin],[data-fx],[data-fv]"); if (!c) return;
     const selecionar = (titulo, filtro) => popFaixa(e, titulo, filtro);
@@ -3045,7 +3045,38 @@ ${extra}
     $("e-vazio-transp").hidden = linhas.length > 0;
     eLinhasTransp = linhas;
     desenharELista(false);
+    desenharCapacidade(gFiltrados());
   }
+  // "Entregue e previsto para entregar por transportadora" (Brenda 26/11): ● verde = entregues no dia (dias passados e hoje);
+  // ○ = em aberto previstos para o dia (previsão atual da Intelipost, senão a prometida); número vermelho = mais do que a
+  // transportadora entrega por dia (média dos últimos 10 dias com entrega, contando zero nos dias em que ela não entregou)
+  let capDados = null;
+  function desenharCapacidade(L) {
+    const hoje = hojeISO(), prevDe = (r) => r.prev || r._prom || null;
+    const ent = L.filter((r) => norm(r.status).startsWith("ENTREGUE") && r.entrega), ab = L.filter((r) => !r._fechado && prevDe(r));
+    const diasEnt = [...new Set(ent.map((r) => r.entrega).filter((d) => d < hoje))].sort();
+    const passados = diasEnt.slice(-8), media10 = diasEnt.slice(-10);
+    const futuros = [...new Set(ab.map(prevDe).filter((d) => d > hoje))].sort().slice(0, 6);
+    const M = new Map(), lin = (t) => { if (!M.has(t)) M.set(t, { t, e: new Map(), p: new Map(), soma10: 0, tot: 0 }); return M.get(t); };
+    ent.forEach((r) => { const x = lin(gProdK(r.transp)); x.e.set(r.entrega, (x.e.get(r.entrega) || 0) + 1); if (media10.includes(r.entrega)) x.soma10++; if (r.entrega >= (passados[0] || hoje)) x.tot++; });
+    ab.forEach((r) => { const d = prevDe(r); if (d <= hoje || !futuros.includes(d)) return; const x = lin(gProdK(r.transp)); x.p.set(d, (x.p.get(d) || 0) + 1); });
+    const linhas = [...M.values()].filter((x) => x.tot || [...x.p.values()].some(Boolean)).map((x) => ({ ...x, cap: media10.length ? x.soma10 / media10.length : 0 }))
+      .sort((a, b) => b.tot - a.tot || a.t.localeCompare(b.t));
+    capDados = { prevDe };
+    const dd = (d) => `${d.slice(8, 10)}/${d.slice(5, 7)}/${d.slice(0, 4)}`;
+    $("cap-cab").innerHTML = `<tr><th>Transportadora</th>${passados.map((d) => `<th class="num">${dd(d)}</th>`).join("")}<th class="num cap-hoje">Atual</th>${futuros.map((d) => `<th class="num cap-fut">${dd(d)}</th>`).join("")}<th class="num" title="Média de entregas por dia nos últimos 10 dias com entrega">Média/dia</th></tr>`;
+    const cel = (n, t, d, tipo, alem) => n ? `<td class="num clic" data-cap="${tipo}" data-t="${esc(t)}" data-d="${d}" title="${tipo === "ent" ? `${n} entregue(s)` : `${n} previsto(s)${alem ? " · acima da média da transportadora" : ""}`} · clique para baixar"><span class="cap-b ${tipo === "ent" ? "v" : "b"}"></span><span class="${alem ? "cap-red" : ""}">${fmt(n)}</span></td>` : `<td></td>`;
+    $("cap-linhas").innerHTML = linhas.map((x) => { const c = Math.round(x.cap);
+      return `<tr><td>${esc(x.t)}</td>${passados.map((d) => cel(x.e.get(d) || 0, x.t, d, "ent")).join("")}${cel(x.e.get(hoje) || 0, x.t, hoje, "ent")}${futuros.map((d) => { const n = x.p.get(d) || 0; return cel(n, x.t, d, "prev", n > c); }).join("")}<td class="num s">${x.cap ? x.cap.toFixed(1).replace(".", ",") : "—"}</td></tr>`; }).join("")
+      || `<tr><td colspan="${passados.length + futuros.length + 3}" class="s">Sem entregas nem previsões com esses filtros.</td></tr>`;
+    $("cap-info").textContent = media10.length ? `Capacidade = média de entregas por dia nos últimos ${media10.length} dias com entrega (${dd(media10[0])} a ${dd(media10[media10.length - 1])}). Número vermelho: previstos acima dessa média.` : "A base não tem entregas para calcular a média.";
+  }
+  document.querySelector(".tabela-cap").addEventListener("click", (e) => {
+    const c = e.target.closest("[data-cap]"); if (!c || !capDados) return;
+    const { cap, t, d } = c.dataset, dd = `${d.slice(8, 10)}/${d.slice(5, 7)}`;
+    if (cap === "ent") popFaixa(e, `${t} · entregues em ${dd}`, (L) => L.filter((r) => norm(r.status).startsWith("ENTREGUE") && r.entrega === d && gProdK(r.transp) === t), true);
+    else popFaixa(e, `${t} · previstos para ${dd}`, (L) => L.filter((r) => !r._fechado && capDados.prevDe(r) === d && gProdK(r.transp) === t), true);
+  });
   let eLinhasTransp = [];
   function desenharELista(rolar) {
     eLista = eSelecao ? eSelecao.filtro(eEntregues) : eEntregues.filter(E_CARD[eCard]);
