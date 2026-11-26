@@ -1426,3 +1426,4 @@ a.oc-link:hover { text-decoration: underline; }
 .cap-red { color: #d11a1a; font-weight: 700; }
 .tabela-cap td.clic { cursor: pointer; white-space: nowrap; }
 .tabela-cap th.cap-hoje, .tabela-cap th.cap-fut { background: #e8f0fb; }
+.tabela-cap td.cap-alem { background: #fde2e2; }
