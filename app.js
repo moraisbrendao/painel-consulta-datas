@@ -754,7 +754,7 @@
           ${p.entregue_ip ? '<div><span class="chip verde" title="O arquivo da Intelipost já mostra este pedido como entregue/cancelado; a base ainda não.">✓ entregue na Intelipost</span></div>' : ""}${marcaTicket(p)}</td>
         <td>${esc(p.transportadora || "—")}<div class="s">${esc([p.cidade, p.uf].filter(Boolean).join(" / "))}</div></td>
         <td><span class="ms">${esc(p.micro_status || "—")}</span><div class="s">${p._parado !== null ? `${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento` : ""}</div><div class="s resp-p">👤 ${nomeResp(p.micro_status)}</div>${marcaOc(p)}</td>
-        <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div>${p.prev_atual && p.prev_atual !== p._venc ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}${sswLinha(p)}</td>
+        <td>${br(p._venc) || "—"}<div>${chipPrazo(p)}</div><div class="s" title="Data original estimada da entrega (Intelipost), da base">Prazo original: <b>${br(p.prev_original) || "não veio na base"}</b></div>${p.prev_atual && p.prev_atual !== p.prev_original ? `<div class="s">Intelipost atual ${br(p.prev_atual)}</div>` : ""}${p.prev_360 && p.prev_360 !== p.prev_original ? `<div class="s" title="Data estimada da entrega (360) da base">Previsão 360 ${br(p.prev_360)}</div>` : ""}${sswLinha(p)}</td>
         <td><input type="date" ${attr}="nova_data" value="${esc(t.nova_data || "")}">${t.nova_data_fonte === "ssw" ? `<div class="s" title="Gravada sozinha pela previsão do SSW (depois da prometida). Se mudar à mão, o robô não mexe mais.">🤖 data do SSW</div>` : ""}</td>
         <td class="col-obs"><input ${attr}="observacao" value="${esc(t.observacao || "")}" placeholder="O que foi feito…" maxlength="1000">
           <div class="s quem">${quem}</div>
