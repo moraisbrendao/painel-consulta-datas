@@ -3021,7 +3021,8 @@ ${extra}
   const pctBR = (x) => (x * 100).toFixed(1).replace(".", ",") + "%";
   function desenharEntregas() {
     if (!gDados) return;
-    const E = gFiltrados().filter((r) => r._sit === "ent_prazo" || r._sit === "ent_atraso");
+    const GF = gFiltrados(); gFiltradosCache = GF;   // o "Baixar Excel" dos quadros desta página lê daqui
+    const E = GF.filter((r) => r._sit === "ent_prazo" || r._sit === "ent_atraso");
     eEntregues = E;
     const prazo = E.filter(E_CARD.prazo).length, atraso = E.length - prazo, sla = E.length ? prazo / E.length : 0;
     const meta = Math.min(100, Math.max(50, parseFloat($("g-meta").value) || 97)) / 100, metaTxt = pctBR(meta).replace(",0%", "%");
@@ -3045,7 +3046,7 @@ ${extra}
     $("e-vazio-transp").hidden = linhas.length > 0;
     eLinhasTransp = linhas;
     desenharELista(false);
-    desenharCapacidade(gFiltrados());
+    desenharCapacidade(GF);
     desenharEFaixas();
   }
   // entregues por transportadora × dias de atraso na entrega (entrega − data prometida), mesmas faixas da Visão Gerencial (Brenda 26/11)
@@ -3061,7 +3062,7 @@ ${extra}
     const cel = (n, k, f, cls = "") => `<td class="num ${cls} ${n ? "clic" : "vazio-c"}" ${n ? `data-elin="${esc(k)}" data-efx="${f}"` : ""}>${n ? fmt(n) : "·"}</td>`;
     $("e-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, soma(x.a)]).sort((a, b) => b[2] - a[2] || b[1].t - a[1].t)
       .map(([k, x, ta]) => `<tr><td class="clic" data-elin="${esc(k)}">${esc(k)}</td>${x.a.map((n, i) => cel(n, k, i)).join("")}${cel(ta, k, "atr", "tot")}${cel(x.ok, k, "ok", "fx-sep txt-verde")}<td class="num tot">${fmt(x.t)}</td><td class="num">${x.t ? pctBR(ta / x.t) : "—"}</td></tr>`).join("")
-      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${tot.map((n) => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(soma(tot))}</td><td class="num fx-sep">${fmt([...porL.values()].reduce((s, x) => s + x.ok, 0))}</td><td class="num">${fmt(eEntregues.length)}</td><td class="num">${eEntregues.length ? pctBR(soma(tot) / eEntregues.length) : "—"}</td></tr>`
+      + (porL.size ? `<tr class="tot-linha"><td class="clic" data-elin="">Total</td>${tot.map((n, i) => `<td class="num ${n ? "clic" : ""}" ${n ? `data-elin="" data-efx="${i}"` : ""}>${fmt(n)}</td>`).join("")}<td class="num clic" data-elin="" data-efx="atr">${fmt(soma(tot))}</td><td class="num fx-sep clic" data-elin="" data-efx="ok">${fmt([...porL.values()].reduce((s, x) => s + x.ok, 0))}</td><td class="num clic" data-elin="">${fmt(eEntregues.length)}</td><td class="num">${eEntregues.length ? pctBR(soma(tot) / eEntregues.length) : "—"}</td></tr>`
         : `<tr><td colspan="${FAIXAS.length + 5}" class="s">Nenhuma entrega com esses filtros.</td></tr>`);
   }
   $("e-faixa-dim").addEventListener("change", desenharEFaixas);
