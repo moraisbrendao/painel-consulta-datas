@@ -77,7 +77,7 @@
     const V = L.filter(passa);
     $("br-titulo").textContent = `${CARDS.find((c) => c[0] === card)[1]} (${fmt(V.length)})`;
     $("br-linhas").innerHTML = V.map(linha).join("") || `<tr><td colspan="8" class="vazio">Nenhuma nota aqui.</td></tr>`;
-    const nm = [...marcadas].filter((nf) => L.some((x) => x.nf === nf)).length;
+    const nm = V.filter((x) => marcadas.has(x.nf) && x.portal_status !== "feito").length;   // só as marcadas que estão na lista que você está vendo
     $("br-aprovar").textContent = `Aprovar sugestão (${nm})`; $("br-aprovar").disabled = !nm; $("br-desfazer").disabled = !nm;
     $("br-todos").checked = V.length > 0 && V.every((x) => marcadas.has(x.nf));
     desenharEnvios(); desenharErroTransp();
@@ -259,7 +259,7 @@
     desenhar();
   }
 
-  $("br-cards").addEventListener("click", (e) => { const b = e.target.closest("[data-br]"); if (!b) return; card = b.dataset.br === card ? "todos" : b.dataset.br; desenhar(); });
+  $("br-cards").addEventListener("click", (e) => { const b = e.target.closest("[data-br]"); if (!b) return; card = b.dataset.br === card ? "todos" : b.dataset.br; marcadas.clear(); desenhar(); });   // trocar de quadro desmarca tudo (Brenda 26/11)
   $("br-busca").addEventListener("input", desenhar); $("br-transp").addEventListener("change", desenhar);
   $("br-limpar").addEventListener("click", () => { $("br-busca").value = ""; $("br-transp").value = ""; card = "todos"; desenhar(); });
   document.addEventListener("change", async (e) => {
@@ -280,7 +280,7 @@
   });
   $("br-todos").addEventListener("change", (e) => { L.filter(passa).forEach((x) => { if (x.portal_status === "feito") return; e.target.checked ? marcadas.add(x.nf) : marcadas.delete(x.nf); }); desenhar(); });
   $("br-aprovar").addEventListener("click", async () => {
-    const sel = L.filter((x) => marcadas.has(x.nf) && x.portal_status !== "feito");
+    const sel = L.filter(passa).filter((x) => marcadas.has(x.nf) && x.portal_status !== "feito");
     const comSug = sel.filter((x) => x.sugestao === "barrar" || x.sugestao === "nao_barrar"), sem = sel.length - comSug.length;
     if (!comSug.length) { const jaDec = sel.filter((x) => x.decisao).length;
       return toast(jaDec === sel.length && sel.length ? `As ${sel.length} nota(s) marcadas já estão com a decisão escolhida na linha (gravada). Não precisa aprovar: elas vão no próximo envio ao portal.` : "As notas marcadas não têm sugestão de ✓ ou ✗. Escolha a decisão na própria linha.", !(jaDec === sel.length && sel.length)); }
@@ -288,7 +288,7 @@
     for (const x of comSug) await salvarDecisao([x.nf], x.sugestao, x.sugestao_opcao, x.sugestao === "nao_barrar" ? x.sugestao_motivo || "" : null);
     marcadas.clear(); desenhar(); toast(`${comSug.length} aprovada(s).`);
   });
-  $("br-desfazer").addEventListener("click", async () => { await salvarDecisao([...marcadas], null); marcadas.clear(); desenhar(); });
+  $("br-desfazer").addEventListener("click", async () => { await salvarDecisao(L.filter(passa).filter((x) => marcadas.has(x.nf)).map((x) => x.nf), null); marcadas.clear(); desenhar(); });
   document.addEventListener("click", async (e) => {
     const a = e.target.closest(".br-print"); if (!a || !(e.target.closest("#br-linhas") || e.target.closest("#br-erro-transp"))) return; e.preventDefault();
     try { let u = urls.get(a.dataset.p); if (!u) { const { data, error } = await sb().storage.from("barrar").createSignedUrl(a.dataset.p, 3600); if (error) throw error; u = data.signedUrl; urls.set(a.dataset.p, u); } window.open(u, "_blank", "noopener"); }
