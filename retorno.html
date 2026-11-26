@@ -34,6 +34,19 @@
     button:disabled { opacity: .5; cursor: default; }
     .rodape { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--linha); padding: 10px 16px; display: flex; justify-content: center; gap: 10px; align-items: center; }
     .ok { color: var(--verde); font-weight: 700; }
+    .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
+    .card { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 12px; text-align: left; font-weight: 400; color: var(--texto); }
+    .card b { display: block; font-size: 22px; line-height: 1.1; }
+    .card span { font-size: 12.5px; color: var(--suave); }
+    .card.ativo { background: var(--amarelo); border-color: var(--amarelo); }
+    .card.ativo span { color: #1d2433; }
+    .card.c-verm b { color: var(--vermelho); } .card.c-roxo b { color: #6b2fb3; } .card.c-verde b { color: var(--verde); }
+    .card.ativo b { color: #1d2433; }
+    .alerta { grid-column: 1 / -1; border-radius: 8px; padding: 8px 10px; font-size: 14px; }
+    .alerta.barrar { background: var(--vermelho-f); color: var(--vermelho); font-weight: 700; border: 1px solid #f3b2ad; }
+    .alerta.oc { background: #f1e8fc; color: #4b1f86; border: 1px solid #d6c0f3; white-space: pre-wrap; word-break: break-word; }
+    .alerta.oc b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+    .repo { display: inline-block; margin-top: 3px; font-size: 13px; font-weight: 700; color: #0b5c8a; background: #e2f1fb; padding: 1px 8px; border-radius: 10px; }
     .err { color: var(--vermelho); font-size: 13px; }
     @media (max-width: 760px) {
       .ped { grid-template-columns: 1fr; }
@@ -48,6 +61,7 @@
   </header>
   <main>
     <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <div class="cards" id="cards"></div>
     <div class="barra"><input id="busca" type="search" placeholder="Procurar pedido ou NF"><span class="s" id="cont"></span></div>
     <div id="lista"></div>
   </main>
@@ -58,9 +72,9 @@
     const $ = (id) => document.getElementById(id);
     const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
-    const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Outro"];
+    const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Outro"];
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
-    let itens = [], hoje = "", feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+    let itens = [], hoje = "", filtro = "", feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
     async function rpc(nome, corpo) {
       const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
@@ -83,18 +97,37 @@
     }
     function erro(msg) { $("sub").textContent = ""; $("explica").className = "aviso erro"; $("explica").textContent = msg; $("lista").innerHTML = ""; }
 
+    // cards de resumo (Brenda 26/11): clicar filtra a lista; clicar de novo tira o filtro
+    const atraso = (x) => (x.prometido ? dias(x.prometido, hoje) : null);
+    const CARDS = [
+      ["", "Pedidos na lista", () => true, ""],
+      ["sem", "Sem nova data", (x) => !feitos.has(x.pedido), ""],
+      ["venc", "Vencidos", (x) => atraso(x) > 0 || !!x.nova_antiga, "c-verm"],
+      ["hoje", "Vencem hoje / amanhã", (x) => { const d = atraso(x); return d !== null && d <= 0 && !x.nova_antiga; }, ""],
+      ["oc", "Mensagem da Multimóveis esperando vocês", (x) => !!x.oc_msg, "c-roxo"],
+      ["barrar", "Em Barrar entrega", (x) => !!x.barrar, "c-verm"],
+      ["repo", "Com nota de reposição", (x) => !!x.nf_repo, ""],
+      ["salvo", "Salvos agora", (x) => feitos.has(x.pedido), "c-verde"],
+    ];
+    function desenharCards() {
+      $("cards").innerHTML = CARDS.filter(([k, , f]) => !k || k === "sem" || k === "salvo" || k === filtro || itens.some(f))
+        .map(([k, nome, f, cls]) => `<button type="button" class="card ${cls}${filtro === k ? " ativo" : ""}" data-f="${k}"><b>${itens.filter(f).length}</b><span>${nome}</span></button>`).join("");
+    }
     function desenhar() {
-      const q = $("busca").value.trim().toUpperCase();
-      const V = itens.filter((x) => (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
+      desenharCards();
+      const q = $("busca").value.trim().toUpperCase(), fc = (CARDS.find((c) => c[0] === filtro) || CARDS[0])[2];
+      const V = itens.filter((x) => fc(x) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
       const pend = itens.filter((x) => !feitos.has(x.pedido)).length, feitosN = feitos.size;
       $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + (feitosN ? ` · ${feitosN} salvo${feitosN === 1 ? "" : "s"} agora` : "");
-      $("cont").textContent = q ? `${V.length} encontrado(s)` : "";
+      $("cont").textContent = q || filtro ? `${V.length} na lista` : "";
       $("lista").innerHTML = V.map((x) => {
         const d = x.prometido ? dias(x.prometido, hoje) : null, ra = rasc.get(x.pedido) || {};
         const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
         const fs = feitos.get(x.pedido);
         return `<div class="ped${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
-          <div><b class="num">${esc(x.pedido)}</b><div class="s">NF ${esc(x.nf || "—")}${x.transportadora ? " · " + esc(x.transportadora) : ""}</div></div>
+          ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme com a Logística.</div>` : ""}
+          ${x.oc_msg ? `<div class="alerta oc"><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
+          <div><b class="num">${esc(x.pedido)}</b><div class="s">NF ${esc(x.nf || "—")}${x.transportadora ? " · " + esc(x.transportadora) : ""}</div>${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}</div>` : ""}</div>
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)} ${chip}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
@@ -129,6 +162,7 @@
         feitos.set(x.pedido, h); el.classList.add("salvo"); st(el, `<span class="ok">✓ salvo às ${h}</span>`);
         const pend = itens.filter((y) => !feitos.has(y.pedido)).length;
         $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + ` · ${feitos.size} salvo${feitos.size === 1 ? "" : "s"} agora`;
+        desenharCards();
       } catch (err) { st(el, ""); el.querySelector(".err").textContent = err.message + " (tente de novo)"; ultimoEnviado.delete(x.pedido); }
     }
     const mexeu = (e) => {
@@ -141,6 +175,7 @@
     };
     $("lista").addEventListener("input", mexeu); $("lista").addEventListener("change", mexeu);
     $("busca").addEventListener("input", desenhar);
+    $("cards").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; filtro = filtro === b.dataset.f ? "" : b.dataset.f; desenhar(); });
     carregar();
   })();
   </script>

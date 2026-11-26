@@ -55,7 +55,7 @@
     $("lk-novo").hidden = !novo;
     if (novo) {
       $("lk-novo-nome").textContent = novo.nome; $("lk-url").value = novo.url;
-      $("lk-msg").value = `Olá, equipe ${novo.nome}! Este é o link fixo da Multimóveis para informar a nova data de entrega dos nossos pedidos em atraso:\n${novo.url}\n\nÉ só abrir (não precisa de login), colocar a nova data, escolher o motivo e clicar em Salvar. A lista se atualiza sozinha todo dia e mostra só os pedidos que ainda estão sem data. Obrigado!`;
+      $("lk-msg").value = `Olá, equipe ${novo.nome}! Este é o link fixo da Multimóveis para informar a nova data de entrega dos nossos pedidos em atraso:\n${novo.url}\n\nÉ só abrir (não precisa de login), colocar a nova data e escolher o motivo (salva sozinho). A lista se atualiza sozinha todo dia e mostra só os pedidos que ainda estão sem data. Obrigado!`;
     }
   }
   let lkGrupos = new Map();
