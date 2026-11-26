@@ -340,6 +340,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   const M = await import("./multi360.mjs"); let m360 = null;
   const comentar = async (x) => { if (!m360) m360 = await M.entrarMulti360(ctx2, log); return comentarTicket(x, m360, baixarArquivo, M, chamar); };
   const ctx2 = ctx;
+  const paraComentar = [];
   const grava = (nf, st, msg) => chamar(`barrar_entrega?nf=eq.${encodeURIComponent(nf)}`, "PATCH", { portal_status: st, portal_msg: msg, portal_em: new Date().toISOString() });
   for (const x of L) {
     try {
@@ -382,10 +383,12 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
       if (ainda) { await grava(x.nf, "erro", "Cliquei, mas a nota continua na lista Barrar Entrega."); soma("continua na lista"); }
       else {
         await grava(x.nf, "feito", x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.`); soma(`feito ${x.decisao}`);
-        await comentar(x).then(() => soma("prints no ticket")).catch(async (e) => { soma("prints no ticket: erro"); await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "erro", ticket_msg: String(e.message).split("\n")[0].slice(0, 200), ticket_em: new Date().toISOString() }).catch(() => {}); });
+        paraComentar.push(x);   // prints no ticket só DEPOIS de terminar o portal (26/11: o login do Multi360 no meio atrapalhava a busca do portal)
       }
     } catch (e) { soma("erro"); await grava(x.nf, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); await p.keyboard.press("Escape").catch(() => {}); }
   }
+  for (const x of paraComentar)
+    await comentar(x).then(() => soma("prints no ticket")).catch(async (e) => { soma("prints no ticket: erro"); await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "erro", ticket_msg: String(e.message).split("\n")[0].slice(0, 200), ticket_em: new Date().toISOString() }).catch(() => {}); });
   log("barrar-portal: " + Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · "));
 }
 
