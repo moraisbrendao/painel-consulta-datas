@@ -15,7 +15,9 @@
   let velha = false, verVelha = false;
   let L = [], H = [], info = null, ok = true, card = "todos", marcadas = new Set(), urls = new Map(), carregou = false;
   const SUG = { barrar: "Barrar ✓", nao_barrar: "Não barrar ✗", manual: "Erro: verificar" };
-  const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao === "nao_barrar" ? (x.sugestao_opcao === "Entregue" ? "nb_entregue" : "nb_naorec") : x.sugestao || "manual");
+  // "não está mais na lista" não é erro de verdade (a busca do portal demorava): volta para Aprovadas e vai no próximo envio (Brenda 26/11)
+  const reenvio = (x) => x.portal_status === "erro" && /não está mais na lista/i.test(x.portal_msg || "");
+  const sit = (x) => (x.portal_status === "feito" ? "feito" : x.portal_status === "erro" && !reenvio(x) ? "erro" : x.decisao ? "aprovado" : !x.conferido_em ? "robo" : x.sugestao === "nao_barrar" ? (x.sugestao_opcao === "Entregue" ? "nb_entregue" : "nb_naorec") : x.sugestao || "manual");
   const CARDS = [["barrar", "Barrar ✓", "status atual: devolução", "verde"], ["nb_entregue", "Não barrar ✗ · Entregue", "entregue no rastreio", "vermelho"], ["nb_naorec", "Não barrar ✗ · Não recebido", "anotação: transportadora não recebeu", "vermelho"],
     ["manual", "Erro: verificar", "nada no rastreio ou ticket sem transportadora", "laranja"], ["difer", "Transportadora diferente", "rastreio × portal", "roxo"], ["robo", "Aguardando o robô", "ainda não conferidas", ""],
     ["aprovado", "Aprovadas", "vão para o portal", "azul"], ["feito", "Feitas no portal", "✓/✗ já clicado", "verde"], ["erro", "Erro no portal", "", "vermelho"], ["todos", "Todas", "da última planilha", ""]];
@@ -240,7 +242,7 @@
     const sug = x.sugestao ? `<span class="chip ${x.sugestao === "barrar" ? "verde" : x.sugestao === "nao_barrar" ? "vermelho" : "ambar"}">${SUG[x.sugestao]}</span>${x.sugestao_opcao ? `<div class="s">${esc(x.sugestao_opcao)}</div>` : ""}${x.sugestao_motivo ? `<div class="s">${esc(x.sugestao_motivo)}</div>` : ""}` : "";
     const travado = !!x.portal_status && x.portal_status === "feito";
     const dec = celDec(x);
-    const port = x.portal_status === "feito" ? `<span class="chip verde">✓ Feito</span><div class="s">${esc(x.portal_msg || "")} ${hora(x.portal_em)}</div>` : x.portal_status === "erro" ? `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>` : x.decisao ? `<span class="s">na próxima ida ao portal</span>` : "";
+    const port = x.portal_status === "feito" ? `<span class="chip verde">✓ Feito</span><div class="s">${esc(x.portal_msg || "")} ${hora(x.portal_em)}</div>` : reenvio(x) ? `<span class="s">na próxima ida ao portal (o robô procura de novo)</span>` : x.portal_status === "erro" ? `<span class="txt-vermelho">⚠ ${esc(x.portal_msg || "erro")}</span>` : x.decisao ? `<span class="s">na próxima ida ao portal</span>` : "";
     return `<tr><td><input type="checkbox" class="br-sel" data-nf="${esc(x.nf)}"${marcadas.has(x.nf) ? " checked" : ""}${travado ? " disabled" : ""}></td>
       <td><b>${esc(x.nf)}</b>${x.ticket ? `<div><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener noreferrer">#${esc(x.ticket)}</a></div>` : ""}${x.status_intelipost ? `<div class="s">${esc(x.status_intelipost)}</div>` : ""}</td>
       <td>${tp}</td><td>${rast}${x.print_rastreio ? `<div><a href="#" class="br-print" data-p="${esc(x.print_rastreio)}">ver print do rastreio</a></div>` : ""}</td><td>${an}</td><td>${sug}</td><td>${dec}</td><td>${port}${x.ticket_status === "feito" ? `<div class="s">✓ prints no ticket (comentário interno)</div>` : x.ticket_status === "erro" ? `<div class="s txt-vermelho">⚠ ticket: ${esc(x.ticket_msg || "erro")}</div>` : ""}</td></tr>`;
