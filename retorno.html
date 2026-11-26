@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="robots" content="noindex, nofollow">
+  <meta name="referrer" content="no-referrer">
+  <title>Retorno de entregas · Multimóveis</title>
+  <style>
+    :root { --azul: #0f1f3d; --amarelo: #f3c84b; --fundo: #f3f5f9; --cartao: #fff; --texto: #1d2433; --suave: #5b667a; --linha: #e3e7ee; --verde: #1d7a43; --verde-f: #e3f5ea; --vermelho: #b4231b; --vermelho-f: #fde2e0; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--fundo); color: var(--texto); font: 15px/1.4 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+    header { background: var(--azul); color: #fff; padding: 14px 16px; }
+    header h1 { margin: 0; font-size: 18px; }
+    header p { margin: 4px 0 0; font-size: 13px; opacity: .85; }
+    main { max-width: 980px; margin: 0 auto; padding: 14px 16px 90px; }
+    .aviso { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
+    .aviso.erro { border-color: var(--vermelho); color: var(--vermelho); }
+    .barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+    .barra input { flex: 1; min-width: 180px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; font-size: 15px; }
+    .ped { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1.2fr 1fr 1.6fr auto; gap: 10px 14px; align-items: center; }
+    .ped.salvo { background: var(--verde-f); border-color: #9fd8b4; }
+    .ped b.num { font-size: 15px; word-break: break-all; }
+    .s { color: var(--suave); font-size: 13px; }
+    .chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: #eef1f6; }
+    .chip.verm { background: var(--vermelho-f); color: var(--vermelho); }
+    .chip.amar { background: #fff1c9; color: #7a5a00; }
+    .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .campos input, .campos select { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e2; border-radius: 8px; font-size: 15px; background: #fff; color: var(--texto); }
+    .campos .obs { grid-column: 1 / -1; }
+    button { font: inherit; cursor: pointer; border-radius: 10px; border: 0; padding: 10px 16px; font-weight: 700; }
+    .btn-am { background: var(--amarelo); color: #1d2433; }
+    .btn-cont { background: #fff; border: 1px solid #cfd6e2; color: var(--texto); }
+    button:disabled { opacity: .5; cursor: default; }
+    .rodape { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--linha); padding: 10px 16px; display: flex; justify-content: center; gap: 10px; align-items: center; }
+    .ok { color: var(--verde); font-weight: 700; }
+    .err { color: var(--vermelho); font-size: 13px; }
+    @media (max-width: 760px) {
+      .ped { grid-template-columns: 1fr; }
+      .ped .acao button { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1 id="titulo">Retorno de entregas · Multimóveis</h1>
+    <p id="sub">Carregando…</p>
+  </header>
+  <main>
+    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b> e clique em <b>Salvar</b>. O pedido sai da lista na hora e só volta se a nova data vencer.</div>
+    <div class="barra"><input id="busca" type="search" placeholder="Procurar pedido ou NF"><span class="s" id="cont"></span></div>
+    <div id="lista"></div>
+  </main>
+  <div class="rodape" id="rodape" hidden><button id="salvar-todos" class="btn-am" type="button" disabled>Salvar todos preenchidos (0)</button><span id="rod-msg" class="s"></span></div>
+  <script src="config.js"></script>
+  <script>
+  (function () {
+    const CFG = window.PAINEL_CONFIG || {};
+    const $ = (id) => document.getElementById(id);
+    const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+    const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
+    const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Outro"];
+    const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
+    let itens = [], hoje = "", feitos = new Set(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+
+    async function rpc(nome, corpo) {
+      const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
+      const j = await r.json().catch(() => null);
+      if (!r.ok) throw new Error((j && j.message) || "Não consegui falar com o sistema. Tente de novo em instantes.");
+      return j;
+    }
+    const dias = (a, b) => Math.round((Date.parse(b + "T12:00:00Z") - Date.parse(a + "T12:00:00Z")) / 864e5);
+    const maxData = () => { const d = new Date(hoje + "T12:00:00Z"); d.setUTCDate(d.getUTCDate() + 90); return d.toISOString().slice(0, 10); };
+
+    async function carregar() {
+      if (!token) { erro("Link incompleto. Peça o link de retorno para a Logística da Multimóveis."); return; }
+      try {
+        const r = await rpc("link_pendentes", { p_token: token });
+        itens = r.itens || []; hoje = r.hoje;
+        $("titulo").textContent = `Retorno de entregas · ${r.nome}`;
+        document.title = `Retorno de entregas · ${r.nome}`;
+        desenhar();
+      } catch (e) { erro(e.message); }
+    }
+    function erro(msg) { $("sub").textContent = ""; $("explica").className = "aviso erro"; $("explica").textContent = msg; $("lista").innerHTML = ""; $("rodape").hidden = true; }
+
+    function desenhar() {
+      const q = $("busca").value.trim().toUpperCase();
+      const V = itens.filter((x) => !feitos.has(x.pedido) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
+      const pend = itens.filter((x) => !feitos.has(x.pedido)).length;
+      $("sub").textContent = pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data · atualizado agora` : "Tudo respondido. Obrigado!";
+      $("cont").textContent = q ? `${V.length} encontrado(s)` : "";
+      $("lista").innerHTML = V.map((x) => {
+        const d = x.prometido ? dias(x.prometido, hoje) : null, ra = rasc.get(x.pedido) || {};
+        const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
+        return `<div class="ped" data-p="${esc(x.pedido)}">
+          <div><b class="num">${esc(x.pedido)}</b><div class="s">NF ${esc(x.nf || "—")}${x.transportadora ? " · " + esc(x.transportadora) : ""}</div></div>
+          <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)} ${chip}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}</div>
+          <div class="campos">
+            <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
+            <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
+            <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
+          </div>
+          <div class="acao"><button class="btn-am salvar" type="button">Salvar</button><div class="err"></div></div>
+        </div>`;
+      }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
+      $("rodape").hidden = !pend; contar();
+    }
+    const preenchidos = () => [...document.querySelectorAll(".ped[data-p]")].filter((el) => el.querySelector(".dt").value && el.querySelector(".mt").value);
+    function contar() { const n = preenchidos().length; $("salvar-todos").textContent = `Salvar todos preenchidos (${n})`; $("salvar-todos").disabled = !n; }
+    const dadosDe = (el) => ({ pedido: el.dataset.p, nova_data: el.querySelector(".dt").value, motivo: el.querySelector(".mt").value, obs: el.querySelector(".obs").value.trim() });
+    function valida(x) {
+      if (!x.nova_data) return "Coloque a nova data.";
+      if (x.nova_data < hoje) return "A nova data não pode ser no passado.";
+      if (x.nova_data > maxData()) return "Data muito longe (máximo 90 dias).";
+      if (!x.motivo) return "Escolha o motivo.";
+      if (x.motivo === "Outro" && !x.obs) return "Explique na observação.";
+      return "";
+    }
+    async function salvar(els) {
+      const envio = []; let ruim = 0;
+      els.forEach((el) => { const x = dadosDe(el), e = valida(x); el.querySelector(".err").textContent = e; if (e) ruim++; else envio.push(x); });
+      if (!envio.length) return;
+      els.forEach((el) => (el.querySelector(".salvar").disabled = true)); $("salvar-todos").disabled = true; $("rod-msg").textContent = "Salvando…";
+      try {
+        const r = await rpc("link_responder", { p_token: token, p_itens: envio });
+        envio.forEach((x) => feitos.add(x.pedido));
+        $("rod-msg").innerHTML = `<span class="ok">✓ ${r.gravados} salvo(s)</span>${r.recusados ? ` · ${r.recusados} não aceito(s) (pedido já entregue ou data inválida)` : ""}${ruim ? ` · ${ruim} com campo faltando` : ""}`;
+        desenhar();
+      } catch (e) { $("rod-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; els.forEach((el) => (el.querySelector(".salvar").disabled = false)); contar(); }
+    }
+    $("lista").addEventListener("click", (e) => { const b = e.target.closest(".salvar"); if (b) salvar([b.closest(".ped")]); });
+    const guarda = (e) => { const el = e.target.closest(".ped[data-p]"); if (el) rasc.set(el.dataset.p, dadosDe(el)); contar(); };
+    $("lista").addEventListener("input", guarda); $("lista").addEventListener("change", guarda);
+    $("salvar-todos").addEventListener("click", () => salvar(preenchidos()));
+    $("busca").addEventListener("input", desenhar);
+    carregar();
+  })();
+  </script>
+</body>
+</html>

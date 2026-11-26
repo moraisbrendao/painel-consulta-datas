@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=384">
+  <link rel="stylesheet" href="styles.css?v=385">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -707,6 +707,29 @@
           </table>
         </div>
         <p class="dica">Compara o retorno que cada pedido em aberto tinha no começo da semana com o de agora (histórico de toda nova data gravada: tela, Enviar retornos e robô do SSW). A <b>auditoria</b> cruza o retorno com os <b>Tempos reais de entrega</b> (dias úteis da expedição até a entrega, mesma transportadora para a mesma cidade, senão UF, com 30+ entregas) e com os dias parados no rastreio. <b>Crítico · prioridade máxima</b> = data já remarcada 2+ vezes ou previsão vencida, com rastreio parado, pedido acima do prazo usual da região ou nova data difícil de cumprir. Clique num card ou numa transportadora para ver os pedidos.</p>
+      </section>
+
+      <!-- ============ LINKS DAS TRANSPORTADORAS (links.js, parte 82) ============ -->
+      <section class="cartao" id="lk-box">
+        <div class="cartao-topo">
+          <div>
+            <h2>🔗 Links das transportadoras · elas mesmas informam a nova data</h2>
+            <p class="sub" id="lk-info">Carregando…</p>
+          </div>
+          <div class="acoes-robo">
+            <select id="lk-transp" aria-label="Transportadora"></select>
+            <button id="lk-gerar" class="btn amarelo" type="button">🔗 Gerar link</button>
+          </div>
+        </div>
+        <div id="lk-novo" class="lk-novo" hidden>
+          <p><b>Link de <span id="lk-novo-nome"></span></b> · copie agora: por segurança ele <b>não aparece de novo</b> (se perder, gere outro).</p>
+          <div class="lk-linha"><input id="lk-url" readonly><button id="lk-copiar-url" class="btn contorno" type="button">Copiar link</button></div>
+          <textarea id="lk-msg" rows="5"></textarea>
+          <div class="lk-linha"><button id="lk-copiar-msg" class="btn amarelo" type="button">Copiar mensagem</button><button id="lk-fechar" class="link" type="button">Fechar</button></div>
+        </div>
+        <div class="tabela-wrap"><table class="tabela-pedidos">
+          <thead><tr><th>Transportadora</th><th class="num">Sem retorno agora</th><th>Último acesso</th><th>Última resposta</th><th>Criado</th><th></th></tr></thead>
+          <tbody id="lk-linhas"></tbody></table></div>
       </section>
 
       <!-- lista -->
@@ -1717,23 +1740,24 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=384"></script>
-  <script src="mapa-brasil.js?v=384"></script>
-  <script src="cidades-br.js?v=384"></script>
-  <script src="troca-notas.js?v=384"></script>
-  <script src="app.js?v=384"></script>
-  <script src="ordenar.js?v=384"></script>
-  <script src="menu.js?v=384"></script>
-  <script src="ajuda.js?v=384"></script>
-  <script src="documentos.js?v=384"></script>
-  <script src="barrar.js?v=384"></script>
-  <script src="naoloc.js?v=384"></script>
-  <script src="faltas.js?v=384"></script>
-  <script src="motor.js?v=384"></script>
-  <script src="retornos-semana.js?v=384"></script>
-  <script src="cobranca-massa.js?v=384"></script>
-  <script src="gargalos.js?v=384"></script>
-  <script src="filas.js?v=384"></script>
-  <script src="filtros.js?v=384"></script>
+  <script src="config.js?v=385"></script>
+  <script src="mapa-brasil.js?v=385"></script>
+  <script src="cidades-br.js?v=385"></script>
+  <script src="troca-notas.js?v=385"></script>
+  <script src="app.js?v=385"></script>
+  <script src="ordenar.js?v=385"></script>
+  <script src="menu.js?v=385"></script>
+  <script src="ajuda.js?v=385"></script>
+  <script src="documentos.js?v=385"></script>
+  <script src="barrar.js?v=385"></script>
+  <script src="naoloc.js?v=385"></script>
+  <script src="faltas.js?v=385"></script>
+  <script src="motor.js?v=385"></script>
+  <script src="retornos-semana.js?v=385"></script>
+  <script src="links.js?v=385"></script>
+  <script src="cobranca-massa.js?v=385"></script>
+  <script src="gargalos.js?v=385"></script>
+  <script src="filas.js?v=385"></script>
+  <script src="filtros.js?v=385"></script>
 </body>
 </html>

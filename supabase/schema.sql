@@ -3585,3 +3585,107 @@ grant execute on function public.receber_torre(jsonb) to service_role;
 drop policy if exists "admins leem" on public.previsao_torre;
 drop policy if exists "logados leem" on public.previsao_torre;
 create policy "logados leem" on public.previsao_torre for select to authenticated using (true);
+
+-- 82) Link de retorno das transportadoras (Brenda 26/11): cada transportadora recebe um link fixo (sem login) que mostra
+--     só os pedidos dela sem retorno (atrasados, vencendo hoje/amanhã ou com a nova data já vencida) e grava a nova data
+--     + motivo direto nas tratativas (fonte 'link'). Sem dado de cliente. O token só existe no link: o banco guarda o hash.
+create table if not exists public.transp_links (
+  id              bigint generated always as identity primary key,
+  nome            text not null,                         -- nome mostrado no link
+  transportadoras text[] not null,                       -- nomes exatos da coluna Transportadora da base
+  token_hash      text not null unique,                  -- sha256 do token (o token em si só fica no link)
+  ativo           boolean not null default true,
+  criado_por      text default (auth.jwt() ->> 'email'),
+  criado_em       timestamptz not null default now(),
+  ultimo_acesso   timestamptz,
+  acessos         integer not null default 0,
+  ultima_resposta timestamptz,
+  respostas       integer not null default 0
+);
+alter table public.transp_links enable row level security;
+revoke all on public.transp_links from anon;
+grant select, insert, update, delete on public.transp_links to authenticated;
+drop policy if exists "logistica cuida" on public.transp_links;
+create policy "logistica cuida" on public.transp_links for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- carimbo das tratativas: resposta pelo link fica como "Transportadora (link): Nome" e fonte 'link'
+create or replace function public._carimbo_tratativa()
+returns trigger language plpgsql as $$
+begin
+  new.atualizado_por := coalesce(auth.jwt() ->> 'email', new.atualizado_por);
+  new.atualizado_em := now();
+  if coalesce(current_setting('painel.ssw', true), '') = '1' then new.atualizado_por := 'SSW (automático)';
+  elsif coalesce(current_setting('painel.link', true), '') <> '' then
+    new.atualizado_por := 'Transportadora (link): ' || current_setting('painel.link', true); new.nova_data_fonte := 'link';
+  -- nova data mudada por uma pessoa: deixa de ser automática
+  elsif tg_op = 'INSERT' then new.nova_data_fonte := null;
+  elsif new.nova_data is distinct from old.nova_data then new.nova_data_fonte := null;
+  end if;
+  return new;
+end $$;
+
+create or replace function public._link_de(p_token text) returns public.transp_links
+language plpgsql security definer set search_path = public, extensions as $$
+declare l public.transp_links;
+begin
+  select * into l from public.transp_links
+   where ativo and token_hash = encode(extensions.digest(convert_to(coalesce(p_token, ''), 'UTF8'), 'sha256'), 'hex');
+  if not found then perform pg_sleep(0.5); raise exception 'Link inválido ou desativado. Peça um link novo para a Logística da Multimóveis.'; end if;
+  return l;
+end $$;
+revoke all on function public._link_de(text) from public, anon, authenticated;
+
+-- pedidos pendentes de retorno da transportadora do link (só o necessário para ela responder; nada do cliente)
+create or replace function public.link_pendentes(p_token text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; r jsonb;
+begin
+  l := public._link_de(p_token);
+  update public.transp_links set ultimo_acesso = now(), acessos = acessos + 1 where id = l.id;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido', b.pedido, 'nf', b.nf, 'transportadora', b.transportadora, 'cidade', b.cidade, 'uf', b.uf,
+           'prometido', coalesce(b.prev_original, b.prev_atual), 'micro', b.micro_status, 'expedicao', b.data_expedicao,
+           'nova_antiga', t.nova_data) order by coalesce(b.prev_original, b.prev_atual), b.pedido), '[]'::jsonb)
+    into r
+    from public.base_pedidos b
+    left join public.tratativas t on t.pedido = b.pedido
+   where b.transportadora = any (l.transportadoras)
+     and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+     and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+     and b.data_expedicao is not null                                           -- só o que já saiu daqui
+     and (t.nova_data is null or t.nova_data < hoje)                            -- sem retorno válido (nova data futura já conta)
+     and (coalesce(b.prev_original, b.prev_atual) <= hoje + 1 or coalesce(b.range_atrasos, '') ilike 'vencido%' or t.nova_data < hoje);
+  return jsonb_build_object('nome', l.nome, 'hoje', hoje, 'itens', r);
+end $$;
+revoke all on function public.link_pendentes(text) from public;
+grant execute on function public.link_pendentes(text) to anon, authenticated;
+
+-- grava as respostas: [{pedido, nova_data 'AAAA-MM-DD', motivo, obs}]
+create or replace function public.link_responder(p_token text, p_itens jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; x record; d date; ok int := 0; rec int := 0;
+  motivos text[] := array['Em rota de entrega','Reagendado com o cliente','Cliente ausente','Endereço não localizado','Aguardando transferência','Atraso operacional','Avaria','Outro'];
+begin
+  l := public._link_de(p_token);
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) > 500 then raise exception 'Envio inválido.'; end if;
+  perform set_config('painel.link', left(l.nome, 60), true);
+  for x in select * from jsonb_to_recordset(p_itens) as y(pedido text, nova_data text, motivo text, obs text) loop
+    begin
+      d := case when coalesce(x.nova_data, '') ~ '^\d{4}-\d{2}-\d{2}$' then x.nova_data::date end;
+      if d is null or d < hoje or d > hoje + 90 or not (x.motivo = any (motivos))
+         or not exists (select 1 from public.base_pedidos b where b.pedido = x.pedido and b.transportadora = any (l.transportadoras)
+                          and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%') then
+        rec := rec + 1; continue;
+      end if;
+      insert into public.tratativas (pedido, nova_data, observacao)
+      values (x.pedido, d, left('Transportadora: ' || x.motivo || coalesce(' · ' || nullif(trim(x.obs), ''), ''), 1000))
+      on conflict (pedido) do update set nova_data = excluded.nova_data, observacao = excluded.observacao;
+      ok := ok + 1;
+    exception when others then rec := rec + 1;
+    end;
+  end loop;
+  if ok > 0 then update public.transp_links set ultima_resposta = now(), respostas = respostas + ok where id = l.id; end if;
+  return jsonb_build_object('gravados', ok, 'recusados', rec);
+end $$;
+revoke all on function public.link_responder(text, jsonb) from public;
+grant execute on function public.link_responder(text, jsonb) to anon, authenticated;

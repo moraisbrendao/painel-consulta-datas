@@ -1441,3 +1441,10 @@ a.oc-link:hover { text-decoration: underline; }
 .tn-dia td { background: #eef2f8; cursor: pointer; font-size: 13px; padding: 8px 12px; border-top: 2px solid #d8dee8; }
 .tn-dia td:first-letter { text-transform: uppercase; }
 .tn-dia:hover td { background: #e2e8f2; }
+
+/* Preventivo › Links das transportadoras */
+.lk-novo { border: 1px solid #f3c84b; background: #fffbea; border-radius: 10px; padding: 12px; margin: 10px 0; display: flex; flex-direction: column; gap: 8px; }
+.lk-linha { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.lk-linha input { flex: 1; min-width: 240px; font-size: 13px; padding: 6px 8px; }
+.lk-novo textarea { width: 100%; font: inherit; font-size: 13px; padding: 8px; box-sizing: border-box; }
+#lk-transp { max-width: 260px; }
