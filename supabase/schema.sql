@@ -3689,3 +3689,10 @@ begin
 end $$;
 revoke all on function public.link_responder(text, jsonb) from public;
 grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
+
+-- 83) Link das transportadoras mais rápido: índice por transportadora na base (a consulta do link lia a base inteira e
+--     estourava o tempo de quem abre sem login) + tempo um pouco maior para chamadas sem login (padrão do Supabase: 3 s).
+create index if not exists base_pedidos_transp on public.base_pedidos (transportadora);
+analyze public.base_pedidos;
+alter role anon set statement_timeout = '15s';
+notify pgrst, 'reload config';
