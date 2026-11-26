@@ -3567,7 +3567,10 @@ ${extra}
     $("tn-info").textContent = tnInfo ? `${tnInfo.arquivo || "planilha"} · enviada em ${new Date(tnInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${tnInfo.enviado_por ? " por " + tnInfo.enviado_por : ""} · ${fmt(tnInfo.linhas)} tickets na fila`
       : 'Suba o detalhamento_tickets ("Subir detalhamento_tickets") para trazer os tickets.';
     document.querySelectorAll("#tn-cards .kpi[data-tn]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(tnLista.filter(tnDoTipo).filter(TN_CARD[b.dataset.tn]).length); b.classList.toggle("ativa", b.dataset.tn === tnCard); });
-    const L = tnLista.filter(tnDoTipo).filter(TN_CARD[tnCard]).sort((a, b) => String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
+    // mais recente primeiro (Brenda 26/11): nos cards do portal vale a data da anotação; nos outros, a última atualização do ticket
+    const tnQuando = (t) => String((tnCard === "portal_ok" || tnCard === "portal_nao" ? t.portal_anot_em : null) || t.atualizado_em || "");
+    const L = tnLista.filter(tnDoTipo).filter(TN_CARD[tnCard]).sort((a, b) => tnQuando(b).localeCompare(tnQuando(a)) || String(a.ticket).localeCompare(String(b.ticket), "pt-BR", { numeric: true }));
+    const tnQuandoTxt = (t) => { const q = tnQuando(t); return q ? new Date(q).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"; };
     $("tn-titulo").textContent = `${TN_NOME[tnCard]} (${fmt(L.length)})`;
     const eu = meuEmail();
     $("tn-linhas").innerHTML = L.map((t) => {
@@ -3576,8 +3579,8 @@ ${extra}
       const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span> <button class="btn mini contorno" data-voltar="${esc(t.ticket)}" title="Tira o ticket de Em andamento e volta para A fazer (o erro do robô continua aparecendo)">↩ A fazer</button>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
       const errRobo = t.robo_status === "erro" ? `<div class="tn-err-linha txt-vermelho">⚠ ${esc(String(t.robo_msg || "O robô não conseguiu.").slice(0, 140))}</div>` : "";
       return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td><a class="tn-tk" href="https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">${esc(t.ticket)} ↗</a></td><td><span class="chip ${tnParcial(t) ? "azul" : "cinza"}">${tnParcial(t) ? "Parcial" : "Total"}</span></td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}${t.portal_anot_status ? `<div class="s">orig. ${esc(t.nf_ticket || "")} · <span class="chip ${t.portal_anot_status === "nao_achou" ? "roxo" : t.portal_anot_status === "erro" ? "vermelho" : t.portal_anot_status === "fechado" ? "cinza" : "verde"}">${t.portal_anot_status === "nao_achou" ? "não localizado no portal" : t.portal_anot_status === "erro" ? "erro no portal" : t.portal_anot_status === "fechado" ? "ticket fechado: sem ação" : "✓ portal ok"}</span></div>` : ""}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
-        <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span>${errRobo}</td><td class="tn-quem">${quem}</td></tr>`
-        + (aberto ? `<tr class="tn-detalhe"><td colspan="8">${detalheTroca(t, m)}</td></tr>` : "");
+        <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span>${errRobo}</td><td class="tn-quem">${quem}</td><td class="s" data-ord="${esc(tnQuando(t))}">${tnQuandoTxt(t)}</td></tr>`
+        + (aberto ? `<tr class="tn-detalhe"><td colspan="9">${detalheTroca(t, m)}</td></tr>` : "");
     }).join("");
     $("tn-vazio").hidden = L.length > 0;
   }
