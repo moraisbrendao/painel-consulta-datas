@@ -3772,6 +3772,8 @@ ${extra}
 
   // ---------------- Fila Aguardando entrega (relatório de tickets do Multi360) ----------------
   // O robô (modo "aguardando" do Robô do SSW) lê a nova NF no chat do ticket, confere no rastreio e dá a baixa ("Nota entregue?" → Sim).
+  let agVelha = false; const agVerVelha = new Set();
+  document.addEventListener("click", (e) => { if (e.target.id === "ag-ver-velha") { agVerVelha.add(agFila); carregarAguardando(); } });
   let agLista = [], agObs = new Map(), agInfo = null, agCard = "tratar", agBusca = "", agFila = "AE";   // AE = Aguardando entrega · AT = Aguardando entrega (AT)
   const agTransp = (t) => t.transp_chat || String(t.transportadora || "").split(" / ")[0] || "";
   let agSaida = new Map();
@@ -3837,6 +3839,10 @@ ${extra}
       const ativos = lista.filter((t) => t.na_planilha);
       agLista = ativos.filter((t) => (t.fila_rel || "AE") === agFila); agObs = new Map(obs.map((o) => [o.ticket, o]));
       agInfo = ((inf.data || []).find((x) => x.id === (agFila === "AT" ? 2 : 1))) || null;
+      // virou o dia: relatório de dia anterior = quadros limpos até subir o novo (Brenda 26/11, igual ao Barrar)
+      const diaSPag = (ts) => new Date(ts).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
+      agVelha = !!(agInfo && agInfo.enviado_em && diaSPag(agInfo.enviado_em) < diaSPag(Date.now()));
+      if (agVelha && !agVerVelha.has(agFila)) agLista = [];
       agOc = ativos.filter((t) => t.insucesso && t.situacao !== "entregue");   // aba Ocorrências já vê os novos insucessos (das duas filas)
     } catch (err) {
       $("ag-info").textContent = /aguardando|does not exist|schema cache/i.test(err.message || "") ? "Para usar a Fila Aguardando entrega, rode a parte 24 do supabase/schema.sql no Supabase." : "Não consegui carregar: " + (err.message || err);
@@ -3877,7 +3883,8 @@ ${extra}
   }
   function desenharAguardando() {
     agChecarRobo();
-    $("ag-info").textContent = agInfo ? `${agInfo.arquivo || "relatório"} · enviado em ${new Date(agInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${agInfo.enviado_por ? " por " + agInfo.enviado_por : ""} · ${fmt(agLista.length)} tickets`
+    if (agVelha && !agVerVelha.has(agFila)) $("ag-info").innerHTML = `<b>Quadros limpos:</b> o último relatório é de ${esc(new Date(agInfo.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às"))}. Suba o relatório de hoje para ver os tickets. <button type="button" class="link" id="ag-ver-velha">ver o de ${esc(new Date(agInfo.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }))} mesmo assim</button>`;
+    else $("ag-info").textContent = agInfo ? `${agInfo.arquivo || "relatório"} · enviado em ${new Date(agInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${agInfo.enviado_por ? " por " + agInfo.enviado_por : ""} · ${fmt(agLista.length)} tickets`
       : "Suba o relatório de tickets da fila Aguardando entrega para começar.";
     const ult = agLista.reduce((m, t) => (t.consultado_em && t.consultado_em > m ? t.consultado_em : m), "");
     $("ag-robo").textContent = ult ? `Robô olhou pela última vez em ${new Date(ult).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}` : "";
