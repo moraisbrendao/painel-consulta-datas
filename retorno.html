@@ -47,11 +47,10 @@
     <p id="sub">Carregando…</p>
   </header>
   <main>
-    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b> e clique em <b>Salvar</b>. O pedido sai da lista na hora e só volta se a nova data vencer.</div>
+    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
     <div class="barra"><input id="busca" type="search" placeholder="Procurar pedido ou NF"><span class="s" id="cont"></span></div>
     <div id="lista"></div>
   </main>
-  <div class="rodape" id="rodape" hidden><button id="salvar-todos" class="btn-am" type="button" disabled>Salvar todos preenchidos (0)</button><span id="rod-msg" class="s"></span></div>
   <script src="config.js"></script>
   <script>
   (function () {
@@ -61,7 +60,7 @@
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
     const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Outro"];
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
-    let itens = [], hoje = "", feitos = new Set(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+    let itens = [], hoje = "", feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
     async function rpc(nome, corpo) {
       const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
@@ -82,18 +81,19 @@
         desenhar();
       } catch (e) { erro(e.message); }
     }
-    function erro(msg) { $("sub").textContent = ""; $("explica").className = "aviso erro"; $("explica").textContent = msg; $("lista").innerHTML = ""; $("rodape").hidden = true; }
+    function erro(msg) { $("sub").textContent = ""; $("explica").className = "aviso erro"; $("explica").textContent = msg; $("lista").innerHTML = ""; }
 
     function desenhar() {
       const q = $("busca").value.trim().toUpperCase();
-      const V = itens.filter((x) => !feitos.has(x.pedido) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
-      const pend = itens.filter((x) => !feitos.has(x.pedido)).length;
-      $("sub").textContent = pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data · atualizado agora` : "Tudo respondido. Obrigado!";
+      const V = itens.filter((x) => (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
+      const pend = itens.filter((x) => !feitos.has(x.pedido)).length, feitosN = feitos.size;
+      $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + (feitosN ? ` · ${feitosN} salvo${feitosN === 1 ? "" : "s"} agora` : "");
       $("cont").textContent = q ? `${V.length} encontrado(s)` : "";
       $("lista").innerHTML = V.map((x) => {
         const d = x.prometido ? dias(x.prometido, hoje) : null, ra = rasc.get(x.pedido) || {};
         const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
-        return `<div class="ped" data-p="${esc(x.pedido)}">
+        const fs = feitos.get(x.pedido);
+        return `<div class="ped${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
           <div><b class="num">${esc(x.pedido)}</b><div class="s">NF ${esc(x.nf || "—")}${x.transportadora ? " · " + esc(x.transportadora) : ""}</div></div>
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)} ${chip}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}</div>
           <div class="campos">
@@ -101,38 +101,45 @@
             <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>
-          <div class="acao"><button class="btn-am salvar" type="button">Salvar</button><div class="err"></div></div>
+          <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : `<span class="s">preencha data e motivo</span>`}</div><div class="err"></div></div>
         </div>`;
       }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
-      $("rodape").hidden = !pend; contar();
     }
-    const preenchidos = () => [...document.querySelectorAll(".ped[data-p]")].filter((el) => el.querySelector(".dt").value && el.querySelector(".mt").value);
-    function contar() { const n = preenchidos().length; $("salvar-todos").textContent = `Salvar todos preenchidos (${n})`; $("salvar-todos").disabled = !n; }
     const dadosDe = (el) => ({ pedido: el.dataset.p, nova_data: el.querySelector(".dt").value, motivo: el.querySelector(".mt").value, obs: el.querySelector(".obs").value.trim() });
     function valida(x) {
-      if (!x.nova_data) return "Coloque a nova data.";
+      if (!x.nova_data || !x.motivo) return null;                       // ainda preenchendo: não avisa nada
       if (x.nova_data < hoje) return "A nova data não pode ser no passado.";
       if (x.nova_data > maxData()) return "Data muito longe (máximo 90 dias).";
-      if (!x.motivo) return "Escolha o motivo.";
-      if (x.motivo === "Outro" && !x.obs) return "Explique na observação.";
+      if (x.motivo === "Outro" && !x.obs) return "Escreva na observação o que aconteceu.";
       return "";
     }
-    async function salvar(els) {
-      const envio = []; let ruim = 0;
-      els.forEach((el) => { const x = dadosDe(el), e = valida(x); el.querySelector(".err").textContent = e; if (e) ruim++; else envio.push(x); });
-      if (!envio.length) return;
-      els.forEach((el) => (el.querySelector(".salvar").disabled = true)); $("salvar-todos").disabled = true; $("rod-msg").textContent = "Salvando…";
+    // salva sozinho (Brenda 26/11): com data + motivo válidos, 1,2 s depois da última mudança na linha (observação digitando espera)
+    const timers = new Map(), ultimoEnviado = new Map();
+    const st = (el, html) => { el.querySelector(".st").innerHTML = html; };
+    async function salvar(el) {
+      const x = dadosDe(el), e = valida(x); el.querySelector(".err").textContent = e || "";
+      if (e !== "") return;
+      const chave = JSON.stringify(x); if (ultimoEnviado.get(x.pedido) === chave) return;
+      st(el, `<span class="s">salvando…</span>`);
       try {
-        const r = await rpc("link_responder", { p_token: token, p_itens: envio });
-        envio.forEach((x) => feitos.add(x.pedido));
-        $("rod-msg").innerHTML = `<span class="ok">✓ ${r.gravados} salvo(s)</span>${r.recusados ? ` · ${r.recusados} não aceito(s) (pedido já entregue ou data inválida)` : ""}${ruim ? ` · ${ruim} com campo faltando` : ""}`;
-        desenhar();
-      } catch (e) { $("rod-msg").innerHTML = `<span class="err">${esc(e.message)}</span>`; els.forEach((el) => (el.querySelector(".salvar").disabled = false)); contar(); }
+        const r = await rpc("link_responder", { p_token: token, p_itens: [x] });
+        if (!r.gravados) { st(el, ""); el.querySelector(".err").textContent = "Não aceito: o pedido pode já ter sido entregue. Atualize a página."; return; }
+        ultimoEnviado.set(x.pedido, chave);
+        const h = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        feitos.set(x.pedido, h); el.classList.add("salvo"); st(el, `<span class="ok">✓ salvo às ${h}</span>`);
+        const pend = itens.filter((y) => !feitos.has(y.pedido)).length;
+        $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + ` · ${feitos.size} salvo${feitos.size === 1 ? "" : "s"} agora`;
+      } catch (err) { st(el, ""); el.querySelector(".err").textContent = err.message + " (tente de novo)"; ultimoEnviado.delete(x.pedido); }
     }
-    $("lista").addEventListener("click", (e) => { const b = e.target.closest(".salvar"); if (b) salvar([b.closest(".ped")]); });
-    const guarda = (e) => { const el = e.target.closest(".ped[data-p]"); if (el) rasc.set(el.dataset.p, dadosDe(el)); contar(); };
-    $("lista").addEventListener("input", guarda); $("lista").addEventListener("change", guarda);
-    $("salvar-todos").addEventListener("click", () => salvar(preenchidos()));
+    const mexeu = (e) => {
+      const el = e.target.closest(".ped[data-p]"); if (!el) return;
+      rasc.set(el.dataset.p, dadosDe(el));
+      clearTimeout(timers.get(el.dataset.p));
+      const x = dadosDe(el), v = valida(x);
+      el.querySelector(".err").textContent = v || "";
+      if (v === "") { st(el, `<span class="s">vai salvar…</span>`); timers.set(el.dataset.p, setTimeout(() => salvar(el), 1200)); }
+    };
+    $("lista").addEventListener("input", mexeu); $("lista").addEventListener("change", mexeu);
     $("busca").addEventListener("input", desenhar);
     carregar();
   })();
