@@ -1646,7 +1646,7 @@ ${extra}
   let gProd = {};
 
   // a vencer (em aberto, ainda no prazo), pela data prometida: Brenda 23/11 pediu junto do quadro de atrasos
-  const G_VENCER = [["Hoje", 0, 0], ["Amanhã", 1, 1], ["2 dias", 2, 2], ["3 a 5 dias", 3, 5], ["6 a 10 dias", 6, 10]];
+  const G_VENCER = [["Hoje", 0, 0], ["Amanhã", 1, 1], ["2 dias", 2, 2], ["3 a 5 dias", 3, 5], ["6 a 10 dias", 6, 10], ["Acima de 10 dias", 11, 99999]];   // "acima de 10" (Brenda 26/11): todos os em aberto no prazo entram
   const vencerDe = (r) => (r._fechado || r._atraso || r._d === null || r._d === undefined ? -1 : G_VENCER.findIndex(([, a, b]) => r._d >= a && r._d <= b));
   function desenharFaixas(atr, base = gFiltradosCache) {
     const dim = $("g-faixa-dim").value, [nomeDim, fd] = G_DIM[dim];
@@ -1657,13 +1657,15 @@ ${extra}
     av.forEach((r) => { const k = fd(r); const x = porL.get(k) || novo(); x.v[vencerDe(r)]++; porL.set(k, x); });
     const soma = (xs) => xs.reduce((a, b) => a + b, 0);
     const totA = FAIXAS.map((_, i) => [...porL.values()].reduce((s, x) => s + x.a[i], 0)), totV = G_VENCER.map((_, i) => [...porL.values()].reduce((s, x) => s + x.v[i], 0));
-    $("g-faixa-cab").innerHTML = `<tr class="fx-grupo"><th></th><th colspan="${FAIXAS.length + 1}" class="fx-g-atr">Atrasados</th><th colspan="${G_VENCER.length + 1}" class="fx-g-av">A vencer (no prazo)</th></tr>
-      <tr><th>Rótulos de linha</th>${FAIXAS.map(([n], i) => `<th class="num clic" data-fx="${i}">${n}</th>`).join("")}<th class="num">Total</th>${G_VENCER.map(([n], i) => `<th class="num clic av${i ? "" : " fx-sep"}" data-fv="${i}">${n}</th>`).join("")}<th class="num">Total</th></tr>`;
+    const ver = $("g-faixa-ver").value, showA = ver !== "av", showV = ver !== "atr";   // Tudo / Só atrasados / Só a vencer (Brenda 26/11)
+    $("g-faixa-cab").innerHTML = `<tr class="fx-grupo"><th></th>${showA ? `<th colspan="${FAIXAS.length + 1}" class="fx-g-atr">Atrasados</th>` : ""}${showV ? `<th colspan="${G_VENCER.length + 1}" class="fx-g-av">A vencer (no prazo)</th>` : ""}</tr>
+      <tr><th>Rótulos de linha</th>${showA ? FAIXAS.map(([n], i) => `<th class="num clic" data-fx="${i}">${n}</th>`).join("") + '<th class="num">Total</th>' : ""}${showV ? G_VENCER.map(([n], i) => `<th class="num clic av${i || !showA ? "" : " fx-sep"}" data-fv="${i}">${n}</th>`).join("") + '<th class="num">Total</th>' : ""}</tr>`;
     const cel = (n, k, attr, cls) => `<td class="num ${cls} ${n ? "clic" : "vazio-c"}" ${n ? `data-lin="${esc(k)}" ${attr}` : ""}>${n ? fmt(n) : "·"}</td>`;
-    $("g-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, soma(x.a), soma(x.v)]).sort((a, b) => b[2] - a[2] || b[3] - a[3])
-      .map(([k, x, ta, tv]) => `<tr><td class="clic" data-lin="${esc(k)}">${esc(k)}</td>${x.a.map((n, i) => cel(n, k, `data-fx="${i}"`, "")).join("")}<td class="num tot">${ta ? fmt(ta) : "·"}</td>${x.v.map((n, i) => cel(n, k, `data-fv="${i}"`, `av${i ? "" : " fx-sep"}`)).join("")}<td class="num tot av-tot">${tv ? fmt(tv) : "·"}</td></tr>`).join("")
-      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${totA.map((n) => `<td class="num">${fmt(n)}</td>`).join("")}<td class="num">${fmt(atr.length)}</td>${totV.map((n, i) => `<td class="num${i ? "" : " fx-sep"}">${fmt(n)}</td>`).join("")}<td class="num">${fmt(av.length)}</td></tr>` : "");
-    $("g-faixa-todos").textContent = `Extrair todos (${fmt(atr.length)})`;
+    $("g-faixa-linhas").innerHTML = [...porL.entries()].map(([k, x]) => [k, x, soma(x.a), soma(x.v)]).filter(([, , ta, tv]) => (showA && ta) || (showV && tv))
+      .sort((a, b) => (showA ? b[2] - a[2] : 0) || b[3] - a[3] || b[2] - a[2])
+      .map(([k, x, ta, tv]) => `<tr><td class="clic" data-lin="${esc(k)}">${esc(k)}</td>${showA ? x.a.map((n, i) => cel(n, k, `data-fx="${i}"`, "")).join("") + `<td class="num tot">${ta ? fmt(ta) : "·"}</td>` : ""}${showV ? x.v.map((n, i) => cel(n, k, `data-fv="${i}"`, `av${i || !showA ? "" : " fx-sep"}`)).join("") + `<td class="num tot av-tot">${tv ? fmt(tv) : "·"}</td>` : ""}</tr>`).join("")
+      + (porL.size ? `<tr class="tot-linha"><td>Total</td>${showA ? totA.map((n) => `<td class="num">${fmt(n)}</td>`).join("") + `<td class="num">${fmt(atr.length)}</td>` : ""}${showV ? totV.map((n, i) => `<td class="num${i || !showA ? "" : " fx-sep"}">${fmt(n)}</td>`).join("") + `<td class="num">${fmt(av.length)}</td>` : ""}</tr>` : "");
+    $("g-faixa-todos").textContent = `Extrair todos (${fmt((showA ? atr.length : 0) + (showV ? av.length : 0))})`;
   }
 
   function desenharCanais(L) {
@@ -1784,7 +1786,13 @@ ${extra}
     if (c.dataset.fv !== undefined || (!c.dataset.fx && c.closest("td") && c.closest("td").classList.contains("av"))) { const fv = c.dataset.fv !== undefined ? +c.dataset.fv : null;
       return selecionar(`A vencer${lin ? " · " + lin : ""}${fv !== null ? " · " + (fv < 2 ? "vence " + G_VENCER[fv][0].toLowerCase() : "em " + G_VENCER[fv][0]) : ""}`, (L) => L.filter((r) => vencerDe(r) >= 0 && (!lin || fd(r) === lin) && (fv === null || vencerDe(r) === fv))); }
     selecionar(`Atrasados${lin ? " · " + lin : ""}${fx !== null ? " · " + FAIXAS[fx][0] : ""}`, (L) => L.filter((r) => r._atraso && (!lin || fd(r) === lin) && (fx === null || faixaDe(r) === fx))); });
-  $("g-faixa-todos").addEventListener("click", () => { selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados)); baixarGLista(); });
+  try { const v = localStorage.getItem("painel.gFaixaVer"); if (v) $("g-faixa-ver").value = v; } catch (_) {}
+  $("g-faixa-ver").addEventListener("change", () => { try { localStorage.setItem("painel.gFaixaVer", $("g-faixa-ver").value); } catch (_) {} desenharFaixas(gFiltradosCache.filter(G_CARD.atrasados)); });
+  $("g-faixa-todos").addEventListener("click", () => { const ver = $("g-faixa-ver").value;
+    if (ver === "av") selecionar("A vencer (no prazo)", (L) => L.filter((r) => vencerDe(r) >= 0));
+    else if (ver === "atr") selecionar("Atrasados (em aberto)", (L) => L.filter(G_CARD.atrasados));
+    else selecionar("Atrasados e a vencer (em aberto)", (L) => L.filter((r) => G_CARD.atrasados(r) || vencerDe(r) >= 0));
+    baixarGLista(); });
   $("g-situacao").addEventListener("click", (e) => { const b = e.target.closest("[data-sit]"); if (!b) return; const k = b.dataset.sit;
     selecionar(SIT.find((x) => x[0] === k)[1], (L) => L.filter((r) => r._sit === k)); });
   $("g-canais").addEventListener("click", (e) => { const b = e.target.closest("[data-canal]"); if (!b) return; const c = b.dataset.canal, k = b.dataset.ck;
