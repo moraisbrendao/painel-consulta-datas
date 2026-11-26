@@ -55,6 +55,7 @@
   function desenhar() {
     if (!ok) return;
     const conf = L.filter((x) => x.conferido_em).map((x) => x.conferido_em).sort().pop();
+    if (window.__rotArquivo) window.__rotArquivo([$("rot-fv")], info, "Enviar planilha de tickets", "Enviar planilha de tickets");
     $("fv-info").textContent = info ? `Planilha: ${info.arquivo || ""} · ${hora(info.enviado_em)}${info.enviado_por ? " por " + info.enviado_por.split("@")[0] : ""} · ${fmt(L.length)} tickets${conf ? ` · robô olhou por último em ${hora(conf)}` : ""}` : "Nenhuma planilha enviada ainda.";
     const pt = (a, b) => a.localeCompare(b, "pt-BR");
     opcoes("fv-transp", [...new Set(L.map(transpDe))].sort(pt), "Todas"); opcoes("fv-motivo", [...new Set(L.map(motivoDe))].sort(pt), "Todos");
