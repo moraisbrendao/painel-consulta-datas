@@ -1436,3 +1436,8 @@ a.oc-link:hover { text-decoration: underline; }
 .sac-torre .conf.alta { background: #dcf2e3; color: #1d6b3a; }
 .sac-torre .conf.media { background: #fff1c9; color: #7a5a00; }
 .sac-torre .conf.baixa { background: #fde0dd; color: #a2261c; }
+
+/* Ajuste Intelipost: lista separada por dia */
+.tn-dia td { background: #eef2f8; cursor: pointer; font-size: 13px; padding: 8px 12px; border-top: 2px solid #d8dee8; }
+.tn-dia td:first-letter { text-transform: uppercase; }
+.tn-dia:hover td { background: #e2e8f2; }

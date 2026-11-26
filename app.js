@@ -3535,6 +3535,7 @@ ${extra}
   const TN_ETAPAS = ["Transportadora trocada na Intelipost (método pelo DE × PARA)", "Simulação de cotação feita (prazo em dias úteis)",
     "Entrega prev. atualizada (23:59)", "Volumes editados — TODOS os volumes", "Status: Macro 12 · Micro 920 · Equipe_04 Troca de notas",
     "Print no ticket + Executar ação no ticket", "Conferido: ticket na fila Aguardando entrega"];
+  const tnDiasAbertos = new Map();   // card -> dias abertos na lista
   let tnLista = [], tnInfo = null, tnCard = "fazer", tnAberto = null, tnCarregado = false;
   const meuEmail = () => ($("usuario").textContent || "").trim();
   const tnMetodo = (t) => {
@@ -3581,7 +3582,20 @@ ${extra}
     const tnQuandoTxt = (t) => { const q = tnQuando(t); return q ? new Date(q).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—"; };
     $("tn-titulo").textContent = `${TN_NOME[tnCard]} (${fmt(L.length)})`;
     const eu = meuEmail();
+    // separado por dia (igual ao Barrar, Brenda 26/11): cabeçalho por data; clique no cabeçalho abre/fecha o dia (o dia mais recente vem aberto)
+    const diaDe = (t) => { const q = tnQuando(t); return q ? new Date(q).toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : ""; };
+    const porDia = new Map(); L.forEach((t) => { const d = diaDe(t); porDia.set(d, (porDia.get(d) || 0) + 1); });
+    const dias = [...porDia.keys()];
+    if (!tnDiasAbertos.has(tnCard)) tnDiasAbertos.set(tnCard, new Set(dias.slice(0, 1)));
+    const abertos = tnDiasAbertos.get(tnCard), hojeD = hojeISO();
+    const ontemD = new Date(Date.parse(hojeD + "T12:00:00") - 864e5).toISOString().slice(0, 10);
+    const rotDia = (d) => !d ? "Sem data" : (d === hojeD ? "Hoje · " : d === ontemD ? "Ontem · " : "") + new Date(d + "T12:00:00").toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "2-digit", year: "numeric" });
+    let diaAnt = null;
     $("tn-linhas").innerHTML = L.map((t) => {
+      const d = diaDe(t), cab = d !== diaAnt ? `<tr class="tn-dia" data-tn-dia="${esc(d)}"><td colspan="9">${abertos.has(d) ? "▾" : "▸"} <b>${esc(rotDia(d))}</b> · ${fmt(porDia.get(d))} ticket${porDia.get(d) === 1 ? "" : "s"}</td></tr>` : "";
+      diaAnt = d;
+      if (!abertos.has(d)) return cab;
+      return cab + (() => {
       const m = tnMetodo(t), feitas = tnFeitas(t), aberto = tnAberto === t.ticket;
       const met = m.ok ? `<b>${esc(m.ok.metodo)}</b>${m.manual ? ' <span class="chip cinza">escolhido</span>' : ""}` : `<span class="txt-vermelho">⚠ ${esc(m.erro)}</span>`;
       const quem = t.responsavel ? `<span class="chip ${t.responsavel === eu ? "ambar" : "cinza"}">${esc(t.responsavel.split("@")[0])}</span> <button class="btn mini contorno" data-voltar="${esc(t.ticket)}" title="Tira o ticket de Em andamento e volta para A fazer (o erro do robô continua aparecendo)">↩ A fazer</button>` : `<button class="btn mini" data-pegar="${esc(t.ticket)}">Pegar</button>`;
@@ -3589,6 +3603,7 @@ ${extra}
       return `<tr class="clicavel${aberto ? " aberta" : ""}" data-tn-abrir="${esc(t.ticket)}"><td><a class="tn-tk" href="https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">${esc(t.ticket)} ↗</a></td><td><span class="chip ${tnParcial(t) ? "azul" : "cinza"}">${tnParcial(t) ? "Parcial" : "Total"}</span></td><td class="mono">${esc(t.pedido)}</td><td>${esc(t.nf_nova || "—")}${t.portal_anot_status ? `<div class="s">orig. ${esc(t.nf_ticket || "")} · <span class="chip ${t.portal_anot_status === "nao_achou" ? "roxo" : t.portal_anot_status === "erro" ? "vermelho" : t.portal_anot_status === "fechado" ? "cinza" : "verde"}">${t.portal_anot_status === "nao_achou" ? "não localizado no portal" : t.portal_anot_status === "erro" ? "erro no portal" : t.portal_anot_status === "fechado" ? "ticket fechado: sem ação" : "✓ portal ok"}</span></div>` : ""}</td><td>${esc(String(t.transp_promob || "").replace(/^!.*/, "—"))}</td><td>${met}</td>
         <td><span class="chip ${feitas === tnTam(t) ? "verde" : feitas ? "ambar" : "cinza"}">${feitas}/${tnTam(t)}</span>${errRobo}</td><td class="tn-quem">${quem}</td><td class="s" data-ord="${esc(tnQuando(t))}">${tnQuandoTxt(t)}</td></tr>`
         + (aberto ? `<tr class="tn-detalhe"><td colspan="9">${detalheTroca(t, m)}</td></tr>` : "");
+      })();
     }).join("");
     $("tn-vazio").hidden = L.length > 0;
   }
@@ -3655,6 +3670,7 @@ ${extra}
   $("tn-tipo").addEventListener("change", (e) => { tnTipo = e.target.value; tnAberto = null; desenharTrocas(); });
   $("tn-cards").addEventListener("click", (e) => { const b = e.target.closest(".kpi[data-tn]"); if (!b) return; tnCard = b.dataset.tn; tnAberto = null; desenharTrocas(); });
   $("tn-linhas").addEventListener("click", async (e) => {
+    const dia = e.target.closest("tr[data-tn-dia]"); if (dia) { const ab = tnDiasAbertos.get(tnCard) || new Set(), d = dia.dataset.tnDia; ab.has(d) ? ab.delete(d) : ab.add(d); tnDiasAbertos.set(tnCard, ab); desenharTrocas(); return; }
     const cp = e.target.closest("[data-copiar]"); if (cp) { e.stopPropagation(); try { await navigator.clipboard.writeText(cp.dataset.copiar); toast("Copiado."); } catch (_) { toast("Não consegui copiar.", true); } return; }
     const pg = e.target.closest("[data-pegar]"); if (pg) { e.stopPropagation(); const t = tnLista.find((x) => x.ticket === pg.dataset.pegar);
       if (t && t.responsavel && t.responsavel !== meuEmail()) return toast(`${t.responsavel} já pegou este ticket.`, true);
