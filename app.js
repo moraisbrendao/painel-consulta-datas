@@ -1549,7 +1549,7 @@ ${extra}
   function desenharCruz() {
     const meta = Math.min(100, Math.max(50, parseFloat($("g-meta").value) || 97)) / 100;
     const AB = gFiltradosCache.filter((r) => !r._fechado);
-    const linha = (d, x) => `<tr class="clicavel ${gCruz[d] === x.k ? "sel" : ""}" data-czd="${d}" data-czk="${esc(x.k)}"><td>${esc(x.k)}</td>`;
+    const linha = (d, x) => `<tr class="clicavel ${gCruz[d] === x.k ? "sel" : ""}" data-czd="${d}" data-czk="${esc(x.k)}"><td><button class="link cz-abre" data-czabre title="Abrir os pedidos">${esc(x.k)} ↗</button></td>`;
     const nums = (x) => `<td class="num neutro">${fmt(x.q)}</td><td class="num">${fmt(x.a)}</td><td class="num">${czIfa(x)}</td><td class="num">${x.pa ? fmt(x.pa) : ""}</td><td class="num">${fmt(x.ta)}</td>`;
     // transportadora: Performance primeiro (como era)
     const T = czAgrupa(AB.filter((r) => czPassa(r, "transp")), "transp"), tt = czTotal(T);
@@ -1564,25 +1564,28 @@ ${extra}
     $("g-cruz-sel").hidden = $("g-cruz-limpar").hidden = !sel.length;
     $("g-cruz-sel").innerHTML = sel.map((d) => `<span class="chip-sel">${CZ_NOME[d]}: <b>${esc(gCruz[d])}</b> <button class="link" data-czx="${d}" title="Tirar">✕</button></span>`).join("");
   }
-  function czMudou() {
+  // clicar na linha só filtra; o nome (link ↗) abre a janela com os pedidos (Brenda 26/11)
+  function czMudou(abrir) {
     desenharCruz();
     const sel = Object.keys(CZ).filter((d) => gCruz[d] !== null);
     if (!sel.length) { gSelecao = null; gPagina = 1; desenharGLista(false); return; }
-    selecionar(`Pedidos em aberto · ${sel.map((d) => gCruz[d]).join(" · ")}`, (L) => L.filter((r) => !r._fechado && czPassa(r, null)));
+    gSelecao = { titulo: `Pedidos em aberto · ${sel.map((d) => gCruz[d]).join(" · ")}`, filtro: (L) => L.filter((r) => !r._fechado && czPassa(r, null)) };
+    gPagina = 1; desenharGLista(!!abrir);
   }
   $("g-cruz-cartao").addEventListener("click", (e) => {
     const x = e.target.closest("[data-czx]"); if (x) { gCruz[x.dataset.czx] = null; return czMudou(); }
     const tr = e.target.closest("tr[data-czd]"); if (!tr) return;
-    const d = tr.dataset.czd, k = tr.dataset.czk; gCruz[d] = gCruz[d] === k ? null : k;
+    const d = tr.dataset.czd, k = tr.dataset.czk, abrir = !!e.target.closest("[data-czabre]");
+    gCruz[d] = abrir ? k : gCruz[d] === k ? null : k;
     if (d === "uf" && gCruz.cid !== null && gCruz.uf !== null && !gFiltradosCache.some((r) => !r._fechado && CZ.uf(r) === gCruz.uf && CZ.cid(r) === gCruz.cid)) gCruz.cid = null;   // cidade de outra UF
-    czMudou();
+    czMudou(abrir);
   });
   $("g-cruz-limpar").addEventListener("click", () => { Object.keys(gCruz).forEach((d) => (gCruz[d] = null)); czMudou(); });
   $("g-cruz-extrair").addEventListener("click", () => {
     const wb = XLSX.utils.book_new();
     [["Transportadora", "#g-perf-linhas"], ["UF", "#g-cz-uf"], ["Cidade", "#g-cz-cid"], ["Canal", "#g-cz-can"]].forEach(([nome, sel]) => {
       const tb = document.querySelector(sel), cab = [...tb.closest("table").querySelectorAll("thead th")].map((c) => c.textContent.trim());
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab].concat([...tb.querySelectorAll("tr")].map((tr) => [...tr.children].map((c) => c.textContent.replace(/[●↘]/g, "").trim())))), nome);
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([cab].concat([...tb.querySelectorAll("tr")].map((tr) => [...tr.children].map((c) => c.textContent.replace(/[●↘↗]/g, "").trim())))), nome);
     });
     XLSX.writeFile(wb, `atraso_por_transportadora_uf_cidade_canal_${hojeISO()}.xlsx`);
   });

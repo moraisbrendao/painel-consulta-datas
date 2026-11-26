@@ -1427,3 +1427,6 @@ a.oc-link:hover { text-decoration: underline; }
 .tabela-cap td.clic { cursor: pointer; white-space: nowrap; }
 .tabela-cap th.cap-hoje, .tabela-cap th.cap-fut { background: #e8f0fb; }
 .tabela-cap td.cap-alem { background: #fde2e2; }
+
+.cz-abre { padding: 0; font-size: inherit; text-align: left; color: var(--azul); text-decoration: underline; }
+.cz-abre:hover { color: var(--texto); }
