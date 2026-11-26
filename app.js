@@ -426,6 +426,13 @@
     rot("rot-ip", infoFech, "Intelipost enviada", "Enviar Intelipost", infoFech ? diasUteisDesde(diaLocal(infoFech.enviado_em)) : 0);
     rot("rot-tickets", ticketsInfo, "Tickets carregados", "Carregar tickets", 0);
   }
+  // mesma etiqueta "planilha de dd/mm às hh:mm" (vermelha se de dia útil anterior) nos botões de subir das páginas (Brenda 26/11)
+  window.__rotArquivo = (...a) => rotArquivo(...a);
+  function rotArquivo(els, x, sim, nao) {
+    const velha = x && x.enviado_em ? diasUteisDesde(diaLocal(x.enviado_em)) : 0;
+    const hora = x && x.enviado_em ? new Date(x.enviado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às") : "";
+    els.forEach((el) => { if (el) el.innerHTML = hora ? `${sim}<small class="rot-hora${velha ? " velha" : ""}" title="${esc(x.arquivo || "")}">planilha de ${hora}${velha ? ` · ${velha} dia${velha > 1 ? "s" : ""} út${velha > 1 ? "eis" : "il"} atrás` : ""}</small>` : nao; });
+  }
 
   async function carregar() {
     $("info-base").textContent = "Carregando…";
@@ -3564,6 +3571,7 @@ ${extra}
     desenharTrocas();
   }
   function desenharTrocas() {
+    rotArquivo([$("rot-tn")], tnInfo, "Subir detalhamento_tickets", "Subir detalhamento_tickets");
     $("tn-info").textContent = tnInfo ? `${tnInfo.arquivo || "planilha"} · enviada em ${new Date(tnInfo.enviado_em).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}${tnInfo.enviado_por ? " por " + tnInfo.enviado_por : ""} · ${fmt(tnInfo.linhas)} tickets na fila`
       : 'Suba o detalhamento_tickets ("Subir detalhamento_tickets") para trazer os tickets.';
     document.querySelectorAll("#tn-cards .kpi[data-tn]").forEach((b) => { b.querySelector(".kpi-num").textContent = fmt(tnLista.filter(tnDoTipo).filter(TN_CARD[b.dataset.tn]).length); b.classList.toggle("ativa", b.dataset.tn === tnCard); });
@@ -4705,6 +4713,7 @@ ${extra}
       const [lista, inf] = await Promise.all([buscarTudo("reposicoes_tk", "ticket"), sb.from("reposicoes_tk_info").select("*").limit(1)]);
       if (inf.error) throw inf.error;
       reps = lista.filter((r) => (r._t = tipoRep(r))); repInfo = (inf.data && inf.data[0]) || null; repOk = true;
+      rotArquivo([...document.querySelectorAll(".rot-rep")], repInfo, "Subir tabela de acompanhamento", "Subir tabela de acompanhamento");
     } catch (_) { repOk = false; reps = []; repInfo = null; }
     try {
       const [at, env] = await Promise.all([buscarTudo("repo_atual", "ticket"), sb.from("repo_envios").select("id,arquivo,extraido_em,enviado_em,tickets").order("id", { ascending: false }).limit(1)]);

@@ -44,7 +44,7 @@
     try {
       const [f, i, r] = await Promise.all([todas("filas_tk", "*", "ticket"), sb().from("filas_tk_info").select("*").limit(1), sb().from("fila_responsavel").select("*")]);
       if (i.error) throw i.error; if (r.error) throw r.error;
-      F = f; fInfo = (i.data || [])[0] || null; resp = new Map((r.data || []).filter((x) => x.responsavel).map((x) => [norm(x.fila), x.responsavel])); fOk = true;
+      F = f; fInfo = (i.data || [])[0] || null; if (window.__rotArquivo) window.__rotArquivo([document.querySelector("#fo-arq-tab-l .rot-rep")], fInfo, "Subir tabela de acompanhamento", "Subir tabela de acompanhamento"); resp = new Map((r.data || []).filter((x) => x.responsavel).map((x) => [norm(x.fila), x.responsavel])); fOk = true;
     } catch (e) { fOk = false; F = []; $("fo-info").textContent = falta52(e) ? "Para usar esta aba, rode a parte 52 no Supabase." : "Não consegui carregar: " + (e.message || e); }
     try {
       const [o, i] = await Promise.all([todas("ocorrencias_tk", "*", "id"), sb().from("ocorrencias_tk_info").select("*").limit(1)]);
