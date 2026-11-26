@@ -42,5 +42,6 @@ Um objeto ou uma lista (até 1000 por envio):
 - Todo recebimento fica registrado no histórico.
 
 ## Resposta
-`200` com `{"ok":true,"recebidas":N,"resumo":{"nova":1,...},"resultados":[{"pedido":"…","nf":"…","resultado":"nova"}]}`.
-`400` JSON inválido/vazio, `401` token, `413` mais de 1000, `500` falha ao gravar (pode reenviar o mesmo lote).
+`200` com `{"ok":true,"recebidas":N,"resumo":{"nova":0,"atualizada":0,"duplicada":0,"antiga":0,"pedido_nao_encontrado":0,"invalida":0},"resultados":[{"pedido":"…","resultado":"nova"}]}`
+(o resumo traz sempre os 6 resultados; "nf" só aparece no resultado de um registro enviado sem pedido).
+`400` JSON inválido, corpo vazio (`{}` ou `[]`), `401` token, `413` mais de 1000, `500` falha ao gravar (pode reenviar o mesmo lote).
