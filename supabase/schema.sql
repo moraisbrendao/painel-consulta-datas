@@ -3580,3 +3580,8 @@ begin
 end $$;
 revoke all on function public.receber_torre(jsonb) from public, anon, authenticated;
 grant execute on function public.receber_torre(jsonb) to service_role;
+
+-- 81) Torre de Controle liberada para todos os logados (Brenda 26/11): todos leem as previsões; o histórico (log) continua só para administradores.
+drop policy if exists "admins leem" on public.previsao_torre;
+drop policy if exists "logados leem" on public.previsao_torre;
+create policy "logados leem" on public.previsao_torre for select to authenticated using (true);

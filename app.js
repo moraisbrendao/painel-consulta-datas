@@ -166,7 +166,7 @@
     let adm = { data: false };
     try { adm = await sb.rpc("e_admin"); } catch (err) { adm = { data: false }; }
     if (adm && adm.data === true) document.body.dataset.admin = "1"; else delete document.body.dataset.admin;
-    if (document.body.dataset.admin) carregarTorre();   // previsões da Torre (só administradores) no Preventivo e na Consulta SAC
+    carregarTorre();   // previsões da Torre no Preventivo e na Consulta SAC (liberado para todos em 26/11)
     if (perfil !== "sac") await lerAcesso(); else { acessoPag = null; aplicarAcesso(); }
     $("tela-painel").hidden = false;
     if (perfil === "sac") {
@@ -5825,11 +5825,11 @@ ${extra}
     return h;
   }
 
-  // Torre de Controle (MVP, só administradores): previsão LOGÍSTICA, é estimativa e não substitui a promessa original.
+  // Torre de Controle (liberado para todos os logados em 26/11): previsão LOGÍSTICA, é estimativa e não substitui a promessa original.
   // A tabela previsao_torre só devolve linhas para administradores (RLS), então para os demais fica vazia.
   let torrePrev = null, torreCarregando = false;
   async function carregarTorre() {
-    if (!document.body.dataset.admin || torreCarregando) return;
+    if (torreCarregando) return;
     torreCarregando = true;
     try {
       const m = new Map();
@@ -5845,7 +5845,7 @@ ${extra}
     } finally { torreCarregando = false; }
   }
   function celTorre(ped) {
-    const t = document.body.dataset.admin && torrePrev && torrePrev.get(ped);
+    const t = torrePrev && torrePrev.get(ped);
     if (!t) return "";
     const conf = { alta: "Alta", media: "Média", baixa: "Baixa" }[t.confianca] || "";
     const quando = t.recebida_em ? new Date(t.recebida_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "";
@@ -5860,7 +5860,7 @@ ${extra}
     const lim = limiteSac();
     lista = lista.filter((l) => (l.prometido && String(l.prometido).slice(0, 10) <= lim) || (l.nova_data && String(l.nova_data).slice(0, 10) <= lim));
     sacLinhas = lista;
-    if (document.body.dataset.admin) carregarTorre();
+    carregarTorre();
     $("sac-info").textContent = `${fmt(lista.length)} pedidos vencidos ou que vencem hoje ou amanhã · atualizado às ${new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
     const preencher = (id, valores, rotulo) => {
       const sel = $(id), atual = sel.value;
