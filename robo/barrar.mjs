@@ -29,6 +29,26 @@ export async function abrirBarrar(p, log) {
   log(`Tela Barrar: caminho ${mascara(new URL(p.url()).pathname)}`);
 }
 
+// diag 4 (26/11): por que notas aprovadas dão "não está na lista"? Só lê (não clica em ✓/✗); loga formas mascaradas, nunca a NF
+export async function diagBarrar4({ chamar, ctx, log }) {
+  const L = await chamar(`barrar_entrega?select=nf&na_planilha=eq.true&portal_status=eq.erro&portal_msg=like.${encodeURIComponent("Nota não está mais*")}&limit=6`);
+  log(`diag4: ${L.length} nota(s) com "não está na lista"`);
+  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
+  const m = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 60);
+  const filtros = p.locator("input[placeholder^='Filtrar por nota']");
+  log(`diag4: campos 'Filtrar por nota': ${await filtros.count()} · inputs: ${(await p.$$eval("input", (xs) => xs.map((i) => (i.placeholder || i.type).replace(/\d/g, "#")))).join(" | ")}`);
+  const f = filtros.first();
+  for (const [i, x] of L.entries()) {
+    for (const termo of [x.nf, x.nf.split("-")[0]]) {
+      await f.fill(""); await p.waitForTimeout(400); await f.fill(termo); await p.waitForTimeout(8000);
+      const r = await p.$$eval("table tbody tr", (trs) => trs.map((tr) => [...tr.querySelectorAll("td")].slice(0, 2).map((td) => (td.textContent || "").trim())));
+      const iguais = r.filter((c) => (c[0] || "").replace(/\s+/g, "") === x.nf).length, contem = r.filter((c) => (c[0] || "").includes(x.nf.split("-")[0])).length;
+      log(`diag4 nota ${i + 1} busca ${termo === x.nf ? "nota-série" : "só número"}: ${r.length} linha(s) · igual ${iguais} · contém número ${contem} · 1ª célula forma "${m((r[0] || [])[0])}" (esperado "${m(x.nf)}") · pág "${m((await p.locator("body").innerText()).match(/P[aá]gina\s+\d+\s+de\s+\d+/i)?.[0] || "")}"`);
+    }
+  }
+  const abas = await p.$$eval("button,[role=tab]", (bs) => bs.map((b) => (b.textContent || "").trim()).filter((t) => t && t.length < 30));
+  log("diag4 abas/botões:", abas.map(m).slice(0, 15).join(" | "));
+}
 export async function diagBarrar({ ctx, log }) {
   const p = await entrarPortal(ctx, log);
   const menu = await p.evaluate(() => [...document.querySelectorAll("a[href]")].map((a) => `${(a.textContent || "").trim().slice(0, 30)} → ${a.getAttribute("href")}`).filter((x) => /barr/i.test(x)));
