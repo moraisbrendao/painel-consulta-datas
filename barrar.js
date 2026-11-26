@@ -81,7 +81,7 @@
     $("br-aprovar").textContent = `Aprovar sugestão (${nm})`; $("br-aprovar").disabled = !nm; $("br-desfazer").disabled = !nm;
     $("br-todos").checked = V.length > 0 && V.every((x) => marcadas.has(x.nf));
     desenharEnvios(); desenharErroTransp();
-    const aprov = L.filter((x) => x.decisao && !x.portal_status).length;
+    const aprov = L.filter((x) => x.decisao && (!x.portal_status || (x.portal_status === "erro" && /não está mais na lista/i.test(x.portal_msg || "")))).length;   // "não está na lista" tenta de novo (26/11)
     $("br-portal").textContent = `Mandar para o portal (${aprov})`; $("br-portal").disabled = !aprov;
   }
   // "Erro: verificar" = rastreio sem devolução/entrega e sem anotação: a transportadora não atuou.
@@ -320,7 +320,7 @@
     toast(`${plural(muda.length, "nota aprovada", "notas aprovadas")}: estão no card Aprovadas. Clique em "Mandar para o portal" quando quiser enviar ao robô.`);
   }
   $("br-portal").addEventListener("click", () => {
-    const ap = L.filter((x) => x.decisao && !x.portal_status), b = ap.filter((x) => x.decisao === "barrar").length;
+    const ap = L.filter((x) => x.decisao && (!x.portal_status || (x.portal_status === "erro" && /não está mais na lista/i.test(x.portal_msg || "")))), b = ap.filter((x) => x.decisao === "barrar").length;
     if (!confirm(`Mandar ${ap.length} nota(s) para o portal?\n\n${b} serão marcadas como BARRADAS (✓) e ${ap.length - b} como NÃO BARRADAS (✗) com a opção e o motivo escolhidos.\nIsso fica gravado no portal da transportadora.`)) return;
     robo("barrar-portal", "Robô chamado: ele vai marcar no portal só as notas aprovadas.");
   });

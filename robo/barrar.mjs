@@ -303,6 +303,10 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
     log(`barrar-ticket: prints no ticket ${ok} · erro ${er}`); return;
   }
   const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500" + (soAuto ? "&decisao_por=like.rob*" : ""));
+  // 26/11: notas que deram "não está mais na lista" tentam de novo (a busca do portal às vezes demora e a tabela vinha vazia)
+  const COLS_AP = "nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio";
+  const deNovo = await chamar(`barrar_entrega?select=${COLS_AP}&na_planilha=eq.true&portal_status=eq.erro&portal_msg=like.${encodeURIComponent("Nota não está mais*")}&decisao=in.(barrar,nao_barrar)&limit=500` + (soAuto ? "&decisao_por=like.rob*" : "")).catch(() => []);
+  if (deNovo.length) { log(`barrar-portal: ${deNovo.length} nota(s) com "não está na lista" vão ser procuradas de novo`); L.push(...deNovo); }
   // regra (Brenda, 18/11): sozinho o robô só atua em devolução, entregue ou "não recebeu"; o que uma pessoa escolheu e aprovou no painel ele sempre aplica
   const pode = (x) => !/^rob/i.test(x.decisao_por || "") ? true : x.decisao === "barrar" ? (PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) || /segregado|barrada/i.test(x.decisao_por || "")) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
   const fora = L.filter((x) => !pode(x)); if (fora.length) log(`barrar-portal: ${fora.length} aprovada(s) fora da regra do robô (ficam para a Brenda)`);
@@ -320,9 +324,13 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   for (const x of L) {
     try {
       const filtro = p.locator("input[placeholder^='Filtrar por nota']").first();
-      await filtro.fill(""); await filtro.fill(x.nf); await p.waitForTimeout(2200);
+      // espera a tabela mostrar a nota (até ~15 s, digitando de novo na metade): antes eram 2,2 s fixos e a busca às vezes ainda não tinha voltado
       const linhas = p.locator("table tbody tr"); let alvo = null;
-      for (let i = 0; i < await linhas.count(); i++) if (((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim() === x.nf) { alvo = linhas.nth(i); break; }
+      const procura = async () => { for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").replace(/\s+/g, ""); if (t === x.nf.replace(/\s+/g, "")) return linhas.nth(i); } return null; };
+      for (let tent = 0; tent < 2 && !alvo; tent++) {
+        await filtro.fill(""); await p.waitForTimeout(400); await filtro.fill(x.nf);
+        for (let w = 0; w < 15 && !alvo; w++) { await p.waitForTimeout(500); alvo = await procura(); }
+      }
       if (!alvo) { await grava(x.nf, "erro", "Nota não está mais na lista Barrar Entrega do portal."); soma("não está na lista"); continue; }
       const bts = alvo.locator("td").last().locator("button");
       if (x.decisao === "barrar") {
