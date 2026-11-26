@@ -104,6 +104,11 @@ const EH_DOMINALOG = (t) => /DOMINALOG|\bFLOG\b/.test(sa(t));   // Flog incluíd
 const nomeSeg = (r, pt) => (/FLOG/.test(sa((r || {}).alvo || (pt || {}).transp)) ? "Flog" : "Dominalog");
 const PAL_SEGREGADO_DOM = /DEVOLUCAO\s+SOLICITADA\W+PEDIDO\s+SEGREGADO/;
 // regra (Brenda, 24/11 15:47): Dominalog com pedido segregado = sempre BARRADO (anotação no portal OU status atual do rastreio "segregado")
+// regra (Brenda, 26/11): Flog com anotação no portal de mercadoria/entrega barrada, cancelada, bloqueada, segregada ou devolução solicitada
+// = BARRADO e o robô aprova sozinho. Frases negativas ("não foi possível barrar", "não cancelado"...) não contam.
+const PAL_BARRADA_FLOG = /(MERCADORIA|ENTREGA|PEDIDO|CARGA|NOTA|NF|VOLUME|MATERIAL)S?\s+(FOI\s+|FORAM\s+|ESTA\s+|ESTAO\s+|JA\s+)*(BARRAD|CANCELAD|BLOQUEAD|SEGREGAD)|\bBARRAD[OA]S?\b|\bCANCELAD[OA]S?\b|DEVOLUCAO\s+SOLICITADA|PEDIDO\s+SEGREGADO/;
+const NEG_BARRADA = /N[AÃ]O\s+(FOI\s+|FORAM\s+|SERA\s+|SERAO\s+|ESTA\s+|CONSEGUIMOS\s+|CONSEGUIU\s+|E\s+)*(POSSIVEL\s+)?(BARR|CANCEL|BLOQUE|SEGREG|RET[EI])|SEM\s+(BARRA|CANCELA)|DESCANCEL|DESBLOQUE/;
+export const anotFlogBarrada = (r, pt) => /\bFLOG\b/.test(sa((r || {}).alvo || (pt || {}).transp)) && (((pt || {}).anotacoes || []).find((a) => PAL_BARRADA_FLOG.test(sa(a.texto)) && !NEG_BARRADA.test(sa(a.texto))) || null);
 export const segregadoDominalog = (r, pt) => EH_DOMINALOG((r || {}).alvo || (pt || {}).transp) && (((pt || {}).anotacoes || []).some((a) => PAL_SEGREGADO_DOM.test(sa(a.texto)) || /PEDIDO\s+SEGREGADO/.test(sa(a.texto))) || /SEGREGAD/.test(sa((r || {}).evento)));
 const sa = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase();
 const GEN = new Set(["LTDA", "ME", "SA", "S", "A", "E", "DE", "DA", "DO", "EIRELI", "TRANSPORTE", "TRANSPORTES", "TRANSPORTADORA", "LOGISTICA", "LOG", "CARGAS", "CARGA", "EXPRESS", "EXPRESSO", "STANDARD", "FILIAL", "MATRIZ", "SERVICOS", "SP", "RJ", "MG", "PE", "PR", "SC", "RS", "BA", "CE", "GO", "ES"]);
@@ -183,6 +188,8 @@ async function lerPortal(p, nf, R) {
 function sugerir(x) {
   const r = x.rastreio || {}, pt = x.portal || {}, an = sa(pt.anotacao);
   if (r.sem_transp) return { sugestao: "manual", opcao: null, motivo: "Erro: o ticket do 360 não tem transportadora nem redespacho." };
+  const fb = anotFlogBarrada(r, pt);
+  if (fb) return { sugestao: "barrar", opcao: null, motivo: `Anotação da Flog no portal: ${String(fb.texto || "").replace(/\s+/g, " ").trim().slice(0, 120)}`, dominalog: true, flogAuto: true };
   if (segregadoDominalog(r, pt)) return { sugestao: "barrar", opcao: null, motivo: /SEGREGAD/.test(sa(r.evento)) ? `${nomeSeg(r, pt)}: pedido segregado (status atual do rastreio: ${String(r.evento).toLowerCase().slice(0, 80)}).` : `Anotação da ${nomeSeg(r, pt)} no portal: pedido segregado.`, dominalog: true };
   // regra (Brenda, 18/11): barrado SÓ quando o status atual (último evento) do rastreio é devolução; segregado ou devolução no histórico não contam
   const devolucao = PAL_DEVOLUCAO.test(sa(r.evento));
@@ -264,11 +271,11 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
       const auto = ENTREGUE_AUTO && s.sugestao === "nao_barrar" && s.opcao === "Entregue" && !x.decisao && print_rastreio;
       // regra (Brenda, 24/11): Dominalog com anotação "Devolução solicitada, pedido segregado." → o robô marca BARRADO sozinho, com o print da anotação no ticket
       // Flog: por enquanto só sugere barrar (a Brenda aprova) até termos exemplos para testar (Brenda, 24/11 15:52)
-      const FLOG_AUTO = false;
-      const autoDom = s.dominalog && (FLOG_AUTO || nomeSeg(rastreio, pt) !== "Flog") && !x.decisao && !!(print_path || print_rastreio);
+      // 26/11 (Brenda): Flog com anotação de mercadoria barrada/cancelada/segregada → o robô aprova sozinho (flogAuto); segregado só no rastreio da Flog continua sugestão
+      const autoDom = s.dominalog && (s.flogAuto || nomeSeg(rastreio, pt) !== "Flog") && !x.decisao && !!(print_path || print_rastreio);
       await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { rastreio, portal: pt, mesma_transp: mesma, sugestao: s.sugestao, sugestao_opcao: s.opcao, sugestao_motivo: s.motivo, conferido_em: new Date().toISOString(), print_path, print_rastreio,
         ...(auto ? { decisao: "nao_barrar", decisao_opcao: "Entregue", decisao_motivo: s.motivo, decisao_por: "robô (entregue automático)", decisao_em: new Date().toISOString() } : {}),
-        ...(autoDom ? { decisao: "barrar", decisao_opcao: null, decisao_motivo: s.motivo, decisao_por: `robô (${nomeSeg(rastreio, pt)}: pedido segregado)`, decisao_em: new Date().toISOString() } : {}) });
+        ...(autoDom ? { decisao: "barrar", decisao_opcao: null, decisao_motivo: s.motivo, decisao_por: s.flogAuto ? "robô (Flog: mercadoria barrada)" : `robô (${nomeSeg(rastreio, pt)}: pedido segregado)`, decisao_em: new Date().toISOString() } : {}) });
       if (auto) { soma("entregue aprovado pelo robô"); autoN++; }
       if (autoDom) { soma("segregado (Dominalog/Flog) aprovado pelo robô"); autoN++; }
       soma(`sugestão ${s.sugestao}`); if (!pt.achou) soma("não está no portal"); if (mesma === false) soma("transportadora diferente");
@@ -297,7 +304,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   }
   const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500" + (soAuto ? "&decisao_por=like.rob*" : ""));
   // regra (Brenda, 18/11): sozinho o robô só atua em devolução, entregue ou "não recebeu"; o que uma pessoa escolheu e aprovou no painel ele sempre aplica
-  const pode = (x) => !/^rob/i.test(x.decisao_por || "") ? true : x.decisao === "barrar" ? (PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) || /segregado/i.test(x.decisao_por || "")) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
+  const pode = (x) => !/^rob/i.test(x.decisao_por || "") ? true : x.decisao === "barrar" ? (PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) || /segregado|barrada/i.test(x.decisao_por || "")) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
   const fora = L.filter((x) => !pode(x)); if (fora.length) log(`barrar-portal: ${fora.length} aprovada(s) fora da regra do robô (ficam para a Brenda)`);
   for (const x of fora) await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { portal_status: null, portal_msg: "O robô não atua neste caso (só devolução, entregue ou \"não recebeu\"): verificar à mão.", portal_em: new Date().toISOString() }).catch(() => {});
   L.splice(0, L.length, ...L.filter(pode));
@@ -371,7 +378,7 @@ async function comentarTicket(x, m360, baixarArquivo, M, chamar) {
   if (x.print_path) arquivos.push({ name: `anotacao-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_path) });
   if (!arquivos.length) throw new Error("sem print para anexar");
   const r = x.rastreio || {};
-  const texto = x.decisao === "barrar" && /^rob.*segregado/i.test(x.decisao_por || "")
+  const texto = x.decisao === "barrar" && /^rob.*(segregado|barrada)/i.test(x.decisao_por || "")
     ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. ${String(x.decisao_motivo || "Pedido segregado.").slice(0, 200)} Print${arquivos.length > 1 ? "s" : ""} em anexo.`
     : x.decisao === "barrar"
     ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Rastreio${r.alvo ? " " + r.alvo : ""}: ${r.evento ? String(r.evento).toLowerCase().slice(0, 80) : "devolução"}. Print${arquivos.length > 1 ? "s" : ""} em anexo.`
