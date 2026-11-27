@@ -142,10 +142,11 @@
     if (!$("lkk")) return;
     if (!kOk) { $("lkk-info").textContent = "Para ver os KPIs, rode a parte 86 no Supabase."; $("lkk-cards").innerHTML = $("lkk-linhas").innerHTML = $("lkk-mot").innerHTML = $("lkk-mot-cab").innerHTML = ""; return; }
     if (!kd) return;
-    kLin = calcular();
+    const fT = $("lk-transp").value;   // filtro de transportadora do topo (Brenda 27/11): os números seguem a escolhida
+    kLin = calcular().filter((x) => !fT || x.nome === fT);
     const T = (f) => kLin.reduce((a, x) => a + f(x), 0);
     const vistos = T((x) => x.vistos), atual = T((x) => x.ult.length), cum = T((x) => x.cumpriu.length), atr = T((x) => x.atrasou.length);
-    $("lkk-info").textContent = `Desde que a parte 86 foi rodada o painel guarda cada acesso e cada resposta. Respostas anteriores vieram do histórico de retornos (sem os acessos). Clique num número para ver os pedidos.`;
+    $("lkk-info").textContent = `Desde que a parte 86 foi rodada o painel guarda cada acesso e cada resposta. Respostas anteriores vieram do histórico de retornos (sem os acessos). Clique num número para ver os pedidos.${fT ? ` Mostrando só: ${fT}.` : ""}`;
     $("lkk-cards").innerHTML = [
       [fmt(T((x) => x.acessos)), "Acessos aos links", ""], [fmt(vistos), "Pedidos que apareceram nos links", ""],
       [fmt(atual), "Pedidos atualizados pela transportadora", ""], [pct(atual, Math.max(vistos, atual)), "% atualizado", ""],
@@ -194,6 +195,7 @@
   }
   if ($("lkk")) {
     $("lkk-dias").addEventListener("change", carregarKpi);
+    $("lk-transp").addEventListener("change", () => { if (kd) desenharKpi(); });
     $("lkk").addEventListener("click", (e) => { const a = e.target.closest("[data-lkk]"); if (a) abrirLista(a.dataset.lkkNome, a.dataset.lkk); });
     $("lkk-excel").addEventListener("click", () => {
       if (!kLin.length) return toast("Sem dados no período.", true);

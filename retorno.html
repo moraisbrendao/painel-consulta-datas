@@ -141,7 +141,17 @@
     const $ = (id) => document.getElementById(id);
     const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
-    const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Falta de volumes", "Outro"];
+    // motivos agrupados (Brenda 27/11: causas de atraso da malha, resumidas); os antigos continuam iguais para não quebrar o histórico
+    const GRUPOS_MOT = [
+      ["Transportadora (operação)", ["Em rota de entrega", "Aguardando transferência", "Não chegou em nosso CD", "Atraso operacional", "CT-e emitido com atraso", "Aguardando completar carga/rota", "Falta de veículo ou motorista", "Atraso no redespacho/transbordo", "Região atendida só em alguns dias", "Alto volume (Black Friday/datas)"]],
+      ["Volume com problema", ["Avaria", "Extravio", "Falta de volumes", "Inversão de volumes"]],
+      ["Na rota (externos)", ["Chuva/estrada interditada", "Greve ou manifestação", "Retenção fiscal (SEFAZ)", "Feriado", "Restrição de circulação (rodízio/ZMRC)"]],
+      ["Na entrega", ["Cliente ausente", "Estabelecimento fechado", "Endereço não localizado", "Cliente mudou-se", "Área de risco/difícil acesso", "Recusa do cliente", "Reagendado com o cliente", "Entrega precisa ser agendada", "Várias tentativas sem sucesso", "Aguardando retorno da Multimóveis"]],
+      ["Prazo", ["Prazo prometido menor que o da região"]],
+      ["Outros", ["Outro"]],
+    ];
+    const MOTIVOS = GRUPOS_MOT.flatMap((g) => g[1]);
+    const optsMot = (sel) => GRUPOS_MOT.map(([g, ms]) => `<optgroup label="${g}">${ms.map((m) => `<option${sel === m ? " selected" : ""}>${m}</option>`).join("")}</optgroup>`).join("");
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
     let ret = [], itens = [], hoje = "", filtro = "", chips = new Map(), sel = new Set(), V = [], feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
@@ -207,7 +217,7 @@
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.cep ? `<div class="s">CEP ${esc(String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2"))}</div>` : ""}<div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
-            <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
+            <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${optsMot(ra.motivo)}</select>
             ${x.nova_antiga && !fs ? `<div class="d-furo">🥺 Poxa vida, você não cumpriu com a data prometida. Vamos tentar de novo?</div>` : ""}
             <input class="sku" maxlength="200" placeholder="SKU do item que está faltando" value="${esc(ra.sku || "")}"${ra.motivo === "Falta de volumes" ? "" : " hidden"} aria-label="SKU do item">
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
@@ -231,7 +241,7 @@
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.cep ? `<div class="s">CEP ${esc(String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2"))}</div>` : ""}<div class="s">Prometido ${br(x.prometido)}</div></div>
           ${aberto ? `<div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
-            <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
+            <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${optsMot(ra.motivo)}</select>
             <input class="sku" maxlength="200" placeholder="SKU do item que está faltando" value="${esc(ra.sku || "")}"${ra.motivo === "Falta de volumes" ? "" : " hidden"} aria-label="SKU do item">
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>` : `<div></div>`}
@@ -305,7 +315,7 @@
       V.filter((x) => !feitos.has(x.pedido)).forEach((x) => (e.target.checked ? sel.add(x.pedido) : sel.delete(x.pedido)));
       desenhar();
     });
-    $("m-mt").innerHTML = `<option value="">Motivo…</option>` + MOTIVOS.map((m) => `<option>${m}</option>`).join("");
+    $("m-mt").innerHTML = `<option value="">Motivo…</option>` + optsMot("");
     $("m-mt").addEventListener("change", () => { $("m-sku").hidden = $("m-mt").value !== "Falta de volumes"; });
     $("m-limpar").addEventListener("click", () => { sel.clear(); desenhar(); });
     $("m-aplicar").addEventListener("click", async () => {

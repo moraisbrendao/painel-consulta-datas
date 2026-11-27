@@ -4733,3 +4733,46 @@ end $$;
 revoke all on function public.rodar_robo_repopre_solicitar() from public, anon;
 grant execute on function public.rodar_robo_repopre_solicitar() to authenticated;
 notify pgrst, 'reload schema';
+
+-- PARTE 100) Link das transportadoras (Brenda 27/11): motivos novos (causas de atraso da malha, resumidas).
+--     Os motivos antigos continuam valendo. Igual à parte 95 no resto.
+create or replace function public.link_responder(p_token text, p_itens jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; x record; d date; ok int := 0; rec int := 0;
+  motivos text[] := array['Em rota de entrega','Aguardando transferência','Não chegou em nosso CD','Atraso operacional','CT-e emitido com atraso','Aguardando completar carga/rota','Falta de veículo ou motorista','Atraso no redespacho/transbordo','Região atendida só em alguns dias','Alto volume (Black Friday/datas)',
+                          'Avaria','Extravio','Falta de volumes','Inversão de volumes','Chuva/estrada interditada','Greve ou manifestação','Retenção fiscal (SEFAZ)','Feriado','Restrição de circulação (rodízio/ZMRC)',
+                          'Cliente ausente','Estabelecimento fechado','Endereço não localizado','Cliente mudou-se','Área de risco/difícil acesso','Recusa do cliente','Reagendado com o cliente','Entrega precisa ser agendada','Várias tentativas sem sucesso','Aguardando retorno da Multimóveis',
+                          'Prazo prometido menor que o da região','Outro'];
+begin
+  l := public._link_de(p_token);
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) > 500 then raise exception 'Envio inválido.'; end if;
+  perform set_config('painel.link', left(l.nome, 60), true);
+  for x in select * from jsonb_to_recordset(p_itens) as y(pedido text, nova_data text, motivo text, obs text, sku text) loop
+    begin
+      d := case when coalesce(x.nova_data, '') ~ '^\d{4}-\d{2}-\d{2}$' then x.nova_data::date end;
+      -- parte 95: a data é opcional (ex.: Extravio sem nova data ainda); se vier, tem que ser de hoje a 90 dias
+      if (coalesce(x.nova_data, '') <> '' and (d is null or d < hoje or d > hoje + 90)) or not (x.motivo = any (motivos))
+         or (x.motivo = 'Falta de volumes' and nullif(trim(coalesce(x.sku, '')), '') is null)
+         or not exists (select 1 from public.base_pedidos b where b.pedido = x.pedido and b.transportadora = any (l.transportadoras)
+                          and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%') then
+        rec := rec + 1; continue;
+      end if;
+      insert into public.tratativas (pedido, nova_data, observacao)
+      values (x.pedido, d, left('Transportadora: ' || x.motivo || case when d is null then ' (sem nova data)' else '' end
+        || case when x.motivo = 'Falta de volumes' then ' · SKU ' || left(trim(x.sku), 200) else '' end
+        || coalesce(' · ' || nullif(trim(x.obs), ''), ''), 1000))
+      on conflict (pedido) do update set nova_data = coalesce(excluded.nova_data, public.tratativas.nova_data), observacao = excluded.observacao;
+      insert into public.link_respostas (link_id, nome, pedido, nova_data, motivo, sku, obs, prometido, transportadora, nf)
+      select l.id, l.nome, x.pedido, d, x.motivo, case when x.motivo = 'Falta de volumes' then left(trim(x.sku), 200) end, left(nullif(trim(x.obs), ''), 300),
+             coalesce(b.prev_original, b.prev_atual), b.transportadora, b.nf
+        from public.base_pedidos b where b.pedido = x.pedido;
+      ok := ok + 1;
+    exception when others then rec := rec + 1;
+    end;
+  end loop;
+  if ok > 0 then update public.transp_links set ultima_resposta = now(), respostas = respostas + ok where id = l.id; end if;
+  return jsonb_build_object('gravados', ok, 'recusados', rec);
+end $$;
+revoke all on function public.link_responder(text, jsonb) from public;
+grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
+notify pgrst, 'reload schema';
