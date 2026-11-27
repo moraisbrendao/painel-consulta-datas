@@ -130,7 +130,8 @@
       const de = (s) => ult.filter((r) => r.sit === s);
       const emp = ult.filter((r) => r.prometido && r.nova_data).map((r) => (Date.parse(r.nova_data) - Date.parse(r.prometido)) / 864e5);
       const mot = [...g.motivos.entries()].sort((a, b) => b[1] - a[1]);
-      return { nome: g.nome, acessos: g.acessos, dias: g.dias.size, vistos: g.vistos.size, ult, semRet, tempo: mediana(tempos),
+      const hojeL = [...g.resp.values()].filter((a) => a.some((r) => dia(r.em) === hoje)).map((a) => { const r = a.filter((y) => dia(y.em) === hoje).pop(); return { ...r, sit: situacao(r, hoje) }; });
+      return { nome: g.nome, hojeL, acessos: g.acessos, dias: g.dias.size, vistos: g.vistos.size, ult, semRet, tempo: mediana(tempos),
         cumpriu: de("Cumpriu"), atrasou: de("Atrasou após a nova data"), prazo: de("No prazo"), remarcou: ult.filter((r) => r.datas > 1),
         emp: emp.length ? emp.reduce((a, b) => a + b, 0) / emp.length : null, motivo: mot[0] ? `${mot[0][0]} (${mot[0][1]})` : "—", motivos: g.motivos,
         ultimo: kd.acessos.filter((a) => a.nome === g.nome).map((a) => a.em).pop() };
@@ -154,13 +155,13 @@
     $("lkk-linhas").innerHTML = kLin.map((x) => {
       const pa = x.vistos || x.ult.length ? Math.round((100 * x.ult.length) / Math.max(x.vistos, x.ult.length)) : null, pc = x.cumpriu.length + x.atrasou.length ? Math.round((100 * x.cumpriu.length) / (x.cumpriu.length + x.atrasou.length)) : null;
       return `<tr><td><b>${esc(x.nome)}</b><div class="s">último acesso ${quando(x.ultimo)}</div></td><td class="num">${fmt(x.acessos)}</td><td class="num">${fmt(x.dias)}</td>
-        <td class="num">${lnk(x.vistos, x.nome, "vistos")}</td><td class="num">${lnk(x.ult.length, x.nome, "atual")}</td>
+        <td class="num">${lnk(x.vistos, x.nome, "vistos")}</td><td class="num">${lnk(x.ult.length, x.nome, "atual")}</td><td class="num">${lnk(x.hojeL.length, x.nome, "hoje")}</td>
         <td class="num ${pa == null ? "" : pa >= 80 ? "bom" : pa < 50 ? "ruim" : ""}">${pa == null ? "—" : pa + "%"}</td>
         <td class="num">${lnk(x.semRet.length, x.nome, "sem", "ruim")}</td><td class="num">${horas(x.tempo)}</td>
         <td class="num">${lnk(x.cumpriu.length, x.nome, "cumpriu")}</td><td class="num">${lnk(x.atrasou.length, x.nome, "atrasou", "ruim")}</td>
         <td class="num ${pc == null ? "" : pc >= 80 ? "bom" : "ruim"}">${pc == null ? "—" : pc + "%"}</td><td class="num">${lnk(x.prazo.length, x.nome, "prazo")}</td>
         <td class="num">${lnk(x.remarcou.length, x.nome, "remarcou")}</td><td class="num">${x.emp == null ? "—" : x.emp.toFixed(1).replace(".", ",")}</td><td>${esc(x.motivo)}</td></tr>`;
-    }).join("") || `<tr><td colspan="15" class="vazio">Nenhum link no período.</td></tr>`;
+    }).join("") || `<tr><td colspan="16" class="vazio">Nenhum link no período.</td></tr>`;
     const mots = [...new Set(kLin.flatMap((x) => [...x.motivos.keys()]))].sort((a, b) => T((x) => x.motivos.get(b) || 0) - T((x) => x.motivos.get(a) || 0));
     const comResp = kLin.filter((x) => x.motivos.size);
     $("lkk-mot-cab").innerHTML = `<tr><th>Motivo</th>${comResp.map((x) => `<th class="num">${esc(x.nome)}</th>`).join("")}<th class="num">Total</th></tr>`;
@@ -168,12 +169,12 @@
       || `<tr><td class="vazio">Nenhuma resposta no período.</td></tr>`;
   }
   const CARD_TIPO = ["acessos", "vistos", "atual", "atual", "sem", "atrasou", "cumpriu", "promessas"];
-  const TIT = { acessos: "Acessos aos links", promessas: "Promessas (cumpriu + atrasou)", vistos: "Pedidos que apareceram no link", atual: "Pedidos atualizados", sem: "Sem retorno", cumpriu: "Cumpriu a nova data", atrasou: "Atrasou após a nova data", prazo: "Nova data ainda no prazo", remarcou: "Remarcou (2+ datas)" };
+  const TIT = { hoje: "Atualizados hoje", acessos: "Acessos aos links", promessas: "Promessas (cumpriu + atrasou)", vistos: "Pedidos que apareceram no link", atual: "Pedidos atualizados", sem: "Sem retorno", cumpriu: "Cumpriu a nova data", atrasou: "Atrasou após a nova data", prazo: "Nova data ainda no prazo", remarcou: "Remarcou (2+ datas)" };
   function linhasDe(x, tipo) {
     if (tipo === "sem") return x.semRet;
     if (tipo === "vistos") { const R = new Map(x.ult.map((r) => [r.pedido, r])); return [...x.ult, ...x.semRet.filter((s) => !R.has(s.pedido))]; }
     if (tipo.startsWith("mot:")) { const m = tipo.slice(4); return kd.respostas.filter((r) => r.nome === x.nome && (r.motivo || "—") === m).map((r) => ({ ...r, sit: situacao(r, kd.hoje) })); }
-    return { atual: x.ult, cumpriu: x.cumpriu, atrasou: x.atrasou, prazo: x.prazo, remarcou: x.remarcou }[tipo] || [];
+    return { hoje: x.hojeL, atual: x.ult, cumpriu: x.cumpriu, atrasou: x.atrasou, prazo: x.prazo, remarcou: x.remarcou }[tipo] || [];
   }
   const COLS = [["NF", (r) => r.nf], ["Pedido", (r) => r.pedido], ["Transportadora", (r) => r.transportadora], ["Cidade/UF", (r) => [r.cidade, r.uf].filter(Boolean).join(" / ")],
     ["Micro status", (r) => r.micro], ["Prometido", (r) => br(r.prometido)], ["Nova data informada", (r) => br(r.nova_data)], ["Motivo", (r) => r.motivo], ["SKU", (r) => r.sku],
@@ -197,8 +198,8 @@
     $("lkk-excel").addEventListener("click", () => {
       if (!kLin.length) return toast("Sem dados no período.", true);
       const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Transportadora", "Acessos", "Dias com acesso", "Pedidos no link", "Atualizados", "Sem retorno", "Tempo p/ responder (h, mediana)", "Cumpriu", "Atrasou após a nova data", "% cumprido", "No prazo", "Remarcou", "Dias empurrados (média)", "Motivo principal"]]
-        .concat(kLin.map((x) => [x.nome, x.acessos, x.dias, x.vistos, x.ult.length, x.semRet.length, x.tempo == null ? "" : Math.round(x.tempo), x.cumpriu.length, x.atrasou.length,
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Transportadora", "Acessos", "Dias com acesso", "Pedidos no link", "Atualizados", "Atualizados hoje", "Sem retorno", "Tempo p/ responder (h, mediana)", "Cumpriu", "Atrasou após a nova data", "% cumprido", "No prazo", "Remarcou", "Dias empurrados (média)", "Motivo principal"]]
+        .concat(kLin.map((x) => [x.nome, x.acessos, x.dias, x.vistos, x.ult.length, x.hojeL.length, x.semRet.length, x.tempo == null ? "" : Math.round(x.tempo), x.cumpriu.length, x.atrasou.length,
           x.cumpriu.length + x.atrasou.length ? Math.round((100 * x.cumpriu.length) / (x.cumpriu.length + x.atrasou.length)) / 100 : "", x.prazo.length, x.remarcou.length, x.emp == null ? "" : +x.emp.toFixed(1), x.motivo]))), "KPIs");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Link", ...COLS.map((c) => c[0])]].concat(kLin.flatMap((x) => [...x.ult, ...x.semRet].map((r) => [x.nome, ...COLS.map((c) => c[1](r) ?? "")])))), "Pedidos");
       XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Link", "Pedido", "NF", "Nova data", "Motivo", "SKU", "Observação", "Respondido em"]].concat(kd.respostas.map((r) => [r.nome, r.pedido, r.nf, br(r.nova_data), r.motivo, r.sku || "", r.obs || "", quando(r.em)]))), "Todas as respostas");
