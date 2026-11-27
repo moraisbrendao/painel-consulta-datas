@@ -47,6 +47,7 @@
     .alerta.barrar { background: var(--vermelho-f); color: var(--vermelho); font-weight: 700; border: 1px solid #f3b2ad; }
     .alerta.oc { background: #f1e8fc; color: #4b1f86; border: 1px solid #d6c0f3; white-space: pre-wrap; word-break: break-word; }
     .alerta.oc b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+    .alerta.oc b.oc-tit { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
     .repo { display: inline-block; margin-top: 3px; font-size: 13px; font-weight: 700; color: #0b5c8a; background: #e2f1fb; padding: 1px 8px; border-radius: 10px; }
     .err { color: var(--vermelho); font-size: 13px; }
     @media (max-width: 760px) {
@@ -136,7 +137,7 @@
           </div>
           <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : (chip || `<span class="s">preencha data e motivo</span>`)}</div><div class="err"></div></div>
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
-          ${x.oc_msg ? `<div class="alerta oc"><b>📌 Assunto: Retorno da Ocorrência</b><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
+          ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
         </div>`;
       }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
     }
