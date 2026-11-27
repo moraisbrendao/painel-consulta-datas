@@ -1561,6 +1561,14 @@ if (MODO === "faltas" || MODO === "diag-faltas" || MODO === "diag-chat") {   // 
   catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }
+if (MODO === "diag-repopre") {   // Reposição pré › Falta de volumes: lê a etiqueta da foto anexada no portal (robo/repo-pre.mjs). Só sim/não no log.
+  await entrarSupabase();
+  const { chromium } = await import("playwright"); const { createHash } = await import("node:crypto");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  try { await (await import("./repo-pre.mjs")).diagRepoPre({ chamar, log, ctx, alvo: process.env.TRANSP || "", createHash }); }
+  catch (e) { log("diag-repopre: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
+  finally { await nav.close(); }
+}
 if (MODO === "anota-portal" || MODO === "diag-anota" || MODO === "diag-anota2" || MODO === "diag-ocurl") {   // Reposição pré-entrega: anotação "NF <nova> emitida para o pedido" no portal do transportador (robo/anota-portal.mjs)
   await entrarSupabase();
   const { chromium } = await import("playwright");

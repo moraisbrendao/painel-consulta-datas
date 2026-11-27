@@ -7,6 +7,8 @@
     "pdfjs-dist": "^4.10.38",
     "playwright": "1.48.2",
     "xlsx": "0.18.5",
-    "exceljs": "4.4.0"
+    "exceljs": "4.4.0",
+    "sharp": "0.33.5",
+    "zxing-wasm": "2.2.4"
   }
 }

@@ -32,7 +32,7 @@ export const jaMandouPdf = (p) => p.evaluate((txt) => { const ls = document.body
 const nfComSerie = (x) => { const n = String(x.nf_nova || "").trim(); return /-/.test(n) || !x.serie ? n : `${n}-${String(x.serie).trim()}`; };
 export const textoAnotacao = (x, comPdf) => `NF ${nfComSerie(x)} emitida para o pedido${comPdf ? ", também temos o pdf em anexo na aba chat" : ""}`;
 
-async function abrirRepoPre(p, log) {
+export async function abrirRepoPre(p, log) {
   const link = p.getByRole("link", { name: /reposi[cç][oõ]es/i }).first();
   if (await link.count()) await link.click(); else await p.getByText(/^\s*Reposi[cç][oõ]es\s*\d*\s*$/i).first().click();
   await p.waitForTimeout(2500);
@@ -51,7 +51,7 @@ const CHAT_PDF = false;   // PDF da nova NF no chat do ticket: desligado (Brenda
 // ticket com Situação FECHADO no 360: o caso acabou, não precisa de PDF nem anotação (Brenda 25/11)
 const ticketFechado = async (m) => /Situa[cç][aã]o:?\s*FECHADO/i.test(((await m.locator("body").innerText().catch(() => "")) || "").replace(/\s+/g, " "));
 // filtra a NF original e devolve a linha (primeira coluna igual à NF)
-async function acharLinha(p, nf) {
+export async function acharLinha(p, nf) {
   const filtro = p.locator("input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]").first();
   const nfL = String(nf).trim().split("-").map((t) => t.trim().replace(/^0+(?=\d)/, "")).join("-");   // "09873-034" → "9873-34", como no portal
   await filtro.fill(""); await filtro.fill(nfL); await p.waitForTimeout(400);
