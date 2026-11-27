@@ -35,6 +35,13 @@
     button:disabled { opacity: .5; cursor: default; }
     .rodape { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--linha); padding: 10px 16px; display: flex; justify-content: center; gap: 10px; align-items: center; }
     .ok { color: var(--verde); font-weight: 700; }
+    .planilha { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
+    .planilha .pl-bts { display: flex; gap: 8px; flex-wrap: wrap; }
+    .planilha label.btn-am { font-weight: 700; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
+    #pl-res { flex-basis: 100%; }
+    #pl-res:empty { display: none; }
+    #pl-res .r-ok { color: var(--verde); font-weight: 700; }
+    #pl-res ul { margin: 6px 0 0; padding-left: 18px; color: var(--vermelho); font-size: 13px; max-height: 200px; overflow: auto; }
     .ped .ck, #ck-todos { width: 18px; height: 18px; vertical-align: -3px; margin: 0 6px 0 0; accent-color: var(--azul); cursor: pointer; }
     .ped.marcado { border-color: var(--azul); box-shadow: 0 0 0 1px var(--azul) inset; }
     .sel-todos { display: inline-flex; align-items: center; font-size: 14px; cursor: pointer; white-space: nowrap; }
@@ -71,7 +78,13 @@
     <p id="sub">Carregando…</p>
   </header>
   <main>
-    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela; ou use a planilha. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <div class="planilha" id="planilha">
+      <div><b>📊 Muitos pedidos?</b> Baixe a planilha, preencha as colunas <b>Nova data</b>, <b>Motivo</b> (e SKU / Observação) e suba de volta: salva tudo sozinho.</div>
+      <div class="pl-bts"><button type="button" class="btn-cont" id="pl-baixar">⤓ Baixar planilha dos pedidos</button>
+        <label class="btn-am" id="pl-subir-l">⇪ Subir planilha preenchida<input type="file" id="pl-subir" accept=".xlsx,.xls,.csv" hidden></label></div>
+      <div id="pl-res"></div>
+    </div>
     <div class="cards" id="cards"></div>
     <div class="barra"><label class="sel-todos"><input type="checkbox" id="ck-todos">Selecionar todos da lista</label><input id="busca" type="search" placeholder="Procurar NF"><span class="s" id="cont"></span></div>
     <div id="massa" hidden>
@@ -86,6 +99,7 @@
     </div>
     <div id="lista"></div>
   </main>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="config.js"></script>
   <script>
   (function () {
@@ -245,6 +259,75 @@
       desenhar();
       $("m-err").textContent = falhou ? `${ok} salvo(s). ${falhou} não foram aceitos (podem já ter sido entregues): continuam marcados, atualize a página e confira.` : "";
       if (!falhou) $("massa").hidden = true;
+    });
+
+    // planilha (Brenda 26/11): baixa os pedidos em Excel, a transportadora preenche e sobe; cada linha válida salva sozinha
+    const COLS_PL = ["NF", "Cidade", "UF", "CEP", "Prometido ao cliente", "Situação", "Micro status", "Nova data (dd/mm/aaaa)", "Motivo", "SKU (se falta de volumes)", "Observação", "Pedido (não mexer)"];
+    $("pl-baixar").addEventListener("click", () => {
+      if (!window.XLSX) return alert("Não consegui carregar o Excel. Atualize a página.");
+      const L = itens.filter((x) => !feitos.has(x.pedido));
+      const linhas = L.map((x) => { const d = x.prometido ? dias(x.prometido, hoje) : null;
+        return [x.nf || "", x.cidade || "", x.uf || "", x.cep ? String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2") : "", br(x.prometido),
+          [d === null ? "" : d > 0 ? `vencido há ${d} dia(s)` : d === 0 ? "vence hoje" : "vence amanhã", x.barrar ? "EM BARRAR ENTREGA" : "", x.oc_msg ? "RETORNO OCORRÊNCIA" : "", x.nf_repo ? "NF reposição " + x.nf_repo : ""].filter(Boolean).join(" · "),
+          x.micro || "", "", "", "", "", x.pedido]; });
+      const ws = XLSX.utils.aoa_to_sheet([COLS_PL].concat(linhas));
+      ws["!cols"] = [12, 18, 5, 11, 12, 34, 28, 16, 30, 18, 40, 26].map((w) => ({ wch: w }));
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
+      XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([["Motivos aceitos (escreva igual)"]].concat(MOTIVOS.map((m) => [m]))), "Motivos");
+      XLSX.writeFile(wb, `pedidos_${(document.title.split("·")[1] || "transportadora").trim().replace(/[^\wÀ-ú]+/g, "_")}_${hoje}.xlsx`);
+    });
+    const semAc = (t) => String(t ?? "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
+    function dataPl(v) {
+      if (v instanceof Date && !isNaN(v)) return new Date(v.getTime() - v.getTimezoneOffset() * 6e4).toISOString().slice(0, 10);
+      if (typeof v === "number" && v > 30000 && v < 80000) return new Date(Math.round((v - 25569) * 864e5)).toISOString().slice(0, 10);
+      const t = String(v ?? "").trim(); let m = t.match(/^(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?$/);
+      if (m) { const a = m[3] ? (m[3].length === 2 ? "20" + m[3] : m[3]) : hoje.slice(0, 4); return `${a}-${m[2].padStart(2, "0")}-${m[1].padStart(2, "0")}`; }
+      m = t.match(/^(\d{4})-(\d{2})-(\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : null;
+    }
+    const dataOk = (iso) => !!iso && new Date(iso + "T12:00:00Z").toISOString().slice(0, 10) === iso;
+    $("pl-subir").addEventListener("change", async (e) => {
+      const arq = e.target.files[0]; e.target.value = ""; if (!arq) return;
+      const res = $("pl-res"); res.innerHTML = `<span class="s">Lendo a planilha…</span>`;
+      let rows;
+      try { const wb = XLSX.read(await arq.arrayBuffer(), { type: "array", cellDates: true }); rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: true, defval: "" }); }
+      catch (err) { res.innerHTML = `<ul><li>Não consegui ler o arquivo. Use a planilha baixada aqui (Excel).</li></ul>`; return; }
+      const iCab = rows.findIndex((r) => r && r.some((c) => /^NOVA DATA/.test(semAc(c))));
+      if (iCab < 0) { res.innerHTML = `<ul><li>Não achei a coluna "Nova data". Use a planilha baixada aqui.</li></ul>`; return; }
+      const cab = rows[iCab].map(semAc), ci = (re) => cab.findIndex((c) => re.test(c));
+      const cP = ci(/^PEDIDO/), cN = ci(/^NF$|^NOTA/), cD = ci(/^NOVA DATA/), cM = ci(/^MOTIVO/), cS = ci(/^SKU/), cO = ci(/^OBSERVA/);
+      const porP = new Map(itens.map((x) => [semAc(x.pedido), x])), porN = new Map(itens.map((x) => [semAc(x.nf), x]));
+      const MOT = new Map(MOTIVOS.map((m) => [semAc(m), m]));
+      const enviar = [], erros = []; let vazias = 0;
+      rows.slice(iCab + 1).forEach((r, i) => {
+        if (!r || r.every((c) => String(c ?? "").trim() === "")) return;
+        const lin = iCab + i + 2, x = (cP >= 0 && porP.get(semAc(r[cP]))) || (cN >= 0 && porN.get(semAc(r[cN])));
+        const nf = cN >= 0 ? String(r[cN] || "").trim() : "", quem = nf ? "NF " + nf : "linha " + lin;
+        const dRaw = cD >= 0 ? r[cD] : "", mRaw = cM >= 0 ? String(r[cM] ?? "").trim() : "";
+        if (String(dRaw ?? "").trim() === "" && !mRaw) { vazias++; return; }
+        if (!x) return erros.push(`${quem}: não está mais na sua lista (pode já ter sido entregue ou já tem data).`);
+        const nova = dataPl(dRaw), motivo = MOT.get(semAc(mRaw)) || "";
+        if (!dataOk(nova)) return erros.push(`${quem}: data "${String(dRaw)}" inválida (use dd/mm/aaaa).`);
+        if (!motivo) return erros.push(`${quem}: motivo "${mRaw || "(vazio)"}" não é um dos aceitos (veja a aba Motivos).`);
+        const y = { pedido: x.pedido, nova_data: nova, motivo, obs: cO >= 0 ? String(r[cO] ?? "").trim().slice(0, 300) : "", sku: motivo === "Falta de volumes" && cS >= 0 ? String(r[cS] ?? "").trim().slice(0, 200) : "" };
+        const v = valida(y); if (v) return erros.push(`${quem}: ${v}`);
+        enviar.push(y);
+      });
+      if (!enviar.length) { res.innerHTML = `<b>Nenhuma linha para salvar.</b>${vazias ? ` <span class="s">${vazias} linha(s) sem data e motivo.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`; return; }
+      let ok = 0, n = 0; const fila = enviar.slice(), h = () => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      res.innerHTML = `<span class="s" id="pl-prog">Salvando 0 de ${enviar.length}…</span>`;
+      async function trabalhador() {
+        while (fila.length) {
+          const y = fila.shift(); rasc.set(y.pedido, y); clearTimeout(timers.get(y.pedido));
+          try { const r = await rpc("link_responder", { p_token: token, p_itens: [y] });
+            if (r.gravados) { ok++; feitos.set(y.pedido, h()); ultimoEnviado.set(y.pedido, JSON.stringify(y)); sel.delete(y.pedido); }
+            else erros.push(`NF ${(itens.find((z) => z.pedido === y.pedido) || {}).nf || ""}: não aceito (pode já ter sido entregue).`);
+          } catch (err) { erros.push(`NF ${(itens.find((z) => z.pedido === y.pedido) || {}).nf || ""}: ${err.message}`); }
+          const pg = $("pl-prog"); if (pg) pg.textContent = `Salvando ${++n} de ${enviar.length}…`;
+        }
+      }
+      await Promise.all([1, 2, 3, 4].map(trabalhador));
+      desenhar();
+      res.innerHTML = `<span class="r-ok">✓ ${ok} pedido(s) salvo(s) pela planilha.</span>${vazias ? ` <span class="s">${vazias} linha(s) sem data e motivo ficaram de fora.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`;
     });
     $("lista").addEventListener("input", mexeu); $("lista").addEventListener("change", mexeu);
     $("busca").addEventListener("input", desenhar);
