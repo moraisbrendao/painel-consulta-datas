@@ -148,7 +148,7 @@
     if (x.solicitar_status === "feito") return `<span class="chip verde">✓ Reposição solicitada ${hora(x.feito_em)}${x.ticket_360 ? ` · <a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">ticket ${esc(x.ticket_360)} ↗</a>` : ""}</span>`;
     if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>`;
     const pode = podeSol(x);
-    if (pode && soComentario(x)) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">💬 Fazer só o comentário no 360 (o ticket do portal já foi criado)</button> <span class="s">${esc(x.solicitar_msg || "")}</span>`;
+    if (pode && soComentario(x)) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">💬 Fazer só o comentário no 360 (o ticket do portal já existe)</button> <span class="s">${esc(x.solicitar_msg || "")}</span>`;
     const volta = rp.length || x.solicitar_status === "erro" ? ` <button type="button" class="btn contorno" data-rpp-volta="${esc(x.nf)}" title="Desfaz a marcação e devolve o caso para Para analisar">↩ Voltar para analisar</button>` : "";
     if (pode) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Aprovar e solicitar reposição de ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</button>${volta}${x.solicitar_status === "erro" ? ` <span class="s">(deu erro: tentar de novo${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""})</span>` : ""}`;
     // por que o botão não aparece (Brenda 27/11 não achou o botão)
@@ -157,7 +157,7 @@
     return (motivo ? `<span class="s">📤 O botão de solicitar aparece quando der: ${esc(motivo)}.</span>` : "") + volta;
   }
   // o robô clicou em Adicionar mas não viu o aviso (27/11): o ticket do portal existe; falta só o comentário no 360
-  const soComentario = (x) => x.solicitar_status === "erro" && (x.ticket_portal_ok || /cliquei em Adicionar/i.test(x.solicitar_msg || ""));
+  const soComentario = (x) => x.solicitar_status === "erro" && (x.ticket_portal_ok || /cliquei em Adicionar|Em Andamento/i.test(x.solicitar_msg || ""));
   function podeSol(x) { return !["pendente", "feito"].includes(x.solicitar_status) && (x.na_lista || soComentario(x)) && repor(x).length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro); }
   async function voltar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;

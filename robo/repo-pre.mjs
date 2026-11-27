@@ -390,10 +390,10 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
           log(`  só o número: ${prim.length} linha(s) · 1ª coluna ${JSON.stringify(prim.map((t) => t.replace(/\d/g, "9").slice(0, 20)))}`);
         }
         if (l0 && /^novo$/i.test(st)) linha = l0;   // está Novo: o filtro é que não trouxe
-        else if (l0 && /andamento/i.test(st) && /cliquei em Adicionar/i.test(x.solicitar_msg || "")) {   // o robô já criou o ticket (não viu o aviso): segue só para o comentário no 360
+        else if (l0 && /andamento/i.test(st) && /cliquei em Adicionar|Em Andamento/i.test(x.solicitar_msg || "")) {   // o robô já criou o ticket (não viu o aviso): segue só para o comentário no 360
           log("  ticket já criado pelo robô na rodada anterior: sigo para o comentário no 360"); x.ticket_portal_ok = true; await patch(x, { ticket_portal_ok: true, na_lista: true }); linha = l0;
         }
-        else { await aplicarNovo(p, log).catch(() => {}); await patch(x, { na_lista: !!l0 && /^novo$/i.test(st) });
+        else { await aplicarNovo(p, log).catch(() => {}); if (!teste) await patch(x, { na_lista: !!l0 && /^novo$/i.test(st) });
           throw new Error(l0 ? `no portal a NF está como "${st}", não mais Novo (alguém já tratou?)` : "NF não achada no portal (nem sem filtro)"); }
       }
       etapa = "print da solicitação"; const sol = await printSolicitacao(p, linha);
@@ -423,7 +423,7 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       await patch(x, { solicitar_status: "feito", ticket_360: tk.id, solicitar_msg: `Ticket do portal criado e comentário com ${arquivos.length} print(s) no ticket ${tk.id}.`, feito_em: new Date().toISOString() });
       log(`  feito: ticket portal + comentário 360 (${arquivos.length} prints)`);
     } catch (e) { const msg = (`[${etapa}] ` + String(e.message).split("\n")[0]).slice(0, 220); log("  erro: " + msg.replace(/\d{4,}/g, "#"));
-      await patch(x, { solicitar_status: /tento de novo/.test(msg) ? "pendente" : "erro", solicitar_msg: msg }).catch(() => {});
+      if (!teste) await patch(x, { solicitar_status: /tento de novo/.test(msg) ? "pendente" : "erro", solicitar_msg: msg }).catch(() => {});   // teste não mexe no caso
       // volta para a lista limpa antes do próximo caso (janela/menu aberto travava o caso seguinte)
       await p.keyboard.press("Escape").catch(() => {}); await p.keyboard.press("Escape").catch(() => {});
       const dl = p.locator("[role=dialog]").last(); if (await dl.count()) await dl.getByRole("button", { name: /cancelar|fechar/i }).first().click({ timeout: 4000 }).catch(() => {});
