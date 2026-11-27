@@ -1307,6 +1307,11 @@ function lerLote(html) {   // uma linha por NF: número, data/hora do último ev
 }
 // Dominalog, Tempo Justo, Trans Sua e Transvanio nas séries 25, 34 e 35: o CT-e da Rajlog é o milk run (coleta), não a entrega ao cliente.
 // Vale só o rastreio da Dominalog; se só tiver a Rajlog, ainda não foi entregue. (Regra da Brenda, 16/11.)
+// mesma transportadora? compara palavras do nome (sem TRANSPORTES/LTDA...); VM e Tempo Justo são a mesma (regra 16/11)
+const PAL_FORA = new Set(["TRANSPORTE", "TRANSPORTES", "TRANSPORTADORA", "LTDA", "LOGISTICA", "LOG", "EIRELI", "ME", "EPP", "SA", "CARGAS", "EXPRESS", "EXPRESSO", "RODOVIARIO", "DE", "DA", "DO", "DOS", "DAS", "E", "SILVA"]);
+function palavrasT(t) { const n = normT(t).replace(/[^A-Z0-9 ]/g, " "); const P = new Set(n.split(/\s+/).filter((w) => w.length >= 3 && !PAL_FORA.has(w)));
+  if (/\bVM\b|TEMPO JUSTO/.test(n)) { P.add("VM"); P.add("TEMPOJUSTO"); } return P; }
+function mesmaTransp(emissor, nomes) { if (!emissor) return false; const E = palavrasT(emissor); return nomes.filter(Boolean).some((t) => [...palavrasT(t)].some((w) => E.has(w))); }
 function REGRA_RAJ(transp, nf) { return /dominalog|tempo\s*justo|trans\s*sua|transvanio/i.test(transp || "") && ["25", "34", "35"].includes(String(nf || "").split("-")[1]?.trim()); }
 function pegaLote(m, x) {
   let v = m.get(x.n); if (!v) return null;
@@ -1327,6 +1332,10 @@ async function conferirLote() {
   // "entregue" achado com outro CNPJ: confere de novo (antes não olhava a série e podia ser outra nota com o mesmo número)
   { const E = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&detalhe->>serie_ok=is.null&order=pedido&limit=2000`).catch(() => []);
     E.forEach((l) => { l.detalhe = { ...(l.detalhe || {}), tentados: [] }; }); lista.push(...E); if (E.length) log(`Reconfiro ${E.length} entregues ainda sem a checagem da série`); }
+  // Regra da Brenda (27/11): NF com CT-e de mais de uma transportadora (ex.: Karavaggio + Transvanio) só vale o da transportadora do pedido / redespacho.
+  // Reconfere uma vez os "entregues" que ainda não passaram por essa checagem (detalhe.transp_ok).
+  { const E = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,prev_cliente,situacao,detalhe&situacao=eq.entregue&detalhe->>transp_ok=is.null&order=pedido&limit=3000`).catch(() => []);
+    const tem = new Set(lista.map((l) => l.pedido)); let n = 0; E.forEach((l) => { const t = l.transportadora || ""; if (!tem.has(l.pedido) && !EH_JADLOG.test(t) && !EH_BENTO.test(t) && !EH_FORMATO.test(t) && !EH_TRANSITO.test(t) && !FORA_SSW.test(t) && !/transiga/i.test(t)) { lista.push(l); n++; } }); if (n) log(`Reconfiro ${n} entregues ainda sem a checagem de transportadora (CT-e de outra transportadora)`); }
   // Série 35 (dropshipping) da TSL: a TSL só faz a first mile; fora do RJ o rastreio que vale é o da transportadora de redespacho (Promob).
   // Para RJ a TSL emite o CT-e da entrega e segue o rastreio da TSL. (Regra da Brenda, 16/11.)
   // (inclui as já "entregues" pela TSL fora do RJ: podem ter sido a entrega da first mile, então reconfere pelo redespacho)
@@ -1410,7 +1419,7 @@ async function conferirLote() {
   const montar = (lista) => lista.filter((l) => res.has(l.pedido)).map((l) => { const r = res.get(l.pedido), ser = String(l.nf).split("-")[1];
     const tt = r.situacao === "sem cte" ? (tentados.get(l.pedido) || (l.detalhe && l.detalhe.tentados) || null) : null;
     const det = { ...(l.detalhe && l.detalhe.emissor ? l.detalhe : {}), ...(r.previsao ? { fonte: (l.detalhe && l.detalhe.fonte) || "SSW", previsao: r.previsao } : {}),
-      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(r.situacao === "entregue" || r.situacao === "nao entregue" ? { serie_ok: true } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}) };
+      ...(r._cnpj && r._cnpj !== cnpjDaSerie(ser) && r.situacao !== "sem cte" ? { cnpj_outro: r._cnpj.slice(-6) } : {}), ...(r.situacao === "entregue" || r.situacao === "nao entregue" ? { serie_ok: true } : {}), ...(tt && tt.length ? { tentados: tt } : {}), ...(r._semSenha && r.situacao !== "sem cte" ? { sem_senha: true } : {}), ...(r.sigla ? { sigla: r.sigla } : {}), ...(r.emissor ? { emissor: r.emissor } : {}), ...(r.transp_ok ? { transp_ok: true } : {}) };
     if (r.situacao !== "sem cte") delete det.tentados; if (!r._semSenha) delete det.sem_senha;
     return { pedido: l.pedido, situacao: r.situacao, ultimo_evento: r.ultimo_evento || null, data_evento: r.data_evento || null, data_entrega: r.data_entrega || null, detalhe: Object.keys(det).length ? det : null }; });
   const gravar = async (linhas) => { for (let i = 0; i < linhas.length; i += 200) await chamar("rpc/gravar_conferencia", "POST", { linhas: linhas.slice(i, i + 200) }).catch((e) => log("Não gravei um lote:", e.message.slice(0, 120))); };
@@ -1430,6 +1439,26 @@ async function conferirLote() {
         if (em && /dominalog/i.test(em)) { ok++; r.emissor = em; continue; }
         nao++; res.set(x.pedido, { situacao: "nao entregue", ultimo_evento: `ENTREGUE POR ${(em || r.sigla || "OUTRA").toUpperCase()} (NÃO É A DOMINALOG)`.slice(0, 60), data_evento: r.data_evento || null, previsao: null, sigla: r.sigla, _cnpj: r._cnpj }); }
       if (ok + nao) log(`Dominalog (séries 25/34/35): ${ok} entregues confirmados pela Dominalog · ${nao} eram de outra transportadora (ficam como não entregue)`); }
+    // Regra da Brenda (27/11): a mesma NF com CT-e de transportadoras diferentes (ex.: 1ª perna Karavaggio "entregue" ao redespacho + CT-e da Transvanio):
+    // vale só o rastreio da transportadora do pedido ou do redespacho da base. Nenhuma linha dela = não entregue ainda.
+    { const multi = [...grupos.values()].flat().filter((x) => { const r = res.get(x.pedido); return r && r._L && !REGRA_RAJ(x.transportadora, x.nf)
+        && new Set(r._L.filter((y) => y.situacao === "entregue" || y.situacao === "nao entregue").map((y) => String(y.sigla || "").split(/\s+/)[0])).size > 1; });
+      if (multi.length) { const B = new Map();
+        for (let i = 0; i < multi.length; i += 100) { const ids = multi.slice(i, i + 100).map((l) => `"${String(l.pedido).replace(/"/g, "")}"`).join(",");
+          (await chamar(`base_pedidos?select=pedido,transportadora,rd:extra->>redespacho&pedido=in.(${encodeURIComponent(ids)})`).catch(() => [])).forEach((b) => B.set(b.pedido, b)); }
+        const cacheE = new Map(); let ok = 0, troca = 0, nenhuma = 0;
+        for (const x of multi) { const r = res.get(x.pedido), b = B.get(x.pedido) || {}, nomes = [x.transportadora, b.transportadora, /^SEM\b|^-$/i.test(b.rd || "") ? "" : b.rd];
+          const L = []; for (const y of r._L.filter((y) => y.situacao === "entregue" || y.situacao === "nao entregue")) { let em = cacheE.get(y.det);
+            if (em === undefined && y.det) { const d = await pagina("https://ssw.inf.br" + y.det).catch(() => null); consultas++; await dorme(PAUSA);
+              em = d && d.status === 200 ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "").trim().slice(0, 60) || null : null; cacheE.set(y.det, em); }
+            L.push({ ...y, emissor: em || null }); }
+          const dele = L.filter((y) => mesmaTransp(y.emissor, nomes));
+          if (dele.length) { const m = lerLote.melhor(dele); if (m.situacao !== r.situacao || m.data_evento !== r.data_evento) troca++; else ok++;
+            res.set(x.pedido, { ...m, _cnpj: r._cnpj, _semSenha: r._semSenha, transp_ok: true }); continue; }
+          nenhuma++; const outra = lerLote.melhor(L);
+          res.set(x.pedido, { situacao: "nao entregue", ultimo_evento: `${outra.situacao === "entregue" ? "ENTREGUE" : "CT-E"} POR ${String(outra.emissor || outra.sigla || "OUTRA").toUpperCase()} (NÃO É A DO PEDIDO)`.slice(0, 60), data_evento: outra.data_evento || null, previsao: null, sigla: outra.sigla, _cnpj: r._cnpj, transp_ok: true }); }
+        log(`CT-e de mais de uma transportadora: ${multi.length} NFs · ${ok} já estavam certas · ${troca} trocadas para o rastreio da transportadora do pedido/redespacho · ${nenhuma} sem CT-e dela (ficam não entregue)`); }
+      for (const r of res.values()) if (r.situacao === "entregue") r.transp_ok = true; }
     const achadosSSW = [...res.values()].filter((r) => r.situacao !== "sem cte").length;
     if (res.size > 200 && achadosSSW === 0) throw new Error("nenhuma NF reconhecida no retorno do SSW (leitura da página falhou); não gravo nada");
     await gravar(montar(ssw)); gravados = true; log(`Gravei a 1ª passada · ${Math.round((Date.now() - t0) / 1000)} s`);
