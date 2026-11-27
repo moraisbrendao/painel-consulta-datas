@@ -17,7 +17,7 @@
     .aviso { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 14px; margin-bottom: 12px; }
     .aviso.erro { border-color: var(--vermelho); color: var(--vermelho); }
     .barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
-    .barra input { flex: 1; min-width: 180px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; font-size: 15px; }
+    .barra input[type=search] { flex: 1; min-width: 180px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; font-size: 15px; }
     .ped { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1.2fr 1fr 1.6fr 150px; gap: 10px 14px; align-items: center; }
     .ped.salvo { background: var(--verde-f); border-color: #9fd8b4; }
     .ped b.num { font-size: 15px; word-break: break-all; }
@@ -35,6 +35,14 @@
     button:disabled { opacity: .5; cursor: default; }
     .rodape { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--linha); padding: 10px 16px; display: flex; justify-content: center; gap: 10px; align-items: center; }
     .ok { color: var(--verde); font-weight: 700; }
+    .ped .ck, #ck-todos { width: 18px; height: 18px; vertical-align: -3px; margin: 0 6px 0 0; accent-color: var(--azul); cursor: pointer; }
+    .ped.marcado { border-color: var(--azul); box-shadow: 0 0 0 1px var(--azul) inset; }
+    .sel-todos { display: inline-flex; align-items: center; font-size: 14px; cursor: pointer; white-space: nowrap; }
+    #massa { position: sticky; top: 0; z-index: 5; background: #fffbea; border: 1px solid var(--amarelo); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; box-shadow: 0 4px 14px rgba(15,31,61,.12); }
+    #massa b { font-size: 15px; }
+    #massa input, #massa select { padding: 8px 10px; border: 1px solid #cfd6e2; border-radius: 8px; font-size: 15px; background: #fff; color: var(--texto); }
+    #massa .m-obs { flex: 1; min-width: 160px; }
+    #massa .err { flex-basis: 100%; }
     .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-bottom: 12px; }
     .card { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 10px 12px; text-align: left; font-weight: 400; color: var(--texto); }
     .card b { display: block; font-size: 22px; line-height: 1.1; }
@@ -62,9 +70,19 @@
     <p id="sub">Carregando…</p>
   </header>
   <main>
-    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
     <div class="cards" id="cards"></div>
-    <div class="barra"><input id="busca" type="search" placeholder="Procurar NF"><span class="s" id="cont"></span></div>
+    <div class="barra"><label class="sel-todos"><input type="checkbox" id="ck-todos">Selecionar todos da lista</label><input id="busca" type="search" placeholder="Procurar NF"><span class="s" id="cont"></span></div>
+    <div id="massa" hidden>
+      <b id="m-qtd"></b>
+      <input type="date" id="m-dt" aria-label="Nova data para os selecionados">
+      <select id="m-mt" aria-label="Motivo para os selecionados"></select>
+      <input id="m-sku" maxlength="200" placeholder="SKU do item que está faltando" hidden>
+      <input id="m-obs" class="m-obs" maxlength="300" placeholder="Observação (opcional)">
+      <button type="button" class="btn-am" id="m-aplicar">Aplicar nos selecionados</button>
+      <button type="button" class="btn-cont" id="m-limpar">Limpar seleção</button>
+      <div class="err" id="m-err"></div>
+    </div>
     <div id="lista"></div>
   </main>
   <script src="config.js"></script>
@@ -76,7 +94,7 @@
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
     const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Falta de volumes", "Outro"];
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
-    let itens = [], hoje = "", filtro = "", chips = new Map(), feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+    let itens = [], hoje = "", filtro = "", chips = new Map(), sel = new Set(), V = [], feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
     async function rpc(nome, corpo) {
       const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
@@ -118,7 +136,7 @@
     function desenhar() {
       desenharCards();
       const q = $("busca").value.trim().toUpperCase(), fc = (CARDS.find((c) => c[0] === filtro) || CARDS[0])[2];
-      const V = itens.filter((x) => fc(x) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
+      V = itens.filter((x) => fc(x) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
       const pend = itens.filter((x) => !feitos.has(x.pedido)).length, feitosN = feitos.size;
       $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + (feitosN ? ` · ${feitosN} salvo${feitosN === 1 ? "" : "s"} agora` : "");
       $("cont").textContent = q || filtro ? `${V.length} na lista` : "";
@@ -126,8 +144,8 @@
         const d = x.prometido ? dias(x.prometido, hoje) : null, ra = rasc.get(x.pedido) || {};
         const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
         const fs = feitos.get(x.pedido); chips.set(x.pedido, chip);
-        return `<div class="ped${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
-          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}${x.repo_tipo ? " · " + (/^parc/i.test(x.repo_tipo) ? "Parcial" : /^tot/i.test(x.repo_tipo) ? "Total" : esc(x.repo_tipo)) : ""}</div>` : ""}</div>
+        return `<div class="ped${fs ? " salvo" : ""}${sel.has(x.pedido) ? " marcado" : ""}" data-p="${esc(x.pedido)}">
+          <div><label><input type="checkbox" class="ck" aria-label="Selecionar"${sel.has(x.pedido) ? " checked" : ""}><b class="num">NF ${esc(x.nf || "—")}</b></label>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}${x.repo_tipo ? " · " + (/^parc/i.test(x.repo_tipo) ? "Parcial" : /^tot/i.test(x.repo_tipo) ? "Total" : esc(x.repo_tipo)) : ""}</div>` : ""}</div>
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
@@ -140,6 +158,15 @@
           ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
         </div>`;
       }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
+      barraMassa();
+    }
+    // data em massa (Brenda 26/11): marca os pedidos e aplica a mesma data + motivo em todos de uma vez
+    function barraMassa() {
+      for (const p of [...sel]) if (!itens.some((x) => x.pedido === p)) sel.delete(p);
+      $("massa").hidden = !sel.size;
+      $("m-qtd").textContent = `${sel.size} selecionado${sel.size === 1 ? "" : "s"}:`;
+      const vis = V.filter((x) => !feitos.has(x.pedido));
+      $("ck-todos").checked = vis.length > 0 && vis.every((x) => sel.has(x.pedido));
     }
     const dadosDe = (el) => ({ pedido: el.dataset.p, nova_data: el.querySelector(".dt").value, motivo: el.querySelector(".mt").value, obs: el.querySelector(".obs").value.trim(), sku: el.querySelector(".mt").value === "Falta de volumes" ? el.querySelector(".sku").value.trim() : "" });
     function valida(x) {
@@ -170,7 +197,7 @@
       } catch (err) { st(el, ""); el.querySelector(".err").textContent = err.message + " (tente de novo)"; ultimoEnviado.delete(x.pedido); }
     }
     const mexeu = (e) => {
-      const el = e.target.closest(".ped[data-p]"); if (!el) return;
+      const el = e.target.closest(".ped[data-p]"); if (!el || e.target.classList.contains("ck")) return;
       const sk = el.querySelector(".sku"), falta = el.querySelector(".mt").value === "Falta de volumes";
       if (sk.hidden === falta) { sk.hidden = !falta; if (falta && e.target.classList.contains("mt")) sk.focus(); }
       rasc.set(el.dataset.p, { ...dadosDe(el), sku: sk.value.trim() });
@@ -179,6 +206,45 @@
       el.querySelector(".err").textContent = v || "";
       if (v === "") { st(el, `<span class="s">vai salvar…</span>`); timers.set(el.dataset.p, setTimeout(() => salvar(el), 1200)); }
     };
+    $("lista").addEventListener("click", (e) => {
+      const c = e.target.closest(".ck"); if (!c) return;
+      const el = c.closest(".ped[data-p]"); c.checked ? sel.add(el.dataset.p) : sel.delete(el.dataset.p);
+      el.classList.toggle("marcado", c.checked); barraMassa();
+    });
+    $("ck-todos").addEventListener("change", (e) => {
+      V.filter((x) => !feitos.has(x.pedido)).forEach((x) => (e.target.checked ? sel.add(x.pedido) : sel.delete(x.pedido)));
+      desenhar();
+    });
+    $("m-mt").innerHTML = `<option value="">Motivo…</option>` + MOTIVOS.map((m) => `<option>${m}</option>`).join("");
+    $("m-mt").addEventListener("change", () => { $("m-sku").hidden = $("m-mt").value !== "Falta de volumes"; });
+    $("m-limpar").addEventListener("click", () => { sel.clear(); desenhar(); });
+    $("m-aplicar").addEventListener("click", async () => {
+      const base = { nova_data: $("m-dt").value, motivo: $("m-mt").value, obs: $("m-obs").value.trim(), sku: $("m-mt").value === "Falta de volumes" ? $("m-sku").value.trim() : "" };
+      const v = valida(base);
+      if (v === null) { $("m-err").textContent = "Escolha a nova data e o motivo."; return; }
+      if (v) { $("m-err").textContent = v; return; }
+      const alvo = [...sel]; $("m-err").textContent = "";
+      const bt = $("m-aplicar"); bt.disabled = true; bt.textContent = `Salvando 0 de ${alvo.length}…`;
+      let ok = 0, falhou = 0, n = 0;
+      const h = () => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+      const fila = alvo.slice();
+      async function trabalhador() {
+        while (fila.length) {
+          const pedido = fila.shift(), x = { pedido, ...base };
+          rasc.set(pedido, x); clearTimeout(timers.get(pedido));
+          try {
+            const r = await rpc("link_responder", { p_token: token, p_itens: [x] });
+            if (r.gravados) { ok++; feitos.set(pedido, h()); ultimoEnviado.set(pedido, JSON.stringify(x)); sel.delete(pedido); } else falhou++;
+          } catch (e) { falhou++; }
+          bt.textContent = `Salvando ${++n} de ${alvo.length}…`;
+        }
+      }
+      await Promise.all([1, 2, 3, 4].map(trabalhador));
+      bt.disabled = false; bt.textContent = "Aplicar nos selecionados";
+      desenhar();
+      $("m-err").textContent = falhou ? `${ok} salvo(s). ${falhou} não foram aceitos (podem já ter sido entregues): continuam marcados, atualize a página e confira.` : "";
+      if (!falhou) $("massa").hidden = true;
+    });
     $("lista").addEventListener("input", mexeu); $("lista").addEventListener("change", mexeu);
     $("busca").addEventListener("input", desenhar);
     $("cards").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; filtro = filtro === b.dataset.f ? "" : b.dataset.f; desenhar(); });
