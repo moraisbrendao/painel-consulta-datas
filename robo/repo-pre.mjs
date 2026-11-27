@@ -125,11 +125,11 @@ export async function lerListaRepoPre(p, log, maxPag = 40) {
     const iNf = col(/^NF/i), iMot = col(/motivo/i), iSt = col(/^status/i), iTr = col(/transportadora/i), iDt = col(/data/i), iQv = col(/qtd.*vol/i);
     const rows = await p.locator("table tbody tr").evaluateAll((trs) => trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => (td.innerText || "").trim())));
     for (const c of rows) if (c.length > 3) casos.push({ nf: c[iNf], motivo: c[iMot], status: c[iSt], transp: c[iTr], data: c[iDt], qtd: iQv >= 0 ? c[iQv] : null, pagina: pg });
-    const prox = p.locator("button[aria-label*='next' i], button[aria-label*='próxima' i], button:has-text('›'), button:has-text('Próxima')").first();
+    const prox = p.getByRole("button", { name: /go to next page|pr[óo]xima p[áa]gina/i }).first();
     if (!(await prox.count()) || (await prox.isDisabled().catch(() => true))) break;
     const antes = rows[0] && rows[0][iNf]; await prox.click().catch(() => {}); await p.waitForTimeout(2500);
     const depois = ((await p.locator("table tbody tr").first().locator("td").nth(Math.max(0, iNf)).innerText().catch(() => "")) || "").trim();
-    if (depois === antes) break;
+    if (depois === antes) { if (log) log(`  página ${pg}: a próxima não mudou a tabela`); break; }
   }
   return casos;
 }
@@ -167,7 +167,10 @@ export async function diagRepoPre2({ log, ctx }) {
   // filtro Status → opções
   const st = p.locator("button:has-text('Status')").first(); await st.click().catch(() => {}); await p.waitForTimeout(1200);
   log("Opções do filtro Status:", (await p.locator("[role=option], [role=menuitemcheckbox], [role=menuitem], [cmdk-item]").allInnerTexts().catch(() => [])).map((t) => t.trim()).join(" | ") || "(nenhuma com role)");
-  await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+  const novo = p.locator("[role=option], [role=menuitemcheckbox], [role=menuitem], [cmdk-item]").filter({ hasText: /^\s*Novo\s*$/ }).first();
+  if (await novo.count()) { await novo.click().catch(() => {}); await p.waitForTimeout(2500); log("Filtro Status = Novo aplicado"); }
+  await p.keyboard.press("Escape"); await p.waitForTimeout(1500);
+  log("Rodapé depois do filtro:", mascara(((await p.locator("xpath=//table/following::*[contains(.,'Página')][1]").first().innerText().catch(() => "")) || "").slice(0, 60)));
   const casos = await lerListaRepoPre(p, log);
   const cont = (f) => Object.entries(casos.reduce((a, c) => ((a[f(c)] = (a[f(c)] || 0) + 1), a), {})).map(([k, v]) => `${k}: ${v}`).join(" · ");
   log(`Lista: ${casos.length} linhas em ${Math.max(0, ...casos.map((c) => c.pagina))} página(s)`);
