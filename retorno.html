@@ -93,6 +93,8 @@
     .alerta.oc .oci { white-space: normal; margin-top: 8px; }
     .alerta.oc .oci.ok { font-weight: 700; color: #9a1b1b; }
     .alerta.oc .oci textarea { width: 100%; box-sizing: border-box; margin: 4px 0; font: inherit; padding: 6px; border-radius: 6px; border: 1px solid #d6c0f3; }
+    .alerta.oc.oct { background: #fff4e0; color: #7a4200; border-color: #f3d29a; }
+    .alerta.oc.oct .oci textarea { border-color: #f3d29a; }
     .alerta.oc b.oc-tit { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
     .repo { display: inline-block; margin-top: 3px; font-size: 13px; font-weight: 700; color: #0b5c8a; background: #e2f1fb; padding: 1px 8px; border-radius: 10px; }
     .err { color: var(--vermelho); font-size: 13px; }
@@ -194,7 +196,7 @@
       ["sem", "Sem nova data", (x) => !feitos.has(x.pedido), ""],
       ["venc", "Vencidos", (x) => atraso(x) > 0 || !!x.nova_antiga, "c-verm"],
       ["hoje", "Vencem hoje / amanhã", (x) => { const d = atraso(x); return d !== null && d <= 0 && !x.nova_antiga; }, ""],
-      ["oc", "Mensagem da Multimóveis esperando vocês", (x) => !!x.oc_msg, "c-roxo"],
+      ["oc", "Mensagem da Multimóveis esperando vocês", (x) => !!x.oc_msg && x.oc_lado !== "transp", "c-roxo"],
       ["barrar", "Em Barrar entrega", (x) => !!x.barrar, "c-verm"],
       ["repo", "Com nota de reposição", (x) => !!x.nf_repo, ""],
       ["salvo", "Salvos agora", (x) => feitos.has(x.pedido), "c-verde"],
@@ -313,7 +315,8 @@
     // alertas do pedido (pendentes e retornados, parte 104): barrar entrega e retorno da ocorrência com o botão "não é válido"
     function alertasPed(x) {
       return `${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
-          ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}${ocBotao(x)}</div>` : ""}`;
+          ${x.oc_msg && x.oc_lado !== "transp" ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}${ocBotao(x)}</div>` : ""}
+          ${x.oc_msg && x.oc_lado === "transp" ? `<div class="alerta oc oct"><b class="oc-tit">🕓 OCORRÊNCIA EM ANDAMENTO · aguardando a Multimóveis</b><b>Última mensagem foi de vocês${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}</b>${esc(x.oc_msg)}${ocBotao(x)}</div>` : ""}`;
     }
     // parte 103 (Brenda 27/11): a transportadora avisa que o retorno da Multimóveis na ocorrência do portal não é válido → alerta urgente na Consulta SAC
     function ocBotao(x) {
@@ -378,7 +381,7 @@
       const L = itens.filter((x) => !feitos.has(x.pedido));
       const linhas = L.map((x) => { const d = x.prometido ? dias(x.prometido, hoje) : null;
         return [x.nf || "", x.cidade || "", x.uf || "", x.cep ? String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2") : "", br(x.prometido),
-          [d === null ? "" : d > 0 ? `vencido há ${d} dia(s)` : d === 0 ? "vence hoje" : "vence amanhã", x.barrar ? "EM BARRAR ENTREGA" : "", x.oc_msg ? "RETORNO OCORRÊNCIA" : "", x.nf_repo ? "NF reposição " + x.nf_repo : ""].filter(Boolean).join(" · "),
+          [d === null ? "" : d > 0 ? `vencido há ${d} dia(s)` : d === 0 ? "vence hoje" : "vence amanhã", x.barrar ? "EM BARRAR ENTREGA" : "", x.oc_msg ? (x.oc_lado === "transp" ? "OCORRÊNCIA AGUARDANDO MULTIMÓVEIS" : "RETORNO OCORRÊNCIA") : "", x.nf_repo ? "NF reposição " + x.nf_repo : ""].filter(Boolean).join(" · "),
           x.micro || "", "", "", "", "", x.pedido]; });
       const ws = XLSX.utils.aoa_to_sheet([COLS_PL].concat(linhas));
       ws["!cols"] = [12, 18, 5, 11, 12, 34, 28, 16, 30, 18, 40, 26].map((w) => ({ wch: w }));
