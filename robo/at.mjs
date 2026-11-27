@@ -30,9 +30,9 @@ export async function lerPecas(p) {
         const resto = iQ >= 0 ? L.slice(iQ + 1) : [];
         for (let i = 0; i + 2 < resto.length + 1; i += 3) if (resto[i]) pecas.push({ peca: resto[i] || "", sku: resto[i + 1] || "", qtde: Number(String(resto[i + 2] || "").replace(",", ".")) || null });
       }
-      out.push({ forma: linhas.length ? `tabela ${linhas.length} linhas, ${cab ? cab.length : "?"} colunas` : "texto", pecas });
+      out.push({ cab, forma: linhas.length ? `tabela ${linhas.length} linhas, ${cab ? cab.length : "?"} colunas` : "texto", pecas });
     }
-    return { quadros: out.length, forma: out.map((x) => x.forma).join(" | "), pecas: out.flatMap((x) => x.pecas) };
+    return { cab: (out[0] && out[0].cab) || [], quadros: out.length, forma: out.map((x) => x.forma).join(" | "), pecas: out.flatMap((x) => x.pecas) };
   });
 }
 
@@ -54,6 +54,7 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
         const pecas = (r.pecas || []).filter((y) => y.peca || y.sku);
         await patch(x.ticket, { pecas, pecas_em: new Date().toISOString(), pecas_msg: r.erro || (r.quadros ? null : "sem quadro Peças de Assistência") });
         pecas.length ? ok++ : vazio++;
+        if (limite <= 5) log(`  formato: cab=${JSON.stringify((r.cab || []).map((c) => c.replace(/[A-Za-zÀ-ÿ]+/g, (w) => (/^(pe[cç]a|sku|qtde|descri[cç][aã]o|nome|c[oó]digo|valor|unit[aá]rio|total|a[cç][oõ]es|status)$/i.test(w) ? w : "w"))))} · ` + pecas.map((y) => `[peça ${String(y.peca).split(/\s+/).length} palavras · sku ${String(y.sku).replace(/[A-Za-z]/g, "A").replace(/\d/g, "#")} · qtde ${y.qtde}]`).join(" "));
       } catch (e) { erro++; await patch(x.ticket, { pecas_msg: String(e.message).split("\n")[0].slice(0, 150) }).catch(() => {}); }
     }
     log(`AT peças: ${ok} com peça · ${vazio} sem peça · ${erro} com erro · formas ${JSON.stringify(formas).replace(/\d{5,}/g, "#")}`);
