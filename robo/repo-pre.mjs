@@ -332,6 +332,9 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   const ob = d.locator("textarea").first();
   if (obs && await ob.count()) { passo = "campo Observação"; await ob.fill(obs, { timeout: 8000 }).catch(() => {}); await p.waitForTimeout(400); }
   const cj = await camposJanela(d);
+  { const nd = await p.locator("[role=dialog]").count(); const bts = (await p.locator("[role=dialog] button, [role=alertdialog] button").allInnerTexts().catch(() => [])).map((t) => t.replace(/\s+/g, " ").trim().replace(/\d/g, "#").slice(0, 25));
+    const tudo = (await p.locator("button").allInnerTexts().catch(() => [])).map((t) => t.replace(/\s+/g, " ").trim()).filter((t) => /adicionar|criar|salvar|enviar|cancelar/i.test(t));
+    log(`  janelas abertas ${nd} · botões nelas ${JSON.stringify(bts)} · botões Adicionar/Criar na página ${JSON.stringify(tudo)} · título Criar Ticket visível ${await p.getByText(/Criar Ticket/i).first().isVisible().catch(() => false)}`); }
   log(`  janela Criar Ticket: campos ${JSON.stringify(cj.rot)} · Observação ${(await ob.count()) ? "sim" : "não"} · Adicionar ${cj.lib === null ? "não achado" : cj.lib ? "liberado" : "BLOQUEADO"}`);
   if (cj.lib === false) throw new Error("o botão Adicionar está bloqueado (falta preencher algum campo da janela)");
   if (teste) { log(`  TESTE: volumes selecionados ${marcados.length}; NÃO cliquei em Adicionar`); await p.keyboard.press("Escape"); await p.waitForTimeout(600); if (await p.locator("[role=dialog]").count()) await d.getByRole("button", { name: /cancelar|fechar/i }).first().click().catch(() => {}); return { teste: true }; }
