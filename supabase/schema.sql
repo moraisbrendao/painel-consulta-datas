@@ -4318,3 +4318,65 @@ end $$;
 revoke all on function public.link_desempenho(text) from public;
 grant execute on function public.link_desempenho(text) to anon, authenticated;
 notify pgrst, 'reload schema';
+-- 94) Link das transportadoras (Brenda 27/11): o link deu "statement timeout".
+-- Mesma regra da parte 91, só mais rápida: primeiro separa os pedidos candidatos com os filtros baratos
+-- (transportadora, em aberto, expedido, prometido até amanhã / vencido), calcula a chave da NF uma vez
+-- e só depois olha ocorrências, reposição, barrar e troca de notas.
+create or replace function public.link_pendentes(p_token text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; r jsonb; sem_nf text[];
+begin
+  l := public._link_de(p_token);
+  update public.transp_links set ultimo_acesso = now(), acessos = acessos + 1 where id = l.id;
+  select coalesce(array_agg(distinct public.chave_nf(h.nota_ticket)), '{}') into sem_nf
+    from public.repo_hist h
+    left join public.reposicoes_tk rt on rt.ticket = h.ticket
+   where h.envio_id = (select max(id) from public.repo_envios)
+     and coalesce(h.nota_ticket, '') <> ''
+     and coalesce(rt.status, '') !~* 'RESOLVID|ENCERRAD'
+     and coalesce(h.fila_atual, '') !~* 'RECUPERA'
+     and (coalesce(h.fila_atual, '') ~* 'AGUARDANDO FATURAMENTO|CONFIRMAR NOVA DATA|DIGITAR PEDIDO DE REPOSI|UPLOAD DE ARQUIVO'
+          or not exists (select 1 from public.repo_hist y where y.ticket = h.ticket and y.nf_nova <> ''));
+  with cand as materialized (
+    select b.pedido, b.nf, public.chave_nf(b.nf) as k, b.transportadora, b.cidade, b.uf, b.extra ->> 'cep' as cep,
+           coalesce(b.prev_original, b.prev_atual) as prometido, b.micro_status, b.data_expedicao, t.nova_data
+      from public.base_pedidos b
+      left join public.tratativas t on t.pedido = b.pedido
+     where b.transportadora = any (l.transportadoras)
+       and b.data_expedicao is not null
+       and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+       and trim(coalesce(b.status_intelipost, '')) !~* '^(despachado|falha ao criar|criado|pr[eé][- ]?lista)'
+       and (t.nova_data is null or t.nova_data < hoje)
+       and (coalesce(b.prev_original, b.prev_atual) <= hoje + 1 or coalesce(b.range_atrasos, '') ilike 'vencido%' or t.nova_data < hoje)
+  ), ok as materialized (
+    select c.* from cand c
+     where not exists (select 1 from public.intelipost_fechados f where f.pedido = c.pedido)
+       and not exists (select 1 from public.ocorrencias_tk z where z.nf = c.k and coalesce(z.status, '') ilike 'novo%')
+       and not (c.k = any (sem_nf))
+       and not exists (select 1 from public.barrar_entrega z where z.nf = c.k and z.decisao = 'barrar' and z.portal_status = 'feito')
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido', c.pedido, 'nf', c.nf, 'transportadora', c.transportadora, 'cidade', c.cidade, 'uf', c.uf, 'cep', nullif(regexp_replace(coalesce(c.cep, ''), '\D', '', 'g'), ''),
+           'prometido', c.prometido, 'micro', c.micro_status, 'expedicao', c.data_expedicao,
+           'nova_antiga', c.nova_data,
+           'barrar', be.nf is not null,
+           'oc_msg', case when o.nf is not null then left(o.mensagem, 500) end, 'oc_em', o.mensagem_em, 'oc_motivo', o.motivo,
+           'nf_repo', tn.nf_repo, 'repo_tipo', tn.tipo) order by c.prometido, c.pedido), '[]'::jsonb)
+    into r
+    from ok c
+    left join lateral (select x.nf from public.barrar_entrega x where x.na_planilha and x.nf = c.k limit 1) be on true
+    left join lateral (select x.nf, x.mensagem, x.mensagem_em, x.motivo from public.ocorrencias_tk x
+                        where x.nf = c.k and coalesce(x.status, '') ilike '%andamento%' and coalesce(x.solicitante, '') ilike 'multi%'
+                        order by x.mensagem_em desc nulls last limit 1) o on true
+    left join lateral (select x.nf_nova || case when x.serie is not null and position('-' in x.nf_nova) = 0 then '-' || x.serie else '' end as nf_repo, x.tipo
+                         from public.troca_notas x where x.pedido = c.pedido and coalesce(x.nf_nova, '') <> ''
+                        order by x.data_emissao desc nulls last limit 1) tn on true;
+  insert into public.link_acessos (link_id, nome, qtd, pedidos)
+  select l.id, l.nome, jsonb_array_length(r), coalesce(array(select e ->> 'pedido' from jsonb_array_elements(r) e), '{}');
+  return jsonb_build_object('nome', l.nome, 'hoje', hoje, 'itens', r);
+end $$;
+revoke all on function public.link_pendentes(text) from public;
+grant execute on function public.link_pendentes(text) to anon, authenticated;
+create index if not exists repo_hist_envio on public.repo_hist (envio_id);
+
+notify pgrst, 'reload schema';

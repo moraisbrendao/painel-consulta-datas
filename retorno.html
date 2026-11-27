@@ -154,7 +154,9 @@
     async function carregar() {
       if (!token) { erro("Link incompleto. Peça o link de retorno para a Logística da Multimóveis."); return; }
       try {
-        const r = await rpc("link_pendentes", { p_token: token });
+        let r; for (let t = 1; ; t++) { try { r = await rpc("link_pendentes", { p_token: token }); break; }   // banco ocupado: tenta de novo sozinho (até 3 vezes)
+          catch (e) { if (t >= 3 || !/timeout|tempo|falar com o sistema/i.test(e.message)) throw /timeout/i.test(e.message) ? new Error("O sistema está ocupado agora. Atualize a página em alguns minutos.") : e;
+            $("explica").textContent = "Carregando… o sistema está ocupado, tentando de novo."; await new Promise((ok) => setTimeout(ok, 2500 * t)); } }
         itens = r.itens || []; hoje = r.hoje;
         $("titulo").textContent = `Retorno de entregas · ${r.nome}`;
         document.title = `Retorno de entregas · ${r.nome}`;
