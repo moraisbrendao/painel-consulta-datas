@@ -1515,7 +1515,7 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 #rp-at tr.at-cli:hover { background: #fffbea; }
 #rp-at .at-barra { height: 10px; border-radius: 5px; background: var(--amarelo-escuro, #e0a800); min-width: 4px; }
 #rp-at td.num, #rp-at th.num { text-align: right; }
-#rp-at .at-duas { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+#rp-at .at-duas { display: grid; grid-template-columns: 1fr; gap: 16px; }
 #rp-at .at-duas h3 { margin: 0 0 6px; font-size: 14px; }
 @media (max-width: 900px) { #rp-at .at-duas { grid-template-columns: 1fr; } }
 .rpp-ia { background: #eef4ff; border: 1px dashed #7a9be0; color: #1d3a7a; border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 4px 0; }
@@ -1525,3 +1525,16 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 .rpp-caso.sel { outline: 2px solid #f2b705; }
 .rpp-selbar label, .rpp-sel { flex-direction: row !important; white-space: nowrap; }
 .rpp-selbar input, .rpp-sel input { width: auto !important; margin: 0; }
+#rp-at h2.at-sec { margin: 22px 0 10px; font-size: 15px; text-transform: uppercase; letter-spacing: .04em; color: var(--marinho); border-left: 4px solid var(--amarelo); padding-left: 10px; }
+#rp-at .at-quem { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+#rp-at .at-quem-b { text-align: left; font: inherit; background: #fff; border: 1px solid var(--borda); border-left-width: 5px; border-radius: 10px; padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 4px; }
+#rp-at .at-quem-b.ativa { background: #fff8e1; outline: 2px solid var(--amarelo); }
+#rp-at .at-quem-n { font-size: 22px; font-weight: 800; color: var(--marinho); }
+#rp-at .at-quem-u { color: #b42318; font-weight: 700; font-size: 12px; }
+#rp-at .at-q-mm { border-left-color: #1d4ed8; } #rp-at .at-q-tp { border-left-color: #e08a00; } #rp-at .at-q-cl { border-left-color: #7c3aed; } #rp-at .at-q-fo { border-left-color: #64748b; }
+#rp-at .at-quem-chip { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; background: #eef2f7; border-left: 4px solid #94a3b8; white-space: nowrap; }
+#rp-at .at-reinc { display: inline-block; font-size: 11px; font-weight: 700; color: #b42318; background: #fde8e8; border-radius: 999px; padding: 1px 7px; }
+#rp-at .at-custo-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin-bottom: 12px; }
+#rp-at .at-custo-cards > div { border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
+#rp-at .at-custo-cards b { font-size: 20px; color: var(--marinho); }
+@media (max-width: 700px) { #rp-at .at-custo-cards { grid-template-columns: 1fr; } }
