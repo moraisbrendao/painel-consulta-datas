@@ -850,8 +850,12 @@ if (MODO === "diag-lote2") {   // estrutura da resposta em lote (só tags, atrib
 if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai para o código nem para o log)
   const { createHash } = await import("node:crypto"); await entrarSupabase(); await carregarSenhasDB();
   const alvo = process.env.ALVO_HASH || (/^[0-9a-f]{16}$/.test(process.env.TRANSP || "") ? process.env.TRANSP : "06c17d56f26512c0"); let l = null;
-  for (let de = 0; !l; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,situacao,ultimo_evento,data_evento,data_entrega,consultado_em,detalhe&order=pedido&limit=1000&offset=${de}`);
-    l = L.find((x) => createHash("sha256").update(x.pedido).digest("hex").slice(0, 16) === alvo) || null; if (L.length < 1000) break; }
+  for (let de = 0; !l; de += 1000) { const L = await chamar(`conferencia_ssw?select=pedido,nf,transportadora,status_intelipost,situacao,ultimo_evento,data_evento,data_entrega,consultado_em,detalhe&order=pedido&limit=1000&offset=${de}`);
+    const hh = (t) => createHash("sha256").update(String(t || "")).digest("hex").slice(0, 16);
+    l = L.find((x) => hh(x.pedido) === alvo || hh(String(x.nf || "").split("-")[0].trim()) === alvo) || null; if (L.length < 1000) break; }
+  if (l) { const pv = await chamar(`previsao_ssw?select=situacao,previsao,consultado_em&pedido=eq.${encodeURIComponent(l.pedido)}`).catch(() => []);
+    const bp = await chamar(`base_pedidos?select=status_intelipost,micro_status,data_entrega&pedido=eq.${encodeURIComponent(l.pedido)}`).catch(() => []);
+    log("previsao_ssw:", JSON.stringify(pv), "· base:", JSON.stringify(bp), "· status_intelipost na conferência:", l.status_intelipost); }
   if (!l) log("não achei"); else {
     const [num, ser] = String(l.nf).split("-"), cs = cnpjDaSerie(ser);
     log("transp:", l.transportadora, "· série", ser, "· situação", l.situacao, "· evento", l.ultimo_evento, "· data_evento", l.data_evento, "· entrega", l.data_entrega, "· consultado", l.consultado_em, "· detalhe", JSON.stringify(l.detalhe || {}).replace(/\d{5,}/g, "#"));
