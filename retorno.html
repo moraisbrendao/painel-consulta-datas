@@ -25,6 +25,7 @@
     .chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: #eef1f6; }
     .chip.verm { background: var(--vermelho-f); color: var(--vermelho); }
     .chip.amar { background: #fff1c9; color: #7a5a00; }
+    .campos .d-furo { grid-column: 1 / -1; background: #fdecec; border: 1px dashed #f3b2ad; color: #7a1f1a; border-radius: 8px; padding: 4px 8px; font-size: 12.5px; text-align: center; }
     .chip.verde { background: #e6f6ec; color: #145c33; }
     .ped .retorno { grid-column: 1 / -1; background: #f0f7f2; border: 1px solid #cfe9d8; border-radius: 10px; padding: 7px 10px; font-size: 13.5px; line-height: 1.5; }
     .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
@@ -207,6 +208,7 @@
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
             <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
+            ${x.nova_antiga && !fs ? `<div class="d-furo">🥺 Poxa vida, você não cumpriu com a data prometida. Vamos tentar de novo?</div>` : ""}
             <input class="sku" maxlength="200" placeholder="SKU do item que está faltando" value="${esc(ra.sku || "")}"${ra.motivo === "Falta de volumes" ? "" : " hidden"} aria-label="SKU do item">
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>
