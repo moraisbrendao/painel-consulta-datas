@@ -49,7 +49,8 @@
     const sel = $("lk-transp"), atual = sel.value;
     sel.innerHTML = `<option value="">Escolha a transportadora…</option>` + [...g.keys()].sort((a, b) => a.localeCompare(b, "pt-BR")).map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("");
     sel.value = atual; lkGrupos = g;
-    $("lk-linhas").innerHTML = ativos.map((l) => `<tr>
+    const fT = sel.value;   // a lista de links também segue a transportadora escolhida
+    $("lk-linhas").innerHTML = ativos.filter((l) => !fT || l.nome === fT).map((l) => `<tr>
         <td><b>${esc(l.nome)}</b>${l.transportadoras.length > 1 ? `<div class="s">${esc(l.transportadoras.join(" · "))}</div>` : ""}</td>
         <td class="num">${fmt(pendentes(l.transportadoras))}</td>
         <td>${quando(l.ultimo_acesso)}<div class="s">${fmt(l.acessos)} acesso(s)</div></td>
@@ -195,7 +196,7 @@
   }
   if ($("lkk")) {
     $("lkk-dias").addEventListener("change", carregarKpi);
-    $("lk-transp").addEventListener("change", () => { if (kd) desenharKpi(); });
+    $("lk-transp").addEventListener("change", () => { desenhar(); if (kd) desenharKpi(); });
     $("lkk").addEventListener("click", (e) => { const a = e.target.closest("[data-lkk]"); if (a) abrirLista(a.dataset.lkkNome, a.dataset.lkk); });
     $("lkk-excel").addEventListener("click", () => {
       if (!kLin.length) return toast("Sem dados no período.", true);
