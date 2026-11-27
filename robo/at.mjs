@@ -22,8 +22,9 @@ export async function lerPecas(p) {
       if (linhas.length) {
         const iC = linhas.findIndex((l) => l.some((c) => /^SKU$/i.test(c)));
         cab = iC >= 0 ? linhas[iC] : null;
-        const iS = cab ? cab.findIndex((c) => /^SKU$/i.test(c)) : -1, iQ = cab ? cab.findIndex((c) => /^Qtde?$/i.test(c)) : -1, iP = cab ? cab.findIndex((c) => /^Pe[cç]a/i.test(c)) : 0;
-        pecas = linhas.slice(iC + 1).filter((l) => l.some(Boolean)).map((l) => ({ peca: l[iP] || "", sku: iS >= 0 ? l[iS] || "" : "", qtde: iQ >= 0 ? Number(String(l[iQ]).replace(",", ".")) || null : null }));
+        const iS = cab ? cab.findIndex((c) => /^SKU$/i.test(c)) : -1, iQ = cab ? cab.findIndex((c) => /^Qtde?$/i.test(c)) : -1;
+        let iP = cab ? cab.findIndex((c) => /pe[cç]a|descri|nome|produto/i.test(c) && !/^SKU$/i.test(c)) : 0; if (iP < 0) iP = iS >= 0 ? iS + 1 : 0;   // descrição fica logo depois do SKU
+        pecas = linhas.slice(iC + 1).filter((l) => l.some(Boolean) && !(iQ >= 0 && !String(l[iQ] || "").trim() && iS >= 0 && !/\d/.test(l[iS] || "")))   // sem a linha de rodapé (sem qtde e sem código).map((l) => ({ peca: l[iP] || "", sku: iS >= 0 ? l[iS] || "" : "", qtde: iQ >= 0 ? Number(String(l[iQ]).replace(",", ".")) || null : null }));
       } else {   // sem tabela: texto em linhas depois do cabeçalho "Qtde"
         const L = (d.innerText || "").split("\n").map(limpa).filter(Boolean);
         const iQ = L.findIndex((l) => /^Qtde?$/i.test(l));
@@ -37,8 +38,10 @@ export async function lerPecas(p) {
 }
 
 export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
-  const T = await chamar("at_tk?select=ticket,nota_at,transp_envio,transp_promob,redesp_promob,pecas_em,rastreio,rastreio_em&na_planilha=eq.true&order=criado_em.desc&limit=5000");
-  const semPeca = T.filter((x) => !x.pecas_em).slice(0, limite);
+  const T = await chamar("at_tk?select=ticket,nota_at,transp_envio,transp_promob,redesp_promob,pecas,pecas_em,rastreio,rastreio_em&na_planilha=eq.true&order=criado_em.desc&limit=5000");
+  // relê quem foi lido com a versão antiga (peça sem descrição ou linha de rodapé)
+  const velho = (x) => (x.pecas || []).some((y) => !y.peca || (y.qtde == null && !/\d/.test(y.sku || "")));
+  const semPeca = T.filter((x) => !x.pecas_em || velho(x)).slice(0, limite);
   const H = 20 * 3600000;
   const rast = T.filter((x) => x.nota_at && !/^entregue/i.test((x.rastreio && x.rastreio.situacao) || "") && (!x.rastreio_em || Date.now() - Date.parse(x.rastreio_em) > H));
   log(`AT: ${T.length} tickets na planilha · ${semPeca.length} para ler peças · ${rast.length} para rastrear`);
