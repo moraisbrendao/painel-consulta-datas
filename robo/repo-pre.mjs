@@ -6,6 +6,7 @@
 import fs from "node:fs";
 import { entrarPortal } from "./barrar.mjs";
 import { abrirRepoPre, acharLinha } from "./anota-portal.mjs";
+import { entrarMulti360 } from "./multi360.mjs";
 
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 80);
 let zx = null;
@@ -75,4 +76,40 @@ export async function diagRepoPre({ chamar, log, ctx, alvo, createHash }) {
     log(`Foto ${i + 1}: códigos lidos ${Array.isArray(cb) ? lista.length : "erro " + cb.erro} · algum com a NF: ${nossa.length ? "sim" : "não"}${nossa.length ? " · volume/total pelo código: " + nossa.map((c) => c.slice(-4, -2) + "/" + c.slice(-2)).join(", ") : ""}`);
     log(`   leitura de texto: ${txt ? txt.length + " letras" : "falhou"} · tem a NF: ${T.includes(num) ? "sim" : "não"} · "VOL. NF" ${(T.match(/VOL\.?\s*NF\s*:?\s*(\d{1,2})\s*\/\s*(\d{1,2})/) || []).slice(1).join("/") || "não achei"} · códigos de volume ${[...new Set(T.match(/\b\d{5}\.\d{4}\b/g) || [])].join(", ") || "nenhum"}`);
   }
+}
+
+// 360 › Hub › Pedidos › Filtros › NF: achou = venda. Abre o pedido e lê o SKU (Produtos do Pedido) e os tickets (fila / tipo / situação).
+// Nada de nome, CPF, telefone ou endereço: só SKU, filas, tipos e situação.
+export async function pedido360(ctx, log, nf) {
+  const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
+  const m = await entrarMulti360(ctx, log);
+  await m.goto(BASE + "/pedidos/hub", { waitUntil: "domcontentloaded" }); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  await m.getByRole("button", { name: /filtros/i }).first().click(); await m.waitForTimeout(1200);
+  const campo = m.locator("xpath=//*[normalize-space(text())='NF']/following::input[1]").first();
+  await campo.fill(nf); await m.getByRole("button", { name: /aplicar filtros/i }).first().click();
+  await m.waitForTimeout(4000); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  const linhas = m.locator("table tbody tr"); const n = await linhas.count();
+  const cab = (await m.locator("table thead th").allTextContents()).map((t) => t.trim());
+  const iNf = cab.findIndex((h) => /^NF$/i.test(h));
+  let alvo = null;
+  for (let i = 0; i < n; i++) { const t = ((await linhas.nth(i).locator("td").nth(Math.max(0, iNf)).innerText().catch(() => "")) || "").trim(); if (t === nf) { alvo = linhas.nth(i); break; } }
+  const r = { venda: !!alvo, linhas: n, sku: [], tickets: [] };
+  if (!alvo) return r;
+  const st = cab.findIndex((h) => /status/i.test(h)); r.status = st >= 0 ? ((await alvo.locator("td").nth(st).innerText().catch(() => "")) || "").trim() : "";
+  await alvo.locator("td").first().click(); await m.waitForTimeout(4000); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
+  if (!/Tickets do Pedido/i.test(await m.locator("body").innerText())) { await alvo.locator("a").first().click().catch(() => {}); await m.waitForTimeout(4000); }
+  const corpo = await m.locator("body").innerText();
+  const prod = corpo.split(/Produtos do Pedido/i)[1] || ""; r.sku = [...new Set(prod.match(/\b[A-Z0-9]{2,}[A-Z0-9-]*\.\d{3}\b/g) || [])];
+  const tk = (corpo.split(/Tickets do Pedido/i)[1] || "").split(/Informa[cç][oõ]es do Pedido|Produtos do Pedido/i)[0];
+  r.semTickets = /Nenhum ticket vinculado/i.test(tk);
+  for (const b of tk.split(/\bID:\s*/).slice(1)) r.tickets.push({ fila: ((b.match(/Fila:\s*([^\n]+)/) || [])[1] || "").trim(), tipo: ((b.match(/Tipo:\s*([^\n]+(?:\n[^\n:]+\))?)/) || [])[1] || "").replace(/\s+/g, " ").trim(), situacao: ((b.match(/\n(Em Andamento|Resolvido|Encerrado|Fechado|Novo|Aberto|Pendente)[^\n]*/i) || [])[1] || "").trim() });
+  return r;
+}
+export async function diag360({ chamar, log, ctx, alvo, createHash }) {
+  const hh = (t) => createHash("sha256").update(String(t || "")).digest("hex").slice(0, 16); let nf = null;
+  for (let de = 0; !nf; de += 1000) { const B = await chamar(`base_pedidos?select=nf&order=pedido&limit=1000&offset=${de}`).catch(() => []); const x = B.find((b) => hh(String(b.nf || "").split("-")[0].trim()) === alvo); if (x) nf = x.nf; if (B.length < 1000) break; }
+  if (!nf) { log("diag-repo360: NF não achada na base"); return; }
+  const r = await pedido360(ctx, log, nf);
+  log(`360: linhas depois do filtro ${r.linhas} · é venda (achou a NF): ${r.venda ? "sim" : "não"} · status ${r.status || "—"} · SKU ${r.sku.join(", ") || "nenhum"} · sem tickets: ${r.semTickets ? "sim" : "não"}`);
+  for (const t of r.tickets) log(`   ticket: fila ${t.fila || "—"} · tipo ${t.tipo || "—"} · situação ${t.situacao || "—"}`);
 }
