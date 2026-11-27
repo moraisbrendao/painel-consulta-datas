@@ -288,9 +288,16 @@ async function printSolicitacao(p, linha) {
     await p.keyboard.press("Escape"); await p.waitForTimeout(700); }
   const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim()); const ia = ths.findIndex((h) => /anexo/i.test(h));
   const ba = ia >= 0 ? linha.locator("td").nth(ia).locator("button, a").first() : null;
-  if (ba && await ba.count()) { await ba.click().catch(() => {}); await p.waitForTimeout(3000);
-    try { out.prints.push({ name: "solicitacao-foto.png", mimeType: "image/png", buffer: await p.screenshot() }); } catch (_) {}
-    await p.keyboard.press("Escape"); await p.waitForTimeout(700); }
+  if (ba && await ba.count()) {
+    // a foto pode ser um link (abre outra página): tira o print numa aba separada e não sai da lista do portal
+    const href = await ba.getAttribute("href").catch(() => null);
+    if (href) { const q = await p.context().newPage(); try { await q.goto(new URL(href, p.url()).href, { timeout: 30000 }); await q.waitForTimeout(1500); out.prints.push({ name: "solicitacao-foto.png", mimeType: "image/png", buffer: await q.screenshot() }); } catch (_) {} finally { await q.close().catch(() => {}); } }
+    else { const url0 = p.url(); const nova = p.context().waitForEvent("page", { timeout: 2500 }).catch(() => null);
+      await ba.click().catch(() => {}); const q = await nova; await p.waitForTimeout(2500);
+      try { out.prints.push({ name: "solicitacao-foto.png", mimeType: "image/png", buffer: await (q || p).screenshot() }); } catch (_) {}
+      if (q) await q.close().catch(() => {});
+      await p.keyboard.press("Escape").catch(() => {}); await p.waitForTimeout(700);
+      if (p.url() !== url0) throw new Error("a foto saiu da lista do portal"); } }
   if (!out.prints.length) { try { out.prints.push({ name: "solicitacao.png", mimeType: "image/png", buffer: await p.screenshot() }); } catch (_) {} }
   return out;
 }
@@ -328,26 +335,27 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
   for (const x of L) {
     // Avaria: os volumes marcados são os AVARIADOS (repõe esses); Falta/Extravio: marcados = em posse (repõe os outros)
     const repor = /avaria/i.test(x.motivo || "") ? (x.vol_posse || []) : (x.volumes || []).filter((v) => !(x.vol_posse || []).includes(v));
+    let etapa = "início";
     try {
       if (!repor.length) throw new Error("nenhum volume para repor");
       if (x.tem_devolucao || x.venda === false) throw new Error("caso para conferir à mão (devolução ou não é venda)");
       let linha = await acharLinha(p, x.nf); if (!linha) throw new Error("NF não está mais como Novo na lista do portal");
-      const sol = await printSolicitacao(p, linha);
+      etapa = "print da solicitação"; const sol = await printSolicitacao(p, linha);
       const jad = /jadlog/i.test(x.transp || "") ? (sol.anot.split(/\n+/).find((l) => /cnpj|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/i.test(l)) || "").trim().toUpperCase() : "";
       if (/jadlog/i.test(x.transp || "") && !jad) log("  Jadlog: não achei CNPJ na anotação (sigo sem)");
       if (!x.ticket_portal_ok) {
-        linha = await acharLinha(p, x.nf);
+        etapa = "criar ticket no portal"; linha = await acharLinha(p, x.nf); if (!linha) throw new Error("a NF sumiu da lista depois do print");
         const c = await criarTicketPortal(p, linha, repor, teste, log);
         if (!teste) await patch(x, { ticket_portal_ok: true, solicitar_msg: "Ticket criado no portal; falta o comentário no 360" });
       }
       // rastreio SSW da transportadora que pediu (a do portal)
-      const r = await B.rastrear({ nf: x.nf, transp_pedido: x.transp || "" }, R).catch(() => null);
+      etapa = "rastreio"; const r = await B.rastrear({ nf: x.nf, transp_pedido: x.transp || "" }, R).catch(() => null);
       const arquivos = [];
       if (r) arquivos.push({ name: `rastreio-${x.nf}.png`, mimeType: "image/png", buffer: await B.printRastreio(ctx, x.nf, r) });
       arquivos.push(...sol.prints);
       if (teste) { log(`  TESTE: prints prontos ${arquivos.length} (rastreio ${r ? r.fonte + "/" + r.situacao : "não achado"}) · CNPJ Jadlog ${jad ? "sim" : "não"}`); await patch(x, { solicitar_msg: `Teste OK em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}: nada foi criado.` }); continue; }
       // 360: o ticket de Reposição aparece no pedido alguns segundos depois
-      let tk = null;
+      etapa = "comentário no 360"; let tk = null;
       for (let i = 0; i < 4 && !tk; i++) { if (i) await new Promise((ok) => setTimeout(ok, 30000));
         const q = await pedido360(ctx, log, x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || ""));
         tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null; }
@@ -358,8 +366,10 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
       await M.comentarioInterno(pedido360.pg, tk.id, texto, arquivos);
       await patch(x, { solicitar_status: "feito", ticket_360: tk.id, solicitar_msg: `Ticket do portal criado e comentário com ${arquivos.length} print(s) no ticket ${tk.id}.`, feito_em: new Date().toISOString() });
       log(`  feito: ticket portal + comentário 360 (${arquivos.length} prints)`);
-    } catch (e) { const msg = String(e.message).split("\n")[0].slice(0, 200); log("  erro: " + msg.replace(/\d{4,}/g, "#"));
+    } catch (e) { const msg = (`[${etapa}] ` + String(e.message).split("\n")[0]).slice(0, 220); log("  erro: " + msg.replace(/\d{4,}/g, "#"));
       await patch(x, { solicitar_status: /tento de novo/.test(msg) ? "pendente" : "erro", solicitar_msg: msg }).catch(() => {});
-      await p.keyboard.press("Escape").catch(() => {}); }
+      // volta para a lista limpa antes do próximo caso (janela/menu aberto travava o caso seguinte)
+      await p.keyboard.press("Escape").catch(() => {}); await p.keyboard.press("Escape").catch(() => {});
+      try { await abrirRepoPre(p, log); await aplicarNovo(p, log); } catch (_) {} }
   }
 }
