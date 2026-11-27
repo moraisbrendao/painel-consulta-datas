@@ -5061,3 +5061,104 @@ begin
   return jsonb_build_object('nome', l.nome, 'hoje', hoje, 'itens', r, 'retornados', ret);
 end $$;
 notify pgrst, 'reload schema';
+
+-- parte 106 (Brenda 27/11): Assistência Técnica › visão gerencial
+-- fonte: detalhamento de tickets, aba "Assistência Técnica" (cada upload vira uma foto em at_hist)
+-- robô: peças de cada ticket no 360 (Eventos › Peças de Assistência) e rastreio da Nota AT na transportadora
+create table if not exists public.at_tk (
+  ticket text primary key,
+  criado_em timestamptz,
+  fila text,
+  grupo text,
+  nota_ticket text,
+  pedido text,
+  transp_envio text,
+  nota_at text,
+  data_saida date,
+  transp_promob text,
+  redesp_promob text,
+  na_planilha boolean not null default true,
+  visto_em timestamptz,
+  saiu_em timestamptz,
+  pecas jsonb,
+  pecas_em timestamptz,
+  pecas_msg text,
+  rastreio jsonb,
+  rastreio_em timestamptz
+);
+create table if not exists public.at_hist (
+  envio_em timestamptz not null,
+  ticket text not null,
+  fila text,
+  grupo text,
+  nota_at text,
+  data_saida date,
+  primary key (envio_em, ticket)
+);
+alter table public.at_tk enable row level security;
+alter table public.at_hist enable row level security;
+drop policy if exists at_tk_ler on public.at_tk;
+create policy at_tk_ler on public.at_tk for select to authenticated using ((select not public.e_sac()));
+drop policy if exists at_hist_ler on public.at_hist;
+create policy at_hist_ler on public.at_hist for select to authenticated using ((select not public.e_sac()));
+grant select on public.at_tk, public.at_hist to authenticated;
+
+-- upload da aba (em lotes): o 1º lote (limpar=true) marca todos como fora da planilha; quem vier volta para dentro
+create or replace function public.importar_at(linhas jsonb, envio_em timestamptz, limpar boolean default false)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  perform set_config('statement_timeout', '120s', true);
+  if limpar then update public.at_tk set na_planilha = false where na_planilha; end if;
+  insert into public.at_tk as a (ticket, criado_em, fila, grupo, nota_ticket, pedido, transp_envio, nota_at, data_saida, transp_promob, redesp_promob, na_planilha, visto_em, saiu_em)
+  select x.ticket, x.criado_em, x.fila, x.grupo, x.nota_ticket, x.pedido, x.transp_envio, nullif(x.nota_at, ''), x.data_saida, x.transp_promob, x.redesp_promob, true, envio_em, null
+    from jsonb_to_recordset(linhas) as x(ticket text, criado_em timestamptz, fila text, grupo text, nota_ticket text, pedido text, transp_envio text, nota_at text, data_saida date, transp_promob text, redesp_promob text)
+   where coalesce(x.ticket, '') <> ''
+  on conflict (ticket) do update set criado_em = excluded.criado_em, fila = excluded.fila, grupo = excluded.grupo, nota_ticket = excluded.nota_ticket,
+    pedido = excluded.pedido, transp_envio = excluded.transp_envio, nota_at = excluded.nota_at, data_saida = excluded.data_saida,
+    transp_promob = excluded.transp_promob, redesp_promob = excluded.redesp_promob, na_planilha = true, visto_em = excluded.visto_em, saiu_em = null,
+    -- Nota AT mudou: rastreio antigo não vale mais
+    rastreio = case when a.nota_at is distinct from excluded.nota_at then null else a.rastreio end,
+    rastreio_em = case when a.nota_at is distinct from excluded.nota_at then null else a.rastreio_em end;
+  get diagnostics n = row_count;
+  insert into public.at_hist (envio_em, ticket, fila, grupo, nota_at, data_saida)
+  select envio_em, x.ticket, x.fila, x.grupo, nullif(x.nota_at, ''), x.data_saida
+    from jsonb_to_recordset(linhas) as x(ticket text, fila text, grupo text, nota_at text, data_saida date)
+   where coalesce(x.ticket, '') <> ''
+  on conflict do nothing;
+  return n;
+end $$;
+revoke all on function public.importar_at(jsonb, timestamptz, boolean) from public, anon;
+grant execute on function public.importar_at(jsonb, timestamptz, boolean) to authenticated;
+
+-- fim do upload: quem não veio na planilha saiu da AT (fechado)
+create or replace function public.fechar_at(envio_em timestamptz)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  update public.at_tk set saiu_em = coalesce(saiu_em, envio_em) where not na_planilha and saiu_em is null;
+  get diagnostics n = row_count; return n;
+end $$;
+revoke all on function public.fechar_at(timestamptz) from public, anon;
+grant execute on function public.fechar_at(timestamptz) to authenticated;
+
+-- botão "Ler peças e rastreio agora" (robô modo at)
+create or replace function public.rodar_robo_at()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', 'at')));
+end $$;
+revoke all on function public.rodar_robo_at() from public, anon;
+grant execute on function public.rodar_robo_at() to authenticated;
+notify pgrst, 'reload schema';

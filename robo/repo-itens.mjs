@@ -8,7 +8,7 @@ import { entrarMulti360 } from "./multi360.mjs";
 const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
 export const RE_VOL = /(\d{5}\.\d{4})\s*[-–]\s*([^\n]{3,120})/g;
 
-async function abrir(p, ticket) {
+export async function abrir(p, ticket) {
   await p.goto(`${BASE}/tickets/${encodeURIComponent(ticket)}`, { waitUntil: "domcontentloaded" });
   await p.getByRole("button", { name: /executar a[cç][aã]o no ticket/i }).first().waitFor({ timeout: 60000 });
   await p.waitForTimeout(1500);

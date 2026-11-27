@@ -1556,6 +1556,15 @@ if (MODO === "diag-sla") {   // Reposição: lê o SLA de 3 tickets em aberto (s
   const nav = await chromium.launch(); const ctx = await nav.newContext();
   try { await (await import("./repo-itens.mjs")).diagSla({ chamar, log, ctx }); } finally { await nav.close(); }
 }
+if (MODO === "at") {   // Assistência Técnica: peças no 360 + rastreio da Nota AT (robo/at.mjs). TRANSP=pecas|rastreio faz só uma parte.
+  await entrarSupabase(); await carregarSenhasDB();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  try { await (await import("./at.mjs")).rodarAt({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 150, so: process.env.TRANSP || "",
+      R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } }); }
+  catch (e) { log("at: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
+  finally { await nav.close(); }
+}
 if (MODO === "diag-at") {   // Assistência Técnica: onde o 360 mostra a peça (robo/repo-itens.mjs diagAt) — só formato no log
   await entrarSupabase();
   const { chromium } = await import("playwright");

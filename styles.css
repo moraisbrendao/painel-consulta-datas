@@ -1506,3 +1506,12 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 .sac-ocinv .ocinv-item:first-of-type { border-top: 0; }
 .sac-ocinv .ocinv-item b { color: #8a1414; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .sac-ocinv { background: #3a1616; border-color: #e05555; } :root:not([data-theme="light"]) .sac-ocinv h2, :root:not([data-theme="light"]) .sac-ocinv .ocinv-item b { color: #ffb4b4; } }
+
+/* Assistência Técnica (at.js, parte 106) */
+#rp-at .at-filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+#rp-at .at-filtros label { display: flex; flex-direction: column; font-size: 12px; gap: 4px; }
+#rp-at td.at-ruim { color: #b42318; font-weight: 700; }
+#rp-at tr.at-cli { cursor: pointer; }
+#rp-at tr.at-cli:hover { background: #fffbea; }
+#rp-at .at-barra { height: 10px; border-radius: 5px; background: var(--amarelo-escuro, #e0a800); min-width: 4px; }
+#rp-at td.num, #rp-at th.num { text-align: right; }

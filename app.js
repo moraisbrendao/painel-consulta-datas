@@ -4680,7 +4680,8 @@ ${extra}
     carregando("");
     const avisoOc = wbDet && window.__ocorr ? await window.__ocorr.enviar(wbDet, arq.name).catch((err) => " · ocorrências: " + err.message) : "";
     const avisoSai = wbDet ? await guardarSaidasTk(wbDet).catch((err) => " · saídas: " + err.message) : "";
-    const avisoHist = (wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "") + avisoOc + avisoSai;
+    const avisoAt = wbDet ? await guardarAt(arq, wbDet).catch((err) => " · Assistência Técnica: " + err.message) : "";
+    const avisoHist = (wbDet ? await guardarHistRepo(arq, wbDet).catch((err) => " · histórico: " + err.message) : "") + avisoOc + avisoSai + avisoAt;
     carregando("Atualizando o painel…");
     try { await carregar(); } finally { carregando(""); }   // o histórico deixava a janela "Enviando…" aberta para sempre
     if (avisoHist && /guardados/.test(avisoHist)) carregarReposicoes();
@@ -4895,16 +4896,17 @@ ${extra}
     if ($("rp-faltas")) $("rp-faltas").hidden = repAba !== "faltas";
     if ($("rp-filas")) $("rp-filas").hidden = repAba !== "filasoc";
     if ($("rp-repopre")) $("rp-repopre").hidden = repAba !== "repopre";
+    if ($("rp-at")) $("rp-at").hidden = repAba !== "at";
     if (repAba === "sla") { repAba = "geral"; gargAberto = true; }   // a aba virou parte do card Gargalos por fila (Brenda 24/11)
     if ($("rp-sla")) $("rp-sla").hidden = !(repAba === "geral" && gargAberto);
-    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc" || repAba === "repopre"));
+    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc" || repAba === "repopre" || repAba === "at"));
     const fl = repAba === "pre" || repAba === "pos";
     repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
     if (repAba === "det" && pvDet) repFiltradas = repFiltradas.filter((r) => casaPv(r, pvDet));
     if (repAba === "det" && repFaixa >= 0) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && faixaFila(diasFila(r)) === repFaixa);
     if (repAba === "det" && pvDet && pvDet.slaFx != null) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && (pvDet.slaFx === -9 ? slaFx(r) >= 0 : slaFx(r) === pvDet.slaFx));
-    $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc", "sla", "repopre"].includes(repAba);
+    $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc", "sla", "repopre", "at"].includes(repAba);
     if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
   }
 
@@ -5572,7 +5574,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; volAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
-  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc", "sla", "repopre"].includes(s)) repAba = s; } catch (_) {}
+  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc", "sla", "repopre", "at"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
   // ---------------- "↶ Voltar" / Ctrl+Z em todas as abas ----------------
@@ -5744,6 +5746,35 @@ ${extra}
         if (!a || (x.nf_nova && (!a.nf_nova || String(x.data_emissao || "") > String(a.data_emissao || "")))) m.set(tk, a && !x.data_saida && a.nf_nova === x.nf_nova ? { ...x, data_saida: a.data_saida } : x); });
     }
     return [...m.values()];
+  }
+  // Assistência Técnica › visão gerencial (parte 106, Brenda 27/11): aba "Assistência Técnica" do detalhamento → at_tk + foto em at_hist
+  function lerAt(wb) {
+    const n = wb.SheetNames.find((x) => norm(x) === "ASSISTENCIA TECNICA"); if (!n) return [];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, raw: true, defval: null });
+    const iC = rows.findIndex((r) => r && r.some((c) => norm(c) === "ID TICKET")); if (iC < 0) return [];
+    const cab = rows[iC].map(norm), c = (...xs) => cab.findIndex((h) => xs.includes(h));
+    const txt = (v) => (v == null || v === "" ? null : String(v).trim().replace(/\.0+$/, ""));
+    const iso = (v, dia) => { if (v == null || v === "") return null; let d = null;
+      if (v instanceof Date) d = v; else if (typeof v === "number") { const q = XLSX.SSF.parse_date_code(v); d = q ? new Date(q.y, q.m - 1, q.d, q.H, q.M, q.S) : null; }
+      else { const t = dataCelula(v, true); return t ? (dia ? String(t).slice(0, 10) : t) : null; }
+      if (!d || isNaN(d)) return null;
+      return dia ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}` : d.toISOString(); };
+    const k = { t: c("ID TICKET"), cr: c("DATA CRIACAO TICKET"), f: c("FILA ATUAL"), g: c("GRUPO ATUAL"), nt: c("NOTA TICKET"), p: c("PEDIDO INTELIPOST"),
+      te: c("TRANSPORTADOR ENVIO AT TICKET"), na: c("NOTA AT EMITIDA"), ds: c("DATA SAIDA NOTA AT"), tp: c("TRANSPORTADORA PROMOB"), rd: c("TRANSPORTADORA REDESPACHO PROMOB") };
+    const v = (r, i) => (i >= 0 ? r[i] : null), m = new Map();
+    rows.slice(iC + 1).forEach((r) => { if (!r) return; const tk = txt(v(r, k.t)); if (!tk) return;
+      const x = { ticket: tk, criado_em: iso(v(r, k.cr)), fila: txt(v(r, k.f)), grupo: txt(v(r, k.g)), nota_ticket: txt(v(r, k.nt)), pedido: txt(v(r, k.p)),
+        transp_envio: txt(v(r, k.te)), nota_at: txt(v(r, k.na)), data_saida: iso(v(r, k.ds), true), transp_promob: txt(v(r, k.tp)), redesp_promob: txt(v(r, k.rd)) };
+      const a = m.get(tk); if (!a || (x.nota_at && !a.nota_at)) m.set(tk, x); });
+    return [...m.values()];
+  }
+  async function guardarAt(arq, wb) {
+    const L = lerAt(wb); if (!L.length) return "";
+    const envio_em = new Date(arq && arq.lastModified ? arq.lastModified : Date.now()).toISOString();
+    try { await enviarLotes("importar_at", L, 1000, (lote, primeiro) => ({ linhas: lote, envio_em, limpar: primeiro }), 0); await sb.rpc("fechar_at", { envio_em }); }
+    catch (err) { return /importar_at|function|schema cache/i.test(err.message) ? " · Assistência Técnica: falta rodar a parte 106 no Supabase" : " · Assistência Técnica: " + err.message; }
+    if (window.__at) window.__at.recarregar();
+    return ` · Assistência Técnica: ${fmt(L.length)} tickets`;
   }
   async function guardarSaidasTk(wb) {
     const L = lerSaidasTk(wb); if (!L.length) return "";

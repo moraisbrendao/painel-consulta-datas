@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=430">
+  <link rel="stylesheet" href="styles.css?v=431">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -936,6 +936,7 @@
         <button class="btn contorno" data-ra="faltas">📦 Inversão / Falta de volumes</button>
         <button class="btn contorno" data-ra="filasoc">🗂 Filas atualizadas e ocorrências</button>
         <button class="btn contorno" data-ra="repopre">🧩 Reposição pré · análise</button>
+        <button class="btn contorno" data-ra="at">🛠 Assistência Técnica</button>
       </div>
 
       <!-- 1) visão geral -->
@@ -1135,6 +1136,31 @@
             <tbody id="fv-linhas"></tbody></table></div>
           <p id="fv-mais" class="s"></p>
         </section>
+      </div>
+      <!-- 8) Assistência Técnica · visão gerencial (at.js, parte 106): aba AT do detalhamento + robô (peças no 360, rastreio da Nota AT) -->
+      <div id="rp-at" hidden>
+        <div class="titulo-pagina com-acoes">
+          <div>
+            <h2>🛠 Assistência Técnica · visão gerencial</h2>
+            <p class="sub">Tickets de AT da aba <b>Assistência Técnica</b> do detalhamento de tickets (cada upload guarda uma foto). O robô lê no 360 as <b>peças</b> de cada ticket e acompanha a <b>Nota AT</b> no rastreio da transportadora. A AT não tem prazo próprio: o que vale é a entrega.</p>
+            <p id="at-info" class="info-base">Carregando…</p>
+          </div>
+          <div class="acoes-robo">
+            <button id="at-rodar" class="btn amarelo" type="button">▶ Ler peças e rastreio</button>
+            <button id="at-excel" class="btn contorno" type="button">Baixar Excel</button>
+          </div>
+        </div>
+        <section class="filtros-cartao at-filtros">
+          <label>Transportadora<select id="at-f-transp"></select></label>
+          <label>Grupo<select id="at-f-grupo"></select></label>
+          <label>Busca<input id="at-busca" type="search" placeholder="# ticket, NF ou pedido"></label>
+        </section>
+        <section class="kpis" id="at-cards"></section>
+        <section class="cartao"><div class="cartao-topo"><div><h2>🔧 Peças que mais dão AT</h2><p class="sub" id="at-pecas-info"></p></div></div><div class="tabela-wrap" id="at-pecas"></div></section>
+        <section class="cartao"><div class="cartao-topo"><div><h2>⏳ Envelhecimento por fila</h2><p class="sub">Tickets em aberto por dias desde a criação. Em vermelho, mais de 30 dias.</p></div></div><div class="tabela-wrap" id="at-env"></div></section>
+        <section class="cartao"><div class="cartao-topo"><div><h2>🚚 Por transportadora do envio</h2><p class="sub">Redespacho, senão a transportadora do Promob, senão a do ticket. Clique na linha para filtrar.</p></div></div><div class="tabela-wrap" id="at-transp"></div></section>
+        <section class="cartao"><div class="cartao-topo"><div><h2>📈 Evolução por semana</h2></div></div><div class="tabela-wrap" id="at-evol"></div></section>
+        <section class="cartao"><div class="cartao-topo"><div><h2 id="at-titulo">Tickets</h2><p class="sub">Clique nos cards acima para trocar a lista.</p></div></div><div class="tabela-wrap" id="at-lista"></div></section>
       </div>
       <!-- 7) Reposição pré › Falta de volumes (repopre.js, parte 97): robô lê o portal e o 360; a equipe marca o volume da foto -->
       <div id="rp-repopre" hidden>
@@ -1787,25 +1813,26 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=430"></script>
-  <script src="mapa-brasil.js?v=430"></script>
-  <script src="cidades-br.js?v=430"></script>
-  <script src="troca-notas.js?v=430"></script>
-  <script src="app.js?v=430"></script>
-  <script src="ordenar.js?v=430"></script>
-  <script src="menu.js?v=430"></script>
-  <script src="ajuda.js?v=430"></script>
-  <script src="documentos.js?v=430"></script>
-  <script src="barrar.js?v=430"></script>
-  <script src="naoloc.js?v=430"></script>
-  <script src="faltas.js?v=430"></script>
-  <script src="repopre.js?v=430"></script>
-  <script src="motor.js?v=430"></script>
-  <script src="retornos-semana.js?v=430"></script>
-  <script src="links.js?v=430"></script>
-  <script src="cobranca-massa.js?v=430"></script>
-  <script src="gargalos.js?v=430"></script>
-  <script src="filas.js?v=430"></script>
-  <script src="filtros.js?v=430"></script>
+  <script src="config.js?v=431"></script>
+  <script src="mapa-brasil.js?v=431"></script>
+  <script src="cidades-br.js?v=431"></script>
+  <script src="troca-notas.js?v=431"></script>
+  <script src="app.js?v=431"></script>
+  <script src="ordenar.js?v=431"></script>
+  <script src="menu.js?v=431"></script>
+  <script src="ajuda.js?v=431"></script>
+  <script src="documentos.js?v=431"></script>
+  <script src="barrar.js?v=431"></script>
+  <script src="naoloc.js?v=431"></script>
+  <script src="faltas.js?v=431"></script>
+  <script src="repopre.js?v=431"></script>
+  <script src="at.js?v=431"></script>
+  <script src="motor.js?v=431"></script>
+  <script src="retornos-semana.js?v=431"></script>
+  <script src="links.js?v=431"></script>
+  <script src="cobranca-massa.js?v=431"></script>
+  <script src="gargalos.js?v=431"></script>
+  <script src="filas.js?v=431"></script>
+  <script src="filtros.js?v=431"></script>
 </body>
 </html>
