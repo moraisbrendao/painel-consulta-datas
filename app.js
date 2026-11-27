@@ -1787,6 +1787,43 @@ ${extra}
     if (gProdCheia) return sairCheia();
     gProdCheia = true; $("g-prod-cartao").classList.add("tela-cheia"); document.body.classList.add("sem-rolagem"); ajustaGiro();
     $("g-prod-cheia").textContent = "✕ Sair da tela cheia"; desenharProdutividade(gFiltradosCache, hojeISO()); });
+  // compartilhar o gráfico (Brenda 26/11): vira uma imagem PNG. No celular abre o "Compartilhar" (WhatsApp aparece na lista);
+  // no computador copia a imagem (é só colar no WhatsApp com Ctrl+V) e, se não der para copiar, baixa o arquivo. Nada é enviado sozinho.
+  async function imagemProd() {
+    const svg = $("g-prod").querySelector("svg"); if (!svg) throw new Error("O gráfico ainda não carregou.");
+    const vb = svg.viewBox.baseVal, W = vb.width || 1000, Hs = vb.height || 260;
+    const cl = svg.cloneNode(true); cl.setAttribute("xmlns", "http://www.w3.org/2000/svg"); cl.setAttribute("width", W); cl.setAttribute("height", Hs);
+    const st = document.createElementNS("http://www.w3.org/2000/svg", "style");
+    st.textContent = `.grade{stroke:#e5e7eb;stroke-dasharray:3 3}.eixo{font:10px Arial,sans-serif;fill:#6b7280}.eixo.hoje{fill:#0d2240;font-weight:700}.rot{font:700 10px Arial,sans-serif;fill:#374151}.rot.azul{fill:#0d2240}.linha-ent{fill:none;stroke:#0d2240;stroke-width:2;stroke-dasharray:5 4}.ponto-ent{fill:#fff;stroke:#0d2240;stroke-width:2}`;
+    cl.insertBefore(st, cl.firstChild);
+    const url = URL.createObjectURL(new Blob([new XMLSerializer().serializeToString(cl)], { type: "image/svg+xml" }));
+    const img = await new Promise((ok, erro) => { const i = new Image(); i.onload = () => ok(i); i.onerror = () => erro(new Error("Não consegui montar a imagem.")); i.src = url; });
+    const esc2 = 2, pad = 24, linhas = [...$("g-prod-resumo").querySelectorAll("p")].map((p) => p.innerText.trim()).filter(Boolean);
+    const titulo = `Produtividade · ${gProdT || "Todas as transportadoras"}`, sub = `E-loggia · Multimóveis · ${new Date().toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" })}`;
+    const H = pad + 30 + 20 + linhas.length * 22 + 10 + Hs + 30 + pad, cv = document.createElement("canvas"); cv.width = (W + pad * 2) * esc2; cv.height = H * esc2;
+    const c = cv.getContext("2d"); c.scale(esc2, esc2); c.fillStyle = "#fff"; c.fillRect(0, 0, W + pad * 2, H);
+    c.fillStyle = "#0d2240"; c.font = "700 22px Arial, sans-serif"; c.fillText(titulo, pad, pad + 22);
+    c.fillStyle = "#6b7280"; c.font = "13px Arial, sans-serif"; c.fillText(sub, pad, pad + 44);
+    c.fillStyle = "#1f2937"; c.font = "15px Arial, sans-serif"; linhas.forEach((t, i) => c.fillText(t, pad, pad + 72 + i * 22));
+    const yG = pad + 60 + linhas.length * 22 + 10; c.drawImage(img, pad, yG, W, Hs);
+    c.font = "12px Arial, sans-serif"; c.fillStyle = "#6b7280"; c.fillText("Linha: entregues por dia · Amarelo: atrasados hoje · Verde: vencem no dia", pad, yG + Hs + 22);
+    URL.revokeObjectURL(url);
+    const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
+    return new File([blob], `produtividade_${(gProdT || "todas").replace(/[^\wÀ-ú]+/g, "_")}_${hojeISO()}.png`, { type: "image/png" });
+  }
+  $("g-prod-share").addEventListener("click", async () => {
+    try {
+      const f = await imagemProd();
+      if (navigator.canShare && navigator.canShare({ files: [f] }) && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)) {
+        try { await navigator.share({ files: [f], title: "Produtividade das transportadoras" }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+      }
+      if (navigator.clipboard && window.ClipboardItem) {
+        try { await navigator.clipboard.write([new ClipboardItem({ "image/png": f })]); toast("Imagem do gráfico copiada. Abra a conversa no WhatsApp e cole (Ctrl+V)."); return; } catch (_) {}
+      }
+      const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast("Imagem do gráfico baixada. Anexe no WhatsApp (clipe › Fotos).");
+    } catch (e) { toast(e.message || "Não consegui gerar a imagem.", true); }
+  });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") sairCheia(); });
   addEventListener("resize", () => { if (gProdCheia) { ajustaGiro(); desenharProdutividade(gFiltradosCache, hojeISO()); } });
   $("g-janela").addEventListener("click", (e) => { const b = e.target.closest("button[data-j]"); if (!b) return; gJanela = +b.dataset.j;
