@@ -856,7 +856,16 @@ if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai p
   if (l) { const pv = await chamar(`previsao_ssw?select=situacao,previsao,consultado_em&pedido=eq.${encodeURIComponent(l.pedido)}`).catch(() => []);
     const bp = await chamar(`base_pedidos?select=status_intelipost,micro_status,data_entrega&pedido=eq.${encodeURIComponent(l.pedido)}`).catch(() => []);
     log("previsao_ssw:", JSON.stringify(pv), "· base:", JSON.stringify(bp), "· status_intelipost na conferência:", l.status_intelipost); }
-  if (!l) log("não achei"); else {
+  if (!l) { log("não achei na conferência SSW");   // procura também na fila Aguardando entrega e na base (só situação, datas e nomes de transportadora)
+    const hh = (t) => createHash("sha256").update(String(t || "")).digest("hex").slice(0, 16), nn = (t) => String(t || "").split("-")[0].trim();
+    const A = await chamar("aguardando_entrega?select=fila_rel,na_planilha,nf_original,nf_nova,transportadora,transp_chat,situacao,fonte,ultimo_evento,data_evento,data_entrega,consultado_em,baixa_status,baixa_em,ip_entregue_status,ip_entregue_em,manual_entregue&limit=5000").catch(() => []);
+    for (const x of A.filter((x) => hh(nn(x.nf_nova)) === alvo || hh(nn(x.nf_original)) === alvo)) { const qual = hh(nn(x.nf_nova)) === alvo ? "nf_nova" : "nf_original";
+      log(`aguardando_entrega (${qual}, série ${String(x[qual]).split("-")[1]}): fila ${x.fila_rel} · na planilha ${x.na_planilha} · transp ticket ${x.transportadora} · transp chat ${x.transp_chat} · situação ${x.situacao} · fonte ${x.fonte} · evento tem "entreg": ${/entreg/i.test(x.ultimo_evento || "")} · evento tem "first mile"/"não é": ${/first|n[ãa]o [ée]/i.test(x.ultimo_evento || "")} · data_evento ${x.data_evento} · entrega ${x.data_entrega} · consultado ${x.consultado_em} · baixa ${x.baixa_status} ${x.baixa_em} · intelipost ${x.ip_entregue_status} ${x.ip_entregue_em} · manual ${x.manual_entregue ? "sim" : "não"}`); }
+    let vistos = 0; for (let de = 0; ; de += 1000) { const B = await chamar(`base_pedidos?select=nf,transportadora,status_intelipost,micro_status,data_entrega&order=pedido&limit=1000&offset=${de}`).catch(() => []); vistos += B.length;
+      for (const x of B.filter((x) => hh(nn(x.nf)) === alvo)) log(`base: série ${String(x.nf).split("-")[1]} · transp ${x.transportadora} · status ${x.status_intelipost} · micro ${x.micro_status} · entrega ${x.data_entrega}`);
+      if (B.length < 1000) break; }
+    log("base lida:", vistos, "linhas"); }
+  else {
     const [num, ser] = String(l.nf).split("-"), cs = cnpjDaSerie(ser);
     log("transp:", l.transportadora, "· série", ser, "· situação", l.situacao, "· evento", l.ultimo_evento, "· data_evento", l.data_evento, "· entrega", l.data_entrega, "· consultado", l.consultado_em, "· detalhe", JSON.stringify(l.detalhe || {}).replace(/\d{5,}/g, "#"));
     log("REGRA_RAJ:", REGRA_RAJ(l.transportadora, l.nf), "· chave:", chaveDe(l.transportadora) ? "sim" : "não");
