@@ -372,7 +372,16 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
     try {
       if (!repor.length) throw new Error("nenhum volume para repor");
       if (x.tem_devolucao || x.venda === false) throw new Error("caso para conferir à mão (devolução ou não é venda)");
-      let linha = await acharLinha(p, x.nf); if (!linha) throw new Error("NF não está mais como Novo na lista do portal");
+      let linha = await acharLinha(p, x.nf);
+      if (!linha) {   // 27/11: confere sem o filtro Novo qual é o status da NF no portal
+        acharLinha.log = log; await abrirRepoPre(p, log); const l0 = await acharLinha(p, x.nf); acharLinha.log = null;
+        const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim()), iSt = ths.findIndex((h) => /^status/i.test(h));
+        const st = l0 && iSt >= 0 ? ((await l0.locator("td").nth(iSt).innerText().catch(() => "")) || "").trim() : "";
+        log(`  sem filtro: NF ${l0 ? "achada, status " + st.replace(/\d/g, "#") : "não achada"}`);
+        if (l0 && /^novo$/i.test(st)) linha = l0;   // está Novo: o filtro é que não trouxe
+        else { await aplicarNovo(p, log).catch(() => {}); await patch(x, { na_lista: !!l0 && /^novo$/i.test(st) });
+          throw new Error(l0 ? `no portal a NF está como "${st}", não mais Novo (alguém já tratou?)` : "NF não achada no portal (nem sem filtro)"); }
+      }
       etapa = "print da solicitação"; const sol = await printSolicitacao(p, linha);
       const jad = /jadlog/i.test(x.transp || "") ? (sol.anot.split(/\n+/).find((l) => /cnpj|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/i.test(l)) || "").trim().toUpperCase() : "";
       if (/jadlog/i.test(x.transp || "") && !jad) log("  Jadlog: não achei CNPJ na anotação (sigo sem)");
