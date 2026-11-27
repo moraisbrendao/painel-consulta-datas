@@ -3955,3 +3955,47 @@ end $$;
 revoke all on function public.link_kpis(int) from public, anon;
 grant execute on function public.link_kpis(int) to authenticated;
 notify pgrst, 'reload schema';
+
+-- ===== parte 87 =====
+-- 87) Link das transportadoras (Brenda 26/11): pedido com Barrar entrega concluído (decisão barrar e portal feito)
+--     sai da lista do link na próxima atualização da página.
+create or replace function public.link_pendentes(p_token text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; r jsonb;
+begin
+  l := public._link_de(p_token);
+  update public.transp_links set ultimo_acesso = now(), acessos = acessos + 1 where id = l.id;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido', b.pedido, 'nf', b.nf, 'transportadora', b.transportadora, 'cidade', b.cidade, 'uf', b.uf,
+           'prometido', coalesce(b.prev_original, b.prev_atual), 'micro', b.micro_status, 'expedicao', b.data_expedicao,
+           'nova_antiga', t.nova_data,
+           'barrar', be.nf is not null,
+           'oc_msg', case when o.nf is not null then left(o.mensagem, 500) end, 'oc_em', o.mensagem_em, 'oc_motivo', o.motivo,
+           'nf_repo', tn.nf_repo) order by coalesce(b.prev_original, b.prev_atual), b.pedido), '[]'::jsonb)
+    into r
+    from public.base_pedidos b
+    left join public.tratativas t on t.pedido = b.pedido
+    left join lateral (select x.nf from public.barrar_entrega x where x.na_planilha and x.nf = public.chave_nf(b.nf) limit 1) be on true
+    left join lateral (select x.nf, x.mensagem, x.mensagem_em, x.motivo from public.ocorrencias_tk x
+                        where x.nf = public.chave_nf(b.nf) and coalesce(x.status, '') ilike '%andamento%' and coalesce(x.solicitante, '') ilike 'multi%'
+                        order by x.mensagem_em desc nulls last limit 1) o on true
+    left join lateral (select x.nf_nova || case when x.serie is not null and position('-' in x.nf_nova) = 0 then '-' || x.serie else '' end as nf_repo
+                         from public.troca_notas x where x.pedido = b.pedido and coalesce(x.nf_nova, '') <> ''
+                        order by x.data_emissao desc nulls last limit 1) tn on true
+   where b.transportadora = any (l.transportadoras)
+     and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+     and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+     and b.data_expedicao is not null
+     -- parte 87: Barrar concluído (aprovado e confirmado no portal pelo robô) sai da lista
+     and not exists (select 1 from public.barrar_entrega z where z.nf = public.chave_nf(b.nf) and z.decisao = 'barrar' and z.portal_status = 'feito')
+     and (t.nova_data is null or t.nova_data < hoje)
+     and (coalesce(b.prev_original, b.prev_atual) <= hoje + 1 or coalesce(b.range_atrasos, '') ilike 'vencido%' or t.nova_data < hoje);
+  -- KPI (parte 86): guarda cada acesso com os pedidos que a transportadora viu
+  insert into public.link_acessos (link_id, nome, qtd, pedidos)
+  select l.id, l.nome, jsonb_array_length(r), coalesce(array(select e ->> 'pedido' from jsonb_array_elements(r) e), '{}');
+  return jsonb_build_object('nome', l.nome, 'hoje', hoje, 'itens', r);
+end $$;
+revoke all on function public.link_pendentes(text) from public;
+grant execute on function public.link_pendentes(text) to anon, authenticated;
+
+notify pgrst, 'reload schema';
