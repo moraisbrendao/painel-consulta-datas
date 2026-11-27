@@ -1441,7 +1441,7 @@ async function conferirLote() {
       if (ok + nao) log(`Dominalog (séries 25/34/35): ${ok} entregues confirmados pela Dominalog · ${nao} eram de outra transportadora (ficam como não entregue)`); }
     // Regra da Brenda (27/11): a mesma NF com CT-e de transportadoras diferentes (ex.: 1ª perna Karavaggio "entregue" ao redespacho + CT-e da Transvanio):
     // vale só o rastreio da transportadora do pedido ou do redespacho da base. Nenhuma linha dela = não entregue ainda.
-    { const multi = [...grupos.values()].flat().filter((x) => { const r = res.get(x.pedido); return r && r._L && !REGRA_RAJ(x.transportadora, x.nf)
+    { const multi = [...grupos.values()].flat().filter((x) => { const r = res.get(x.pedido); return r && r._L && r.situacao === "entregue" && !REGRA_RAJ(x.transportadora, x.nf)   // só quando o resultado seria "entregue" (rodada não fica lenta)
         && new Set(r._L.filter((y) => y.situacao === "entregue" || y.situacao === "nao entregue").map((y) => String(y.sigla || "").split(/\s+/)[0])).size > 1; });
       if (multi.length) { const B = new Map();
         for (let i = 0; i < multi.length; i += 100) { const ids = multi.slice(i, i + 100).map((l) => `"${String(l.pedido).replace(/"/g, "")}"`).join(",");
