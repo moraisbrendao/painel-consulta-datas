@@ -4,6 +4,7 @@
 // texto "VOL. NF:01/02" e o código do volume (ex. 76280.0002).
 // Registro público (Actions): só sim/não e números de volume — nunca a foto, nome, endereço ou texto da etiqueta.
 import fs from "node:fs";
+import { createHash } from "node:crypto";
 import { entrarPortal } from "./barrar.mjs";
 import { abrirRepoPre, acharLinha } from "./anota-portal.mjs";
 import { entrarMulti360 } from "./multi360.mjs";
@@ -356,9 +357,11 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   throw new Error("cliquei em Adicionar mas não vi \"Ticket criado com sucesso\": conferir no portal antes de tentar de novo");
   } catch (e) { if (/Timeout/i.test(e.message)) throw new Error(`não consegui clicar em: ${passo} (a tela não respondeu)`); throw e; }
 }
-export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
+export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, hash = "" }) {
   // teste: pega 1 caso da lista (o volume em posse marcado, senão finge que o 1º está em posse) e não cria nada
-  const L = teste ? [...(await chamar("repo_pre?select=*&solicitar_status=eq.erro&na_lista=eq.true&limit=5")), ...(await chamar("repo_pre?select=*&na_lista=eq.true&order=criado_em&limit=20"))].filter((x) => (x.volumes || []).length > 1 && x.venda !== false && !x.tem_devolucao).slice(0, 1).map((x) => ({ ...x, vol_posse: (x.vol_posse || []).length ? x.vol_posse : [x.volumes[0]], ticket_portal_ok: false }))
+  const hNf = (nf) => createHash("sha256").update(String(nf).split("-")[0].trim()).digest("hex").slice(0, 16);
+  const L = teste && hash ? (await chamar("repo_pre?select=*&limit=5000")).filter((x) => hNf(x.nf) === hash).slice(0, 1).map((x) => ({ ...x, vol_posse: (x.vol_posse || []).length ? x.vol_posse : [x.volumes[0]], ticket_portal_ok: false }))
+    : teste ? [...(await chamar("repo_pre?select=*&solicitar_status=eq.erro&na_lista=eq.true&limit=5")), ...(await chamar("repo_pre?select=*&na_lista=eq.true&order=criado_em&limit=20"))].filter((x) => (x.volumes || []).length > 1 && x.venda !== false && !x.tem_devolucao).slice(0, 1).map((x) => ({ ...x, vol_posse: (x.vol_posse || []).length ? x.vol_posse : [x.volumes[0]], ticket_portal_ok: false }))
     : await chamar("repo_pre?select=*&solicitar_status=eq.pendente&order=solicitar_em&limit=20");
   if (!L.length) { log("repo-pre-solicitar: nada pendente"); return; }
   log(`repo-pre-solicitar: ${L.length} caso(s)${teste ? " · MODO TESTE (não cria nada)" : ""}`);
@@ -377,7 +380,13 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
         acharLinha.log = log; await abrirRepoPre(p, log); const l0 = await acharLinha(p, x.nf); acharLinha.log = null;
         const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim()), iSt = ths.findIndex((h) => /^status/i.test(h));
         const st = l0 && iSt >= 0 ? ((await l0.locator("td").nth(iSt).innerText().catch(() => "")) || "").trim() : "";
-        log(`  sem filtro: NF ${l0 ? "achada, status " + st.replace(/\d/g, "#") : "não achada"}`);
+        log(`  sem filtro: NF ${l0 ? "achada, status " + st.replace(/\d/g, "#") : "não achada"} · formato da NF no E-loggia ${String(x.nf).replace(/\d/g, "9")} · na lista na última análise: ${x.na_lista} · motivo ${x.motivo || "—"}`);
+        if (!l0) {   // tenta só o número (sem a série) e mostra o formato do que o portal devolve
+          const filtro = p.locator("input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]").first();
+          await filtro.fill(String(x.nf).split("-")[0].trim().replace(/^0+/, "")); await filtro.press("Enter").catch(() => {}); await p.waitForTimeout(3000);
+          const prim = await p.locator("table tbody tr").evaluateAll((trs) => trs.slice(0, 5).map((tr) => ((tr.querySelector("td") || {}).innerText || "").trim()));
+          log(`  só o número: ${prim.length} linha(s) · 1ª coluna ${JSON.stringify(prim.map((t) => t.replace(/\d/g, "9").slice(0, 20)))}`);
+        }
         if (l0 && /^novo$/i.test(st)) linha = l0;   // está Novo: o filtro é que não trouxe
         else { await aplicarNovo(p, log).catch(() => {}); await patch(x, { na_lista: !!l0 && /^novo$/i.test(st) });
           throw new Error(l0 ? `no portal a NF está como "${st}", não mais Novo (alguém já tratou?)` : "NF não achada no portal (nem sem filtro)"); }

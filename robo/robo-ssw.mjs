@@ -1625,7 +1625,7 @@ if (MODO === "repo-pre-solicitar") {   // Reposição pré: cria o ticket no por
   await entrarSupabase(); await carregarSenhasDB();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-  try { await (await import("./repo-pre.mjs")).solicitarRepoPre({ chamar, log, ctx, teste: process.env.TRANSP === "teste",
+  try { await (await import("./repo-pre.mjs")).solicitarRepoPre({ chamar, log, ctx, teste: /^teste/.test(process.env.TRANSP || ""), hash: (String(process.env.TRANSP || "").match(/^teste:h:([0-9a-f]{16})$/) || [])[1] || "",
       R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } }); }
   catch (e) { log("repo-pre-solicitar: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
