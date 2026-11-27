@@ -353,7 +353,9 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   if (cj.lib === false) throw new Error("o botão Adicionar está bloqueado (falta preencher algum campo da janela)");
   if (teste) { log(`  TESTE: volumes selecionados ${marcados.length}; NÃO cliquei em Adicionar`); await p.keyboard.press("Escape"); await p.waitForTimeout(600); if (await p.locator("[role=dialog]").count()) await d.getByRole("button", { name: /cancelar|fechar/i }).first().click().catch(() => {}); return { teste: true }; }
   await clicar(d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first(), "botão Adicionar");
-  for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); const b = (await p.locator("body").innerText().catch(() => "")) || ""; if (/ticket criado com sucesso/i.test(b)) return { ok: true }; if (/erro|falha/i.test(b) && !(await p.locator("[role=dialog]").count())) break; }
+  // 27/11: o ticket foi criado mas o aviso sumiu antes de o robô ler; a janela fechar sozinha também conta como criado
+  for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); const b = (await p.locator("body").innerText().catch(() => "")) || ""; if (/ticket criado com sucesso|criad[oa] com sucesso|sucesso/i.test(b)) return { ok: true };
+    if (!(await d.count())) { if (/erro|falha/i.test(b)) break; log("  a janela Criar Ticket fechou depois do Adicionar: conta como criado"); return { ok: true, fechou: true }; } }
   throw new Error("cliquei em Adicionar mas não vi \"Ticket criado com sucesso\": conferir no portal antes de tentar de novo");
   } catch (e) { if (/Timeout/i.test(e.message)) throw new Error(`não consegui clicar em: ${passo} (a tela não respondeu)`); throw e; }
 }
@@ -388,6 +390,9 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
           log(`  só o número: ${prim.length} linha(s) · 1ª coluna ${JSON.stringify(prim.map((t) => t.replace(/\d/g, "9").slice(0, 20)))}`);
         }
         if (l0 && /^novo$/i.test(st)) linha = l0;   // está Novo: o filtro é que não trouxe
+        else if (l0 && /andamento/i.test(st) && /cliquei em Adicionar/i.test(x.solicitar_msg || "")) {   // o robô já criou o ticket (não viu o aviso): segue só para o comentário no 360
+          log("  ticket já criado pelo robô na rodada anterior: sigo para o comentário no 360"); x.ticket_portal_ok = true; await patch(x, { ticket_portal_ok: true, na_lista: true }); linha = l0;
+        }
         else { await aplicarNovo(p, log).catch(() => {}); await patch(x, { na_lista: !!l0 && /^novo$/i.test(st) });
           throw new Error(l0 ? `no portal a NF está como "${st}", não mais Novo (alguém já tratou?)` : "NF não achada no portal (nem sem filtro)"); }
       }
