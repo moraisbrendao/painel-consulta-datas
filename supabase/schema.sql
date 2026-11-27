@@ -3766,3 +3766,41 @@ begin
 end $$;
 revoke all on function public.link_responder(text, jsonb) from public;
 grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
+
+-- ===== parte 85 =====
+-- 85) Link das transportadoras (Brenda 26/11): motivo novo 'Falta de volumes'; com ele a transportadora tem que
+--     informar o SKU do item que falta, que vai junto na observação da tratativa ("Transportadora: Falta de volumes · SKU X · obs").
+create or replace function public.link_responder(p_token text, p_itens jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; x record; d date; ok int := 0; rec int := 0;
+  motivos text[] := array['Em rota de entrega','Reagendado com o cliente','Cliente ausente','Endereço não localizado','Aguardando transferência','Atraso operacional','Avaria',
+                          'Não chegou em nosso CD','Extravio','Aguardando retorno da Multimóveis','Falta de volumes','Outro'];
+begin
+  l := public._link_de(p_token);
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) > 500 then raise exception 'Envio inválido.'; end if;
+  perform set_config('painel.link', left(l.nome, 60), true);
+  for x in select * from jsonb_to_recordset(p_itens) as y(pedido text, nova_data text, motivo text, obs text, sku text) loop
+    begin
+      d := case when coalesce(x.nova_data, '') ~ '^\d{4}-\d{2}-\d{2}$' then x.nova_data::date end;
+      if d is null or d < hoje or d > hoje + 90 or not (x.motivo = any (motivos))
+         or (x.motivo = 'Falta de volumes' and nullif(trim(coalesce(x.sku, '')), '') is null)
+         or not exists (select 1 from public.base_pedidos b where b.pedido = x.pedido and b.transportadora = any (l.transportadoras)
+                          and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%') then
+        rec := rec + 1; continue;
+      end if;
+      insert into public.tratativas (pedido, nova_data, observacao)
+      values (x.pedido, d, left('Transportadora: ' || x.motivo
+        || case when x.motivo = 'Falta de volumes' then ' · SKU ' || left(trim(x.sku), 200) else '' end
+        || coalesce(' · ' || nullif(trim(x.obs), ''), ''), 1000))
+      on conflict (pedido) do update set nova_data = excluded.nova_data, observacao = excluded.observacao;
+      ok := ok + 1;
+    exception when others then rec := rec + 1;
+    end;
+  end loop;
+  if ok > 0 then update public.transp_links set ultima_resposta = now(), respostas = respostas + ok where id = l.id; end if;
+  return jsonb_build_object('gravados', ok, 'recusados', rec);
+end $$;
+revoke all on function public.link_responder(text, jsonb) from public;
+grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
+
+notify pgrst, 'reload schema';

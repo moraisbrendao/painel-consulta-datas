@@ -27,7 +27,8 @@
     .chip.amar { background: #fff1c9; color: #7a5a00; }
     .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .campos input, .campos select { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e2; border-radius: 8px; font-size: 15px; background: #fff; color: var(--texto); }
-    .campos .obs { grid-column: 1 / -1; }
+    .campos .obs, .campos .sku { grid-column: 1 / -1; }
+    .campos .sku { border-color: #e0a100; background: #fffaf0; }
     button { font: inherit; cursor: pointer; border-radius: 10px; border: 0; padding: 10px 16px; font-weight: 700; }
     .btn-am { background: var(--amarelo); color: #1d2433; }
     .btn-cont { background: #fff; border: 1px solid #cfd6e2; color: var(--texto); }
@@ -72,7 +73,7 @@
     const $ = (id) => document.getElementById(id);
     const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
-    const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Outro"];
+    const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Falta de volumes", "Outro"];
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
     let itens = [], hoje = "", filtro = "", chips = new Map(), feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
@@ -125,24 +126,26 @@
         const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
         const fs = feitos.get(x.pedido); chips.set(x.pedido, chip);
         return `<div class="ped${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
-          ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme com a Logística.</div>` : ""}
-          ${x.oc_msg ? `<div class="alerta oc"><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
           <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}</div>` : ""}</div>
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
             <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
+            <input class="sku" maxlength="200" placeholder="SKU do item que está faltando" value="${esc(ra.sku || "")}"${ra.motivo === "Falta de volumes" ? "" : " hidden"} aria-label="SKU do item">
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>
           <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : (chip || `<span class="s">preencha data e motivo</span>`)}</div><div class="err"></div></div>
+          ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme com a Logística.</div>` : ""}
+          ${x.oc_msg ? `<div class="alerta oc"><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
         </div>`;
       }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
     }
-    const dadosDe = (el) => ({ pedido: el.dataset.p, nova_data: el.querySelector(".dt").value, motivo: el.querySelector(".mt").value, obs: el.querySelector(".obs").value.trim() });
+    const dadosDe = (el) => ({ pedido: el.dataset.p, nova_data: el.querySelector(".dt").value, motivo: el.querySelector(".mt").value, obs: el.querySelector(".obs").value.trim(), sku: el.querySelector(".mt").value === "Falta de volumes" ? el.querySelector(".sku").value.trim() : "" });
     function valida(x) {
       if (!x.nova_data || !x.motivo) return null;                       // ainda preenchendo: não avisa nada
       if (x.nova_data < hoje) return "A nova data não pode ser no passado.";
       if (x.nova_data > maxData()) return "Data muito longe (máximo 90 dias).";
+      if (x.motivo === "Falta de volumes" && !x.sku) return "Digite o SKU do item que está faltando.";
       if (x.motivo === "Outro" && !x.obs) return "Escreva na observação o que aconteceu.";
       return "";
     }
@@ -167,7 +170,9 @@
     }
     const mexeu = (e) => {
       const el = e.target.closest(".ped[data-p]"); if (!el) return;
-      rasc.set(el.dataset.p, dadosDe(el));
+      const sk = el.querySelector(".sku"), falta = el.querySelector(".mt").value === "Falta de volumes";
+      if (sk.hidden === falta) { sk.hidden = !falta; if (falta && e.target.classList.contains("mt")) sk.focus(); }
+      rasc.set(el.dataset.p, { ...dadosDe(el), sku: sk.value.trim() });
       clearTimeout(timers.get(el.dataset.p));
       const x = dadosDe(el), v = valida(x);
       el.querySelector(".err").textContent = v || "";
