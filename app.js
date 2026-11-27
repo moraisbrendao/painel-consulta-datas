@@ -3770,6 +3770,7 @@ ${extra}
       const aba = wb.SheetNames.find((n) => norm(n).startsWith("REPOSI"));
       if (!aba) throw new Error('Não achei a aba "Reposições" nessa planilha.');
       guardarSaidasTk(wb).catch(() => {});   // saída da NF nova (Reposições e AT) para o quadro "Sem saída da expedição"
+      guardarAt(arq, wb).then((m) => { if (/falta|:/.test(m || "") && !/tickets$/.test(m)) toast(m.replace(/^ · /, ""), true); }).catch(() => {});   // aba Assistência Técnica (parte 106)
       const rows = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, raw: true, defval: null });
       const iCab = rows.findIndex((r) => r && r.some((c) => norm(c) === "ID TICKET"));
       if (iCab < 0) throw new Error('Não achei a coluna "ID Ticket" na aba Reposições.');
