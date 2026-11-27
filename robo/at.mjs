@@ -24,9 +24,11 @@ export async function lerPecas(p) {
         const iC = linhas.findIndex((l) => l.some((c) => /^SKU$/i.test(c)));
         cab = iC >= 0 ? linhas[iC] : null;
         const iS = cab ? cab.findIndex((c) => /^SKU$/i.test(c)) : -1, iQ = cab ? cab.findIndex((c) => /^Qtde?$/i.test(c)) : -1;
+        const num = (t) => { const v = Number(String(t || "").replace(/[^\d,.-]/g, "").replace(/\.(?=\d{3}(\D|$))/g, "").replace(",", ".")); return isFinite(v) && String(t || "").trim() ? v : null; };
+        const iV = cab ? cab.findIndex((c) => /valor|pre[cç]o|r\$/i.test(c)) : -1, iW = cab ? cab.findIndex((c) => /peso|kg/i.test(c)) : -1;
         let iP = cab ? cab.findIndex((c) => /pe[cç]a|descri|nome|produto/i.test(c) && !/^SKU$/i.test(c)) : 0; if (iP < 0) iP = iS >= 0 ? iS + 1 : 0;   // descrição fica logo depois do SKU
         pecas = linhas.slice(iC + 1).filter((l) => l.some(Boolean) && !(iQ >= 0 && !(Number(String(l[iQ] || "").replace(",", ".")) > 0) && iS >= 0 && !/\d/.test(l[iS] || "")))   // sem a linha de rodapé (sem qtde e sem código)
-          .map((l) => ({ peca: l[iP] || "", sku: iS >= 0 ? l[iS] || "" : "", qtde: iQ >= 0 ? Number(String(l[iQ]).replace(",", ".")) || null : null }));
+          .map((l) => ({ peca: l[iP] || "", sku: iS >= 0 ? l[iS] || "" : "", qtde: iQ >= 0 ? Number(String(l[iQ]).replace(",", ".")) || null : null, valor: iV >= 0 ? num(l[iV]) : null, peso: iW >= 0 ? num(l[iW]) : null }));
       } else {   // sem tabela: texto em linhas depois do cabeçalho "Qtde"
         const L = (d.innerText || "").split("\n").map(limpa).filter(Boolean);
         const iQ = L.findIndex((l) => /^Qtde?$/i.test(l));
@@ -40,12 +42,15 @@ export async function lerPecas(p) {
 }
 
 export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
-  const T = await chamar("at_tk?select=ticket,nota_at,transp_envio,transp_promob,redesp_promob,pecas,pecas_em,rastreio,rastreio_em&na_planilha=eq.true&order=criado_em.desc&limit=5000");
+  const T = await chamar("at_tk?select=ticket,fila,nota_at,transp_envio,transp_promob,redesp_promob,pecas,pecas_em,rastreio,rastreio_em&na_planilha=eq.true&order=criado_em.desc&limit=5000");
   // relê quem foi lido com a versão antiga (peça sem descrição ou linha de rodapé)
-  const velho = (x) => (x.pecas || []).some((y) => !y.peca || (y.qtde == null && !/\d/.test(y.sku || "")));
+  const velho = (x) => (x.pecas || []).some((y) => !y.peca || (y.qtde == null && !/\d/.test(y.sku || "")) || !("valor" in y));   // 27/11: valor e peso da peça
   const semPeca = T.filter((x) => !x.pecas_em || velho(x)).slice(0, limite);
   const H = 20 * 3600000;
   const rast = T.filter((x) => x.nota_at && !/^entregue/i.test((x.rastreio && x.rastreio.situacao) || "") && (!x.rastreio_em || Date.now() - Date.parse(x.rastreio_em) > H));
+  { const c = (f) => JSON.stringify(Object.entries(T.reduce((a, x) => { const k = f(x); a[k] = (a[k] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 25));
+    log(`AT filas: ${c((x) => (x.fila || "—").slice(0, 40))}`);
+    log(`AT rastreio: ${c((x) => (x.rastreio && x.rastreio.situacao) || "—")} · eventos ${c((x) => String((x.rastreio && x.rastreio.evento) || "—").replace(/\d+/g, "#").trim().split(/\s+/).slice(0, 2).join(" ").slice(0, 25))}`); }
   log(`AT: ${T.length} tickets na planilha · ${semPeca.length} para ler peças · ${rast.length} para rastrear`);
   // confere que gravou de verdade (sem permissão o banco responde OK com 0 linhas)
   const patch = async (tk, c) => { const r = await chamar(`at_tk?ticket=eq.${encodeURIComponent(tk)}&select=ticket`, "PATCH", c, { Prefer: "return=representation" });
