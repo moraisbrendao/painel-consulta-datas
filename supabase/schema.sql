@@ -4247,3 +4247,34 @@ grant execute on function public.link_pendentes(text) to anon, authenticated;
 
 
 notify pgrst, 'reload schema';
+
+-- ===== parte 92 =====
+-- 92) Tickets abertos (Brenda 26/11): quando a nota tem mais de um ticket, guardar a fila de cada um
+--     (coluna filas: uma linha por ticket, "número<TAB>fila"). Depois de rodar, suba de novo a planilha de tickets.
+alter table public.tickets_abertos add column if not exists filas text;
+create or replace function public.importar_tickets(linhas jsonb, limpar boolean, arquivo text, total integer)
+returns integer
+language plpgsql security definer set search_path = public
+as $$
+begin
+  if auth.uid() is null then raise exception 'Faça login.'; end if;
+  if public.e_sac() then raise exception 'O login do SAC só consulta.'; end if;
+  if limpar then
+    delete from public.tickets_abertos where true;
+    insert into public.tickets_info (id, arquivo, linhas, enviado_por, enviado_em)
+    values (1, arquivo, total, auth.jwt() ->> 'email', now())
+    on conflict (id) do update set arquivo = excluded.arquivo, linhas = excluded.linhas,
+      enviado_por = excluded.enviado_por, enviado_em = excluded.enviado_em;
+  end if;
+  insert into public.tickets_abertos (nf, fila, tipo, motivo, id_ticket, criado_em, qtd, filas)
+  select r.nf, r.fila, r.tipo, r.motivo, r.id_ticket, r.criado_em, coalesce(r.qtd, 1), left(r.filas, 4000)
+  from jsonb_to_recordset(linhas) as r(nf text, fila text, tipo text, motivo text, id_ticket text, criado_em timestamptz, qtd integer, filas text)
+  where r.nf is not null and r.nf <> ''
+  on conflict (nf) do update set fila = excluded.fila, tipo = excluded.tipo, motivo = excluded.motivo,
+    id_ticket = excluded.id_ticket, criado_em = excluded.criado_em, qtd = excluded.qtd, filas = excluded.filas;
+  return (select count(*) from public.tickets_abertos);
+end $$;
+revoke all on function public.importar_tickets(jsonb, boolean, text, integer) from public, anon;
+grant execute on function public.importar_tickets(jsonb, boolean, text, integer) to authenticated;
+
+notify pgrst, 'reload schema';

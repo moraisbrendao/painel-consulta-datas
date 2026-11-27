@@ -1461,3 +1461,5 @@ a.oc-link:hover { text-decoration: underline; }
 .lkk-tab td.num a { cursor: pointer; color: inherit; text-decoration: underline dotted; }
 .lkk-tab td.num a:hover { color: #0e7fc0; }
 .lkk-tab .ruim { color: var(--vermelho); font-weight: 700; } .lkk-tab .bom { color: #1d7a43; font-weight: 700; }
+
+.tk .tk-fila { margin-top: 2px; padding-left: 10px; border-left: 2px solid #c8ced8; }

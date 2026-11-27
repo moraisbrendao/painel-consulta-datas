@@ -859,7 +859,7 @@ ${extra}
       </div>
       <h3>Rastreio</h3>
       <div class="det-grade">
-        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${ticketsInfo ? item("Ticket", (() => { const t = ticketDe(p); return t ? `${esc(t.fila || "")}<div class="s">${esc([t.tipo, t.motivo, t.qtd > 1 ? t.qtd + " tickets" : ""].filter(Boolean).join(" · "))}</div>${String(t.id_ticket || "").split(",").map((x) => x.trim()).filter(Boolean).map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer">#${esc(id)} ↗</a>`).join(" ")}` : "Sem ticket"; })()) : ""}${item("Status Intelipost", esc(p.status_intelipost))}
+        ${item("Micro status", `<span class="ms">${esc(p.micro_status)}</span>${marcaOc(p)}`)}${item("Responsável", nomeResp(p.micro_status))}${ticketsInfo ? item("Ticket", (() => { const t = ticketDe(p); return t && filasDe(t).length > 1 ? `${filasHtml(t)}<div class="s">${esc([t.tipo, t.motivo, t.qtd + " tickets"].filter(Boolean).join(" · "))}</div>` : t ? `${esc(t.fila || "")}<div class="s">${esc([t.tipo, t.motivo, t.qtd > 1 ? t.qtd + " tickets" : ""].filter(Boolean).join(" · "))}</div>${String(t.id_ticket || "").split(",").map((x) => x.trim()).filter(Boolean).map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer">#${esc(id)} ↗</a>`).join(" ")}` : "Sem ticket"; })()) : ""}${item("Status Intelipost", esc(p.status_intelipost))}
         ${item("Última atualização", `${dh(p.ultima_atualizacao)}${p._parado !== null ? ` <span class="s">(${p._parado} dia${p._parado === 1 ? "" : "s"} sem movimento)</span>` : ""}`)}
         ${item("Ocorrência", esc(p.ocorrencia))}
       </div>
@@ -914,9 +914,9 @@ ${extra}
 
   // exportar o que está na lista
   $("btn-exportar").addEventListener("click", () => {
-    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Responsável", "Fila do ticket", "Dias sem movimento", "Prometido ao cliente",
+    const cab = ["Pedido Intelipost", "NF", "Canal", "Transportadora", "Cidade", "UF", "Micro status", "Responsável", "Fila(s) do ticket", "Dias sem movimento", "Prometido ao cliente",
       "Previsão Intelipost atual", "Previsão SSW", "Conferência SSW", "Dias para vencer", "Nova data", "Observação", "Atualizado por", "Atualizado em", "Comentário 360", "Tickets SAC", "Rastreio"];
-    const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, (respDe(p.micro_status) || { nome: PENDENTE }).nome, FILTROS.tk(p), p._parado,
+    const linhas = filtrados.map((p) => { const t = p._t || {}; return [p.pedido, p.nf, p.canal, p.transportadora, p.cidade, p.uf, p.micro_status, (respDe(p.micro_status) || { nome: PENDENTE }).nome, ((t) => (t && filasDe(t).length > 1 ? filasTxt(t) : FILTROS.tk(p)))(ticketsInfo && ticketDe(p)), p._parado,
       br(p.prev_original), br(p.prev_atual), br((ssw.get(p.pedido) || {}).previsao), sswClasse(p), p._dias, br(t.nova_data), t.observacao, t.atualizado_por,
       t.atualizado_em ? new Date(t.atualizado_em).toLocaleString("pt-BR") : "", p.comentario_360, p.qtd_tickets, p.link_rastreio]; });
     const ws = XLSX.utils.aoa_to_sheet([cab].concat(linhas));
@@ -4566,10 +4566,15 @@ ${extra}
   let tickets = new Map(), ticketsInfo = null, ticketsOk = true;
   const chaveNF = (v) => String(v ?? "").trim().split("-").map((x) => x.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-");
   const ticketDe = (p) => tickets.get(chaveNF(p.nf)) || null;
+  // filas de todos os tickets da nota (Brenda 26/11): [{id, fila}], só quando a planilha guardou (parte 92)
+  const filasDe = (t) => String((t && t.filas) || "").split("\n").map((l) => { const [id, ...f] = l.split("\t"); return { id: (id || "").trim(), fila: f.join(" ").trim() }; }).filter((x) => x.id || x.fila);
+  const filasTxt = (t) => { const F = filasDe(t); return F.length > 1 ? F.map((x) => `${x.fila || "(sem fila)"}${x.id ? " (#" + x.id + ")" : ""}`).join(" · ") : (t && t.fila) || ""; };
+  const filasHtml = (t) => filasDe(t).map((x) => `<div class="tk-fila">${esc(x.fila || "(sem fila)")}${x.id ? ` · <a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(x.id)}</a>` : ""}</div>`).join("");
   function marcaTicket(p) {
     if (!ticketsInfo) return p.qtd_tickets ? `<div class="s">🎫 ${p.qtd_tickets} ticket${p.qtd_tickets > 1 ? "s" : ""} SAC${p.motivo_ticket ? " · " + esc(p.motivo_ticket) : ""}</div>` : "";
     const t = ticketDe(p);
     const ids = String((t && t.id_ticket) || "").split(",").map((x) => x.trim()).filter(Boolean);
+    if (t && filasDe(t).length > 1) return `<div class="s tk" title="${esc([t.tipo, t.motivo].filter(Boolean).join(" · "))}">🎫 ${t.qtd} tickets, em ${new Set(filasDe(t).map((x) => x.fila)).size === 1 ? "1 fila" : new Set(filasDe(t).map((x) => x.fila)).size + " filas"}:${filasHtml(t)}</div>`;
     return t ? `<div class="s tk" title="${esc([t.tipo, t.motivo].filter(Boolean).join(" · "))}">🎫 Fila: ${esc(t.fila || "—")}${t.qtd > 1 ? ` (${t.qtd} tickets)` : ""}${ids.length ? `<div class="tk-links">${ids.map((id) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(id)}" target="_blank" rel="noopener noreferrer" title="Abrir o ticket no Multi360">#${esc(id)}</a>`).join(" ")}</div>` : ""}</div>`
       : `<div class="s sem-tk">Sem ticket</div>`;
   }
@@ -4610,11 +4615,13 @@ ${extra}
         d = d instanceof Date ? d.toISOString() : d ? String(d).replace(" ", "T") : null;
         const novo = { nf, fila: cFila >= 0 && r[cFila] != null ? String(r[cFila]).trim() : null, tipo: cTipo >= 0 && r[cTipo] != null ? String(r[cTipo]).trim() : null,
           motivo: cMot >= 0 && r[cMot] != null ? String(r[cMot]).trim() : null, id_ticket: cId >= 0 && r[cId] != null ? String(r[cId]).trim() : null, criado_em: d, qtd: 1 };
+        novo.filas = `${novo.id_ticket || ""}\t${novo.fila || ""}`;   // parte 92: todas as filas da nota (uma linha por ticket: id TAB fila)
         const ant = porNF.get(nf);
         if (!ant) porNF.set(nf, novo);
         else { novo.qtd = ant.qtd + 1; const mais = String(novo.criado_em || "") >= String(ant.criado_em || "");
           const ids = [...new Set((mais ? [novo.id_ticket, ant.id_ticket] : [ant.id_ticket, novo.id_ticket]).flatMap((x) => String(x || "").split(",")).map((x) => x.trim()).filter(Boolean))].join(",");   // guarda todos os números (o mais novo primeiro)
-          porNF.set(nf, { ...(mais ? novo : ant), qtd: novo.qtd, id_ticket: ids || null }); }
+          const filas = [...new Set((mais ? [novo.filas, ant.filas] : [ant.filas, novo.filas]).join("\n").split("\n"))].join("\n");
+          porNF.set(nf, { ...(mais ? novo : ant), qtd: novo.qtd, id_ticket: ids || null, filas }); }
       });
       linhas = [...porNF.values()];
       if (!linhas.length) throw new Error("A aba Tickets não tem notas.");
@@ -6072,7 +6079,8 @@ ${extra}
     const sit = r ? r._sit : x._atrasoG || x._atraso ? "ab_atraso" : "ab_prazo";
     return { pedido: x.pedido, nf, transp: r ? r.transp : x.transportadora || "", uf: r ? r.uf : x.uf || "", cidade: (r ? r.cidade : x.cidade) || "", sit,
       atraso: r ? r._atraso || 0 : x._atrasoG || x._atraso || 0, prom: r ? r._prom : x.prev_original || null, nova: t.nova_data || null,
-      ult: r ? r.ult : x.ultima_atualizacao ? String(x.ultima_atualizacao).slice(0, 10) : null, micro: (r ? r.micro : x.micro_status) || "" };
+      ult: r ? r.ult : x.ultima_atualizacao ? String(x.ultima_atualizacao).slice(0, 10) : null, micro: (r ? r.micro : x.micro_status) || "",
+      tk: ticketsInfo ? tickets.get(chaveNF(nf)) || null : null };
   }
   const LM_COR = { ab_atraso: "vermelho", ab_risco: "ambar", ab_prazo: "azul", ent_atraso: "vermelho", ent_prazo: "verde", cancelado: "cinza" };
   function abrirListaCard(titulo, lista, excelBtn) {
@@ -6082,7 +6090,7 @@ ${extra}
       m = document.createElement("div"); m.id = "lista-modal"; m.className = "lm-fundo"; m.hidden = true;
       m.innerHTML = `<div class="lm-caixa" role="dialog" aria-modal="true"><header class="lm-topo"><div><h2 id="lm-tit"></h2><small id="lm-qtd"></small></div>
         <div class="lm-acoes"><button type="button" class="btn lm-excel" id="lm-excel">⤓ Baixar Excel</button><button type="button" class="lm-fechar" id="lm-fechar" aria-label="Fechar">×</button></div></header>
-        <div class="lm-corpo"><table class="lm-tab"><thead><tr><th>Nota</th><th>Transportadora</th><th>UF</th><th>Cidade</th><th>Micro status</th><th>Situação</th><th class="num">Dias atraso</th><th>Prometida</th><th>Nova data</th><th>Últ. movim.</th><th>Rastreio</th></tr></thead><tbody id="lm-linhas"></tbody></table></div>
+        <div class="lm-corpo"><table class="lm-tab"><thead><tr><th>Nota</th><th>Transportadora</th><th>UF</th><th>Cidade</th><th>Micro status</th><th>Ticket / fila</th><th>Situação</th><th class="num">Dias atraso</th><th>Prometida</th><th>Nova data</th><th>Últ. movim.</th><th>Rastreio</th></tr></thead><tbody id="lm-linhas"></tbody></table></div>
         <footer class="lm-rodape" id="lm-rodape"></footer></div>`;
       document.body.appendChild(m);
       const fechar = () => { m.hidden = true; document.body.classList.remove("lm-aberto"); };
@@ -6091,8 +6099,8 @@ ${extra}
         const b = e.target.closest("[data-ssw]"); if (b) abrirSSW(b.dataset.ssw, b.dataset.transp, b.dataset.pedido);
         if (e.target.closest("#lm-excel") && lmExcel && $(lmExcel)) return $(lmExcel).click();   // mesmo relatório de antes da página
         if (e.target.closest("#lm-excel")) {
-          const aoa = [["Pedido", "Nota", "Transportadora", "UF", "Cidade", "Micro status", "Situação", "Dias atraso", "Prometida", "Nova data", "Últ. movim."]]
-            .concat(lmLinhas.map((l) => [l.pedido, l.nf, l.transp, l.uf, l.cidade, l.micro, G_SIT_NOME[l.sit] || "", l.atraso, br(l.prom), br(l.nova), br(l.ult)]));
+          const aoa = [["Pedido", "Nota", "Transportadora", "UF", "Cidade", "Micro status", "Fila(s) do ticket", "Situação", "Dias atraso", "Prometida", "Nova data", "Últ. movim."]]
+            .concat(lmLinhas.map((l) => [l.pedido, l.nf, l.transp, l.uf, l.cidade, l.micro, l.tk ? filasTxt(l.tk) : "", G_SIT_NOME[l.sit] || "", l.atraso, br(l.prom), br(l.nova), br(l.ult)]));
           const ws = XLSX.utils.aoa_to_sheet(aoa), wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "Pedidos");
           XLSX.writeFile(wb, `${lmTitulo.replace(/\s*\(\d[\d.]*\)\s*$/, "").replace(/[^\wÀ-ú]+/g, "_").slice(0, 60)}_${hojeISO()}.xlsx`);
         }
@@ -6102,10 +6110,10 @@ ${extra}
     const MAX = 500, L = lmLinhas;
     $("lm-tit").textContent = titulo.replace(/\s*\(\d[\d.]*\)\s*$/, "");
     $("lm-qtd").textContent = `${fmt(L.length)} pedido(s)`;
-    $("lm-linhas").innerHTML = L.slice(0, MAX).map((l) => `<tr><td class="p" title="${esc(l.pedido)}">${esc(l.nf)}</td><td>${esc(l.transp)}</td><td>${esc(l.uf)}</td><td>${esc(l.cidade)}</td><td class="s">${esc(l.micro)}</td>
+    $("lm-linhas").innerHTML = L.slice(0, MAX).map((l) => `<tr><td class="p" title="${esc(l.pedido)}">${esc(l.nf)}</td><td>${esc(l.transp)}</td><td>${esc(l.uf)}</td><td>${esc(l.cidade)}</td><td class="s">${esc(l.micro)}</td><td class="s tk">${l.tk ? (filasDe(l.tk).length > 1 ? `<b>${l.tk.qtd} tickets:</b>${filasHtml(l.tk)}` : esc(l.tk.fila || "—")) : ""}</td>
       <td><span class="chip ${LM_COR[l.sit] || "cinza"}">${esc(G_SIT_NOME[l.sit] || "")}</span></td><td class="num">${l.atraso || "—"}</td><td>${br(l.prom) || "—"}</td><td>${br(l.nova) || "—"}</td><td>${br(l.ult) || "—"}</td>
       <td>${l.nf ? `<button type="button" class="link" data-ssw="${esc(l.nf)}" data-transp="${esc(l.transp)}" data-pedido="${esc(l.pedido)}">abrir</button>` : ""}</td></tr>`).join("")
-      || `<tr><td colspan="11" class="vazio">Nenhum pedido neste card.</td></tr>`;
+      || `<tr><td colspan="12" class="vazio">Nenhum pedido neste card.</td></tr>`;
     $("lm-rodape").textContent = L.length > MAX ? `Mostrando os primeiros ${fmt(MAX)} de ${fmt(L.length)}. Clique em "Baixar Excel" para o relatório completo.` : `${fmt(L.length)} pedido(s).`;
     $("lm-rodape").hidden = false;
     m.hidden = false; document.body.classList.add("lm-aberto"); m.querySelector(".lm-corpo").scrollTop = 0;
