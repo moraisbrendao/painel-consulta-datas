@@ -4380,3 +4380,105 @@ grant execute on function public.link_pendentes(text) to anon, authenticated;
 create index if not exists repo_hist_envio on public.repo_hist (envio_id);
 
 notify pgrst, 'reload schema';
+-- 95) Link das transportadoras (Brenda 27/11): a transportadora pode salvar só o MOTIVO + observação, sem nova data
+--     (ex.: Extravio, ainda sem data). O pedido continua na lista (ainda falta a data) e mostra o retorno salvo.
+--     Precisa ter rodado a parte 94 antes.
+create or replace function public.link_responder(p_token text, p_itens jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; x record; d date; ok int := 0; rec int := 0;
+  motivos text[] := array['Em rota de entrega','Reagendado com o cliente','Cliente ausente','Endereço não localizado','Aguardando transferência','Atraso operacional','Avaria',
+                          'Não chegou em nosso CD','Extravio','Aguardando retorno da Multimóveis','Falta de volumes','Outro'];
+begin
+  l := public._link_de(p_token);
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) > 500 then raise exception 'Envio inválido.'; end if;
+  perform set_config('painel.link', left(l.nome, 60), true);
+  for x in select * from jsonb_to_recordset(p_itens) as y(pedido text, nova_data text, motivo text, obs text, sku text) loop
+    begin
+      d := case when coalesce(x.nova_data, '') ~ '^\d{4}-\d{2}-\d{2}$' then x.nova_data::date end;
+      -- parte 95: a data é opcional (ex.: Extravio sem nova data ainda); se vier, tem que ser de hoje a 90 dias
+      if (coalesce(x.nova_data, '') <> '' and (d is null or d < hoje or d > hoje + 90)) or not (x.motivo = any (motivos))
+         or (x.motivo = 'Falta de volumes' and nullif(trim(coalesce(x.sku, '')), '') is null)
+         or not exists (select 1 from public.base_pedidos b where b.pedido = x.pedido and b.transportadora = any (l.transportadoras)
+                          and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%') then
+        rec := rec + 1; continue;
+      end if;
+      insert into public.tratativas (pedido, nova_data, observacao)
+      values (x.pedido, d, left('Transportadora: ' || x.motivo || case when d is null then ' (sem nova data)' else '' end
+        || case when x.motivo = 'Falta de volumes' then ' · SKU ' || left(trim(x.sku), 200) else '' end
+        || coalesce(' · ' || nullif(trim(x.obs), ''), ''), 1000))
+      on conflict (pedido) do update set nova_data = coalesce(excluded.nova_data, public.tratativas.nova_data), observacao = excluded.observacao;
+      insert into public.link_respostas (link_id, nome, pedido, nova_data, motivo, sku, obs, prometido, transportadora, nf)
+      select l.id, l.nome, x.pedido, d, x.motivo, case when x.motivo = 'Falta de volumes' then left(trim(x.sku), 200) end, left(nullif(trim(x.obs), ''), 300),
+             coalesce(b.prev_original, b.prev_atual), b.transportadora, b.nf
+        from public.base_pedidos b where b.pedido = x.pedido;
+      ok := ok + 1;
+    exception when others then rec := rec + 1;
+    end;
+  end loop;
+  if ok > 0 then update public.transp_links set ultima_resposta = now(), respostas = respostas + ok where id = l.id; end if;
+  return jsonb_build_object('gravados', ok, 'recusados', rec);
+end $$;
+revoke all on function public.link_responder(text, jsonb) from public;
+grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
+
+create or replace function public.link_pendentes(p_token text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; r jsonb; sem_nf text[];
+begin
+  l := public._link_de(p_token);
+  update public.transp_links set ultimo_acesso = now(), acessos = acessos + 1 where id = l.id;
+  select coalesce(array_agg(distinct public.chave_nf(h.nota_ticket)), '{}') into sem_nf
+    from public.repo_hist h
+    left join public.reposicoes_tk rt on rt.ticket = h.ticket
+   where h.envio_id = (select max(id) from public.repo_envios)
+     and coalesce(h.nota_ticket, '') <> ''
+     and coalesce(rt.status, '') !~* 'RESOLVID|ENCERRAD'
+     and coalesce(h.fila_atual, '') !~* 'RECUPERA'
+     and (coalesce(h.fila_atual, '') ~* 'AGUARDANDO FATURAMENTO|CONFIRMAR NOVA DATA|DIGITAR PEDIDO DE REPOSI|UPLOAD DE ARQUIVO'
+          or not exists (select 1 from public.repo_hist y where y.ticket = h.ticket and y.nf_nova <> ''));
+  with cand as materialized (
+    select b.pedido, b.nf, public.chave_nf(b.nf) as k, b.transportadora, b.cidade, b.uf, b.extra ->> 'cep' as cep,
+           coalesce(b.prev_original, b.prev_atual) as prometido, b.micro_status, b.data_expedicao, t.nova_data
+      from public.base_pedidos b
+      left join public.tratativas t on t.pedido = b.pedido
+     where b.transportadora = any (l.transportadoras)
+       and b.data_expedicao is not null
+       and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+       and trim(coalesce(b.status_intelipost, '')) !~* '^(despachado|falha ao criar|criado|pr[eé][- ]?lista)'
+       and (t.nova_data is null or t.nova_data < hoje)
+       and (coalesce(b.prev_original, b.prev_atual) <= hoje + 1 or coalesce(b.range_atrasos, '') ilike 'vencido%' or t.nova_data < hoje)
+  ), ok as materialized (
+    select c.* from cand c
+     where not exists (select 1 from public.intelipost_fechados f where f.pedido = c.pedido)
+       and not exists (select 1 from public.ocorrencias_tk z where z.nf = c.k and coalesce(z.status, '') ilike 'novo%')
+       and not (c.k = any (sem_nf))
+       and not exists (select 1 from public.barrar_entrega z where z.nf = c.k and z.decisao = 'barrar' and z.portal_status = 'feito')
+  )
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido', c.pedido, 'nf', c.nf, 'transportadora', c.transportadora, 'cidade', c.cidade, 'uf', c.uf, 'cep', nullif(regexp_replace(coalesce(c.cep, ''), '\D', '', 'g'), ''),
+           'prometido', c.prometido, 'micro', c.micro_status, 'expedicao', c.data_expedicao,
+           'nova_antiga', c.nova_data,
+           'barrar', be.nf is not null,
+           'oc_msg', case when o.nf is not null then left(o.mensagem, 500) end, 'oc_em', o.mensagem_em, 'oc_motivo', o.motivo,
+           'nf_repo', tn.nf_repo, 'repo_tipo', tn.tipo,
+           'sd_motivo', sd.motivo, 'sd_obs', sd.obs, 'sd_sku', sd.sku, 'sd_em', sd.em) order by c.prometido, c.pedido), '[]'::jsonb)
+    into r
+    from ok c
+    left join lateral (select x.nf from public.barrar_entrega x where x.na_planilha and x.nf = c.k limit 1) be on true
+    left join lateral (select x.nf, x.mensagem, x.mensagem_em, x.motivo from public.ocorrencias_tk x
+                        where x.nf = c.k and coalesce(x.status, '') ilike '%andamento%' and coalesce(x.solicitante, '') ilike 'multi%'
+                        order by x.mensagem_em desc nulls last limit 1) o on true
+    left join lateral (select x.nf_nova || case when x.serie is not null and position('-' in x.nf_nova) = 0 then '-' || x.serie else '' end as nf_repo, x.tipo
+                         from public.troca_notas x where x.pedido = c.pedido and coalesce(x.nf_nova, '') <> ''
+                        order by x.data_emissao desc nulls last limit 1) tn on true
+    -- parte 95: último retorno SEM data que a transportadora deu (motivo + observação), para mostrar e preencher de novo
+    left join lateral (select x.motivo, x.obs, x.sku, x.em from public.link_respostas x
+                        where x.pedido = c.pedido and x.nova_data is null order by x.em desc limit 1) sd on true;
+  insert into public.link_acessos (link_id, nome, qtd, pedidos)
+  select l.id, l.nome, jsonb_array_length(r), coalesce(array(select e ->> 'pedido' from jsonb_array_elements(r) e), '{}');
+  return jsonb_build_object('nome', l.nome, 'hoje', hoje, 'itens', r);
+end $$;
+revoke all on function public.link_pendentes(text) from public;
+grant execute on function public.link_pendentes(text) to anon, authenticated;
+
+notify pgrst, 'reload schema';

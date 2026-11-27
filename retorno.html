@@ -102,7 +102,7 @@
     <p id="sub">Carregando…</p>
   </header>
   <main>
-    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela; ou use a planilha. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela; ou use a planilha. Ainda não tem data (ex.: extravio)? Escolha só o motivo e escreva a observação: também salva, e o pedido continua aqui até vocês passarem a data. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
     <section class="desemp" id="desemp" hidden>
       <div class="d-topo"><h2>📈 Desempenho de vocês</h2><span class="s">mesma conta que a Multimóveis usa para medir as transportadoras</span></div>
       <div class="d-grade">
@@ -111,7 +111,7 @@
       </div>
     </section>
     <div class="planilha" id="planilha">
-      <div><b>📊 Muitos pedidos?</b> Baixe a planilha, preencha as colunas <b>Nova data</b>, <b>Motivo</b> (e SKU / Observação) e suba de volta: salva tudo sozinho.</div>
+      <div><b>📊 Muitos pedidos?</b> Baixe a planilha, preencha as colunas <b>Motivo</b>, <b>Nova data</b> (se já tiver) e SKU / Observação e suba de volta: salva tudo sozinho.</div>
       <div class="pl-bts"><button type="button" class="btn-cont" id="pl-baixar">⤓ Baixar planilha dos pedidos</button>
         <label class="btn-am" id="pl-subir-l">⇪ Subir planilha preenchida<input type="file" id="pl-subir" accept=".xlsx,.xls,.csv" hidden></label></div>
       <div id="pl-res"></div>
@@ -158,6 +158,7 @@
           catch (e) { if (t >= 3 || !/timeout|tempo|falar com o sistema/i.test(e.message)) throw /timeout/i.test(e.message) ? new Error("O sistema está ocupado agora. Atualize a página em alguns minutos.") : e;
             $("explica").textContent = "Carregando… o sistema está ocupado, tentando de novo."; await new Promise((ok) => setTimeout(ok, 2500 * t)); } }
         itens = r.itens || []; hoje = r.hoje;
+        for (const x of itens) if (x.sd_motivo && !rasc.has(x.pedido)) rasc.set(x.pedido, { motivo: x.sd_motivo, obs: x.sd_obs || "", sku: x.sd_sku || "", nova_data: "" });   // parte 95: retorno sem data já salvo
         $("titulo").textContent = `Retorno de entregas · ${r.nome}`;
         document.title = `Retorno de entregas · ${r.nome}`;
         desenhar(); carregarDesempenho();
@@ -201,7 +202,7 @@
             <input class="sku" maxlength="200" placeholder="SKU do item que está faltando" value="${esc(ra.sku || "")}"${ra.motivo === "Falta de volumes" ? "" : " hidden"} aria-label="SKU do item">
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>
-          <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : (chip || `<span class="s">preencha data e motivo</span>`)}</div><div class="err"></div></div>
+          <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : x.sd_motivo ? `${chip}<div class="ok">✓ motivo salvo${x.sd_em ? " em " + br(String(x.sd_em).slice(0, 10)) : ""}, sem nova data</div>` : (chip || `<span class="s">preencha o motivo (e a data, se já tiver)</span>`)}</div><div class="err"></div></div>
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
           ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
         </div>`;
@@ -216,11 +217,13 @@
       const vis = V.filter((x) => !feitos.has(x.pedido));
       $("ck-todos").checked = vis.length > 0 && vis.every((x) => sel.has(x.pedido));
     }
+    // retorno só com motivo (sem nova data, parte 95): o pedido continua na lista, marcado "motivo salvo"
+    const semDataOk = (x) => { const it = itens.find((z) => z.pedido === x.pedido); if (it) { it.sd_motivo = x.motivo; it.sd_obs = x.obs; it.sd_em = new Date().toISOString(); } };
     const dadosDe = (el) => ({ pedido: el.dataset.p, nova_data: el.querySelector(".dt").value, motivo: el.querySelector(".mt").value, obs: el.querySelector(".obs").value.trim(), sku: el.querySelector(".mt").value === "Falta de volumes" ? el.querySelector(".sku").value.trim() : "" });
     function valida(x) {
-      if (!x.nova_data || !x.motivo) return null;                       // ainda preenchendo: não avisa nada
-      if (x.nova_data < hoje) return "A nova data não pode ser no passado.";
-      if (x.nova_data > maxData()) return "Data muito longe (máximo 90 dias).";
+      if (!x.motivo) return null;                                      // ainda preenchendo: não avisa nada
+      if (x.nova_data && x.nova_data < hoje) return "A nova data não pode ser no passado.";   // a data é opcional (Brenda 27/11: ex. Extravio sem data ainda)
+      if (x.nova_data && x.nova_data > maxData()) return "Data muito longe (máximo 90 dias).";
       if (x.motivo === "Falta de volumes" && !x.sku) return "Digite o SKU do item que está faltando.";
       if (x.motivo === "Outro" && !x.obs) return "Escreva na observação o que aconteceu.";
       return "";
@@ -238,7 +241,8 @@
         if (!r.gravados) { st(el, ""); el.querySelector(".err").textContent = "Não aceito: o pedido pode já ter sido entregue. Atualize a página."; return; }
         ultimoEnviado.set(x.pedido, chave);
         const h = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
-        feitos.set(x.pedido, h); el.classList.add("salvo"); st(el, `<span class="ok">✓ salvo às ${h}</span>`);
+        if (x.nova_data) { feitos.set(x.pedido, h); el.classList.add("salvo"); st(el, `<span class="ok">✓ salvo às ${h}</span>`); }
+        else { semDataOk(x); st(el, `<span class="ok">✓ motivo salvo às ${h}</span><div class="s">sem nova data: quando tiver, coloque a data</div>`); }
         const pend = itens.filter((y) => !feitos.has(y.pedido)).length;
         $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + ` · ${feitos.size} salvo${feitos.size === 1 ? "" : "s"} agora`;
         desenharCards();
@@ -252,7 +256,7 @@
       clearTimeout(timers.get(el.dataset.p));
       const x = dadosDe(el), v = valida(x);
       el.querySelector(".err").textContent = v || "";
-      if (v === "") { st(el, `<span class="s">vai salvar…</span>`); timers.set(el.dataset.p, setTimeout(() => salvar(el), 1200)); }
+      if (v === "") { st(el, `<span class="s">vai salvar…</span>`); timers.set(el.dataset.p, setTimeout(() => salvar(el), x.nova_data ? 1200 : 4000)); }
     };
     $("lista").addEventListener("click", (e) => {
       const c = e.target.closest(".ck"); if (!c) return;
@@ -269,7 +273,7 @@
     $("m-aplicar").addEventListener("click", async () => {
       const base = { nova_data: $("m-dt").value, motivo: $("m-mt").value, obs: $("m-obs").value.trim(), sku: $("m-mt").value === "Falta de volumes" ? $("m-sku").value.trim() : "" };
       const v = valida(base);
-      if (v === null) { $("m-err").textContent = "Escolha a nova data e o motivo."; return; }
+      if (v === null) { $("m-err").textContent = "Escolha o motivo (e a nova data, se já tiver)."; return; }
       if (v) { $("m-err").textContent = v; return; }
       const alvo = [...sel]; $("m-err").textContent = "";
       const bt = $("m-aplicar"); bt.disabled = true; bt.textContent = `Salvando 0 de ${alvo.length}…`;
@@ -282,7 +286,7 @@
           rasc.set(pedido, x); clearTimeout(timers.get(pedido));
           try {
             const r = await rpc("link_responder", { p_token: token, p_itens: [x] });
-            if (r.gravados) { ok++; feitos.set(pedido, h()); ultimoEnviado.set(pedido, JSON.stringify(x)); sel.delete(pedido); } else falhou++;
+            if (r.gravados) { ok++; x.nova_data ? feitos.set(pedido, h()) : semDataOk(x); ultimoEnviado.set(pedido, JSON.stringify(x)); sel.delete(pedido); } else falhou++;
           } catch (e) { falhou++; }
           bt.textContent = `Salvando ${++n} de ${alvo.length}…`;
         }
@@ -339,20 +343,20 @@
         if (String(dRaw ?? "").trim() === "" && !mRaw) { vazias++; return; }
         if (!x) return erros.push(`${quem}: não está mais na sua lista (pode já ter sido entregue ou já tem data).`);
         const nova = dataPl(dRaw), motivo = MOT.get(semAc(mRaw)) || "";
-        if (!dataOk(nova)) return erros.push(`${quem}: data "${String(dRaw)}" inválida (use dd/mm/aaaa).`);
+        if (String(dRaw ?? "").trim() !== "" && !dataOk(nova)) return erros.push(`${quem}: data "${String(dRaw)}" inválida (use dd/mm/aaaa).`);
         if (!motivo) return erros.push(`${quem}: motivo "${mRaw || "(vazio)"}" não é um dos aceitos (veja a aba Motivos).`);
-        const y = { pedido: x.pedido, nova_data: nova, motivo, obs: cO >= 0 ? String(r[cO] ?? "").trim().slice(0, 300) : "", sku: motivo === "Falta de volumes" && cS >= 0 ? String(r[cS] ?? "").trim().slice(0, 200) : "" };
+        const y = { pedido: x.pedido, nova_data: dataOk(nova) ? nova : "", motivo, obs: cO >= 0 ? String(r[cO] ?? "").trim().slice(0, 300) : "", sku: motivo === "Falta de volumes" && cS >= 0 ? String(r[cS] ?? "").trim().slice(0, 200) : "" };
         const v = valida(y); if (v) return erros.push(`${quem}: ${v}`);
         enviar.push(y);
       });
-      if (!enviar.length) { res.innerHTML = `<b>Nenhuma linha para salvar.</b>${vazias ? ` <span class="s">${vazias} linha(s) sem data e motivo.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`; return; }
+      if (!enviar.length) { res.innerHTML = `<b>Nenhuma linha para salvar.</b>${vazias ? ` <span class="s">${vazias} linha(s) sem motivo.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`; return; }
       let ok = 0, n = 0; const fila = enviar.slice(), h = () => new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
       res.innerHTML = `<span class="s" id="pl-prog">Salvando 0 de ${enviar.length}…</span>`;
       async function trabalhador() {
         while (fila.length) {
           const y = fila.shift(); rasc.set(y.pedido, y); clearTimeout(timers.get(y.pedido));
           try { const r = await rpc("link_responder", { p_token: token, p_itens: [y] });
-            if (r.gravados) { ok++; feitos.set(y.pedido, h()); ultimoEnviado.set(y.pedido, JSON.stringify(y)); sel.delete(y.pedido); }
+            if (r.gravados) { ok++; y.nova_data ? feitos.set(y.pedido, h()) : semDataOk(y); ultimoEnviado.set(y.pedido, JSON.stringify(y)); sel.delete(y.pedido); }
             else erros.push(`NF ${(itens.find((z) => z.pedido === y.pedido) || {}).nf || ""}: não aceito (pode já ter sido entregue).`);
           } catch (err) { erros.push(`NF ${(itens.find((z) => z.pedido === y.pedido) || {}).nf || ""}: ${err.message}`); }
           const pg = $("pl-prog"); if (pg) pg.textContent = `Salvando ${++n} de ${enviar.length}…`;
@@ -360,7 +364,7 @@
       }
       await Promise.all([1, 2, 3, 4].map(trabalhador));
       desenhar();
-      res.innerHTML = `<span class="r-ok">✓ ${ok} pedido(s) salvo(s) pela planilha.</span>${vazias ? ` <span class="s">${vazias} linha(s) sem data e motivo ficaram de fora.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`;
+      res.innerHTML = `<span class="r-ok">✓ ${ok} pedido(s) salvo(s) pela planilha.</span>${vazias ? ` <span class="s">${vazias} linha(s) sem motivo ficaram de fora.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`;
     });
 
     // desempenho (Brenda 26/11, parte 93): performance do mês (mês da criação) e gráfico de Produtividade, só números agregados
