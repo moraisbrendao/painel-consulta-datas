@@ -18,7 +18,7 @@
     .aviso.erro { border-color: var(--vermelho); color: var(--vermelho); }
     .barra { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
     .barra input { flex: 1; min-width: 180px; padding: 10px 12px; border: 1px solid var(--linha); border-radius: 10px; font-size: 15px; }
-    .ped { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1.2fr 1fr 1.6fr auto; gap: 10px 14px; align-items: center; }
+    .ped { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; display: grid; grid-template-columns: 1.2fr 1fr 1.6fr 150px; gap: 10px 14px; align-items: center; }
     .ped.salvo { background: var(--verde-f); border-color: #9fd8b4; }
     .ped b.num { font-size: 15px; word-break: break-all; }
     .s { color: var(--suave); font-size: 13px; }
@@ -74,7 +74,7 @@
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
     const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Outro"];
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
-    let itens = [], hoje = "", filtro = "", feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+    let itens = [], hoje = "", filtro = "", chips = new Map(), feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
     async function rpc(nome, corpo) {
       const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
@@ -123,18 +123,18 @@
       $("lista").innerHTML = V.map((x) => {
         const d = x.prometido ? dias(x.prometido, hoje) : null, ra = rasc.get(x.pedido) || {};
         const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
-        const fs = feitos.get(x.pedido);
+        const fs = feitos.get(x.pedido); chips.set(x.pedido, chip);
         return `<div class="ped${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme com a Logística.</div>` : ""}
           ${x.oc_msg ? `<div class="alerta oc"><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
-          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}<div class="s">${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}</div>` : ""}</div>
-          <div><div>Prometido ${br(x.prometido)}</div><div>${chip}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
+          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}</div>` : ""}</div>
+          <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
             <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>
-          <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : `<span class="s">preencha data e motivo</span>`}</div><div class="err"></div></div>
+          <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : (chip || `<span class="s">preencha data e motivo</span>`)}</div><div class="err"></div></div>
         </div>`;
       }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
     }
@@ -148,7 +148,7 @@
     }
     // salva sozinho (Brenda 26/11): com data + motivo válidos, 1,2 s depois da última mudança na linha (observação digitando espera)
     const timers = new Map(), ultimoEnviado = new Map();
-    const st = (el, html) => { el.querySelector(".st").innerHTML = html; };
+    const st = (el, html) => { el.querySelector(".st").innerHTML = html || chips.get(el.dataset.p) || ""; };
     async function salvar(el) {
       const x = dadosDe(el), e = valida(x); el.querySelector(".err").textContent = e || "";
       if (e !== "") return;
