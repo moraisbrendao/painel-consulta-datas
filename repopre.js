@@ -58,7 +58,7 @@
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);
     const vols = (x.volumes || []).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? " posse" : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${esc(v)}${posse.has(v) ? " · em posse" : ""}</button>`).join("")
       || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket." : "Aguardando o robô."}</span>`;
-    const fotos = (x.fotos || []).map((f) => `<a href="${esc(f)}" target="_blank" rel="noopener noreferrer" title="Abrir a foto em tamanho grande"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></a>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
+    const fotos = (x.fotos || []).map((f, i) => `<div class="rpp-foto"><button type="button" class="rpp-baixa" data-rpp-baixa="${esc(f)}" data-nome="NF-${esc(x.nf)}-foto-${i + 1}" title="Clique para baixar a foto"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></button><a class="s" href="${esc(f)}" target="_blank" rel="noopener noreferrer">🔍 ampliar</a></div>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const tks = (x.tickets || []).map((t) => `<span class="chip${/devolu|cancel/i.test(`${t.tipo} ${t.fila}`) ? " verm" : ""}">${esc(t.tipo || "ticket")}${t.fila ? " · " + esc(t.fila) : ""}${t.situacao ? " · " + esc(t.situacao) : ""}</span>`).join(" ") || `<span class="s">${x.venda ? "sem tickets" : ""}</span>`;
     return `<article class="rpp-caso">
       <div class="rpp-fotos">${fotos}</div>
@@ -90,6 +90,14 @@
     const r2 = await sb().rpc("rodar_robo_repopre_solicitar"); if (r2.error) return toast("Marcado, mas não consegui chamar o robô: " + r2.error.message, true);
     toast("Robô chamado: em alguns minutos aparece como solicitada."); setTimeout(carregar, 180000);
   }
+  // clicar na foto baixa o arquivo (Brenda 27/11); se o site da foto não deixar baixar direto, abre numa aba para salvar
+  async function baixarFoto(url, nome) {
+    try {
+      const r = await fetch(url, { mode: "cors" }); if (!r.ok) throw new Error(r.status);
+      const b = await r.blob(), ext = (b.type.split("/")[1] || "jpg").replace("jpeg", "jpg"), a = document.createElement("a");
+      a.href = URL.createObjectURL(b); a.download = `${nome}.${ext}`; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    } catch (_) { window.open(url, "_blank", "noopener"); toast("Abri a foto numa aba: clique com o botão direito › Salvar imagem como."); }
+  }
   async function marcar(nf, v) {
     const x = L.find((y) => y.nf === nf); if (!x) return;
     const S = new Set(x.vol_posse || []); S.has(v) ? S.delete(v) : S.add(v);
@@ -102,6 +110,7 @@
   $("rp-repopre").addEventListener("click", (e) => {
     const c = e.target.closest("[data-rpp]"); if (c) { card = c.dataset.rpp; desenhar(); return; }
     const v = e.target.closest("[data-rpp-vol]"); if (v) { const x = L.find((y) => y.nf === v.dataset.nf); if (x && ["pendente", "feito"].includes(x.solicitar_status)) return toast("Já foi para a solicitação: não dá para mudar o volume.", true); marcar(v.dataset.nf, v.dataset.rppVol); return; }
+    const bx = e.target.closest("[data-rpp-baixa]"); if (bx) { baixarFoto(bx.dataset.rppBaixa, bx.dataset.nome); return; }
     const so = e.target.closest("[data-rpp-sol]"); if (so) solicitar(so.dataset.rppSol);
   });
   $("rpp-busca").addEventListener("input", desenhar);

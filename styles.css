@@ -1491,3 +1491,5 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 .rpp-falta { font-size: 14px; padding: 6px 10px; border-radius: 8px; background: #f5f6f8; border: 1px dashed var(--borda); }
 .rpp-falta.ok { background: #fde8e8; border: 1px solid #f3b4b4; } .rpp-falta.ok b { color: var(--vermelho); }
 .rpp-acao:empty { display: none; }
+.rpp-foto { display: flex; flex-direction: column; gap: 2px; align-items: center; }
+.rpp-baixa { border: 0; padding: 0; background: none; cursor: pointer; } .rpp-baixa:hover img { outline: 2px solid var(--amarelo, #f5c518); }
