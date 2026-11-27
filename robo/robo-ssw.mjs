@@ -353,6 +353,14 @@ if (MODO === "diag-senha") {   // Trans Sua: testa a senha de jeitos diferentes 
     await tenta(`série ${se} · sem senha`, cnpjDaSerie(se), n, "");
     await tenta(`série ${se} · com senha`, cnpjDaSerie(se), n, chaveDe(l.transportadora)); }
 }
+if (MODO === "diag-erp") {   // ERP web (endereço no input transp, não vai para o código nem para o log): abre da nuvem? tem login/captcha? só sim/não
+  const u = process.env.TRANSP || ""; if (!/^https:\/\//.test(u)) log("diag-erp: falta o endereço"); else {
+    for (const nome of ["acesso"]) {
+      try { const r = await fetch(u, { signal: AbortSignal.timeout(25000), redirect: "follow" }); const t = await r.text();
+        log(`${nome}: status ${r.status} · tamanho ${t.length} · redirecionou ${r.redirected ? "sim" : "não"} · título: ${((t.match(/<title[^>]*>([^<]{0,80})/i) || [])[1] || "—").replace(/\d{4,}/g, "#")}`);
+        log(`   campo de senha: ${/type=["']?password/i.test(t) ? "sim" : "não"} · captcha: ${/captcha|recaptcha|hcaptcha/i.test(t) ? "sim" : "não"} · formulários: ${(t.match(/<form/gi) || []).length} · scripts: ${(t.match(/<script/gi) || []).length} · pistas: ${["angular", "react", "vue", "asp.net", "__VIEWSTATE", "jsf", "javax.faces", "oracle", "senior", "totvs", "protheus", "sap", "promob", "wildfly", "tomcat", "zk"].filter((k) => t.toLowerCase().includes(k.toLowerCase())).join(", ") || "nenhuma"}`);
+        break; } catch (e) { log(`${nome}: erro ${String((e.cause && (e.cause.code || e.cause.message)) || e.message).slice(0, 120)}`); } } }
+}
 if (MODO === "diag-ajuda") {   // página pública de ajuda do SSW (sem dados de cliente)
   const p = await pagina("https://ssw.inf.br/ajuda/rastreamento.html");
   log("status:", p.status);
