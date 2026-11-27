@@ -1614,7 +1614,7 @@ if (MODO === "repo-pre") {   // Reposição pré › Falta de volumes: analisa o
   await entrarSupabase();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-  try { await (await import("./repo-pre.mjs")).rodarRepoPre({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 40 }); }
+  try { await (await import("./repo-pre.mjs")).rodarRepoPre({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 40, reler: process.env.TRANSP === "reler" }); }
   catch (e) { log("repo-pre: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }

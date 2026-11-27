@@ -56,7 +56,7 @@
   }
   function caso(x) {
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);
-    const vols = (x.volumes || []).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? " posse" : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${String(i + 1).padStart(2, "0")}/${String(x.volumes.length).padStart(2, "0")} · ${esc(v)}${posse.has(v) ? " · em posse" : ""}</button>`).join("")
+    const vols = (x.volumes || []).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? " posse" : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${esc(v)}${posse.has(v) ? " · em posse" : ""}</button>`).join("")
       || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket." : "Aguardando o robô."}</span>`;
     const fotos = (x.fotos || []).map((f) => `<a href="${esc(f)}" target="_blank" rel="noopener noreferrer" title="Abrir a foto em tamanho grande"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></a>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const tks = (x.tickets || []).map((t) => `<span class="chip${/devolu|cancel/i.test(`${t.tipo} ${t.fila}`) ? " verm" : ""}">${esc(t.tipo || "ticket")}${t.fila ? " · " + esc(t.fila) : ""}${t.situacao ? " · " + esc(t.situacao) : ""}</span>`).join(" ") || `<span class="s">${x.venda ? "sem tickets" : ""}</span>`;
@@ -66,7 +66,7 @@
         <div class="rpp-cab"><b>NF ${esc(x.nf)}</b> · ${esc(x.transp || "")} · solicitado ${esc(x.solicitado || "—")}${x.na_lista ? "" : ` · <span class="chip">saiu da lista</span>`}
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
         ${al.map(([t, m]) => `<div class="rpp-al ${t}">⚠ ${esc(m)}</div>`).join("")}
-        <div class="rpp-vols"><span class="s">Volumes da NF (clique no que aparece na foto):</span> ${vols}</div>
+        <div class="rpp-vols"><span class="s">${(x.volumes || []).length ? `A NF tem <b>${x.volumes.length} volume(s)</b> · clique no(s) que aparece(m) na foto:` : "Volumes da NF:"}</span> ${vols}</div>
         <div class="rpp-falta${posse.size && rp.length ? " ok" : ""}">${posse.size && rp.length ? `📦 <b>Volume faltante (repor): ${rp.map(esc).join(", ")}</b>` : posse.size ? `📦 <b>Nenhum volume faltante</b> <span class="s">(todos marcados como em posse)</span>` : `📦 <b>Volume faltante: ?</b> <span class="s">clique acima no volume que aparece na foto (está com a transportadora); o outro é o faltante</span>`}
           ${x.marcado_por ? `<span class="s">· marcado por ${esc(String(x.marcado_por).split("@")[0])} ${hora(x.marcado_em)}</span>` : ""}</div>
         <div class="rpp-acao">${acao(x, rp)}</div>

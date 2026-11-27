@@ -153,8 +153,10 @@ export async function volumesDoDialogo(p, linha, log) {
   const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
   if (await vol.count()) { await vol.click().catch(() => {}); await p.waitForTimeout(1200);
     const ops = await p.locator("[role=option], [role=listbox] li, [cmdk-item]").allInnerTexts().catch(() => []);
-    r.volumes = [...new Set(ops.join("\n").match(VOL) || [])]; r.opcoes = ops.length;
+    r.opcoes = ops.length;
     r.textos = ops.map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean);
+    // todas as opções da lista são volumes (o código pode vir sem ".0001", ex. 95812), menos "Selecionar todas" e "Fechar"
+    r.volumes = [...new Set(r.textos.filter((t) => !/^(selecionar todas?|fechar|limpar)$/i.test(t)))];
     if (log) log("  opções de Volumes (máscara):", r.textos.map((t) => t.replace(/\d/g, "#").slice(0, 60)).join(" | "));
     await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
   // fecha a janela SEM adicionar
@@ -218,7 +220,7 @@ async function fotosDaLinha(p, linha) {
   await p.keyboard.press("Escape"); await p.waitForTimeout(800);
   return [...new Set(out)].filter((u) => /^https:\/\//.test(u));
 }
-export async function rodarRepoPre({ chamar, log, ctx, limite = 40 }) {
+export async function rodarRepoPre({ chamar, log, ctx, limite = 40, reler = false }) {
   const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
   if (!(await aplicarNovo(p, log))) throw new Error("não achei o filtro Status = Novo no portal");
   const lista = await lerListaRepoPre(p, null);
@@ -234,7 +236,7 @@ export async function rodarRepoPre({ chamar, log, ctx, limite = 40 }) {
     const antes = jaTem.get(c.nf);
     const base = { nf: c.nf, motivo: c.motivo, status_portal: c.status, transp: c.transp, solicitado: c.data, qtd_volumes: c.qtd, serie: String(c.nf).split("-")[1].trim(), na_lista: true };
     // já analisado nas últimas 6 h com volumes e 360: só atualiza os dados da lista
-    if (antes && antes.volumes && antes.volumes.length && antes.venda != null && Date.now() - Date.parse(antes.analisado_em || 0) < 6 * 3600000) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
+    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda != null && Date.now() - Date.parse(antes.analisado_em || 0) < 6 * 3600000) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
     if (feitos >= limite) { if (!antes) await chamar("repo_pre", "POST", base, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {}); continue; }
     feitos++;
     const r = { ...base, analisado_em: new Date().toISOString(), robo_msg: null };
@@ -282,7 +284,7 @@ async function criarTicketPortal(p, linha, volumes, teste, log) {
   const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
   await vol.click(); await p.waitForTimeout(1200);
   const marcados = [];
-  for (const v of volumes) { const op = p.locator("[role=option], [role=listbox] li, [cmdk-item]").filter({ hasText: v }).first();
+  for (const v of volumes) { const op = p.locator("[role=option], [role=listbox] li, [cmdk-item]").filter({ hasText: new RegExp("^\\s*" + v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$") }).first();
     if (!(await op.count())) throw new Error(`o volume ${v} não está na lista do portal`); await op.click(); marcados.push(v); await p.waitForTimeout(500); }
   // fecha só a lista de volumes (botão Fechar da lista; senão clica no título da janela)
   const fechar = p.getByRole("button", { name: /^\s*fechar\s*$/i }).last();
