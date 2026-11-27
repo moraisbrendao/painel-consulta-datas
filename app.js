@@ -5843,6 +5843,7 @@ ${extra}
 
   async function carregarSac() {
     $("sac-info").textContent = "Carregando…";
+    carregarOcInv().catch(() => {});
     let lista = [];
     try {
       // parte 58: em partes de 1000 pela ordem do pedido (cada chamada é curta e não estoura o tempo do Supabase)
@@ -5876,7 +5877,28 @@ ${extra}
   }
   setInterval(() => { if (perfil === "sac" && !document.hidden && Date.now() - sacCarregadoEm > 5 * 60000) carregarSac(); }, 60000);
 
+  // parte 103 (Brenda 27/11): transportadora avisou pelo link que o retorno na ocorrência do portal não é válido → alerta urgente no topo da Consulta SAC
+  async function carregarOcInv() {
+    const box = $("sac-ocinv"); if (!box || !usuarioId) return;
+    const { data, error } = await sb.from("oc_invalida").select("id,nf,pedido,transportadora,obs,criado_em").is("verificado_em", null).order("criado_em", { ascending: false }).limit(200);
+    if (error) { box.hidden = true; return; }
+    box.hidden = !data.length;
+    box.innerHTML = data.length ? `<h2>🚨 Retorno inválido no portal de ocorrências (${data.length})</h2>` + data.map((o) => `<div class="ocinv-item">
+      <div><b>NF ${esc(o.nf || o.pedido)} teve retorno inválido no portal de ocorrências, verificar urgente.</b>
+        <div class="s">${esc(o.transportadora || "")} · pedido ${esc(o.pedido)} · avisado em ${new Date(o.criado_em).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}${o.obs ? " · “" + esc(o.obs) + "”" : ""}</div></div>
+      <button type="button" class="btn mini contorno" data-ocinv="${o.id}">✓ Verificado</button></div>`).join("") : "";
+  }
+  $("sac-ocinv").addEventListener("click", async (e) => {
+    const b = e.target.closest("[data-ocinv]"); if (!b) return;
+    b.disabled = true;
+    const { error } = await sb.rpc("oc_invalida_verificar", { p_id: Number(b.dataset.ocinv) });
+    if (error) { b.disabled = false; toast("Não consegui marcar: " + error.message, true); return; }
+    carregarOcInv();
+  });
+  setInterval(() => { if (paginaAtual === "sac" && !document.hidden) carregarOcInv(); }, 60000);
+
   function desenharSacLogistica() {
+    carregarOcInv().catch(() => {});
     if (!detNF) { carregarDetNF().then((m) => { if (m.size && paginaAtual === "sac") desenharSacLogistica(); }); }
     if (!senhasSSW.length) carregarSenhas().catch(() => {});
     const det = detNF || new Map();

@@ -4801,3 +4801,57 @@ notify pgrst, 'reload schema';
 alter table public.repo_pre add column if not exists anotacoes jsonb;
 alter table public.repo_pre add column if not exists rastreio jsonb;
 notify pgrst, 'reload schema';
+
+-- parte 103: link da transportadora › "Retorno inválido" na ocorrência → alerta urgente na Consulta SAC
+create table if not exists public.oc_invalida (
+  id bigserial primary key,
+  pedido text not null,
+  nf text,
+  transportadora text,
+  link_nome text,
+  obs text,
+  criado_em timestamptz not null default now(),
+  verificado_em timestamptz,
+  verificado_por text
+);
+create unique index if not exists oc_invalida_aberta on public.oc_invalida (pedido) where verificado_em is null;
+alter table public.oc_invalida enable row level security;
+drop policy if exists oc_invalida_ler on public.oc_invalida;
+create policy oc_invalida_ler on public.oc_invalida for select to authenticated using (true);
+grant select on public.oc_invalida to authenticated;
+
+-- transportadora avisa (pelo link, sem login)
+create or replace function public.link_oc_invalida(p_token text, p_pedido text, p_obs text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; b record;
+begin
+  l := public._link_de(p_token);
+  select pedido, nf, transportadora into b from public.base_pedidos where pedido = p_pedido and transportadora = any (l.transportadoras) limit 1;
+  if b.pedido is null then raise exception 'Pedido não encontrado para esta transportadora.'; end if;
+  insert into public.oc_invalida (pedido, nf, transportadora, link_nome, obs)
+  values (b.pedido, b.nf, b.transportadora, left(l.nome, 60), left(nullif(trim(coalesce(p_obs, '')), ''), 500))
+  on conflict (pedido) where verificado_em is null do update set obs = coalesce(excluded.obs, public.oc_invalida.obs), criado_em = now();
+  return jsonb_build_object('ok', true, 'em', now());
+end $$;
+revoke all on function public.link_oc_invalida(text, text, text) from public;
+grant execute on function public.link_oc_invalida(text, text, text) to anon, authenticated;
+
+-- o link mostra quais pedidos já foram avisados (e ainda não verificados pelo SAC)
+create or replace function public.link_oc_invalidas(p_token text)
+returns table (pedido text, criado_em timestamptz) language plpgsql security definer set search_path = public as $$
+declare l public.transp_links;
+begin
+  l := public._link_de(p_token);
+  return query select o.pedido, o.criado_em from public.oc_invalida o where o.verificado_em is null and o.transportadora = any (l.transportadoras);
+end $$;
+revoke all on function public.link_oc_invalidas(text) from public;
+grant execute on function public.link_oc_invalidas(text) to anon, authenticated;
+
+-- SAC / Logística marca como verificado
+create or replace function public.oc_invalida_verificar(p_id bigint)
+returns void language sql security definer set search_path = public as $$
+  update public.oc_invalida set verificado_em = now(), verificado_por = lower(auth.jwt() ->> 'email') where id = p_id and verificado_em is null;
+$$;
+revoke all on function public.oc_invalida_verificar(bigint) from public, anon;
+grant execute on function public.oc_invalida_verificar(bigint) to authenticated;
+notify pgrst, 'reload schema';

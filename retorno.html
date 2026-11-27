@@ -90,6 +90,9 @@
     .alerta.barrar { background: var(--vermelho-f); color: var(--vermelho); font-weight: 700; border: 1px solid #f3b2ad; }
     .alerta.oc { background: #f1e8fc; color: #4b1f86; border: 1px solid #d6c0f3; white-space: pre-wrap; word-break: break-word; }
     .alerta.oc b { display: block; font-size: 12.5px; margin-bottom: 2px; }
+    .alerta.oc .oci { white-space: normal; margin-top: 8px; }
+    .alerta.oc .oci.ok { font-weight: 700; color: #9a1b1b; }
+    .alerta.oc .oci textarea { width: 100%; box-sizing: border-box; margin: 4px 0; font: inherit; padding: 6px; border-radius: 6px; border: 1px solid #d6c0f3; }
     .alerta.oc b.oc-tit { font-size: 14px; font-weight: 700; margin-bottom: 4px; }
     .repo { display: inline-block; margin-top: 3px; font-size: 13px; font-weight: 700; color: #0b5c8a; background: #e2f1fb; padding: 1px 8px; border-radius: 10px; }
     .err { color: var(--vermelho); font-size: 13px; }
@@ -153,7 +156,7 @@
     const MOTIVOS = GRUPOS_MOT.flatMap((g) => g[1]);
     const optsMot = (sel) => GRUPOS_MOT.map(([g, ms]) => `<optgroup label="${g}">${ms.map((m) => `<option${sel === m ? " selected" : ""}>${m}</option>`).join("")}</optgroup>`).join("");
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
-    let ret = [], itens = [], hoje = "", filtro = "", chips = new Map(), sel = new Set(), V = [], feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+    let ret = [], itens = [], hoje = "", filtro = "", chips = new Map(), sel = new Set(), V = [], feitos = new Map(); const rasc = new Map(); const ocInv = new Map();   // o que já foi digitado (não some ao buscar)
 
     async function rpc(nome, corpo) {
       const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
@@ -171,6 +174,7 @@
           catch (e) { if (t >= 3 || !/timeout|tempo|falar com o sistema/i.test(e.message)) throw /timeout/i.test(e.message) ? new Error("O sistema está ocupado agora. Atualize a página em alguns minutos.") : e;
             $("explica").textContent = "Carregando… o sistema está ocupado, tentando de novo."; await new Promise((ok) => setTimeout(ok, 2500 * t)); } }
         hoje = r.hoje; ret = r.retornados || [];
+        try { (await rpc("link_oc_invalidas", { p_token: token }) || []).forEach((o) => ocInv.set(o.pedido, o.criado_em)); } catch (_) {}   // parte 103
         // parte 96 (Brenda 27/11): pedido que a transportadora já respondeu vai para o card "Pedidos retornados"
         const jaRet = new Set(ret.filter((x) => x.situacao === "aberto").map((x) => x.pedido));
         itens = (r.itens || []).filter((x) => !(r.retornados && x.sd_motivo && jaRet.has(x.pedido)));
@@ -224,7 +228,7 @@
           </div>
           <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : x.sd_motivo ? `${chip}<div class="ok">✓ motivo salvo${x.sd_em ? " em " + br(String(x.sd_em).slice(0, 10)) : ""}, sem nova data</div>` : (chip || `<span class="s">preencha o motivo (e a data, se já tiver)</span>`)}</div><div class="err"></div></div>
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
-          ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
+          ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}${ocBotao(x)}</div>` : ""}
         </div>`;
       }).join("") || (modoRet ? `<div class="aviso">${q ? "Nenhum pedido com essa busca." : "Vocês ainda não responderam nenhum pedido por este link nos últimos 30 dias."}</div>` : pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
       barraMassa();
@@ -306,7 +310,23 @@
       el.querySelector(".err").textContent = v || "";
       if (v === "") { st(el, `<span class="s">vai salvar…</span>`); timers.set(el.dataset.p, setTimeout(() => salvar(el), x.nova_data ? 1200 : 4000)); }
     };
-    $("lista").addEventListener("click", (e) => {
+    // parte 103 (Brenda 27/11): a transportadora avisa que o retorno da Multimóveis na ocorrência do portal não é válido → alerta urgente na Consulta SAC
+    function ocBotao(x) {
+      const p = esc(x.pedido);
+      if (ocInv.has(x.pedido)) return `<div class="oci ok">⚠ Vocês avisaram que este retorno não é válido (${hmOc(ocInv.get(x.pedido))}). O SAC da Multimóveis já foi alertado.</div>`;
+      return `<div class="oci"><button type="button" class="btn-cont oci-abre" data-oci="${p}">⚠ Este retorno no portal não é válido</button><div class="oci-form" data-oci-form="${p}" hidden><textarea data-oci-obs="${p}" maxlength="500" rows="2" placeholder="Conte em poucas palavras o que não está válido (opcional)"></textarea><button type="button" class="btn-am" data-oci-env="${p}">Avisar o SAC</button> <button type="button" class="btn-cont" data-oci-nao="${p}">Cancelar</button></div></div>`;
+    }
+    function hmOc(t) { try { return new Date(t).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch (_) { return ""; } }
+    $("lista").addEventListener("click", async (e) => {
+      const ab = e.target.closest("[data-oci]"); if (ab) { const f = $("lista").querySelector(`[data-oci-form="${CSS.escape(ab.dataset.oci)}"]`); if (f) { f.hidden = false; ab.hidden = true; } return; }
+      const na = e.target.closest("[data-oci-nao]"); if (na) { const p = na.dataset.ociNao; $("lista").querySelector(`[data-oci-form="${CSS.escape(p)}"]`).hidden = true; $("lista").querySelector(`[data-oci="${CSS.escape(p)}"]`).hidden = false; return; }
+      const en = e.target.closest("[data-oci-env]"); if (en) {
+        const p = en.dataset.ociEnv, obs = ($("lista").querySelector(`[data-oci-obs="${CSS.escape(p)}"]`) || {}).value || "";
+        en.disabled = true; en.textContent = "Avisando…";
+        try { const r = await rpc("link_oc_invalida", { p_token: token, p_pedido: p, p_obs: obs }); ocInv.set(p, (r && r.em) || new Date().toISOString()); desenhar(); }
+        catch (err) { en.disabled = false; en.textContent = "Avisar o SAC"; alert(err.message); }
+        return;
+      }
       const c = e.target.closest(".ck"); if (!c) return;
       const el = c.closest(".ped[data-p]"); c.checked ? sel.add(el.dataset.p) : sel.delete(el.dataset.p);
       el.classList.toggle("marcado", c.checked); barraMassa();
