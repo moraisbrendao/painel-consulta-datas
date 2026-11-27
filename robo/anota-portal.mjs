@@ -63,7 +63,11 @@ export async function acharLinha(p, nf) {
   const linhas = p.locator("table tbody tr");
   if (acharLinha.log) { const txt = ((await linhas.first().innerText().catch(() => "")) || "").replace(/\s+/g, " ").slice(0, 60);
     acharLinha.log(`  portal: pesquisa trouxe ${await linhas.count()} linha(s) · caixa ${((await filtro.inputValue().catch(() => "")) || "").replace(/\d/g, "9")} · 1ª linha ${txt.replace(/\d/g, "9").replace(/[A-Za-zÀ-ú]{3,}/g, (w) => (/nenhum|resultado|encontrad|extravio|avaria|andamento|novo/i.test(w) ? w : "x"))}`); }
-  for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim(); if (t === nf || t === nfL || soNum(t) === soNum(nfL)) return linhas.nth(i); }
+  // a pesquisa às vezes demora: se ainda não veio, espera mais e confere de novo (27/11: "Sem resultados." momentâneo)
+  for (let tent = 0; tent < 3; tent++) {
+    for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").trim(); if (t === nf || t === nfL || soNum(t) === soNum(nfL)) return linhas.nth(i); }
+    await p.waitForTimeout(2500);
+  }
   return null;
 }
 async function abrirAnotacoes(p, linha) {
