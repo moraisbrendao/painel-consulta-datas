@@ -1811,32 +1811,18 @@ ${extra}
     const blob = await new Promise((ok) => cv.toBlob(ok, "image/png"));
     return new File([blob], `produtividade_${(gProdT || "todas").replace(/[^\wÀ-ú]+/g, "_")}_${hojeISO()}.png`, { type: "image/png" });
   }
-  // ao compartilhar, a pessoa escreve a mensagem que vai junto (Brenda 26/11); a imagem é gerada antes, para o "Compartilhar" do celular abrir na hora
-  let gShareImg = null;
   $("g-prod-share").addEventListener("click", async () => {
-    try { gShareImg = await imagemProd(); } catch (e) { return toast(e.message || "Não consegui gerar a imagem.", true); }
-    const movel = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) && navigator.canShare && navigator.canShare({ files: [gShareImg] });
-    $("modal-titulo").textContent = "Compartilhar o gráfico";
-    $("modal-corpo").innerHTML = `<p class="s">Escreva a mensagem que vai junto com a imagem.</p>
-      <textarea id="g-share-msg" rows="5" style="width:100%;box-sizing:border-box;font:inherit;padding:8px" placeholder="Ex.: Bom dia, pessoal! Segue a produtividade de ontem…"></textarea>
-      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-        ${movel ? `<button class="btn amarelo" type="button" id="g-share-ir">📤 Compartilhar (WhatsApp)</button>`
-          : `<button class="btn amarelo" type="button" id="g-share-img">1️⃣ Copiar imagem</button><button class="btn" type="button" id="g-share-txt">2️⃣ Copiar mensagem</button><button class="btn" type="button" id="g-share-baixar">⤓ Baixar imagem</button>`}
-      </div>
-      ${movel ? "" : `<p class="s" style="margin-top:8px">No WhatsApp Web: copie a imagem e cole na conversa (Ctrl+V); depois copie a mensagem e cole na legenda.</p>`}`;
-    $("modal").hidden = false; document.body.classList.add("sem-rolagem");
-    setTimeout(() => $("g-share-msg") && $("g-share-msg").focus(), 50);
-    const msg = () => ($("g-share-msg").value || "").trim();
-    const baixar = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(gShareImg); a.download = gShareImg.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
-    if (movel) $("g-share-ir").onclick = async () => {
-      try { await navigator.share(msg() ? { files: [gShareImg], text: msg() } : { files: [gShareImg] }); $("modal").hidden = true; document.body.classList.remove("sem-rolagem"); }
-      catch (e) { if (!e || e.name !== "AbortError") toast("O celular não deixou compartilhar: " + (e && e.message), true); }
-    };
-    else {
-      $("g-share-img").onclick = async () => { try { await navigator.clipboard.write([new ClipboardItem({ "image/png": gShareImg })]); toast("Imagem copiada. Cole na conversa do WhatsApp (Ctrl+V)."); } catch (_) { baixar(); toast("Não deu para copiar: a imagem foi baixada. Anexe no WhatsApp."); } };
-      $("g-share-txt").onclick = async () => { if (!msg()) return toast("Escreva a mensagem primeiro.", true); try { await navigator.clipboard.writeText(msg()); toast("Mensagem copiada. Cole na legenda (Ctrl+V)."); } catch (_) { toast("Selecione o texto e copie com Ctrl+C.", true); } };
-      $("g-share-baixar").onclick = baixar;
-    }
+    try {
+      const f = await imagemProd();
+      if (navigator.canShare && navigator.canShare({ files: [f] }) && /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent)) {
+        try { await navigator.share({ files: [f] }); return; } catch (e) { if (e && e.name === "AbortError") return; }
+      }
+      if (navigator.clipboard && window.ClipboardItem) {
+        try { await navigator.clipboard.write([new ClipboardItem({ "image/png": f })]); toast("Imagem do gráfico copiada. Abra a conversa no WhatsApp e cole (Ctrl+V)."); return; } catch (_) {}
+      }
+      const a = document.createElement("a"); a.href = URL.createObjectURL(f); a.download = f.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+      toast("Imagem do gráfico baixada. Anexe no WhatsApp (clipe › Fotos).");
+    } catch (e) { toast(e.message || "Não consegui gerar a imagem.", true); }
   });
   document.addEventListener("keydown", (e) => { if (e.key === "Escape") sairCheia(); });
   addEventListener("resize", () => { if (gProdCheia) { ajustaGiro(); desenharProdutividade(gFiltradosCache, hojeISO()); } });
