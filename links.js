@@ -14,6 +14,8 @@
   // VM Transportes e Tempo Justo são a mesma (regra da Brenda): um link só para as duas
   const grupo = (t) => (/tempo\s*justo|^\s*vm\b|vm transportes/i.test(t || "") ? "VM Transportes / Tempo Justo" : (t || "").trim());
   let links = [], ok = true, novo = null;
+  const transpTopo = () => new Set((window.__transpSel ? window.__transpSel() : []).map(grupo));
+  const passaT = (nome) => { const S = transpTopo(); return !S.size || S.has(nome); };
 
   const base = () => (window.__basePainel ? window.__basePainel(false) : []) || [];
   // mesma regra da função link_pendentes: já expedido, sem nova data válida, atrasado / vence até amanhã / nova data vencida
@@ -49,8 +51,7 @@
     const sel = $("lk-transp"), atual = sel.value;
     sel.innerHTML = `<option value="">Escolha a transportadora…</option>` + [...g.keys()].sort((a, b) => a.localeCompare(b, "pt-BR")).map((k) => `<option value="${esc(k)}">${esc(k)}</option>`).join("");
     sel.value = atual; lkGrupos = g;
-    const fT = sel.value;   // a lista de links também segue a transportadora escolhida
-    $("lk-linhas").innerHTML = ativos.filter((l) => !fT || l.nome === fT).map((l) => `<tr>
+    $("lk-linhas").innerHTML = ativos.filter((l) => passaT(l.nome)).map((l) => `<tr>
         <td><b>${esc(l.nome)}</b>${l.transportadoras.length > 1 ? `<div class="s">${esc(l.transportadoras.join(" · "))}</div>` : ""}</td>
         <td class="num">${fmt(pendentes(l.transportadoras))}</td>
         <td>${quando(l.ultimo_acesso)}<div class="s">${fmt(l.acessos)} acesso(s)</div></td>
@@ -143,11 +144,11 @@
     if (!$("lkk")) return;
     if (!kOk) { $("lkk-info").textContent = "Para ver os KPIs, rode a parte 86 no Supabase."; $("lkk-cards").innerHTML = $("lkk-linhas").innerHTML = $("lkk-mot").innerHTML = $("lkk-mot-cab").innerHTML = ""; return; }
     if (!kd) return;
-    const fT = $("lk-transp").value;   // filtro de transportadora do topo (Brenda 27/11): os números seguem a escolhida
-    kLin = calcular().filter((x) => !fT || x.nome === fT);
+    const fT = transpTopo();   // filtro Transportadora do topo do Preventivo (Brenda 27/11): os números seguem a escolhida
+    kLin = calcular().filter((x) => passaT(x.nome));
     const T = (f) => kLin.reduce((a, x) => a + f(x), 0);
     const vistos = T((x) => x.vistos), atual = T((x) => x.ult.length), cum = T((x) => x.cumpriu.length), atr = T((x) => x.atrasou.length);
-    $("lkk-info").textContent = `Desde que a parte 86 foi rodada o painel guarda cada acesso e cada resposta. Respostas anteriores vieram do histórico de retornos (sem os acessos). Clique num número para ver os pedidos.${fT ? ` Mostrando só: ${fT}.` : ""}`;
+    $("lkk-info").textContent = `Desde que a parte 86 foi rodada o painel guarda cada acesso e cada resposta. Respostas anteriores vieram do histórico de retornos (sem os acessos). Clique num número para ver os pedidos.${fT.size ? ` Mostrando só: ${[...fT].join(", ")} (filtro Transportadora do topo).` : ""}`;
     $("lkk-cards").innerHTML = [
       [fmt(T((x) => x.acessos)), "Acessos aos links", ""], [fmt(vistos), "Pedidos que apareceram nos links", ""],
       [fmt(atual), "Pedidos atualizados pela transportadora", ""], [pct(atual, Math.max(vistos, atual)), "% atualizado", ""],
@@ -196,7 +197,8 @@
   }
   if ($("lkk")) {
     $("lkk-dias").addEventListener("change", carregarKpi);
-    $("lk-transp").addEventListener("change", () => { desenhar(); if (kd) desenharKpi(); });
+    // acompanha o filtro Transportadora do topo
+    let ultT = ""; setInterval(() => { const k = [...transpTopo()].sort().join("|"); if (k !== ultT) { ultT = k; if (ok) desenhar(); if (kd) desenharKpi(); } }, 800);
     $("lkk").addEventListener("click", (e) => { const a = e.target.closest("[data-lkk]"); if (a) abrirLista(a.dataset.lkkNome, a.dataset.lkk); });
     $("lkk-excel").addEventListener("click", () => {
       if (!kLin.length) return toast("Sem dados no período.", true);

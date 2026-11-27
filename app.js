@@ -586,6 +586,7 @@
     return `<div class="s ssw ${dif > 0 ? "vermelho" : "verde"}" title="Previsão da transportadora no SSW · ${quando}">SSW ${br(x.previsao)}${dif > 0 ? ` · ${dif} dia${dif === 1 ? "" : "s"} depois` : ""}</div>`;
   }
   const sel = { transp: new Set(), canal: new Set(), ms: new Set(), resp: new Set(), tk: new Set(), obs: new Set(), ssw: new Set() };
+  window.__transpSel = () => [...sel.transp];   // links.js: KPIs e lista de links seguem a transportadora do filtro do topo (Brenda 27/11)
   function passaFiltros(p) {
     const busca = norm($("f-busca").value);
     if (busca && !norm(p.pedido).includes(busca) && !norm(p.nf).includes(busca)) return false;
