@@ -46,6 +46,7 @@
     .d-perf .d-tabw { grid-column: 2; grid-row: 1 / span 3; overflow-x: auto; }
     .d-big { font-size: 34px; font-weight: 800; line-height: 1.05; }
     .d-big.bom, .d-tab b.bom { color: var(--verde); } .d-big.medio, .d-tab b.medio { color: #b7791f; } .d-big.ruim, .d-tab b.ruim { color: var(--vermelho); }
+    .d-feliz { grid-column: 1; background: #e6f6ec; border: 1px dashed #9fd8b4; color: #145c33; border-radius: 10px; padding: 8px 10px; font-size: 13.5px; line-height: 1.45; }
     .d-triste { grid-column: 1; background: #fdecec; border: 1px dashed #f3b2ad; color: #7a1f1a; border-radius: 10px; padding: 8px 10px; font-size: 13.5px; line-height: 1.45; }
     .d-tab { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
     .d-tab th, .d-tab td { padding: 4px 6px; border-bottom: 1px solid var(--linha); text-align: right; }
@@ -369,7 +370,7 @@
       const M = d.meses || [], atual = M.find((x) => x.mes === d.hoje.slice(0, 7)), pa = atual ? perf(atual) : null, n = (v) => Number(v || 0).toLocaleString("pt-BR");
       $("d-perf").innerHTML = `<h3>Performance do mês (${nomeM(d.hoje.slice(0, 7))})</h3>
         <div class="d-big ${cls(pa)}">${pct(pa)}</div>
-        ${pa != null && pa < 0.95 ? `<div class="d-triste">🥺 Poxa… a performance de vocês está abaixo de 95% este mês, e a gente sentiu daqui. Os pedidos estão com saudade de chegar no cliente! 📦💔<br><b>Bora virar esse jogo?</b> Coloca as datas em dia aqui embaixo e faz essas entregas acontecerem. A gente torce por vocês! 💪</div>` : ""}
+        ${pa != null && pa < 0.95 ? `<div class="d-triste">🥺 Poxa… a performance de vocês está abaixo de 95% este mês, e a gente sentiu daqui. Os pedidos estão com saudade de chegar no cliente! 📦💔<br><b>Bora virar esse jogo?</b> Coloca as datas em dia aqui embaixo e faz essas entregas acontecerem. A gente torce por vocês! 💪</div>` : pa != null ? `<div class="d-feliz">🎉 Uhuul! A performance de vocês está acima de 95% este mês! Os clientes agradecem e a gente aqui também. 🥳📦<br><b>Que time!</b> Segue nesse ritmo que tá lindo de ver! 🚀💚</div>` : ""}
         <div class="s">(entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto), pedidos criados no mês, sem cancelados. Meta: 97%.</div>
         <div class="d-tabw"><table class="d-tab"><thead><tr><th>Mês</th><th>Pedidos</th><th>Entregues no prazo</th><th>Entregues c/ atraso</th><th>Em aberto</th><th>Atrasados</th><th>Perf.</th></tr></thead>
         <tbody>${M.slice().reverse().map((x) => `<tr><td>${nomeM(x.mes)}</td><td>${n(x.volume)}</td><td>${n(x.ent_prazo)}</td><td>${n(x.ent_atraso)}</td><td>${n(x.ab_prazo + x.ab_atraso)}</td><td>${n(x.ab_atraso)}</td><td><b class="${cls(perf(x))}">${pct(perf(x))}</b></td></tr>`).join("") || `<tr><td colspan="7">Sem pedidos nos últimos meses.</td></tr>`}</tbody></table></div>`;
