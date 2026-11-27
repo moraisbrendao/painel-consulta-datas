@@ -170,7 +170,7 @@ export async function rastrear(it, R) {
     } catch (_) { continue; }
     if (!r) continue;
     const res = { situacao: r.situacao, fonte: { ssw: "SSW", jadlog: "Jadlog", bento: "Bento Brasil", transito: "Trânsito Brasil", formato: "Formato", transiga: "Transiga" }[k],
-      evento: r.ultimo_evento || null, data_evento: r.data_evento || null, transp, achou_palavra: (sa(txt).match(PAL_BARRAR) || [])[0] || null };
+      evento: r.ultimo_evento || null, data_evento: r.data_evento || null, transp, ...(it.palavras ? { palavra: ((sa(txt).match(it.palavras) || [])[0] || null) } : {}), achou_palavra: (sa(txt).match(PAL_BARRAR) || [])[0] || null };
     Object.defineProperty(res, "_html", { value: html, enumerable: false });   // só para o print, não vai para o banco
     if (!/^(sem cte|sem nf|sem permissao)$/.test(r.situacao)) return res;
     if (!primeiro) primeiro = res;

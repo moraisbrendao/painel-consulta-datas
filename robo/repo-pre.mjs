@@ -203,6 +203,15 @@ export async function diagRepoPre2({ log, ctx }) {
 
 // ===== modo repo-pre: analisa os casos Novo + Falta de volumes (séries da matriz) e grava em repo_pre. Não solicita nada. =====
 const SERIES = ["7", "4", "31"];
+const SINISTRO = /SINISTR\w*|ROUB\w*|FURT\w*|ASSALT\w*|ACIDENT\w*|TOMBAMENT\w*|INCENDI\w*|AVARIA TOTAL|PERDA TOTAL|BOLETIM DE OCORRENCIA/;
+async function anotacoesDaLinha(p, linha) {
+  const bt = linha.locator("button[title='Ver Anotações'], button[title*='Anota' i]").first(); if (!(await bt.count())) return [];
+  await bt.click().catch(() => {}); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }).catch(() => {}); await p.waitForTimeout(800);
+  const ls = ((await d.innerText().catch(() => "")) || "").split("\n").map((l) => l.trim()).filter((l) => l && !/^(close|fechar|×|x)$/i.test(l) && !/^Anota[cç][oõ]es$/i.test(l) && !/^Aqui voc[eê] pode ver/i.test(l) && !/^Adicione aqui/i.test(l));
+  await p.keyboard.press("Escape"); await p.waitForTimeout(600);
+  const ehData = (l) => /^\d{2}\/\d{2}\/\d{4},?\s*\d{2}:\d{2}$/.test(l), idx = ls.map((l, i) => (ehData(l) ? i : -1)).filter((i) => i >= 0);
+  return idx.map((i, k) => ({ quando: ls[i], texto: ls.slice(i + 1, k + 1 < idx.length ? idx[k + 1] - 1 : ls.length).join(" ").slice(0, 600) })).filter((a) => a.texto);
+}
 async function aplicarNovo(p, log) {
   const st = p.locator("button:has-text('Status')").first(); await st.click().catch(() => {}); await p.waitForTimeout(1200);
   const novo = p.locator("[role=option], [role=menuitemcheckbox], [role=menuitem], [cmdk-item]").filter({ hasText: /^\s*Novo\s*$/ }).first();
@@ -220,12 +229,13 @@ async function fotosDaLinha(p, linha) {
   await p.keyboard.press("Escape"); await p.waitForTimeout(800);
   return [...new Set(out)].filter((u) => /^https:\/\//.test(u));
 }
-export async function rodarRepoPre({ chamar, log, ctx, limite = 40, reler = false }) {
+export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, reler = false }) {
   const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
   if (!(await aplicarNovo(p, log))) throw new Error("não achei o filtro Status = Novo no portal");
   const lista = await lerListaRepoPre(p, null);
-  const alvo = lista.filter((c) => /falta/i.test(c.motivo || "") && SERIES.includes(String(c.nf || "").split("-")[1]?.trim()));
-  log(`Portal: ${lista.length} reposições Novo · ${alvo.length} de Falta de volumes nas séries ${SERIES.join("/")}`);
+  // todos os motivos (Falta de volumes, Avaria, Extravio, Inversão...) da matriz (Brenda 27/11)
+  const alvo = lista.filter((c) => SERIES.includes(String(c.nf || "").split("-")[1]?.trim()));
+  log(`Portal: ${lista.length} reposições Novo · ${alvo.length} nas séries ${SERIES.join("/")} (${Object.entries(alvo.reduce((a, c) => ((a[c.motivo || "?"] = (a[c.motivo || "?"] || 0) + 1), a), {})).map(([k, v]) => k + " " + v).join(", ")})`);
   const jaTem = new Map((await chamar("repo_pre?select=nf,analisado_em,volumes,venda&limit=5000")).map((x) => [x.nf, x]));
   // quem saiu da lista (já virou ticket, cancelada ou mudou de status)
   const nfs = new Set(alvo.map((c) => c.nf));
@@ -245,12 +255,18 @@ export async function rodarRepoPre({ chamar, log, ctx, limite = 40, reler = fals
       const v = await volumesDoDialogo(p, linha, null); if (!v.fechou) throw new Error("a janela Criar Ticket não fechou: parei por segurança");
       r.volumes = v.volumes;
       const l2 = await acharLinha(p, c.nf); r.fotos = l2 ? await fotosDaLinha(p, l2) : [];
+      // anotações da transportadora (só o texto e a data; o nome de quem escreveu não é guardado)
+      const l3 = await acharLinha(p, c.nf); if (l3) r.anotacoes = await anotacoesDaLinha(p, l3);
     } catch (e) { erros++; r.robo_msg = "portal: " + String(e.message).split("\n")[0].slice(0, 150); if (/parei por segurança/.test(e.message)) { await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" }); throw e; } }
     try { const q = await pedido360(ctx, log, c.nf);
       r.venda = q.venda; r.status_360 = q.status || null; r.data_360 = q.data || null; r.sku = q.sku; r.tickets = q.tickets;
       r.tem_devolucao = q.tickets.some((t) => /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
     } catch (e) { erros++; r.robo_msg = [r.robo_msg, "360: " + String(e.message).split("\n")[0].slice(0, 120)].filter(Boolean).join(" · "); }
-    await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" });
+    // rastreio da transportadora que pediu: último status + palavras de sinistro (roubo, furto, acidente...)
+    if (R) try { const t = await (await import("./barrar.mjs")).rastrear({ nf: c.nf, transp_pedido: c.transp || "", palavras: SINISTRO }, R);
+      r.rastreio = t ? { fonte: t.fonte, situacao: t.situacao, evento: t.evento, data: t.data_evento, transp: t.transp, sinistro: t.palavra || null } : null; } catch (_) {}
+    try { await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" }); }
+    catch (e) { if (!/PGRST204|anotacoes|rastreio/.test(String(e.message))) throw e; log("  (parte 102 ainda não rodada: salvo sem anotações/rastreio)"); const { anotacoes, rastreio, ...r2 } = r; await chamar("repo_pre", "POST", r2, { Prefer: "resolution=merge-duplicates,return=minimal" }); }
   }
   log(`repo-pre: ${feitos} analisados agora · ${erros} com erro · ${sairam.length} saíram da lista`);
 }
@@ -307,7 +323,8 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
   const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log); await aplicarNovo(p, log);
   const patch = (x, c) => chamar(`repo_pre?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", c);
   for (const x of L) {
-    const repor = (x.volumes || []).filter((v) => !(x.vol_posse || []).includes(v));
+    // Avaria: os volumes marcados são os AVARIADOS (repõe esses); Falta/Extravio: marcados = em posse (repõe os outros)
+    const repor = /avaria/i.test(x.motivo || "") ? (x.vol_posse || []) : (x.volumes || []).filter((v) => !(x.vol_posse || []).includes(v));
     try {
       if (!repor.length) throw new Error("nenhum volume para repor");
       if (x.tem_devolucao || x.venda === false) throw new Error("caso para conferir à mão (devolução ou não é venda)");
@@ -332,8 +349,8 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
         const q = await pedido360(ctx, log, x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || ""));
         tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null; }
       if (!tk) throw new Error("ticket criado no portal, mas o ticket de Reposição (Atribuir transportador) ainda não apareceu no 360: tento de novo na próxima rodada");
-      const texto = [`Reposição pré-entrega solicitada pelo portal do transportador (Falta de volumes) · NF ${x.nf}.`,
-        `Volume(s) a repor: ${repor.join(", ")}.`, x.vol_posse && x.vol_posse.length ? `Volume(s) em posse da transportadora (foto): ${x.vol_posse.join(", ")}.` : "",
+      const texto = [`Reposição pré-entrega solicitada pelo portal do transportador (${x.motivo || "Falta de volumes"}) · NF ${x.nf}.`,
+        `Volume(s) a repor: ${repor.join(", ")}.`, x.vol_posse && x.vol_posse.length && !/avaria/i.test(x.motivo || "") ? `Volume(s) em posse da transportadora (foto): ${x.vol_posse.join(", ")}.` : "",
         jad ? `REPOSIÇÃO NO CNPJ: ${jad}` : "", `Em anexo: print do rastreio${r ? " (" + r.fonte + ")" : ""} e da solicitação no portal.`].filter(Boolean).join(" ");
       await M.comentarioInterno(pedido360.pg, tk.id, texto, arquivos);
       await patch(x, { solicitar_status: "feito", ticket_360: tk.id, solicitar_msg: `Ticket do portal criado e comentário com ${arquivos.length} print(s) no ticket ${tk.id}.`, feito_em: new Date().toISOString() });

@@ -4796,3 +4796,8 @@ grant select, insert, update, delete on public.vol_cadastro to authenticated;
 drop policy if exists "logistica cuida" on public.vol_cadastro;
 create policy "logistica cuida" on public.vol_cadastro for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
 notify pgrst, 'reload schema';
+
+-- parte 102: Reposição pré — anotações do portal e rastreio por caso (sugestão por motivo)
+alter table public.repo_pre add column if not exists anotacoes jsonb;
+alter table public.repo_pre add column if not exists rastreio jsonb;
+notify pgrst, 'reload schema';

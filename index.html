@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=424">
+  <link rel="stylesheet" href="styles.css?v=425">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -935,7 +935,7 @@
         <button class="btn contorno" data-ra="det">☰ Detalhamento operacional</button>
         <button class="btn contorno" data-ra="faltas">📦 Inversão / Falta de volumes</button>
         <button class="btn contorno" data-ra="filasoc">🗂 Filas atualizadas e ocorrências</button>
-        <button class="btn contorno" data-ra="repopre">🧩 Reposição pré · Falta de volumes</button>
+        <button class="btn contorno" data-ra="repopre">🧩 Reposição pré · análise</button>
       </div>
 
       <!-- 1) visão geral -->
@@ -1140,8 +1140,8 @@
       <div id="rp-repopre" hidden>
         <div class="titulo-pagina com-acoes">
           <div>
-            <h2>🧩 Reposição pré-entrega · Falta de volumes</h2>
-            <p class="sub">Casos <b>Novo</b> de Falta de volumes no portal do transportador (matriz: séries 7, 4 e 31, só venda). O robô traz os volumes da NF, a foto que a transportadora anexou e o pedido no 360. Você clica no volume que aparece na foto (está com a transportadora) e o painel mostra qual repor. <b>Nada é solicitado sozinho.</b></p>
+            <h2>🧩 Reposição pré-entrega · análise por motivo</h2>
+            <p class="sub">Casos <b>Novo</b> do portal do transportador (todos os motivos; matriz: séries 7, 4 e 31). O robô traz os volumes da NF, fotos, anotações, rastreio e o pedido no 360, e dá uma <b>sugestão</b> em cada caso. Falta/Extravio: clique no volume que está com a transportadora. Avaria: clique no volume avariado. <b>Nada é solicitado sozinho.</b></p>
             <p id="rpp-info" class="info-base">Carregando…</p>
           </div>
           <div class="acoes-robo">
@@ -1153,7 +1153,7 @@
         <section class="kpis" id="rpp-cards"></section>
         <section class="cartao">
           <div class="cartao-topo"><div><h2 id="rpp-titulo">Casos</h2><p class="sub">Clique na foto para ampliar. Clique no(s) volume(s) que aparecem na foto; o que sobrar é o que pedimos na reposição.</p></div>
-            <div class="acoes-robo"><input id="rpp-busca" type="search" placeholder="# nota" aria-label="Buscar nota"></div></div>
+            <div class="acoes-robo"><select id="rpp-motivo" aria-label="Motivo"></select> <input id="rpp-busca" type="search" placeholder="# nota" aria-label="Buscar nota"></div></div>
           <div id="rpp-lista" class="rpp-lista"></div>
         </section>
       </div>
@@ -1786,25 +1786,25 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=424"></script>
-  <script src="mapa-brasil.js?v=424"></script>
-  <script src="cidades-br.js?v=424"></script>
-  <script src="troca-notas.js?v=424"></script>
-  <script src="app.js?v=424"></script>
-  <script src="ordenar.js?v=424"></script>
-  <script src="menu.js?v=424"></script>
-  <script src="ajuda.js?v=424"></script>
-  <script src="documentos.js?v=424"></script>
-  <script src="barrar.js?v=424"></script>
-  <script src="naoloc.js?v=424"></script>
-  <script src="faltas.js?v=424"></script>
-  <script src="repopre.js?v=424"></script>
-  <script src="motor.js?v=424"></script>
-  <script src="retornos-semana.js?v=424"></script>
-  <script src="links.js?v=424"></script>
-  <script src="cobranca-massa.js?v=424"></script>
-  <script src="gargalos.js?v=424"></script>
-  <script src="filas.js?v=424"></script>
-  <script src="filtros.js?v=424"></script>
+  <script src="config.js?v=425"></script>
+  <script src="mapa-brasil.js?v=425"></script>
+  <script src="cidades-br.js?v=425"></script>
+  <script src="troca-notas.js?v=425"></script>
+  <script src="app.js?v=425"></script>
+  <script src="ordenar.js?v=425"></script>
+  <script src="menu.js?v=425"></script>
+  <script src="ajuda.js?v=425"></script>
+  <script src="documentos.js?v=425"></script>
+  <script src="barrar.js?v=425"></script>
+  <script src="naoloc.js?v=425"></script>
+  <script src="faltas.js?v=425"></script>
+  <script src="repopre.js?v=425"></script>
+  <script src="motor.js?v=425"></script>
+  <script src="retornos-semana.js?v=425"></script>
+  <script src="links.js?v=425"></script>
+  <script src="cobranca-massa.js?v=425"></script>
+  <script src="gargalos.js?v=425"></script>
+  <script src="filas.js?v=425"></script>
+  <script src="filtros.js?v=425"></script>
 </body>
 </html>

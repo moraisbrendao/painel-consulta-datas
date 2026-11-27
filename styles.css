@@ -1493,3 +1493,8 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 .rpp-acao:empty { display: none; }
 .rpp-foto { display: flex; flex-direction: column; gap: 2px; align-items: center; }
 .rpp-baixa { border: 0; padding: 0; background: none; cursor: pointer; } .rpp-baixa:hover img { outline: 2px solid var(--amarelo, #f5c518); }
+.rpp-sug { font-size: 13.5px; padding: 6px 10px; border-radius: 8px; background: #eef4ff; color: var(--marinho); border-left: 4px solid #3b6fd8; }
+.rpp-sug.ok { background: #e6f4ea; border-left-color: #1d7a43; } .rpp-sug.mao { background: #fde8e8; border-left-color: var(--vermelho); color: var(--vermelho); } .rpp-sug.aviso { background: #fff6db; border-left-color: #d9a400; color: #7a5a00; }
+.rpp-anot { font-size: 12.5px; background: #fafbfc; border: 1px solid var(--borda); border-radius: 8px; padding: 6px 8px; display: grid; gap: 3px; }
+.rpp-vol.avariado { background: #fde8e8; border-color: var(--vermelho); color: var(--vermelho); font-weight: 600; }
+.rpp-mot { font-size: 11.5px; } .rpp-mot.avaria { background: #fde8e8; color: var(--vermelho); } .rpp-mot.extravio { background: #f1e8fd; color: #6b2fb3; } .rpp-mot.falta { background: #fff6db; color: #7a5a00; } .rpp-mot.inversao, .rpp-mot.sinistro { background: #e8eefc; color: var(--marinho); }

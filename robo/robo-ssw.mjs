@@ -1610,11 +1610,12 @@ if (MODO === "repo-pre-solicitar") {   // Reposição pré: cria o ticket no por
   catch (e) { log("repo-pre-solicitar: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
-if (MODO === "repo-pre") {   // Reposição pré › Falta de volumes: analisa os casos Novo (robo/repo-pre.mjs). Não solicita nada no portal.
-  await entrarSupabase();
+if (MODO === "repo-pre") {   // Reposição pré: analisa os casos Novo de todos os motivos (robo/repo-pre.mjs). Não solicita nada no portal.
+  await entrarSupabase(); await carregarSenhasDB();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-  try { await (await import("./repo-pre.mjs")).rodarRepoPre({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 40, reler: process.env.TRANSP === "reler" }); }
+  try { await (await import("./repo-pre.mjs")).rodarRepoPre({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 40, reler: process.env.TRANSP === "reler",
+      R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } }); }
   catch (e) { log("repo-pre: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
