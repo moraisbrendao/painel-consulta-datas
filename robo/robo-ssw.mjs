@@ -539,6 +539,10 @@ if (MODO === "diag-lnk") {   // Links das transportadoras: por que uma NF (TRANS
     log(`  nova data: ${nv || "nenhuma"}${nv ? (nv >= hoje ? " (>= hoje → sai do link)" : " (já passou)") : ""} · fonte ${t.nova_data_fonte || "—"} · gravada em ${t.atualizado_em || "—"} por ${String(t.atualizado_por || "—").replace(/@.*/, "@…")}`);
     log(`  barrar: ${be.length ? `na planilha ${be[0].na_planilha} · decisão ${be[0].decisao || "—"} · portal ${be[0].portal_status || "—"}` : "não"} · ocorrências: ${oc.map((o) => o.status + "/" + (o.solicitante || "").split(" ")[0]).join(", ") || "nenhuma"}`);
     log(`  reposição (último detalhamento): ${rp.map((r) => `fila ${r.fila_atual || "—"} · NF nova ${r.nf_nova ? "sim" : "não"}`).join(" | ") || "nenhuma"}`);
+    const tn = await chamar(`troca_notas?select=tipo,status,nf_nova,data_emissao&pedido=eq.${encodeURIComponent(b.pedido)}`).catch((e) => ({ erro: e.message.slice(0, 80) }));
+    log(`  troca_notas (Ajuste Intelipost, fonte da "Nota de reposição" no link): ${Array.isArray(tn) ? tn.map((x) => `tipo ${x.tipo || "—"} · status ${x.status || "—"} · NF nova ${x.nf_nova ? "sim" : "não"} · emissão ${x.data_emissao || "—"}`).join(" | ") || "nenhuma linha" : "erro " + tn.erro}`);
+    const rpAll = await chamar(`repo_hist?select=envio_id,fila_atual,nf_nova,nota_ticket&order=envio_id.desc&limit=4000`).then((R) => R.filter((r) => chave(r.nota_ticket) === k)).catch(() => []);
+    log(`  repo_hist (todos os detalhamentos): ${rpAll.slice(0, 6).map((r) => `envio ${r.envio_id} · fila ${r.fila_atual || "—"} · NF nova ${r.nf_nova ? "sim" : "não"}`).join(" | ") || "nenhuma"}`);
     log(`  respostas pelo link: ${resp == null ? "(parte 86 não rodada)" : resp.map((r) => `${r.em} ${r.motivo} → ${r.nova_data}`).join(" | ") || "nenhuma"}`);
   }
 }
