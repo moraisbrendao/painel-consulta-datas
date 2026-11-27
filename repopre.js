@@ -28,6 +28,7 @@
   // sugestão do robô para o caso (o que acha que falta fazer)
   function sugestao(x) {
     const m = MOT(x), vs = x.volumes || [], mk = x.vol_posse || [], fotos = (x.fotos || []).length, an = (x.anotacoes || []).map((a) => a.texto).join(" "), rs = x.rastreio || {};
+    if (/^entregue/i.test(rs.situacao || "")) return ["mao", `O rastreio${rs.fonte ? " (" + rs.fonte + ")" : ""} diz ENTREGUE${rs.data ? " em " + rs.data : ""}: conferir o comprovante (tem ressalva?) antes de repor.`];
     if (rs.sinistro) return ["mao", `O rastreio${rs.fonte ? " (" + rs.fonte + ")" : ""} fala em "${rs.sinistro.toLowerCase()}": possível sinistro. Conferir com a transportadora antes de repor.`];
     if (x.tem_devolucao) return ["mao", "Tem ticket de devolução/cancelamento no 360: não repor, conferir à mão."];
     if (x.venda === false) return ["mao", "NF não achada como venda no 360: conferir à mão."];
