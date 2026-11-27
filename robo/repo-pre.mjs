@@ -317,7 +317,7 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   await clicar((await abrir.count()) ? abrir : p.getByText(/^\s*Abrir ticket\s*$/i).first(), "menu Abrir ticket");
   await p.waitForTimeout(2000);
   // a lista de volumes também é um [role=dialog]: fixa a janela que tem o botão Adicionar (27/11: procurava o Adicionar na lista de volumes)
-  const d = p.locator("[role=dialog]").filter({ has: p.getByRole("button", { name: /^\s*adicionar\s*$/i }) }).first(); await d.waitFor({ timeout: 8000 }).catch(() => {});
+  const d = p.locator("[role=dialog]").filter({ has: p.locator("button", { hasText: /^\s*Adicionar\s*$/ }) }).first(); await d.waitFor({ timeout: 8000 }).catch(() => {});
   if (!(await d.count())) throw new Error("a janela Criar Ticket não abriu");
   const estado = async (q) => { const nd = await p.locator("[role=dialog]").count(); const bd = (await d.locator("button, [role=combobox], input").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}${e.getAttribute("role") ? "/" + e.getAttribute("role") : ""}:${(e.innerText || e.value || e.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim().slice(0, 30)}`)).catch(() => [])).map((t) => t.replace(/\d/g, "#"));
     log(`  [${q}] janelas ${nd} · campos da janela ${JSON.stringify(bd)}`); };
@@ -332,7 +332,9 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   const fechar = p.getByRole("button", { name: /^\s*fechar\s*$/i }).last();
   if (await fechar.count()) await fechar.click().catch(() => {}); else await d.locator("h1,h2,h3").first().click().catch(() => {});
   await p.waitForTimeout(800);
-  if ((await p.locator("[role=dialog]").count()) > 1) { await d.locator("h1,h2,h3,[id$=title]").first().click({ timeout: 4000 }).catch(() => {}); await p.waitForTimeout(800); }
+  // a lista de volumes é uma janelinha por cima: Esc fecha só ela (confere que a janela Criar Ticket continua aberta)
+  if ((await p.locator("[role=dialog]").count()) > 1) { await p.keyboard.press("Escape"); await p.waitForTimeout(900); }
+  if (!(await d.count())) throw new Error("a janela Criar Ticket fechou junto com a lista de volumes");
   await estado("lista fechada");
   // o campo mostra os volumes escolhidos; com muitos, mostra alguns e "+N"
   const naJanela = ((await d.innerText().catch(() => "")) || "") + " " + ((await vol.innerText().catch(() => "")) || "");
