@@ -24,7 +24,8 @@ export async function lerPecas(p) {
         cab = iC >= 0 ? linhas[iC] : null;
         const iS = cab ? cab.findIndex((c) => /^SKU$/i.test(c)) : -1, iQ = cab ? cab.findIndex((c) => /^Qtde?$/i.test(c)) : -1;
         let iP = cab ? cab.findIndex((c) => /pe[cç]a|descri|nome|produto/i.test(c) && !/^SKU$/i.test(c)) : 0; if (iP < 0) iP = iS >= 0 ? iS + 1 : 0;   // descrição fica logo depois do SKU
-        pecas = linhas.slice(iC + 1).filter((l) => l.some(Boolean) && !(iQ >= 0 && !String(l[iQ] || "").trim() && iS >= 0 && !/\d/.test(l[iS] || "")))   // sem a linha de rodapé (sem qtde e sem código).map((l) => ({ peca: l[iP] || "", sku: iS >= 0 ? l[iS] || "" : "", qtde: iQ >= 0 ? Number(String(l[iQ]).replace(",", ".")) || null : null }));
+        pecas = linhas.slice(iC + 1).filter((l) => l.some(Boolean) && !(iQ >= 0 && !String(l[iQ] || "").trim() && iS >= 0 && !/\d/.test(l[iS] || "")))   // sem a linha de rodapé (sem qtde e sem código)
+          .map((l) => ({ peca: l[iP] || "", sku: iS >= 0 ? l[iS] || "" : "", qtde: iQ >= 0 ? Number(String(l[iQ]).replace(",", ".")) || null : null }));
       } else {   // sem tabela: texto em linhas depois do cabeçalho "Qtde"
         const L = (d.innerText || "").split("\n").map(limpa).filter(Boolean);
         const iQ = L.findIndex((l) => /^Qtde?$/i.test(l));
@@ -57,7 +58,7 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
         const pecas = (r.pecas || []).filter((y) => y.peca || y.sku);
         await patch(x.ticket, { pecas, pecas_em: new Date().toISOString(), pecas_msg: r.erro || (r.quadros ? null : "sem quadro Peças de Assistência") });
         pecas.length ? ok++ : vazio++;
-        if (limite <= 5) log(`  formato: cab=${JSON.stringify((r.cab || []).map((c) => c.replace(/[A-Za-zÀ-ÿ]+/g, (w) => (/^(pe[cç]a|sku|qtde|descri[cç][aã]o|nome|c[oó]digo|valor|unit[aá]rio|total|a[cç][oõ]es|status)$/i.test(w) ? w : "w"))))} · ` + pecas.map((y) => `[peça ${String(y.peca).split(/\s+/).length} palavras · sku ${String(y.sku).replace(/[A-Za-z]/g, "A").replace(/\d/g, "#")} · qtde ${y.qtde}]`).join(" "));
+        if (limite <= 5) log(`  formato: cab=${JSON.stringify((r.cab || []).map((c) => c.replace(/[A-Za-zÀ-ÿ]+/g, (w) => (/^(pe[cç]as?|sku|qtde|descri[cç][aã]o|nome|c[oó]digo|valor|unit[aá]rio|total|a[cç][oõ]es|status|item|modelo|cor|lado|tipo|motivo|defeito|volume)$/i.test(w) ? w : "w:" + w.length))))} · ` + pecas.map((y) => `[peça ${String(y.peca).split(/\s+/).length} palavras · sku ${String(y.sku).replace(/[A-Za-z]/g, "A").replace(/\d/g, "#")} · qtde ${y.qtde}]`).join(" "));
       } catch (e) { erro++; await patch(x.ticket, { pecas_msg: String(e.message).split("\n")[0].slice(0, 150) }).catch(() => {}); }
     }
     log(`AT peças: ${ok} com peça · ${vazio} sem peça · ${erro} com erro · formas ${JSON.stringify(formas).replace(/\d{5,}/g, "#")}`);
