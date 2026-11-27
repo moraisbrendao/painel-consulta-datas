@@ -3804,3 +3804,154 @@ revoke all on function public.link_responder(text, jsonb) from public;
 grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
 
 notify pgrst, 'reload schema';
+
+-- ===== parte 86 =====
+-- 86) KPIs dos links das transportadoras (Brenda 26/11): histórico de cada acesso (com os pedidos que apareceram)
+--     e de cada resposta (data, motivo, SKU). Antes desta parte o banco só guardava os totais; as respostas já dadas
+--     são recuperadas do histórico de retornos (retornos_hist, fonte 'link'). Leitura só para a Logística (não SAC).
+create table if not exists public.link_acessos (
+  id      bigserial primary key,
+  link_id bigint references public.transp_links(id) on delete set null,
+  nome    text not null,
+  em      timestamptz not null default now(),
+  qtd     int not null default 0,
+  pedidos text[] not null default '{}'
+);
+create index if not exists link_acessos_em on public.link_acessos (em desc);
+create table if not exists public.link_respostas (
+  id             bigserial primary key,
+  link_id        bigint references public.transp_links(id) on delete set null,
+  nome           text not null,
+  pedido         text not null,
+  nf             text,
+  transportadora text,
+  prometido      date,
+  nova_data      date,
+  motivo         text,
+  sku            text,
+  obs            text,
+  em             timestamptz not null default now()
+);
+create index if not exists link_respostas_em on public.link_respostas (em desc);
+create index if not exists link_respostas_pedido on public.link_respostas (pedido, em desc);
+alter table public.link_acessos enable row level security;
+alter table public.link_respostas enable row level security;
+revoke all on public.link_acessos, public.link_respostas from anon;
+revoke insert, update, delete, truncate on public.link_acessos, public.link_respostas from authenticated;
+grant select on public.link_acessos, public.link_respostas to authenticated;
+drop policy if exists "logistica le" on public.link_acessos;
+drop policy if exists "logistica le" on public.link_respostas;
+create policy "logistica le" on public.link_acessos for select to authenticated using ((select not public.e_sac()));
+create policy "logistica le" on public.link_respostas for select to authenticated using ((select not public.e_sac()));
+
+-- respostas que já vieram pelo link antes desta parte (uma vez só)
+insert into public.link_respostas (link_id, nome, pedido, nf, transportadora, prometido, nova_data, motivo, sku, em)
+select tl.id, tl.nome, h.pedido, b.nf, b.transportadora, coalesce(b.prev_original, b.prev_atual), h.nova_data,
+       split_part(regexp_replace(coalesce(h.observacao, ''), '^Transportadora: ', ''), ' · ', 1),
+       nullif(trim(substring(h.observacao from ' · SKU ([^·]+)')), ''), h.feito_em
+  from public.retornos_hist h
+  join public.transp_links tl on h.feito_por = 'Transportadora (link): ' || left(tl.nome, 60)
+  left join public.base_pedidos b on b.pedido = h.pedido
+ where h.fonte = 'link'
+   and not exists (select 1 from public.link_respostas r where r.pedido = h.pedido and r.em = h.feito_em);
+
+create or replace function public.link_pendentes(p_token text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; r jsonb;
+begin
+  l := public._link_de(p_token);
+  update public.transp_links set ultimo_acesso = now(), acessos = acessos + 1 where id = l.id;
+  select coalesce(jsonb_agg(jsonb_build_object(
+           'pedido', b.pedido, 'nf', b.nf, 'transportadora', b.transportadora, 'cidade', b.cidade, 'uf', b.uf,
+           'prometido', coalesce(b.prev_original, b.prev_atual), 'micro', b.micro_status, 'expedicao', b.data_expedicao,
+           'nova_antiga', t.nova_data,
+           'barrar', be.nf is not null,
+           'oc_msg', case when o.nf is not null then left(o.mensagem, 500) end, 'oc_em', o.mensagem_em, 'oc_motivo', o.motivo,
+           'nf_repo', tn.nf_repo) order by coalesce(b.prev_original, b.prev_atual), b.pedido), '[]'::jsonb)
+    into r
+    from public.base_pedidos b
+    left join public.tratativas t on t.pedido = b.pedido
+    left join lateral (select x.nf from public.barrar_entrega x where x.na_planilha and x.nf = public.chave_nf(b.nf) limit 1) be on true
+    left join lateral (select x.nf, x.mensagem, x.mensagem_em, x.motivo from public.ocorrencias_tk x
+                        where x.nf = public.chave_nf(b.nf) and coalesce(x.status, '') ilike '%andamento%' and coalesce(x.solicitante, '') ilike 'multi%'
+                        order by x.mensagem_em desc nulls last limit 1) o on true
+    left join lateral (select x.nf_nova || case when x.serie is not null and position('-' in x.nf_nova) = 0 then '-' || x.serie else '' end as nf_repo
+                         from public.troca_notas x where x.pedido = b.pedido and coalesce(x.nf_nova, '') <> ''
+                        order by x.data_emissao desc nulls last limit 1) tn on true
+   where b.transportadora = any (l.transportadoras)
+     and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%'
+     and not exists (select 1 from public.intelipost_fechados f where f.pedido = b.pedido)
+     and b.data_expedicao is not null
+     and (t.nova_data is null or t.nova_data < hoje)
+     and (coalesce(b.prev_original, b.prev_atual) <= hoje + 1 or coalesce(b.range_atrasos, '') ilike 'vencido%' or t.nova_data < hoje);
+  -- KPI (parte 86): guarda cada acesso com os pedidos que a transportadora viu
+  insert into public.link_acessos (link_id, nome, qtd, pedidos)
+  select l.id, l.nome, jsonb_array_length(r), coalesce(array(select e ->> 'pedido' from jsonb_array_elements(r) e), '{}');
+  return jsonb_build_object('nome', l.nome, 'hoje', hoje, 'itens', r);
+end $$;
+revoke all on function public.link_pendentes(text) from public;
+grant execute on function public.link_pendentes(text) to anon, authenticated;
+
+create or replace function public.link_responder(p_token text, p_itens jsonb)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; x record; d date; ok int := 0; rec int := 0;
+  motivos text[] := array['Em rota de entrega','Reagendado com o cliente','Cliente ausente','Endereço não localizado','Aguardando transferência','Atraso operacional','Avaria',
+                          'Não chegou em nosso CD','Extravio','Aguardando retorno da Multimóveis','Falta de volumes','Outro'];
+begin
+  l := public._link_de(p_token);
+  if jsonb_typeof(p_itens) <> 'array' or jsonb_array_length(p_itens) > 500 then raise exception 'Envio inválido.'; end if;
+  perform set_config('painel.link', left(l.nome, 60), true);
+  for x in select * from jsonb_to_recordset(p_itens) as y(pedido text, nova_data text, motivo text, obs text, sku text) loop
+    begin
+      d := case when coalesce(x.nova_data, '') ~ '^\d{4}-\d{2}-\d{2}$' then x.nova_data::date end;
+      if d is null or d < hoje or d > hoje + 90 or not (x.motivo = any (motivos))
+         or (x.motivo = 'Falta de volumes' and nullif(trim(coalesce(x.sku, '')), '') is null)
+         or not exists (select 1 from public.base_pedidos b where b.pedido = x.pedido and b.transportadora = any (l.transportadoras)
+                          and coalesce(b.status_intelipost, '') not ilike 'entregue%' and coalesce(b.status_intelipost, '') not ilike 'cancelado%') then
+        rec := rec + 1; continue;
+      end if;
+      insert into public.tratativas (pedido, nova_data, observacao)
+      values (x.pedido, d, left('Transportadora: ' || x.motivo
+        || case when x.motivo = 'Falta de volumes' then ' · SKU ' || left(trim(x.sku), 200) else '' end
+        || coalesce(' · ' || nullif(trim(x.obs), ''), ''), 1000))
+      on conflict (pedido) do update set nova_data = excluded.nova_data, observacao = excluded.observacao;
+      insert into public.link_respostas (link_id, nome, pedido, nova_data, motivo, sku, obs, prometido, transportadora, nf)
+      select l.id, l.nome, x.pedido, d, x.motivo, case when x.motivo = 'Falta de volumes' then left(trim(x.sku), 200) end, left(nullif(trim(x.obs), ''), 300),
+             coalesce(b.prev_original, b.prev_atual), b.transportadora, b.nf
+        from public.base_pedidos b where b.pedido = x.pedido;
+      ok := ok + 1;
+    exception when others then rec := rec + 1;
+    end;
+  end loop;
+  if ok > 0 then update public.transp_links set ultima_resposta = now(), respostas = respostas + ok where id = l.id; end if;
+  return jsonb_build_object('gravados', ok, 'recusados', rec);
+end $$;
+revoke all on function public.link_responder(text, jsonb) from public;
+grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
+
+-- dados dos KPIs para o painel: acessos e respostas do período + situação atual de cada pedido respondido
+create or replace function public.link_kpis(p_dias int default 30)
+returns jsonb language plpgsql stable security definer set search_path = public as $$
+declare de timestamptz := now() - make_interval(days => least(greatest(coalesce(p_dias, 30), 1), 400));
+begin
+  if public.e_sac() then raise exception 'Sem permissão.'; end if;
+  return jsonb_build_object(
+    'hoje', (now() at time zone 'America/Sao_Paulo')::date,
+    'acessos', coalesce((select jsonb_agg(jsonb_build_object('nome', a.nome, 'em', a.em, 'qtd', a.qtd, 'pedidos', a.pedidos) order by a.em)
+                           from public.link_acessos a where a.em >= de), '[]'::jsonb),
+    'respostas', coalesce((select jsonb_agg(jsonb_build_object(
+          'nome', r.nome, 'pedido', r.pedido, 'nf', coalesce(r.nf, b.nf), 'transportadora', coalesce(r.transportadora, b.transportadora),
+          'prometido', r.prometido, 'nova_data', r.nova_data, 'motivo', r.motivo, 'sku', r.sku, 'obs', r.obs, 'em', r.em,
+          'cidade', b.cidade, 'uf', b.uf, 'micro', b.micro_status, 'data_entrega', b.data_entrega,
+          'entregue', (b.data_entrega is not null or coalesce(b.status_intelipost, '') ilike 'entregue%'
+                       or exists (select 1 from public.intelipost_fechados f where f.pedido = r.pedido)),
+          'cancelado', coalesce(b.status_intelipost, '') ilike 'cancelado%',
+          'nova_atual', t.nova_data, 'na_base', b.pedido is not null) order by r.em)
+          from public.link_respostas r
+          left join public.base_pedidos b on b.pedido = r.pedido
+          left join public.tratativas t on t.pedido = r.pedido
+         where r.em >= de), '[]'::jsonb));
+end $$;
+revoke all on function public.link_kpis(int) from public, anon;
+grant execute on function public.link_kpis(int) to authenticated;
+notify pgrst, 'reload schema';

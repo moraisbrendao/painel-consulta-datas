@@ -1448,3 +1448,16 @@ a.oc-link:hover { text-decoration: underline; }
 .lk-linha input { flex: 1; min-width: 240px; font-size: 13px; padding: 6px 8px; }
 .lk-novo textarea { width: 100%; font: inherit; font-size: 13px; padding: 8px; box-sizing: border-box; }
 #lk-transp { max-width: 260px; }
+
+/* KPIs dos links das transportadoras (parte 86) */
+.lkk { border-top: 1px solid var(--borda); margin-top: 14px; padding-top: 6px; }
+.lkk h3 { margin: 0; font-size: 15px; }
+.lkk-h { margin: 14px 0 6px !important; }
+.lkk-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; margin: 8px 0 12px; }
+.lkk-card { background: #fff; border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; }
+.lkk-card b { display: block; font-size: 22px; color: var(--marinho); line-height: 1.15; }
+.lkk-card span { font-size: 12px; color: var(--texto-2); }
+.lkk-card.verm b { color: var(--vermelho); } .lkk-card.verde b { color: #1d7a43; }
+.lkk-tab td.num a { cursor: pointer; color: inherit; text-decoration: underline dotted; }
+.lkk-tab td.num a:hover { color: #0e7fc0; }
+.lkk-tab .ruim { color: var(--vermelho); font-weight: 700; } .lkk-tab .bom { color: #1d7a43; font-weight: 700; }

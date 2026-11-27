@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=389">
+  <link rel="stylesheet" href="styles.css?v=390">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -730,6 +730,27 @@
         <div class="tabela-wrap"><table class="tabela-pedidos">
           <thead><tr><th>Transportadora</th><th class="num">Sem retorno agora</th><th>Último acesso</th><th>Última resposta</th><th>Criado</th><th></th></tr></thead>
           <tbody id="lk-linhas"></tbody></table></div>
+        <div class="lkk" id="lkk">
+          <div class="cartao-topo">
+            <div><h3>📊 KPIs dos links · como cada transportadora está respondendo</h3>
+              <p class="sub" id="lkk-info">Carregando…</p></div>
+            <div class="acoes-robo">
+              <select id="lkk-dias" aria-label="Período"><option value="7">Últimos 7 dias</option><option value="30" selected>Últimos 30 dias</option><option value="90">Últimos 90 dias</option><option value="400">Desde o início</option></select>
+              <button id="lkk-excel" class="btn contorno" type="button">⤓ Excel</button>
+            </div>
+          </div>
+          <div class="lkk-cards" id="lkk-cards"></div>
+          <div class="tabela-wrap"><table class="tabela-pedidos lkk-tab">
+            <thead><tr><th>Transportadora</th><th class="num" title="Quantas vezes abriram o link">Acessos</th><th class="num" title="Dias diferentes em que abriram o link">Dias com acesso</th>
+              <th class="num" title="Pedidos diferentes que apareceram no link">Pedidos no link</th><th class="num" title="Pedidos que receberam nova data pelo link">Atualizados</th><th class="num">% atualizado</th>
+              <th class="num" title="Apareceram no link e nunca receberam data">Sem retorno</th><th class="num" title="Tempo entre o pedido aparecer no link e a resposta (mediana)">Tempo p/ responder</th>
+              <th class="num" title="Entregue até a nova data informada">Cumpriu</th><th class="num" title="Entregue depois da nova data, ou nova data já passou sem entrega">Atrasou após a nova data</th>
+              <th class="num">% cumprido</th><th class="num" title="Nova data ainda não chegou">No prazo</th><th class="num" title="Pedidos que receberam 2 ou mais datas diferentes">Remarcou</th>
+              <th class="num" title="Média de dias entre o prometido ao cliente e a nova data">Dias empurrados</th><th>Motivo principal</th></tr></thead>
+            <tbody id="lkk-linhas"></tbody></table></div>
+          <h3 class="lkk-h">Motivos informados</h3>
+          <div class="tabela-wrap"><table class="tabela-pedidos lkk-tab"><thead id="lkk-mot-cab"></thead><tbody id="lkk-mot"></tbody></table></div>
+        </div>
       </section>
 
       <!-- lista -->
@@ -1740,24 +1761,24 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=389"></script>
-  <script src="mapa-brasil.js?v=389"></script>
-  <script src="cidades-br.js?v=389"></script>
-  <script src="troca-notas.js?v=389"></script>
-  <script src="app.js?v=389"></script>
-  <script src="ordenar.js?v=389"></script>
-  <script src="menu.js?v=389"></script>
-  <script src="ajuda.js?v=389"></script>
-  <script src="documentos.js?v=389"></script>
-  <script src="barrar.js?v=389"></script>
-  <script src="naoloc.js?v=389"></script>
-  <script src="faltas.js?v=389"></script>
-  <script src="motor.js?v=389"></script>
-  <script src="retornos-semana.js?v=389"></script>
-  <script src="links.js?v=389"></script>
-  <script src="cobranca-massa.js?v=389"></script>
-  <script src="gargalos.js?v=389"></script>
-  <script src="filas.js?v=389"></script>
-  <script src="filtros.js?v=389"></script>
+  <script src="config.js?v=390"></script>
+  <script src="mapa-brasil.js?v=390"></script>
+  <script src="cidades-br.js?v=390"></script>
+  <script src="troca-notas.js?v=390"></script>
+  <script src="app.js?v=390"></script>
+  <script src="ordenar.js?v=390"></script>
+  <script src="menu.js?v=390"></script>
+  <script src="ajuda.js?v=390"></script>
+  <script src="documentos.js?v=390"></script>
+  <script src="barrar.js?v=390"></script>
+  <script src="naoloc.js?v=390"></script>
+  <script src="faltas.js?v=390"></script>
+  <script src="motor.js?v=390"></script>
+  <script src="retornos-semana.js?v=390"></script>
+  <script src="links.js?v=390"></script>
+  <script src="cobranca-massa.js?v=390"></script>
+  <script src="gargalos.js?v=390"></script>
+  <script src="filas.js?v=390"></script>
+  <script src="filtros.js?v=390"></script>
 </body>
 </html>
