@@ -1518,3 +1518,4 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 #rp-at .at-duas { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
 #rp-at .at-duas h3 { margin: 0 0 6px; font-size: 14px; }
 @media (max-width: 900px) { #rp-at .at-duas { grid-template-columns: 1fr; } }
+.rpp-ia { background: #eef4ff; border: 1px dashed #7a9be0; color: #1d3a7a; border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 4px 0; }

@@ -5162,3 +5162,7 @@ end $$;
 revoke all on function public.rodar_robo_at() from public, anon;
 grant execute on function public.rodar_robo_at() to authenticated;
 notify pgrst, 'reload schema';
+
+-- parte 107 (Brenda 27/11): Reposição pré › teste da leitura da foto com o Claude (resposta do robô, só para comparar)
+alter table public.repo_pre add column if not exists foto_ia jsonb;
+notify pgrst, 'reload schema';
