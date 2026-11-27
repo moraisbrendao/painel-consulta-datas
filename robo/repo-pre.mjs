@@ -157,7 +157,7 @@ export async function volumesDoDialogo(p, linha, log) {
     r.textos = ops.map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean);
     // todas as opções da lista são volumes (o código pode vir sem ".0001", ex. 95812), menos "Selecionar todas" e "Fechar"
     r.volumes = [...new Set(r.textos.filter((t) => !/^(selecionar todas?|fechar|limpar)$/i.test(t)))];
-    if (log) log("  opções de Volumes (máscara):", r.textos.map((t) => t.replace(/\d/g, "#").slice(0, 60)).join(" | "));
+    if (log) log("  opções de Volumes (códigos de produto, sem dado de cliente):", r.textos.map((t) => t.slice(0, 40)).join(" | "));
     await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
   // fecha a janela SEM adicionar
   const fechar = d.getByRole("button", { name: /cancelar|fechar/i }).first();
