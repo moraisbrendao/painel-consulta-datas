@@ -319,16 +319,21 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   // a lista de volumes também é um [role=dialog]: fixa a janela que tem o botão Adicionar (27/11: procurava o Adicionar na lista de volumes)
   const d = p.locator("[role=dialog]").filter({ has: p.getByRole("button", { name: /^\s*adicionar\s*$/i }) }).first(); await d.waitFor({ timeout: 8000 }).catch(() => {});
   if (!(await d.count())) throw new Error("a janela Criar Ticket não abriu");
+  const estado = async (q) => { const nd = await p.locator("[role=dialog]").count(); const bd = (await d.locator("button, [role=combobox], input").evaluateAll((es) => es.map((e) => `${e.tagName.toLowerCase()}${e.getAttribute("role") ? "/" + e.getAttribute("role") : ""}:${(e.innerText || e.value || e.getAttribute("placeholder") || "").replace(/\s+/g, " ").trim().slice(0, 30)}`)).catch(() => [])).map((t) => t.replace(/\d/g, "#"));
+    log(`  [${q}] janelas ${nd} · campos da janela ${JSON.stringify(bd)}`); };
+  await estado("janela aberta");
   const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
   await clicar(vol, "campo Volumes"); await p.waitForTimeout(1200);
   const marcados = [];
   for (const v of volumes) { const op = p.locator("[role=option], [role=listbox] li, [cmdk-item]").filter({ hasText: new RegExp("^\\s*" + v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$") }).first();
     if (!(await op.count())) throw new Error(`o volume ${v} não está na lista do portal`); await op.scrollIntoViewIfNeeded().catch(() => {}); await clicar(op, "opção do volume " + v); marcados.push(v); await p.waitForTimeout(500); }
+  await estado("volumes escolhidos");
   // fecha só a lista de volumes (botão Fechar da lista; senão clica no título da janela)
   const fechar = p.getByRole("button", { name: /^\s*fechar\s*$/i }).last();
   if (await fechar.count()) await fechar.click().catch(() => {}); else await d.locator("h1,h2,h3").first().click().catch(() => {});
   await p.waitForTimeout(800);
   if ((await p.locator("[role=dialog]").count()) > 1) { await d.locator("h1,h2,h3,[id$=title]").first().click({ timeout: 4000 }).catch(() => {}); await p.waitForTimeout(800); }
+  await estado("lista fechada");
   // o campo mostra os volumes escolhidos; com muitos, mostra alguns e "+N"
   const naJanela = ((await d.innerText().catch(() => "")) || "") + " " + ((await vol.innerText().catch(() => "")) || "");
   const mais = Number((naJanela.match(/\+\s*(\d+)/) || [])[1] || 0), vistos = volumes.filter((v) => naJanela.includes(v)).length;
