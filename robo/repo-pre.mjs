@@ -55,10 +55,15 @@ export async function diagRepoPre({ chamar, log, ctx, alvo, createHash }) {
     log("Na janela: imagens", await d.locator("img").count(), "· links", await d.locator("a").count(), "· botões", (await d.locator("button").evaluateAll((es) => es.map((e) => [e.title, e.getAttribute("aria-label"), (e.innerText || "").trim()].filter(Boolean).join("/") || "(ícone)"))).map(mascara).join(" | "));
     const hrefs = await d.locator("a[href], img[src]").evaluateAll((es) => es.map((e) => e.getAttribute("href") || e.getAttribute("src")));
     log("Endereços (só tipo):", hrefs.map((h) => { try { const u = new URL(h, location.href); return u.host.replace(/[a-z0-9-]+\./, "x.") + " " + (u.pathname.match(/\.[a-z0-9]{2,5}$/i) || ["(sem ext)"])[0]; } catch (e) { return "?"; } }).join(" | ") || "nenhum");
+    log("Imagens (esquema e tamanho):", (await d.locator("img").evaluateAll((es) => es.map((e) => `${(e.getAttribute("src") || "").split(":")[0].slice(0, 10)} ${e.naturalWidth}x${e.naturalHeight} mostrada ${Math.round(e.getBoundingClientRect().width)}px`))).join(" | "));
+    const antes = respostas.length; await d.locator("img").first().click().catch(() => {}); await p.waitForTimeout(2500);
+    log("Depois de clicar na imagem: novas imagens baixadas", respostas.length - antes, "· abas", ctx.pages().length, "· janelas", await p.locator("[role=dialog]").count(), "· imagens maiores na tela:", (await p.locator("img").evaluateAll((es) => es.filter((e) => e.naturalWidth > 900).map((e) => `${e.naturalWidth}x${e.naturalHeight}`))).join(", ") || "nenhuma");
     for (const h of hrefs.slice(0, 4)) { try { const r = await p.request.get(new URL(h, p.url()).href); const ct = r.headers()["content-type"] || ""; if (/image|octet|pdf/.test(ct)) respostas.push({ ct, buf: await r.body() }); } catch (_) {} }
   } else log("Nenhuma janela abriu depois do clique");
-  log("Arquivos baixados:", respostas.length, respostas.map((r) => `${r.ct.split(";")[0]} ${Math.round(r.buf.length / 1024)}KB`).join(" | "));
-  for (const [i, r] of respostas.filter((r) => /image/.test(r.ct) && r.buf.length > 30000).slice(0, 4).entries()) {
+  const sharp = (await import("sharp")).default;
+  for (const r of respostas) { try { const m = await sharp(r.buf).metadata(); r.dim = `${m.width}x${m.height}`; } catch (_) { r.dim = "?"; } }
+  log("Arquivos baixados:", respostas.length, respostas.map((r) => `${r.ct.split(";")[0]} ${Math.round(r.buf.length / 1024)}KB ${r.dim}`).join(" | "));
+  for (const [i, r] of respostas.filter((r) => /image/.test(r.ct) && r.buf.length > 20000).slice(0, 4).entries()) {
     const cb = await codigosDeBarras(r.buf), txt = await ocr(r.buf), T = txt.toUpperCase().replace(/\s+/g, " ");
     const lista = Array.isArray(cb) ? cb : [];
     const nossa = lista.filter((c) => /^\d{12,14}$/.test(c) && c.includes(num));
