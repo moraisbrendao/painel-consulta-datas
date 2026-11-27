@@ -136,7 +136,7 @@
           </div>
           <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : (chip || `<span class="s">preencha data e motivo</span>`)}</div><div class="err"></div></div>
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
-          ${x.oc_msg ? `<div class="alerta oc"><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
+          ${x.oc_msg ? `<div class="alerta oc"><b>📌 Assunto: Retorno da Ocorrência</b><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
         </div>`;
       }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
     }
