@@ -154,6 +154,8 @@ export async function volumesDoDialogo(p, linha, log) {
   if (await vol.count()) { await vol.click().catch(() => {}); await p.waitForTimeout(1200);
     const ops = await p.locator("[role=option], [role=listbox] li, [cmdk-item]").allInnerTexts().catch(() => []);
     r.volumes = [...new Set(ops.join("\n").match(VOL) || [])]; r.opcoes = ops.length;
+    r.textos = ops.map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean);
+    if (log) log("  opções de Volumes (máscara):", r.textos.map((t) => t.replace(/\d/g, "#").slice(0, 60)).join(" | "));
     await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
   // fecha a janela SEM adicionar
   const fechar = d.getByRole("button", { name: /cancelar|fechar/i }).first();
@@ -179,7 +181,9 @@ export async function diagRepoPre2({ log, ctx }) {
   log(`Lista: ${casos.length} linhas em ${Math.max(0, ...casos.map((c) => c.pagina))} página(s)`);
   log("Status →", cont((c) => c.status)); log("Motivo →", cont((c) => c.motivo));
   log("Séries (Novo + Falta) →", cont((c) => (/novo/i.test(c.status) && /falta/i.test(c.motivo) ? String(c.nf).split("-")[1] : "outros")));
-  const alvo = casos.find((c) => /novo/i.test(c.status) && /falta/i.test(c.motivo) && ["7", "4", "31"].includes(String(c.nf).split("-")[1]));
+  const { createHash } = await import("node:crypto"); const hh = (t) => createHash("sha256").update(String(t || "")).digest("hex").slice(0, 16);
+  const quer = String(process.env.TRANSP || "").split(":")[1];
+  const alvo = quer ? casos.find((c) => hh(String(c.nf).split("-")[0]) === quer) : casos.find((c) => /novo/i.test(c.status) && /falta/i.test(c.motivo) && ["7", "4", "31"].includes(String(c.nf).split("-")[1]));
   if (!alvo) { log("Nenhum Novo + Falta de volumes das séries 7/4/31"); return; }
   log(`Caso de teste: série ${String(alvo.nf).split("-")[1]} · qtd volumes ${alvo.qtd}`);
   const linha = await acharLinha(p, alvo.nf); if (!linha) { log("não achei a linha filtrando"); return; }
