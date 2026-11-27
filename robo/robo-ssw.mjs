@@ -1556,6 +1556,12 @@ if (MODO === "diag-sla") {   // Reposição: lê o SLA de 3 tickets em aberto (s
   const nav = await chromium.launch(); const ctx = await nav.newContext();
   try { await (await import("./repo-itens.mjs")).diagSla({ chamar, log, ctx }); } finally { await nav.close(); }
 }
+if (MODO === "diag-at") {   // Assistência Técnica: onde o 360 mostra a peça (robo/repo-itens.mjs diagAt) — só formato no log
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ acceptDownloads: true });
+  try { await (await import("./repo-itens.mjs")).diagAt({ chamar, log, ctx }); } finally { await nav.close(); }
+}
 if (MODO === "diag-repo") {   // Reposição: lê 1 ticket pós (Eventos) e 1 pré (PDF da nota) em Aguardando entrega — só contagens no log
   await entrarSupabase();
   const { chromium } = await import("playwright");

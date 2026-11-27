@@ -317,3 +317,42 @@ export async function rodarSla({ chamar, log, ctx, limite = 600 }) {
   }
   log(`repo-sla: lidos ${n} · ${Object.entries(cont).map(([k, v]) => `${k} ${v}`).join(" · ")} · erros ${erros}`);
 }
+
+// ===== diag-at (Brenda 27/11): onde o 360 mostra a peça de um ticket de Assistência Técnica. Só formato/contagens no log. =====
+// só palavras de tela (rótulos) passam; qualquer outra palavra vira "w" (nunca nome de cliente no log público)
+const UI_OK = /^(pe[cç]as?|itens?|produtos?|volumes?|c[oó]digos?|quantidade|qtde?|descri[cç][aã]o|assist[eê]ncia|t[eé]cnica|AT|eventos?|reposi[cç][aã]o|nota|fiscal|NF|data|status|fila|motivo|tipo|defeito|avaria|montagem|pedido|ticket|chat|anexos?|detalhes|hist[oó]rico|sla|grupo|respons[aá]vel|cliente|transportadora|envio|emitida|sa[ií]da|parcial|total|antes|depois|da|de|do|entrega|modelo|sku|cor|lado|direito|esquerdo|porta|gaveta|tampo|lateral|prateleira|kit|ferragens|fundo|frente|base|coment[aá]rio|interno|p[uú]blico|executar|a[cç][aã]o|no|eventos|informa[cç][oõ]es|solicita[cç][aã]o|observa[cç][aã]o|solicitante|criado|em|por|e|com|sem|para)$/i;
+const ui = (t) => String(t || "").split(/\s+/).map((w) => (/^[#.,:\/()\-–]+$/.test(w) || UI_OK.test(w.replace(/[.,:()]/g, "")) ? w : "w")).join(" ");
+export async function diagAt({ chamar, log, ctx, n = 3 }) {
+  const T = await chamar("tk_saida?select=ticket,nf_nova,data_saida&origem=eq.AT&order=data_emissao.desc.nullslast&limit=400");
+  const com = T.filter((x) => x.nf_nova), sem = T.filter((x) => !x.nf_nova);
+  log(`diag-at: ${T.length} tickets de AT guardados (parte 76) · ${com.length} com Nota AT · ${sem.length} sem`);
+  const alvo = [...com.slice(0, n), ...sem.slice(0, 1)];
+  const p = await entrarMulti360(ctx, log);
+  let k = 0;
+  for (const x of alvo) {
+    k++;
+    try {
+      await abrir(p, x.ticket);
+      const so = await sondar(p);
+      const forma = await p.evaluate(() => {
+        const m = (t) => String(t || "").replace(/\d/g, "#").replace(/\s+/g, " ").trim();
+        const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
+        const tit = [...document.querySelectorAll("h1,h2,h3,h4,h5,h6,strong,b,label,dt,th")].filter(vis).map((e) => m(e.textContent)).filter((t) => t && t.length < 40);
+        const pecas = (document.body.innerText.match(/pe[cç]a|item|produto|volume|c[oó]digo|sku|modelo/gi) || []).map((w) => w.toLowerCase());
+        return { tit: [...new Set(tit)].slice(0, 50), pecas: pecas.reduce((a, w) => ((a[w] = (a[w] || 0) + 1), a), {}) };
+      });
+      log(`AT${k} (${x.nf_nova ? "com" : "sem"} Nota AT): códigos NNNNN.NNNN=${so.codigosNaPagina} · palavras ${JSON.stringify(forma.pecas)}`);
+      log(`  abas/botões: ${so.abas.map(ui).join(" / ").slice(0, 400)}`);
+      log(`  títulos: ${forma.tit.map(ui).join(" | ").slice(0, 600)}`);
+      const ev = await lerEventos(p);
+      const so2 = await sondar(p);
+      const forma2 = await p.evaluate(() => [...new Set([...document.querySelectorAll("h1,h2,h3,h4,h5,h6,strong,b,label,dt,th,span")].filter((e) => { const b = e.getBoundingClientRect(); return b.width > 0 && e.children.length === 0; })
+        .map((e) => String(e.textContent || "").replace(/\d/g, "#").replace(/\s+/g, " ").trim()).filter((t) => t && t.length < 40 && /[A-Za-zÀ-ÿ]{3}/.test(t)))].slice(0, 80));
+      log(`  Eventos: quadros Reposição=${ev.titulos ?? 0} ${ev.erro || ""} · códigos depois=${so2.codigosNaPagina}`);
+      log(`  textos curtos em Eventos: ${[...new Set(forma2.map(ui))].join(" | ").slice(0, 900)}`);
+      await abrir(p, x.ticket);
+      const an = await lerPdfs(p, 3);
+      log(`  anexos=${an.anexos} · PDFs lidos=${an.pdfs.length}` + an.pdfs.map((t, i) => { const d = lerDanfe(t); return ` · PDF${i + 1}: ${t.txt.length} letras, códigos de volume ${d.codigos.length}`; }).join(""));
+    } catch (e) { log(`AT${k}: erro ${String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 140)}`); }
+  }
+}
