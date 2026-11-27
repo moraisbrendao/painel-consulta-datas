@@ -41,7 +41,7 @@
     .d-topo h2 { margin: 0; font-size: 17px; }
     .desemp h3 { margin: 0 0 2px; font-size: 15px; }
     .d-grade { display: grid; grid-template-columns: 1fr; gap: 14px; }
-    .d-perf { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 6px 18px; align-items: start; }
+    .d-perf { display: grid; grid-template-columns: minmax(220px, 640px); gap: 6px 18px; align-items: start; }
     .d-perf h3, .d-perf .d-big, .d-perf > .s { grid-column: 1; }
     .d-perf .d-tabw { grid-column: 2; grid-row: 1 / span 3; overflow-x: auto; }
     .d-big { font-size: 34px; font-weight: 800; line-height: 1.05; }
@@ -371,9 +371,7 @@
       $("d-perf").innerHTML = `<h3>Performance do mês (${nomeM(d.hoje.slice(0, 7))})</h3>
         <div class="d-big ${cls(pa)}">${pct(pa)}</div>
         ${pa != null && pa < 0.95 ? `<div class="d-triste">🥺 Poxa… a performance de vocês está abaixo de 95% este mês, e a gente sentiu daqui. Os pedidos estão com saudade de chegar no cliente! 📦💔<br><b>Bora virar esse jogo?</b> Coloca as datas em dia aqui embaixo e faz essas entregas acontecerem. A gente torce por vocês! 💪</div>` : pa != null && pa >= 0.97 ? `<div class="d-feliz">🎉 Uhuul! A performance de vocês está acima de 97% este mês! Os clientes agradecem e a gente aqui também. 🥳📦<br><b>Que time!</b> Segue nesse ritmo que tá lindo de ver! 🚀💚</div>` : ""}
-        <div class="s">(entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto), pedidos criados no mês, sem cancelados. Meta: 97%.</div>
-        <div class="d-tabw"><table class="d-tab"><thead><tr><th>Mês</th><th>Pedidos</th><th>Entregues no prazo</th><th>Entregues c/ atraso</th><th>Em aberto</th><th>Atrasados</th><th>Perf.</th></tr></thead>
-        <tbody>${M.slice().reverse().map((x) => `<tr><td>${nomeM(x.mes)}</td><td>${n(x.volume)}</td><td>${n(x.ent_prazo)}</td><td>${n(x.ent_atraso)}</td><td>${n(x.ab_prazo + x.ab_atraso)}</td><td>${n(x.ab_atraso)}</td><td><b class="${cls(perf(x))}">${pct(perf(x))}</b></td></tr>`).join("") || `<tr><td colspan="7">Sem pedidos nos últimos meses.</td></tr>`}</tbody></table></div>`;
+        <div class="s">(entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto), pedidos criados no mês, sem cancelados. Meta: 97%.</div>`;
       // gráfico: 14 dias para trás (entregues) e 14 para frente (vencem), hoje com atrasados + vence hoje
       const soma = (iso, k) => { const t = new Date(iso + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); };
       const ddmm = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7), E = d.entregues || {}, V = d.vencem || {}, hj = d.hoje;
