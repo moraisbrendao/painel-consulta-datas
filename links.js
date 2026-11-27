@@ -34,7 +34,12 @@
     carregarKpi();
   }
 
+  // quadro dos links minimizável (Brenda 27/11); lembra a escolha neste navegador
+  const MIN_K = "painel.lkMin";
+  const minimizado = () => { try { return localStorage.getItem(MIN_K) !== "0"; } catch (e) { return true; } };
+  function aplicaMin() { const m = minimizado(); $("lk-tab").hidden = m; $("lk-min").textContent = m ? "▸ Mostrar links" : "▾ Minimizar"; }
   function desenhar() {
+    aplicaMin();
     if (!ok) { $("lk-info").textContent = "Para usar os links, rode a parte 82 no Supabase."; $("lk-linhas").innerHTML = ""; return; }
     const ativos = links.filter((l) => l.ativo);
     $("lk-info").textContent = ativos.length ? `${fmt(ativos.length)} link(s) ativo(s). A transportadora abre o link, vê só os pedidos dela sem retorno e informa a nova data e o motivo; a resposta cai na hora aqui no Preventivo.`
@@ -79,6 +84,7 @@
 
   const copiar = (txt) => (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast("Copiado."), () => toast("Selecione e copie com Ctrl+C.", true));
   $("lk-gerar").addEventListener("click", () => gerar($("lk-transp").value));
+  $("lk-min").addEventListener("click", () => { try { localStorage.setItem(MIN_K, minimizado() ? "0" : "1"); } catch (e) {} aplicaMin(); });
   $("lk-copiar-url").addEventListener("click", () => copiar($("lk-url").value));
   $("lk-copiar-msg").addEventListener("click", () => copiar($("lk-msg").value));
   $("lk-fechar").addEventListener("click", () => { novo = null; desenhar(); });
@@ -144,7 +150,7 @@
       [fmt(atual), "Pedidos atualizados pela transportadora", ""], [pct(atual, Math.max(vistos, atual)), "% atualizado", ""],
       [fmt(T((x) => x.semRet.length)), "Sem retorno", "verm"], [fmt(atr), "Atrasou após a nova data", "verm"],
       [fmt(cum), "Cumpriu a nova data", "verde"], [pct(cum, cum + atr), "% promessas cumpridas", cum + atr ? (cum / (cum + atr) >= 0.8 ? "verde" : "verm") : ""],
-    ].map(([n, r, c]) => `<div class="lkk-card ${c}"><b>${n}</b><span>${r}</span></div>`).join("");
+    ].map(([n, r, c], i) => { const t = CARD_TIPO[i]; return `<div class="lkk-card ${c}">${t ? `<button class="lkk-abre" type="button" data-lkk="${t}" data-lkk-nome="*" title="Abrir os pedidos">↗</button>` : ""}<b>${n}</b><span>${r}</span></div>`; }).join("");
     $("lkk-linhas").innerHTML = kLin.map((x) => {
       const pa = x.vistos || x.ult.length ? Math.round((100 * x.ult.length) / Math.max(x.vistos, x.ult.length)) : null, pc = x.cumpriu.length + x.atrasou.length ? Math.round((100 * x.cumpriu.length) / (x.cumpriu.length + x.atrasou.length)) : null;
       return `<tr><td><b>${esc(x.nome)}</b><div class="s">último acesso ${quando(x.ultimo)}</div></td><td class="num">${fmt(x.acessos)}</td><td class="num">${fmt(x.dias)}</td>
@@ -161,7 +167,8 @@
     $("lkk-mot").innerHTML = mots.map((m) => `<tr><td>${esc(m)}</td>${comResp.map((x) => `<td class="num">${lnk(x.motivos.get(m) || 0, x.nome, "mot:" + m)}</td>`).join("")}<td class="num"><b>${fmt(T((x) => x.motivos.get(m) || 0))}</b></td></tr>`).join("")
       || `<tr><td class="vazio">Nenhuma resposta no período.</td></tr>`;
   }
-  const TIT = { vistos: "Pedidos que apareceram no link", atual: "Pedidos atualizados", sem: "Sem retorno", cumpriu: "Cumpriu a nova data", atrasou: "Atrasou após a nova data", prazo: "Nova data ainda no prazo", remarcou: "Remarcou (2+ datas)" };
+  const CARD_TIPO = ["acessos", "vistos", "atual", "atual", "sem", "atrasou", "cumpriu", "promessas"];
+  const TIT = { acessos: "Acessos aos links", promessas: "Promessas (cumpriu + atrasou)", vistos: "Pedidos que apareceram no link", atual: "Pedidos atualizados", sem: "Sem retorno", cumpriu: "Cumpriu a nova data", atrasou: "Atrasou após a nova data", prazo: "Nova data ainda no prazo", remarcou: "Remarcou (2+ datas)" };
   function linhasDe(x, tipo) {
     if (tipo === "sem") return x.semRet;
     if (tipo === "vistos") { const R = new Map(x.ult.map((r) => [r.pedido, r])); return [...x.ult, ...x.semRet.filter((s) => !R.has(s.pedido))]; }
@@ -171,13 +178,17 @@
   const COLS = [["NF", (r) => r.nf], ["Pedido", (r) => r.pedido], ["Transportadora", (r) => r.transportadora], ["Cidade/UF", (r) => [r.cidade, r.uf].filter(Boolean).join(" / ")],
     ["Micro status", (r) => r.micro], ["Prometido", (r) => br(r.prometido)], ["Nova data informada", (r) => br(r.nova_data)], ["Motivo", (r) => r.motivo], ["SKU", (r) => r.sku],
     ["Observação", (r) => r.obs], ["Respondido em", (r) => (r.em ? quando(r.em) : "")], ["Datas diferentes", (r) => r.datas || ""], ["Entregue em", (r) => (r.data_entrega ? br(r.data_entrega) : "")], ["Situação", (r) => r.sit]];
+  // nome "*" = todas as transportadoras (↗ dos cards, Brenda 27/11); "acessos" lista os acessos
   function abrirLista(nome, tipo) {
-    const x = kLin.find((y) => y.nome === nome); if (!x) return;
-    const L = linhasDe(x, tipo), tit = `${nome} · ${tipo.startsWith("mot:") ? "Motivo: " + tipo.slice(4) : TIT[tipo]} (${fmt(L.length)})`;
+    const todos = nome === "*", X = todos ? kLin : kLin.filter((y) => y.nome === nome); if (!X.length) return;
+    let L, C = COLS;
+    if (tipo === "acessos") { L = kd.acessos.filter((a) => todos || a.nome === nome).slice().reverse(); C = [["Link", (a) => a.nome], ["Acesso em", (a) => quando(a.em)], ["Pedidos na tela", (a) => a.qtd]]; }
+    else { const f = tipo === "promessas" ? (x) => [...x.cumpriu, ...x.atrasou] : (x) => linhasDe(x, tipo); L = X.flatMap((x) => f(x).map((r) => ({ ...r, _link: x.nome }))); if (todos) C = [["Link", (r) => r._link], ...COLS]; }
+    const tit = `${todos ? "Todas as transportadoras" : nome} · ${tipo.startsWith("mot:") ? "Motivo: " + tipo.slice(4) : TIT[tipo]} (${fmt(L.length)})`;
     $("modal-titulo").textContent = tit;
-    $("modal-corpo").innerHTML = `<p><button class="btn contorno" type="button" id="lkk-lista-xls">⤓ Baixar Excel</button></p><div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr>${COLS.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead>
-      <tbody>${L.map((r) => `<tr>${COLS.map((c) => `<td>${esc(c[1](r) ?? "")}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
-    $("lkk-lista-xls").onclick = () => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([COLS.map((c) => c[0])].concat(L.map((r) => COLS.map((c) => c[1](r) ?? "")))), "Pedidos"); XLSX.writeFile(wb, `link_${tit.replace(/\s*\(\d[\d.]*\)$/, "").replace(/[^\wÀ-ú]+/g, "_").slice(0, 60)}_${hojeISO()}.xlsx`); };
+    $("modal-corpo").innerHTML = `<p><button class="btn contorno" type="button" id="lkk-lista-xls">⤓ Baixar Excel</button></p><div class="tabela-wrap"><table class="tabela-pedidos"><thead><tr>${C.map((c) => `<th>${c[0]}</th>`).join("")}</tr></thead>
+      <tbody>${L.map((r) => `<tr>${C.map((c) => `<td>${esc(c[1](r) ?? "")}</td>`).join("")}</tr>`).join("") || `<tr><td colspan="${C.length}" class="vazio">Nenhum pedido.</td></tr>`}</tbody></table></div>`;
+    $("lkk-lista-xls").onclick = () => { const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([C.map((c) => c[0])].concat(L.map((r) => C.map((c) => c[1](r) ?? "")))), "Pedidos"); XLSX.writeFile(wb, `link_${tit.replace(/\s*\(\d[\d.]*\)$/, "").replace(/[^\wÀ-ú]+/g, "_").slice(0, 60)}_${hojeISO()}.xlsx`); };
     $("modal").hidden = false; document.body.classList.add("sem-rolagem");
   }
   if ($("lkk")) {

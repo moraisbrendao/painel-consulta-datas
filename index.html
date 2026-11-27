@@ -9,7 +9,7 @@
   <link rel="icon" href="assets/logo.png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="styles.css?v=414">
+  <link rel="stylesheet" href="styles.css?v=415">
 </head>
 <body>
   <!-- ============ LOGIN ============ -->
@@ -721,6 +721,7 @@
           <div class="acoes-robo">
             <select id="lk-transp" aria-label="Transportadora"></select>
             <button id="lk-gerar" class="btn amarelo" type="button">🔗 Gerar link</button>
+            <button id="lk-min" class="btn contorno" type="button" title="Esconde ou mostra a lista de links">▸ Mostrar links</button>
           </div>
         </div>
         <div id="lk-novo" class="lk-novo" hidden>
@@ -729,7 +730,7 @@
           <textarea id="lk-msg" rows="5"></textarea>
           <div class="lk-linha"><button id="lk-copiar-msg" class="btn amarelo" type="button">Copiar mensagem</button><button id="lk-fechar" class="link" type="button">Fechar</button></div>
         </div>
-        <div class="tabela-wrap"><table class="tabela-pedidos">
+        <div class="tabela-wrap" id="lk-tab" hidden><table class="tabela-pedidos">
           <thead><tr><th>Transportadora</th><th class="num">Sem retorno agora</th><th>Último acesso</th><th>Última resposta</th><th>Criado</th><th></th></tr></thead>
           <tbody id="lk-linhas"></tbody></table></div>
         <div class="lkk" id="lkk">
@@ -1763,24 +1764,24 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
-  <script src="config.js?v=414"></script>
-  <script src="mapa-brasil.js?v=414"></script>
-  <script src="cidades-br.js?v=414"></script>
-  <script src="troca-notas.js?v=414"></script>
-  <script src="app.js?v=414"></script>
-  <script src="ordenar.js?v=414"></script>
-  <script src="menu.js?v=414"></script>
-  <script src="ajuda.js?v=414"></script>
-  <script src="documentos.js?v=414"></script>
-  <script src="barrar.js?v=414"></script>
-  <script src="naoloc.js?v=414"></script>
-  <script src="faltas.js?v=414"></script>
-  <script src="motor.js?v=414"></script>
-  <script src="retornos-semana.js?v=414"></script>
-  <script src="links.js?v=414"></script>
-  <script src="cobranca-massa.js?v=414"></script>
-  <script src="gargalos.js?v=414"></script>
-  <script src="filas.js?v=414"></script>
-  <script src="filtros.js?v=414"></script>
+  <script src="config.js?v=415"></script>
+  <script src="mapa-brasil.js?v=415"></script>
+  <script src="cidades-br.js?v=415"></script>
+  <script src="troca-notas.js?v=415"></script>
+  <script src="app.js?v=415"></script>
+  <script src="ordenar.js?v=415"></script>
+  <script src="menu.js?v=415"></script>
+  <script src="ajuda.js?v=415"></script>
+  <script src="documentos.js?v=415"></script>
+  <script src="barrar.js?v=415"></script>
+  <script src="naoloc.js?v=415"></script>
+  <script src="faltas.js?v=415"></script>
+  <script src="motor.js?v=415"></script>
+  <script src="retornos-semana.js?v=415"></script>
+  <script src="links.js?v=415"></script>
+  <script src="cobranca-massa.js?v=415"></script>
+  <script src="gargalos.js?v=415"></script>
+  <script src="filas.js?v=415"></script>
+  <script src="filtros.js?v=415"></script>
 </body>
 </html>
