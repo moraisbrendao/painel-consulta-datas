@@ -1602,7 +1602,7 @@ if (MODO === "diag-repopre") {   // Reposição pré › Falta de volumes: lê a
   const { chromium } = await import("playwright"); const { createHash } = await import("node:crypto");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
   try { const R = await import("./repo-pre.mjs"), arg = { chamar, log, ctx, alvo: (process.env.TRANSP || "").replace(/^360:/, ""), createHash };
-    if (/^360:/.test(process.env.TRANSP || "")) await R.diag360(arg); else await R.diagRepoPre(arg); }
+    if (process.env.TRANSP === "lista") await R.diagRepoPre2(arg); else if (/^360:/.test(process.env.TRANSP || "")) await R.diag360(arg); else await R.diagRepoPre(arg); }
   catch (e) { log("diag-repopre: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }

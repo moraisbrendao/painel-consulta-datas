@@ -113,3 +113,71 @@ export async function diag360({ chamar, log, ctx, alvo, createHash }) {
   log(`360: linhas depois do filtro ${r.linhas} · é venda (achou a NF): ${r.venda ? "sim" : "não"} · status ${r.status || "—"} · SKU ${r.sku.join(", ") || "nenhum"} · sem tickets: ${r.semTickets ? "sim" : "não"}`);
   for (const t of r.tickets) log(`   ticket: fila ${t.fila || "—"} · tipo ${t.tipo || "—"} · situação ${t.situacao || "—"}`);
 }
+
+// diag-repopre2: lista inteira do portal (páginas, Status/Motivo só em contagens), ⋯ → Abrir ticket → lê as opções de Volumes e FECHA sem adicionar.
+// Testa também se a foto original abre sem login (para mostrar no E-loggia). Nada de nome/endereço no log.
+const VOL = /\b\d{5}\.\d{4}\b/g;
+export async function lerListaRepoPre(p, log, maxPag = 40) {
+  const casos = [];
+  for (let pg = 1; pg <= maxPag; pg++) {
+    const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim());
+    const col = (re) => ths.findIndex((h) => re.test(h));
+    const iNf = col(/^NF/i), iMot = col(/motivo/i), iSt = col(/^status/i), iTr = col(/transportadora/i), iDt = col(/data/i), iQv = col(/qtd.*vol/i);
+    const rows = await p.locator("table tbody tr").evaluateAll((trs) => trs.map((tr) => [...tr.querySelectorAll("td")].map((td) => (td.innerText || "").trim())));
+    for (const c of rows) if (c.length > 3) casos.push({ nf: c[iNf], motivo: c[iMot], status: c[iSt], transp: c[iTr], data: c[iDt], qtd: iQv >= 0 ? c[iQv] : null, pagina: pg });
+    const prox = p.locator("button[aria-label*='next' i], button[aria-label*='próxima' i], button:has-text('›'), button:has-text('Próxima')").first();
+    if (!(await prox.count()) || (await prox.isDisabled().catch(() => true))) break;
+    const antes = rows[0] && rows[0][iNf]; await prox.click().catch(() => {}); await p.waitForTimeout(2500);
+    const depois = ((await p.locator("table tbody tr").first().locator("td").nth(Math.max(0, iNf)).innerText().catch(() => "")) || "").trim();
+    if (depois === antes) break;
+  }
+  return casos;
+}
+export async function volumesDoDialogo(p, linha, log) {
+  const menu = linha.locator("td").last().locator("button").last();
+  await menu.click(); await p.waitForTimeout(1200);
+  const itens = (await p.locator("[role=menuitem], [role=menu] button, [role=menu] a").allInnerTexts().catch(() => [])).map((t) => t.trim()).filter(Boolean);
+  if (log) log("  menu ⋯:", itens.join(" | ") || "(nenhum item com role=menuitem)");
+  const abrir = p.getByRole("menuitem", { name: /abrir ticket/i }).first();
+  if (await abrir.count()) await abrir.click(); else await p.getByText(/^\s*Abrir ticket\s*$/i).first().click();
+  await p.waitForTimeout(2000);
+  const d = p.locator("[role=dialog]").last();
+  const r = { titulo: "", campos: [], volumes: [] };
+  if (!(await d.count())) return r;
+  r.titulo = ((await d.locator("h1,h2,h3,[class*=title]").first().innerText().catch(() => "")) || "").trim();
+  r.campos = (await d.locator("label").allInnerTexts().catch(() => [])).map((t) => t.trim()).filter(Boolean);
+  // abre o multiselect de Volumes (só para ler as opções)
+  const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
+  if (await vol.count()) { await vol.click().catch(() => {}); await p.waitForTimeout(1200);
+    const ops = await p.locator("[role=option], [role=listbox] li, [cmdk-item]").allInnerTexts().catch(() => []);
+    r.volumes = [...new Set(ops.join("\n").match(VOL) || [])]; r.opcoes = ops.length;
+    await p.keyboard.press("Escape"); await p.waitForTimeout(500); }
+  // fecha a janela SEM adicionar
+  const fechar = d.getByRole("button", { name: /cancelar|fechar/i }).first();
+  await p.keyboard.press("Escape"); await p.waitForTimeout(600);
+  if (await p.locator("[role=dialog]").count()) { if (await fechar.count()) await fechar.click().catch(() => {}); await p.waitForTimeout(600); }
+  r.fechou = !(await p.locator("[role=dialog]").count());
+  return r;
+}
+export async function diagRepoPre2({ log, ctx }) {
+  const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+  const casos = await lerListaRepoPre(p, log);
+  const cont = (f) => Object.entries(casos.reduce((a, c) => ((a[f(c)] = (a[f(c)] || 0) + 1), a), {})).map(([k, v]) => `${k}: ${v}`).join(" · ");
+  log(`Lista: ${casos.length} linhas em ${Math.max(0, ...casos.map((c) => c.pagina))} página(s)`);
+  log("Status →", cont((c) => c.status)); log("Motivo →", cont((c) => c.motivo));
+  log("Séries (Novo + Falta) →", cont((c) => (/novo/i.test(c.status) && /falta/i.test(c.motivo) ? String(c.nf).split("-")[1] : "outros")));
+  const alvo = casos.find((c) => /novo/i.test(c.status) && /falta/i.test(c.motivo) && ["7", "4", "31"].includes(String(c.nf).split("-")[1]));
+  if (!alvo) { log("Nenhum Novo + Falta de volumes das séries 7/4/31"); return; }
+  log(`Caso de teste: série ${String(alvo.nf).split("-")[1]} · qtd volumes ${alvo.qtd}`);
+  const linha = await acharLinha(p, alvo.nf); if (!linha) { log("não achei a linha filtrando"); return; }
+  const r = await volumesDoDialogo(p, linha, log);
+  log(`Janela: "${mascara(r.titulo)}" · campos ${r.campos.map(mascara).join(" | ")} · opções na lista ${r.opcoes ?? "—"} · códigos de volume ${r.volumes.length} (${r.volumes.map((v) => v.replace(/\d/g, "#")).join(", ")}) · fechou sem adicionar: ${r.fechou ? "sim" : "NÃO"}`);
+  // foto: abre sem login?
+  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim()); const ia = ths.findIndex((h) => /anexo/i.test(h));
+  const bt = linha.locator("td").nth(ia).locator("button, a").first();
+  if (await bt.count()) { await bt.click(); await p.waitForTimeout(3000); const d = p.locator("[role=dialog]").last();
+    const srcs = await d.locator("img[src]").evaluateAll((es) => es.map((e) => e.getAttribute("src")));
+    for (const s of srcs.slice(0, 2)) { const u = new URL(s, p.url()), o = u.searchParams.get("url") ? new URL(u.searchParams.get("url"), p.url()).href : u.href;
+      const r2 = await fetch(o).catch(() => null); log(`Foto sem login: status ${r2 ? r2.status : "falhou"} · tipo ${r2 ? (r2.headers.get("content-type") || "").split(";")[0] : "—"} · link assinado (expira): ${/X-Amz-|Signature=|Expires=/i.test(o) ? "sim" : "não"}`); }
+    await p.keyboard.press("Escape"); }
+}
