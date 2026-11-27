@@ -14,13 +14,15 @@
   const seisMeses = () => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString().slice(0, 10); };
 
   let L = [], ok = true, card = "marcar", carregou = false;
+  const SEL = new Set();   // casos do Pronto para solicitar marcados para solicitar juntos
   // motivo (Brenda 27/11): Falta de volumes e Extravio = marcados estão COM a transportadora (repõe o resto);
   // Avaria = marcados são os AVARIADOS (repõe esses); Extravio com 1 volume só = extravio total; Inversão = conferir à mão
   const MOT = (x) => { const m = String(x.motivo || ""); return /avaria/i.test(m) ? "avaria" : /extravi/i.test(m) ? "extravio" : /invers/i.test(m) ? "inversao" : /sinistr|roub|furt/i.test(m) ? "sinistro" : "falta"; };
   const TOTAL = (x) => /EXTRAVIO TOTAL/.test(x.obs || "");
+  const REVISAR = (x) => /^REVISAR$/.test(x.obs || "");   // "↩ Voltar para analisar" (Brenda 27/11): sai do Pronto até alguém marcar de novo
   const repor = (x) => { const vs = x.volumes || [], mk = x.vol_posse || [], m = MOT(x);
     if (m === "avaria") return vs.filter((v) => mk.includes(v));
-    if (m === "inversao" || m === "sinistro") return [];
+    if (m === "inversao" || m === "sinistro" || REVISAR(x)) return [];
     if (m === "extravio" && !mk.length && (vs.length === 1 || TOTAL(x))) return vs;
     return mk.length ? vs.filter((v) => !mk.includes(v)) : []; };
   const PAL_AVARIA = /avari|amassad|quebrad|rasgad|danific|molhad/i, PAL_TOTAL = /extravio total|todos os volumes|nenhum volume|n[aã]o (temos|recebemos|localizamos) (nenhum|o pedido|a carga)/i;
@@ -111,7 +113,11 @@
     $("rpp-motivo").innerHTML = `<option value="">Todos os motivos</option>` + mots.map((m) => `<option${m === mf ? " selected" : ""}>${esc(m)}</option>`).join("");
     const V = L.filter((x) => (card === "todos" || sit(x) === card) && (!mf || (x.motivo || "Falta de volumes") === mf) && (!q || String(x.nf).replace(/\D/g, "").includes(q)));
     $("rpp-titulo").textContent = `${CARDS.find((c) => c[0] === card)[1]} (${fmt(V.length)})`;
-    $("rpp-lista").innerHTML = V.map(caso).join("") || `<p class="vazio">Nenhum caso aqui.</p>`;
+    const prontos = V.filter((x) => podeSol(x));
+    [...SEL].forEach((nf) => { if (!prontos.some((x) => x.nf === nf)) SEL.delete(nf); });
+    const barra = card === "pronto" && prontos.length ? `<div class="rpp-selbar"><label><input type="checkbox" data-rpp-todos${SEL.size && SEL.size === prontos.length ? " checked" : ""}> Selecionar todos (${fmt(prontos.length)})</label>
+      <button type="button" class="btn amarelo" data-rpp-sollote${SEL.size ? "" : " disabled"}>📤 Solicitar os ${fmt(SEL.size)} selecionado(s)</button><span class="s">Marque só os que você aprovou. O robô faz até 20 por vez.</span></div>` : "";
+    $("rpp-lista").innerHTML = barra + (V.map(caso).join("") || `<p class="vazio">Nenhum caso aqui.</p>`);
     $("rpp-lista").querySelectorAll("img[data-rpp-prrimg]").forEach(async (im) => { const u = await urlPrint(im.dataset.rppPrrimg); if (u) im.src = u; });
   }
   function caso(x) {
@@ -121,10 +127,10 @@
     const fotos = (x.fotos || []).map((f, i) => `<div class="rpp-foto"><button type="button" class="rpp-baixa" data-rpp-baixa="${esc(f)}" data-nome="NF-${esc(x.nf)}-foto-${i + 1}" title="Clique para baixar a foto"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></button><a class="s" href="${esc(f)}" target="_blank" rel="noopener noreferrer">🔍 ampliar</a></div>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const tks = (x.tickets || []).map((t) => `<span class="chip${/devolu|cancel/i.test(`${t.tipo} ${t.fila}`) ? " verm" : ""}">${esc(t.tipo || "ticket")}${t.fila ? " · " + esc(t.fila) : ""}${t.situacao ? " · " + esc(t.situacao) : ""}</span>`).join(" ") || `<span class="s">${x.venda ? "sem tickets" : ""}</span>`;
     const prr = x.rastreio && x.rastreio.print ? `<div class="rpp-foto rpp-prr"><button type="button" class="rpp-baixa" data-rpp-prr="${esc(x.rastreio.print)}" title="Print do rastreio${x.rastreio.fonte ? " (" + esc(x.rastreio.fonte) + ")" : ""}: clique para ampliar"><img data-rpp-prrimg="${esc(x.rastreio.print)}" alt="Print do rastreio"></button><span class="s">📍 rastreio${x.rastreio.print_em ? " " + hora(x.rastreio.print_em) : ""}</span></div>` : "";
-    return `<article class="rpp-caso">
+    return `<article class="rpp-caso${SEL.has(x.nf) ? " sel" : ""}">
       <div class="rpp-fotos">${fotos}${prr}</div>
       <div class="rpp-corpo">
-        <div class="rpp-cab"><span class="chip rpp-mot ${MOT(x)}">${esc(x.motivo || "Falta de volumes")}</span> <b>NF ${esc(x.nf)}</b> · ${esc(x.transp || "")} · solicitado ${esc(x.solicitado || "—")}${x.na_lista ? "" : ` · <span class="chip">saiu da lista</span>`}
+        <div class="rpp-cab">${podeSol(x) ? `<label class="rpp-sel" title="Selecionar para solicitar junto com outros"><input type="checkbox" data-rpp-sel="${esc(x.nf)}"${SEL.has(x.nf) ? " checked" : ""}> aprovado</label> ` : ""}<span class="chip rpp-mot ${MOT(x)}">${esc(x.motivo || "Falta de volumes")}</span> <b>NF ${esc(x.nf)}</b> · ${esc(x.transp || "")} · solicitado ${esc(x.solicitado || "—")}${x.na_lista ? "" : ` · <span class="chip">saiu da lista</span>`}
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
         ${(([t, m]) => `<div class="rpp-sug ${t}">💡 <b>Sugestão:</b> ${esc(m)}</div>`)(sugestao(x))}
         ${x.foto_ia ? `<div class="rpp-ia">🤖 <b>Leitura da foto (teste):</b> ${(x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ") : "nenhum volume da NF identificado"} · confiança ${esc(x.foto_ia.confianca || "—")}${x.foto_ia.vol_nf && x.foto_ia.vol_nf.length ? ` · etiqueta ${esc(x.foto_ia.vol_nf.join(", "))}` : ""}${x.foto_ia.observacao ? `<div class="s">${esc(x.foto_ia.observacao)}</div>` : ""}${(x.foto_ia.volumes_vistos || []).length && !["pendente", "feito"].includes(x.solicitar_status) && JSON.stringify([...(x.vol_posse || [])].sort()) !== JSON.stringify([...x.foto_ia.volumes_vistos].sort()) ? `<div><button type="button" class="btn mini contorno" data-rpp-ia="${esc(x.nf)}">✓ Usar a leitura do Claude (marcar ${x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ")} como ${MOT(x) === "avaria" ? "avariado" : "em posse"})</button></div>` : ""}</div>` : ""}
@@ -141,12 +147,35 @@
   function acao(x, rp) {
     if (x.solicitar_status === "feito") return `<span class="chip verde">✓ Reposição solicitada ${hora(x.feito_em)}${x.ticket_360 ? ` · <a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">ticket ${esc(x.ticket_360)} ↗</a>` : ""}</span>`;
     if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>`;
-    const pode = x.na_lista && rp.length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro);
-    if (pode) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Aprovar e solicitar reposição de ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</button>${x.solicitar_status === "erro" ? ` <span class="s">(deu erro: tentar de novo${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""})</span>` : ""}`;
+    const pode = podeSol(x);
+    const volta = rp.length || x.solicitar_status === "erro" ? ` <button type="button" class="btn contorno" data-rpp-volta="${esc(x.nf)}" title="Desfaz a marcação e devolve o caso para Para analisar">↩ Voltar para analisar</button>` : "";
+    if (pode) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Aprovar e solicitar reposição de ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</button>${volta}${x.solicitar_status === "erro" ? ` <span class="s">(deu erro: tentar de novo${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""})</span>` : ""}`;
     // por que o botão não aparece (Brenda 27/11 não achou o botão)
     const motivo = !x.na_lista ? "saiu da lista do portal" : x.venda === false ? "a NF não foi achada como venda no 360" : x.tem_devolucao ? "o pedido tem ticket de devolução/cancelamento no 360"
       : x.rastreio && x.rastreio.sinistro ? "o rastreio fala em sinistro/roubo" : !rp.length ? (x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? "use a leitura do Claude acima ou clique nos volumes" : "clique nos volumes acima para dizer qual repor") : "";
-    return motivo ? `<span class="s">📤 O botão de solicitar aparece quando der: ${esc(motivo)}.</span>` : "";
+    return (motivo ? `<span class="s">📤 O botão de solicitar aparece quando der: ${esc(motivo)}.</span>` : "") + volta;
+  }
+  function podeSol(x) { return !["pendente", "feito"].includes(x.solicitar_status) && x.na_lista && repor(x).length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro); }
+  async function voltar(nf) {
+    const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;
+    const email = ((await sb().auth.getUser()).data.user || {}).email || null;
+    const novo = { vol_posse: [], obs: "REVISAR", solicitar_status: null, solicitar_msg: null, marcado_por: email, marcado_em: new Date().toISOString() };
+    const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
+    Object.assign(x, novo); SEL.delete(nf); desenhar(); toast(`NF ${nf} voltou para Para analisar.`);
+  }
+  async function solicitarLote() {
+    const xs = L.filter((x) => SEL.has(x.nf) && podeSol(x)); if (!xs.length) return toast("Marque os casos que você aprovou.", true);
+    if (!confirm(`Solicitar a reposição de ${xs.length} NF(s)?\n\n${xs.map((x) => `NF ${x.nf}: repor ${repor(x).join(", ")}`).join("\n")}\n\nO robô cria o ticket no portal e comenta no ticket de Reposição do 360 de cada uma. Isso cria os tickets de verdade.`)) return;
+    const email = ((await sb().auth.getUser()).data.user || {}).email || null, agora = Date.now();
+    let ok = 0;
+    for (const [i, x] of xs.entries()) {   // solicitar_em em sequência para o robô seguir a ordem
+      const novo = { solicitar_status: "pendente", solicitar_por: email, solicitar_em: new Date(agora + i * 1000).toISOString(), solicitar_msg: null };
+      const r = await sb().from("repo_pre").update(novo).eq("nf", x.nf); if (r.error) { toast("Não salvei a NF " + x.nf + ": " + r.error.message, true); continue; }
+      Object.assign(x, novo); ok++;
+    }
+    SEL.clear(); desenhar(); if (!ok) return;
+    const r2 = await sb().rpc("rodar_robo_repopre_solicitar"); if (r2.error) return toast("Marcados, mas não consegui chamar o robô: " + r2.error.message, true);
+    toast(`Robô chamado para ${ok} NF(s): em alguns minutos aparecem como solicitadas.`); setTimeout(carregar, 240000);
   }
   async function solicitar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x) return; const rp = repor(x);
@@ -185,7 +214,7 @@
     const x = L.find((y) => y.nf === nf); if (!x) return;
     const S = new Set(x.vol_posse || []); S.has(v) ? S.delete(v) : S.add(v);
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
-    const novo = { vol_posse: [...S], marcado_por: email, marcado_em: new Date().toISOString() };
+    const novo = { vol_posse: [...S], marcado_por: email, marcado_em: new Date().toISOString() }; if (REVISAR(x)) novo.obs = null;
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf);
     if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
@@ -197,6 +226,10 @@
     const ia = e.target.closest("[data-rpp-ia]"); if (ia) { usarIa(ia.dataset.rppIa); return; }
     const bx = e.target.closest("[data-rpp-baixa]"); if (bx) { baixarFoto(bx.dataset.rppBaixa, bx.dataset.nome); return; }
     const tt = e.target.closest("[data-rpp-total]"); if (tt) { marcarTotal(tt.dataset.rppTotal); return; }
+    const vt = e.target.closest("[data-rpp-volta]"); if (vt) { voltar(vt.dataset.rppVolta); return; }
+    const sl = e.target.closest("[data-rpp-sel]"); if (sl) { sl.checked ? SEL.add(sl.dataset.rppSel) : SEL.delete(sl.dataset.rppSel); desenhar(); return; }
+    const td = e.target.closest("[data-rpp-todos]"); if (td) { L.filter((x) => sit(x) === "pronto" && podeSol(x)).forEach((x) => (td.checked ? SEL.add(x.nf) : SEL.delete(x.nf))); desenhar(); return; }
+    const lt = e.target.closest("[data-rpp-sollote]"); if (lt) { solicitarLote(); return; }
     const so = e.target.closest("[data-rpp-sol]"); if (so) solicitar(so.dataset.rppSol);
   });
   $("rpp-busca").addEventListener("input", desenhar);

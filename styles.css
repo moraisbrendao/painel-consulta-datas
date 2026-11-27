@@ -1519,3 +1519,9 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 #rp-at .at-duas h3 { margin: 0 0 6px; font-size: 14px; }
 @media (max-width: 900px) { #rp-at .at-duas { grid-template-columns: 1fr; } }
 .rpp-ia { background: #eef4ff; border: 1px dashed #7a9be0; color: #1d3a7a; border-radius: 8px; padding: 6px 10px; font-size: 13px; margin: 4px 0; }
+.rpp-selbar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; padding: 10px 12px; margin-bottom: 10px; background: #fff8e1; border: 1px solid #f0d27a; border-radius: 10px; position: sticky; top: 0; z-index: 2; }
+.rpp-selbar label { font-weight: 600; display: flex; align-items: center; gap: 6px; cursor: pointer; }
+.rpp-sel { display: inline-flex; align-items: center; gap: 4px; font-size: 12.5px; font-weight: 600; color: var(--marinho); margin-right: 6px; cursor: pointer; }
+.rpp-caso.sel { outline: 2px solid #f2b705; }
+.rpp-selbar label, .rpp-sel { flex-direction: row !important; white-space: nowrap; }
+.rpp-selbar input, .rpp-sel input { width: auto !important; margin: 0; }
