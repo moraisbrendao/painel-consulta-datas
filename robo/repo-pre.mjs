@@ -329,8 +329,11 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   if (await fechar.count()) await fechar.click().catch(() => {}); else await d.locator("h1,h2,h3").first().click().catch(() => {});
   await p.waitForTimeout(800);
   if ((await p.locator("[role=dialog]").count()) > 1) { await d.locator("h1,h2,h3,[id$=title]").first().click({ timeout: 4000 }).catch(() => {}); await p.waitForTimeout(800); }
-  const naJanela = ((await d.innerText().catch(() => "")) || "");
-  const faltou = volumes.filter((v) => !naJanela.includes(v)); if (faltou.length) throw new Error(`depois de fechar a lista o volume ${faltou.join(", ")} não aparece na janela`);
+  // o campo mostra os volumes escolhidos; com muitos, mostra alguns e "+N"
+  const naJanela = ((await d.innerText().catch(() => "")) || "") + " " + ((await vol.innerText().catch(() => "")) || "");
+  const mais = Number((naJanela.match(/\+\s*(\d+)/) || [])[1] || 0), vistos = volumes.filter((v) => naJanela.includes(v)).length;
+  log(`  campo Volumes depois de fechar: ${((await vol.innerText().catch(() => "")) || "").replace(/\s+/g, " ").replace(/\d/g, "#").slice(0, 60)} · vistos ${vistos} + ${mais} de ${volumes.length}`);
+  if (vistos + mais < volumes.length) throw new Error(`depois de fechar a lista só ${vistos + mais} de ${volumes.length} volume(s) aparecem escolhidos`);
   // Observação (Brenda 27/11: o Adicionar não liberava sem ela?): escreve o que está sendo reposto
   const ob = d.locator("textarea").first();
   if (obs && await ob.count()) { passo = "campo Observação"; await ob.fill(obs, { timeout: 8000 }).catch(() => {}); await p.waitForTimeout(400); }
