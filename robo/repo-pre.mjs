@@ -82,7 +82,7 @@ export async function diagRepoPre({ chamar, log, ctx, alvo, createHash }) {
 // Nada de nome, CPF, telefone ou endereço: só SKU, filas, tipos e situação.
 export async function pedido360(ctx, log, nf) {
   const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
-  const m = await entrarMulti360(ctx, log);
+  const m = pedido360.pg && !pedido360.pg.isClosed() ? pedido360.pg : (pedido360.pg = await entrarMulti360(ctx, log));
   await m.goto(BASE + "/pedidos/hub", { waitUntil: "domcontentloaded" }); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await m.getByRole("button", { name: /filtros/i }).first().click(); await m.waitForTimeout(1200);
   const campo = m.locator("xpath=//*[normalize-space(text())='NF']/following::input[1]").first();
@@ -96,6 +96,7 @@ export async function pedido360(ctx, log, nf) {
   const r = { venda: !!alvo, linhas: n, sku: [], tickets: [] };
   if (!alvo) return r;
   const st = cab.findIndex((h) => /status/i.test(h)); r.status = st >= 0 ? ((await alvo.locator("td").nth(st).innerText().catch(() => "")) || "").trim() : "";
+  const dt = cab.findIndex((h) => /data|emiss/i.test(h)); r.data = dt >= 0 ? (((await alvo.locator("td").nth(dt).innerText().catch(() => "")) || "").match(/\d{2}\/\d{2}\/\d{4}/) || [""])[0] : "";
   await alvo.locator("td").first().click(); await m.waitForTimeout(4000); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   if (!/Tickets do Pedido/i.test(await m.locator("body").innerText())) { await alvo.locator("a").first().click().catch(() => {}); await m.waitForTimeout(4000); }
   const corpo = await m.locator("body").innerText();
@@ -190,4 +191,58 @@ export async function diagRepoPre2({ log, ctx }) {
     for (const s of srcs.slice(0, 2)) { const u = new URL(s, p.url()), o = u.searchParams.get("url") ? new URL(u.searchParams.get("url"), p.url()).href : u.href;
       const r2 = await fetch(o).catch(() => null); log(`Foto sem login: status ${r2 ? r2.status : "falhou"} · tipo ${r2 ? (r2.headers.get("content-type") || "").split(";")[0] : "—"} · link assinado (expira): ${/X-Amz-|Signature=|Expires=/i.test(o) ? "sim" : "não"}`); }
     await p.keyboard.press("Escape"); }
+}
+
+// ===== modo repo-pre: analisa os casos Novo + Falta de volumes (séries da matriz) e grava em repo_pre. Não solicita nada. =====
+const SERIES = ["7", "4", "31"];
+async function aplicarNovo(p, log) {
+  const st = p.locator("button:has-text('Status')").first(); await st.click().catch(() => {}); await p.waitForTimeout(1200);
+  const novo = p.locator("[role=option], [role=menuitemcheckbox], [role=menuitem], [cmdk-item]").filter({ hasText: /^\s*Novo\s*$/ }).first();
+  const ok = !!(await novo.count()); if (ok) { await novo.click().catch(() => {}); await p.waitForTimeout(2500); }
+  await p.keyboard.press("Escape"); await p.waitForTimeout(1500); log(`Portal: filtro Status = Novo ${ok ? "aplicado" : "NÃO achado"}`); return ok;
+}
+async function fotosDaLinha(p, linha) {
+  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim()); const ia = ths.findIndex((h) => /anexo/i.test(h));
+  if (ia < 0) return [];
+  const bt = linha.locator("td").nth(ia).locator("button, a").first(); if (!(await bt.count())) return [];
+  await bt.click(); await p.waitForTimeout(3000);
+  const d = p.locator("[role=dialog]").last(); const out = [];
+  if (await d.count()) { const srcs = await d.locator("img[src]").evaluateAll((es) => es.map((e) => e.getAttribute("src")));
+    for (const s of srcs) { try { const u = new URL(s, p.url()); out.push(u.searchParams.get("url") ? new URL(u.searchParams.get("url"), p.url()).href : u.href); } catch (_) {} } }
+  await p.keyboard.press("Escape"); await p.waitForTimeout(800);
+  return [...new Set(out)].filter((u) => /^https:\/\//.test(u));
+}
+export async function rodarRepoPre({ chamar, log, ctx, limite = 40 }) {
+  const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+  if (!(await aplicarNovo(p, log))) throw new Error("não achei o filtro Status = Novo no portal");
+  const lista = await lerListaRepoPre(p, null);
+  const alvo = lista.filter((c) => /falta/i.test(c.motivo || "") && SERIES.includes(String(c.nf || "").split("-")[1]?.trim()));
+  log(`Portal: ${lista.length} reposições Novo · ${alvo.length} de Falta de volumes nas séries ${SERIES.join("/")}`);
+  const jaTem = new Map((await chamar("repo_pre?select=nf,analisado_em,volumes,venda&limit=5000")).map((x) => [x.nf, x]));
+  // quem saiu da lista (já virou ticket, cancelada ou mudou de status)
+  const nfs = new Set(alvo.map((c) => c.nf));
+  const sairam = [...jaTem.keys()].filter((nf) => !nfs.has(nf));
+  if (sairam.length) for (let i = 0; i < sairam.length; i += 50) await chamar(`repo_pre?nf=in.(${sairam.slice(i, i + 50).map((n) => `"${n}"`).join(",")})`, "PATCH", { na_lista: false });
+  let feitos = 0, erros = 0;
+  for (const c of alvo) {
+    const antes = jaTem.get(c.nf);
+    const base = { nf: c.nf, motivo: c.motivo, status_portal: c.status, transp: c.transp, solicitado: c.data, qtd_volumes: c.qtd, serie: String(c.nf).split("-")[1].trim(), na_lista: true };
+    // já analisado nas últimas 6 h com volumes e 360: só atualiza os dados da lista
+    if (antes && antes.volumes && antes.volumes.length && antes.venda != null && Date.now() - Date.parse(antes.analisado_em || 0) < 6 * 3600000) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
+    if (feitos >= limite) { if (!antes) await chamar("repo_pre", "POST", base, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {}); continue; }
+    feitos++;
+    const r = { ...base, analisado_em: new Date().toISOString(), robo_msg: null };
+    try {
+      const linha = await acharLinha(p, c.nf); if (!linha) throw new Error("NF não achada filtrando no portal");
+      const v = await volumesDoDialogo(p, linha, null); if (!v.fechou) throw new Error("a janela Criar Ticket não fechou: parei por segurança");
+      r.volumes = v.volumes;
+      const l2 = await acharLinha(p, c.nf); r.fotos = l2 ? await fotosDaLinha(p, l2) : [];
+    } catch (e) { erros++; r.robo_msg = "portal: " + String(e.message).split("\n")[0].slice(0, 150); if (/parei por segurança/.test(e.message)) { await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" }); throw e; } }
+    try { const q = await pedido360(ctx, log, c.nf);
+      r.venda = q.venda; r.status_360 = q.status || null; r.data_360 = q.data || null; r.sku = q.sku; r.tickets = q.tickets;
+      r.tem_devolucao = q.tickets.some((t) => /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
+    } catch (e) { erros++; r.robo_msg = [r.robo_msg, "360: " + String(e.message).split("\n")[0].slice(0, 120)].filter(Boolean).join(" · "); }
+    await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" });
+  }
+  log(`repo-pre: ${feitos} analisados agora · ${erros} com erro · ${sairam.length} saíram da lista`);
 }

@@ -1469,3 +1469,22 @@ a.oc-link:hover { text-decoration: underline; }
 /* item do menu que é link externo (Torre de Controle, 26/11) */
 a.menu-item.menu-link { text-decoration: none; display: flex; align-items: center; }
 a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
+/* Reposição pré › Falta de volumes (repopre.js) */
+.rpp-lista { display: grid; gap: 10px; }
+.rpp-caso { display: grid; grid-template-columns: 160px 1fr; gap: 12px; border: 1px solid var(--borda); border-radius: 10px; padding: 10px; background: #fff; }
+.rpp-fotos { display: flex; flex-direction: column; gap: 6px; }
+.rpp-fotos img { width: 160px; max-height: 240px; object-fit: contain; border-radius: 8px; border: 1px solid var(--borda); background: #f5f6f8; }
+.rpp-semfoto { width: 160px; height: 120px; display: grid; place-items: center; border: 1px dashed var(--borda); border-radius: 8px; color: var(--texto-2); font-size: 12px; }
+.rpp-corpo { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.rpp-cab b { color: var(--marinho); }
+.rpp-vols { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rpp-vol { border: 1px solid var(--borda); background: #fff; border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.rpp-vol:hover { border-color: var(--marinho); }
+.rpp-vol.posse { background: #e6f4ea; border-color: #1d7a43; color: #1d7a43; font-weight: 600; }
+.rpp-res b { color: var(--vermelho); }
+.rpp-al { font-size: 12.5px; padding: 4px 8px; border-radius: 6px; background: #fff6db; color: #7a5a00; }
+.rpp-al.mao, .rpp-al.erro { background: #fde8e8; color: var(--vermelho); }
+.rpp-tks .chip { font-size: 11.5px; }
+.rpp-tks .chip.verm { background: #fde8e8; color: var(--vermelho); }
+#rpp-busca { max-width: 160px; }
+@media (max-width: 700px) { .rpp-caso { grid-template-columns: 1fr; } .rpp-fotos { flex-direction: row; } .rpp-fotos img, .rpp-semfoto { width: 120px; } }

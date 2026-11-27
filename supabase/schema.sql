@@ -4561,3 +4561,56 @@ revoke all on function public.link_pendentes(text) from public;
 grant execute on function public.link_pendentes(text) to anon, authenticated;
 
 notify pgrst, 'reload schema';
+
+-- PARTE 97) Reposição pré-entrega › Falta de volumes (Brenda 27/11)
+-- O robô lê no portal do transportador as reposições Novo + Falta de volumes (matriz: séries 7, 4 e 31),
+-- os volumes da NF (janela "Criar Ticket", sem adicionar nada), a foto anexada e o pedido no 360 (venda, SKU, tickets).
+-- No E-loggia a equipe marca qual volume está com a transportadora (pela foto) e o painel mostra qual repor.
+-- Nada é solicitado automaticamente.
+create table if not exists public.repo_pre (
+  nf            text primary key,          -- como no portal: 658695-7
+  motivo        text,
+  status_portal text,
+  transp        text,
+  solicitado    text,                      -- data da solicitação (texto do portal)
+  qtd_volumes   text,
+  serie         text,
+  volumes       text[],                    -- códigos de volume da NF (janela Criar Ticket)
+  fotos         text[],                    -- endereços das fotos anexadas pela transportadora
+  venda         boolean,                   -- achou a NF em 360 › Hub › Pedidos
+  status_360    text,
+  data_360      text,
+  sku           text[],
+  tickets       jsonb,                     -- [{fila, tipo, situacao}]
+  tem_devolucao boolean,
+  na_lista      boolean not null default true,
+  robo_msg      text,
+  analisado_em  timestamptz,
+  vol_posse     text[],                    -- marcado pela equipe: volume(s) que estão com a transportadora (foto)
+  marcado_por   text,
+  marcado_em    timestamptz,
+  obs           text,
+  criado_em     timestamptz not null default now()
+);
+alter table public.repo_pre enable row level security;
+revoke all on public.repo_pre from anon;
+grant select, insert, update, delete on public.repo_pre to authenticated;
+drop policy if exists "logistica cuida" on public.repo_pre;
+create policy "logistica cuida" on public.repo_pre for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+create or replace function public.rodar_robo_repopre()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', 'repo-pre')));
+end $$;
+revoke all on function public.rodar_robo_repopre() from public, anon;
+grant execute on function public.rodar_robo_repopre() to authenticated;

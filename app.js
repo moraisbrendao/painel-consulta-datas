@@ -4893,16 +4893,17 @@ ${extra}
     // aba Falta de volumes (faltas.js) tem filtros e lista próprios: esconde os filtros e o título da Reposição
     if ($("rp-faltas")) $("rp-faltas").hidden = repAba !== "faltas";
     if ($("rp-filas")) $("rp-filas").hidden = repAba !== "filasoc";
+    if ($("rp-repopre")) $("rp-repopre").hidden = repAba !== "repopre";
     if (repAba === "sla") { repAba = "geral"; gargAberto = true; }   // a aba virou parte do card Gargalos por fila (Brenda 24/11)
     if ($("rp-sla")) $("rp-sla").hidden = !(repAba === "geral" && gargAberto);
-    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc"));
+    document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc" || repAba === "repopre"));
     const fl = repAba === "pre" || repAba === "pos";
     repFiltradas = filtroRep(fl ? ["rep-tipo"] : []).filter((r) => !fl || r._t === repAba);
     if (repAba === "det" && repCard) repFiltradas = repFiltradas.filter(casaCard);
     if (repAba === "det" && pvDet) repFiltradas = repFiltradas.filter((r) => casaPv(r, pvDet));
     if (repAba === "det" && repFaixa >= 0) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && faixaFila(diasFila(r)) === repFaixa);
     if (repAba === "det" && pvDet && pvDet.slaFx != null) repFiltradas = repFiltradas.filter((r) => abertoRep(r) && (pvDet.slaFx === -9 ? slaFx(r) >= 0 : slaFx(r) === pvDet.slaFx));
-    $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc", "sla"].includes(repAba);
+    $("rep-vazio").hidden = repFiltradas.length > 0 || ["det", "faltas", "filasoc", "sla", "repopre"].includes(repAba);
     if (repAba === "geral") desenharRepGeral(); else if (fl) desenharRepFluxo(repAba); else desenharRepDet();
   }
 
@@ -5570,7 +5571,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; volAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
-  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc", "sla"].includes(s)) repAba = s; } catch (_) {}
+  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc", "sla", "repopre"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
   // ---------------- "↶ Voltar" / Ctrl+Z em todas as abas ----------------

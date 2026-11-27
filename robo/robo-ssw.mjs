@@ -1597,6 +1597,14 @@ if (MODO === "faltas" || MODO === "diag-faltas" || MODO === "diag-chat") {   // 
   catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }
   finally { await nav.close(); }
 }
+if (MODO === "repo-pre") {   // Reposição pré › Falta de volumes: analisa os casos Novo (robo/repo-pre.mjs). Não solicita nada no portal.
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  try { await (await import("./repo-pre.mjs")).rodarRepoPre({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 40 }); }
+  catch (e) { log("repo-pre: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
+  finally { await nav.close(); }
+}
 if (MODO === "diag-repopre") {   // Reposição pré › Falta de volumes: lê a etiqueta da foto anexada no portal (robo/repo-pre.mjs). Só sim/não no log.
   await entrarSupabase();
   const { chromium } = await import("playwright"); const { createHash } = await import("node:crypto");
