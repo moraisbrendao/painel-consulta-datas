@@ -1515,3 +1515,6 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 #rp-at tr.at-cli:hover { background: #fffbea; }
 #rp-at .at-barra { height: 10px; border-radius: 5px; background: var(--amarelo-escuro, #e0a800); min-width: 4px; }
 #rp-at td.num, #rp-at th.num { text-align: right; }
+#rp-at .at-duas { display: grid; grid-template-columns: 3fr 2fr; gap: 16px; }
+#rp-at .at-duas h3 { margin: 0 0 6px; font-size: 14px; }
+@media (max-width: 900px) { #rp-at .at-duas { grid-template-columns: 1fr; } }

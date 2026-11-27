@@ -76,13 +76,17 @@
       if (entregue(x)) o.ent++; else if (x.data_saida) { o.trans++; const d = dias(x.data_saida); o.sd += d; o.sn++; if (d > 10) o.par++; } });
     const tps = [...porT.values()].sort((a, b) => b.n - a.n);
     $("at-transp").innerHTML = tps.length ? `<table class="tabela-pedidos"><thead><tr><th>Transportadora (envio da AT)</th><th class="num">Tickets</th><th class="num">Com Nota AT</th><th class="num">Saíram</th><th class="num">Entregues (rastreio)</th><th class="num">Em trânsito</th><th class="num">Dias em trânsito (média)</th><th class="num">Parados +10 dias</th></tr></thead><tbody>${tps.map((o) => `<tr data-att="${esc(o.t)}" class="at-cli"><td>${esc(o.t)}</td><td class="num"><b>${fmt(o.n)}</b></td><td class="num">${fmt(o.nota)}</td><td class="num">${fmt(o.saiu)}</td><td class="num">${fmt(o.ent)}</td><td class="num">${fmt(o.trans)}</td><td class="num">${o.sn ? fmt(Math.round(o.sd / o.sn)) : "—"}</td><td class="num${o.par ? " at-ruim" : ""}">${fmt(o.par)}</td></tr>`).join("")}</tbody></table>` : `<p class="vazio">Nada aqui.</p>`;
-    // peças que mais dão AT (todos os tickets lidos, abertos e fechados, nos filtros de transportadora/grupo)
-    const pecas = new Map(); let lidos = 0;
-    B.forEach((x) => { if (!x.pecas_em) return; lidos++; (x.pecas || []).forEach((p) => { const k = (p.sku || p.peca || "?").trim(); if (!pecas.has(k)) pecas.set(k, { sku: p.sku || "", peca: p.peca || "", tk: new Set(), q: 0 }); const o = pecas.get(k); o.tk.add(x.ticket); o.q += Number(p.qtde) || 1; if (!o.peca && p.peca) o.peca = p.peca; }); });
-    const rk = [...pecas.values()].sort((a, b) => b.tk.size - a.tk.size || b.q - a.q);
-    $("at-pecas-info").textContent = `${fmt(lidos)} de ${fmt(B.length)} tickets já lidos pelo robô`;
-    const max = rk.length ? rk[0].tk.size : 1;
-    $("at-pecas").innerHTML = rk.length ? `<table class="tabela-pedidos"><thead><tr><th>#</th><th>SKU</th><th>Peça</th><th class="num">Tickets</th><th class="num">Qtde</th><th></th></tr></thead><tbody>${rk.slice(0, 30).map((o, i) => `<tr><td>${i + 1}</td><td>${esc(o.sku || "—")}</td><td>${esc(o.peca || "—")}</td><td class="num"><b>${fmt(o.tk.size)}</b></td><td class="num">${fmt(o.q)}</td><td style="width:30%"><div class="at-barra" style="width:${Math.round((o.tk.size / max) * 100)}%"></div></td></tr>`).join("")}</tbody></table>${rk.length > 30 ? `<p class="s">Mostrando 30 de ${fmt(rk.length)} peças. O Excel tem todas.</p>` : ""}` : `<p class="vazio">${lidos ? "O robô ainda não achou peças nos tickets lidos." : "O robô ainda não leu as peças: clique em ▶ Ler peças e rastreio."}</p>`;
+    // peças que mais dão AT (Brenda 27/11). No 360: SKU = produto (móvel), Item = código da peça. Todos os tickets lidos, abertos e fechados.
+    const pecas = new Map(), prods = new Map(); let lidos = 0;
+    B.forEach((x) => { if (!x.pecas_em) return; lidos++; (x.pecas || []).forEach((p) => {
+      const k = (p.peca || "?").trim(); if (!pecas.has(k)) pecas.set(k, { item: k, skus: new Set(), tk: new Set(), q: 0 }); const o = pecas.get(k); o.tk.add(x.ticket); o.q += Number(p.qtde) || 1; if (p.sku) o.skus.add(p.sku);
+      const s2 = (p.sku || "?").trim(); if (!prods.has(s2)) prods.set(s2, { sku: s2, tk: new Set(), itens: new Set() }); const q = prods.get(s2); q.tk.add(x.ticket); q.itens.add(k); }); });
+    const rk = [...pecas.values()].sort((a, b) => b.tk.size - a.tk.size || b.q - a.q), rp = [...prods.values()].sort((a, b) => b.tk.size - a.tk.size);
+    $("at-pecas-info").textContent = `${fmt(lidos)} de ${fmt(B.length)} tickets já lidos pelo robô · Item = código da peça, SKU = produto`;
+    const barra = (v, m) => `<div class="at-barra" style="width:${Math.round((v / (m || 1)) * 100)}%"></div>`;
+    $("at-pecas").innerHTML = rk.length ? `<div class="at-duas"><div><h3>Peças (Item)</h3><table class="tabela-pedidos"><thead><tr><th>#</th><th>Item (peça)</th><th>Produto(s) SKU</th><th class="num">Tickets</th><th class="num">Qtde</th><th></th></tr></thead><tbody>${rk.slice(0, 30).map((o, i) => `<tr><td>${i + 1}</td><td><b>${esc(o.item)}</b></td><td class="s">${esc([...o.skus].slice(0, 3).join(", "))}${o.skus.size > 3 ? ` +${o.skus.size - 3}` : ""}</td><td class="num"><b>${fmt(o.tk.size)}</b></td><td class="num">${fmt(o.q)}</td><td style="width:22%">${barra(o.tk.size, rk[0].tk.size)}</td></tr>`).join("")}</tbody></table>${rk.length > 30 ? `<p class="s">Mostrando 30 de ${fmt(rk.length)} peças. O Excel tem todas.</p>` : ""}</div>
+      <div><h3>Produtos (SKU)</h3><table class="tabela-pedidos"><thead><tr><th>#</th><th>SKU</th><th class="num">Tickets</th><th class="num">Peças diferentes</th><th></th></tr></thead><tbody>${rp.slice(0, 30).map((o, i) => `<tr><td>${i + 1}</td><td><b>${esc(o.sku)}</b></td><td class="num"><b>${fmt(o.tk.size)}</b></td><td class="num">${fmt(o.itens.size)}</td><td style="width:30%">${barra(o.tk.size, rp[0].tk.size)}</td></tr>`).join("")}</tbody></table></div></div>`
+      : `<p class="vazio">${lidos ? "O robô ainda não achou peças nos tickets lidos." : "O robô ainda não leu as peças: clique em ▶ Ler peças e rastreio."}</p>`;
     // evolução semanal: tickets abertos × que saíram da planilha (fechados)
     const sem0 = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
     const W = new Map(); const add = (d, k) => { if (!d) return; const s = sem0(d); if (!W.has(s)) W.set(s, { s, a: 0, f: 0, e: 0 }); W.get(s)[k]++; };
@@ -96,7 +100,7 @@
         <td><a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener">${esc(x.ticket)}</a></td><td>${br(x.criado_em)}</td><td class="num">${dias(x.criado_em) ?? "—"}</td>
         <td>${esc(x.fila || "—")}<div class="s">${esc(x.grupo || "")}</div></td><td>${esc(x.nota_ticket || "—")}</td><td>${esc(x.nota_at || "—")}</td><td>${br(x.data_saida)}</td><td>${esc(alvo(x))}</td>
         <td>${x.rastreio ? `${entregue(x) ? "✅ " : ""}${esc(x.rastreio.situacao || "—")}${x.rastreio.evento ? `<div class="s">${esc(x.rastreio.evento)}${x.rastreio.data ? " · " + esc(x.rastreio.data) : ""}</div>` : ""}` : `<span class="s">${x.nota_at ? "aguardando robô" : "—"}</span>`}</td>
-        <td>${(x.pecas || []).length ? x.pecas.map((p) => `<div>${esc(p.sku || "")}${p.peca ? ` <span class="s">${esc(p.peca)}</span>` : ""}${p.qtde ? ` ×${fmt(p.qtde)}` : ""}</div>`).join("") : `<span class="s">${x.pecas_em ? x.pecas_msg || "sem peça" : "aguardando robô"}</span>`}</td></tr>`).join("")}</tbody></table>
+        <td>${(x.pecas || []).length ? x.pecas.map((p) => `<div><b>${esc(p.peca || "?")}</b>${p.qtde ? ` ×${fmt(p.qtde)}` : ""}${p.sku ? ` <span class="s">${esc(p.sku)}</span>` : ""}</div>`).join("") : `<span class="s">${x.pecas_em ? x.pecas_msg || "sem peça" : "aguardando robô"}</span>`}</td></tr>`).join("")}</tbody></table>
         ${pags > 1 ? `<div class="paginacao"><button class="btn mini contorno" data-atp="-1"${pag === 1 ? " disabled" : ""}>‹</button> página ${pag} de ${pags} <button class="btn mini contorno" data-atp="1"${pag === pags ? " disabled" : ""}>›</button></div>` : ""}` : `<p class="vazio">Nenhum ticket aqui.</p>`;
   }
   $("rp-at").addEventListener("click", (e) => {
@@ -117,12 +121,12 @@
     const B = T.filter(filtroBase);
     const tk = B.map((x) => ({ Ticket: x.ticket, Criado: br(x.criado_em), "Dias desde a criação": dias(x.criado_em), Etapa: (CARDS.find((c) => c[0] === etapa(x)) || [, etapa(x)])[1], "Fila atual": x.fila, Grupo: x.grupo, "Nota do ticket": x.nota_ticket, "Pedido Intelipost": x.pedido,
       "Nota AT": x.nota_at, "Saída da Nota AT": br(x.data_saida), "Transportadora (envio AT)": alvo(x), "Rastreio": x.rastreio ? x.rastreio.situacao : "", "Último evento": x.rastreio ? [x.rastreio.evento, x.rastreio.data].filter(Boolean).join(" · ") : "",
-      "Peças (SKU × qtde)": (x.pecas || []).map((p) => `${p.sku || p.peca}${p.qtde ? " ×" + p.qtde : ""}`).join("; "), "Na planilha": x.na_planilha ? "sim" : "não (fechado)" }));
-    const pc = new Map(); B.forEach((x) => (x.pecas || []).forEach((p) => { const k = (p.sku || p.peca || "?").trim(); if (!pc.has(k)) pc.set(k, { SKU: p.sku || "", "Peça": p.peca || "", tk: new Set(), Qtde: 0 }); const o = pc.get(k); o.tk.add(x.ticket); o.Qtde += Number(p.qtde) || 1; }));
-    const rk = [...pc.values()].sort((a, b) => b.tk.size - a.tk.size).map(({ tk: s, ...o }) => ({ ...o, Tickets: s.size }));
+      "Peças (item × qtde)": (x.pecas || []).map((p) => `${p.peca || "?"}${p.qtde ? " ×" + p.qtde : ""}`).join("; "), "Produto (SKU)": [...new Set((x.pecas || []).map((p) => p.sku).filter(Boolean))].join(", "), "Na planilha": x.na_planilha ? "sim" : "não (fechado)" }));
+    const pc = new Map(); B.forEach((x) => (x.pecas || []).forEach((p) => { const k = (p.peca || "?").trim(); if (!pc.has(k)) pc.set(k, { "Item (peça)": k, sk: new Set(), tk: new Set(), Qtde: 0 }); const o = pc.get(k); o.tk.add(x.ticket); o.Qtde += Number(p.qtde) || 1; if (p.sku) o.sk.add(p.sku); }));
+    const rk = [...pc.values()].sort((a, b) => b.tk.size - a.tk.size).map(({ tk: s2, sk, ...o }) => ({ ...o, "Produtos (SKU)": [...sk].join(", "), Tickets: s2.size }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk), "Tickets AT");
-    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rk.length ? rk : [{ SKU: "", "Peça": "ainda sem peças lidas" }]), "Peças");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rk.length ? rk : [{ "Item (peça)": "ainda sem peças lidas" }]), "Peças");
     XLSX.writeFile(wb, `assistencia_tecnica_${new Date().toISOString().slice(0, 10)}.xlsx`);
   });
   window.__at = { recarregar: () => { if (carregou) carregar(); } };

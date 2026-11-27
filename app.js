@@ -137,7 +137,7 @@
   // abas liberadas para o login (null = todas). Passo a passo é de todos; Logins segue a regra de administrador.
   let acessoPag = null;
   const LIVRES = ["ajuda", "logins"];
-  const podePag = (p) => !acessoPag || LIVRES.includes(p) || acessoPag.has(p);
+  const podePag = (p) => !acessoPag || LIVRES.includes(p) || acessoPag.has(p) || (p === "at" && acessoPag.has("reposicao"));   // AT nasceu dentro de Reposição: quem vê Reposição vê AT
   const primeiraPag = () => { const b = [...document.querySelectorAll(".menu-lateral .menu-item")].find((x) => x.dataset.pagina && !x.classList.contains("sem-acesso") && x.dataset.pagina !== "logins" && getComputedStyle(x).display !== "none"); return b ? b.dataset.pagina : "ajuda"; };
   function aplicarAcesso() {
     document.querySelectorAll(".menu-lateral .menu-item[data-pagina]").forEach((b) => b.classList.toggle("sem-acesso", !podePag(b.dataset.pagina)));
@@ -4260,7 +4260,7 @@ ${extra}
     if (perfil !== "sac" && !podePag(pag)) { toast("Você não tem acesso a essa aba. Fale com a administradora do painel.", true); pag = primeiraPag(); }
     paginaAtual = pag;
     try { localStorage.setItem("painel.pagina", pag); } catch (_) {}
-    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", drop: "Dropshipping", cobmassa: "Cobrança em massa", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Severino", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", conferencia: "Conferência SSW", documentos: "Gerar XML", barrar: "Barrar entrega", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
+    $("topo-pagina").textContent = { gerencial: "Visão Gerencial", entregas: "Entregas e SLA", uf: "Atrasos por UF", canais: "Análise de canais", drop: "Dropshipping", cobmassa: "Cobrança em massa", transp: "Transportadoras", divtp: "Transportadora divergente", alterar: "Severino", preventivo: "Preventivo", ocorrencias: "Ocorrências", responsaveis: "Responsáveis", reposicao: "Reposição", at: "Assistência Técnica", conferencia: "Conferência SSW", documentos: "Gerar XML", barrar: "Barrar entrega", retornos: "Cobrança do dia", ajuda: "Passo a passo", sac: "Consulta SAC", logins: "Logins" }[pag] || "";
     document.querySelectorAll(".menu-item").forEach((x) => x.classList.toggle("ativo", x.dataset.pagina === pag));
     document.querySelectorAll("main.conteudo").forEach((m) => (m.hidden = m.id !== "pagina-" + pag));
     let repClaro = false; try { repClaro = localStorage.getItem("painel.rep.tema") === "claro"; } catch (_) {}
@@ -4897,7 +4897,6 @@ ${extra}
     if ($("rp-faltas")) $("rp-faltas").hidden = repAba !== "faltas";
     if ($("rp-filas")) $("rp-filas").hidden = repAba !== "filasoc";
     if ($("rp-repopre")) $("rp-repopre").hidden = repAba !== "repopre";
-    if ($("rp-at")) $("rp-at").hidden = repAba !== "at";
     if (repAba === "sla") { repAba = "geral"; gargAberto = true; }   // a aba virou parte do card Gargalos por fila (Brenda 24/11)
     if ($("rp-sla")) $("rp-sla").hidden = !(repAba === "geral" && gargAberto);
     document.querySelectorAll("#pagina-reposicao > .filtros-rep, #pagina-reposicao > .titulo-pagina").forEach((el) => (el.hidden = repAba === "faltas" || repAba === "filasoc" || repAba === "repopre" || repAba === "at"));
@@ -5575,7 +5574,7 @@ ${extra}
   });
   $("pagina-reposicao").addEventListener("change", (e) => { const s = e.target.closest(".pv-sel"); if (!s) return; pv[s.dataset.pv] = s.value; filtrarRep(); });
   $("rep-abas").addEventListener("click", (e) => { const b = e.target.closest("[data-ra]"); if (!b) return; repAba = b.dataset.ra; if (repAba !== "det") { repCard = ""; repFaixa = -1; pvDet = null; pvAberto = false; gargAberto = false; volAberto = false; } try { localStorage.setItem("painel.rep", repAba); } catch (_) {} filtrarRep(); });
-  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc", "sla", "repopre", "at"].includes(s)) repAba = s; } catch (_) {}
+  try { const s = localStorage.getItem("painel.rep"); if (["geral", "pre", "pos", "det", "faltas", "filasoc", "sla", "repopre"].includes(s)) repAba = s; } catch (_) {}
   const FILTROS_REP = ["rep-ano", "rep-mes", "rep-de", "rep-ate", "rep-tipo", "rep-transp", "rep-motivo", "rep-filial", "rep-status", "rep-resp", "rep-serie"];
   FILTROS_REP.forEach((id) => $(id).addEventListener("change", () => { rpdPag = 1; filtrarRep(); }));
   // ---------------- "↶ Voltar" / Ctrl+Z em todas as abas ----------------
