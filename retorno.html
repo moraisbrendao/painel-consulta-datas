@@ -227,8 +227,7 @@
             <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
           </div>
           <div class="acao"><div class="st">${fs ? `<span class="ok">✓ salvo às ${fs}</span>` : x.sd_motivo ? `${chip}<div class="ok">✓ motivo salvo${x.sd_em ? " em " + br(String(x.sd_em).slice(0, 10)) : ""}, sem nova data</div>` : (chip || `<span class="s">preencha o motivo (e a data, se já tiver)</span>`)}</div><div class="err"></div></div>
-          ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
-          ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}${ocBotao(x)}</div>` : ""}
+          ${alertasPed(x)}
         </div>`;
       }).join("") || (modoRet ? `<div class="aviso">${q ? "Nenhum pedido com essa busca." : "Vocês ainda não responderam nenhum pedido por este link nos últimos 30 dias."}</div>` : pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
       barraMassa();
@@ -241,7 +240,7 @@
       const sit = x.situacao === "entregue" ? `<span class="chip verde">entregue</span>` : x.situacao === "cancelado" ? `<span class="chip">cancelado</span>` : x.situacao === "fora" ? `<span class="chip">fora da lista</span>`
         : x.r_nova && x.r_nova < hoje ? `<span class="chip verm">a data que vocês passaram venceu: coloque uma nova</span>` : !x.r_nova ? `<span class="chip amar">falta a nova data</span>` : `<span class="chip verde">data em dia</span>`;
       return `<div class="ped ret${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
-          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}</div>
+          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}${x.repo_tipo ? " · " + (/^parc/i.test(x.repo_tipo) ? "Parcial" : /^tot/i.test(x.repo_tipo) ? "Total" : esc(x.repo_tipo)) : ""}</div>` : ""}</div>
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.cep ? `<div class="s">CEP ${esc(String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2"))}</div>` : ""}<div class="s">Prometido ${br(x.prometido)}</div></div>
           ${aberto ? `<div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
@@ -251,6 +250,7 @@
           </div>` : `<div></div>`}
           <div class="acao"><div class="st">${fs ? `<span class="ok">✓ alterado às ${fs}</span>` : sit}</div><div class="err"></div></div>
           ${resumo}
+          ${alertasPed(x)}
         </div>`;
     }
     // depois de salvar, o pedido entra (ou sobe) no card "Pedidos retornados"
@@ -310,6 +310,11 @@
       el.querySelector(".err").textContent = v || "";
       if (v === "") { st(el, `<span class="s">vai salvar…</span>`); timers.set(el.dataset.p, setTimeout(() => salvar(el), x.nova_data ? 1200 : 4000)); }
     };
+    // alertas do pedido (pendentes e retornados, parte 104): barrar entrega e retorno da ocorrência com o botão "não é válido"
+    function alertasPed(x) {
+      return `${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
+          ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}${ocBotao(x)}</div>` : ""}`;
+    }
     // parte 103 (Brenda 27/11): a transportadora avisa que o retorno da Multimóveis na ocorrência do portal não é válido → alerta urgente na Consulta SAC
     function ocBotao(x) {
       const p = esc(x.pedido);
