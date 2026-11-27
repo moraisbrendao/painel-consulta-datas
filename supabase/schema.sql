@@ -5166,3 +5166,9 @@ notify pgrst, 'reload schema';
 -- parte 107 (Brenda 27/11): Reposição pré › teste da leitura da foto com o Claude (resposta do robô, só para comparar)
 alter table public.repo_pre add column if not exists foto_ia jsonb;
 notify pgrst, 'reload schema';
+
+-- parte 108: o robô (login do robô) precisa GRAVAR as peças e o rastreio da AT em at_tk (a parte 106 só liberou leitura)
+grant update on public.at_tk to authenticated;
+drop policy if exists at_tk_robo on public.at_tk;
+create policy at_tk_robo on public.at_tk for update to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+notify pgrst, 'reload schema';

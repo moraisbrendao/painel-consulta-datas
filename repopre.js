@@ -127,7 +127,7 @@
         <div class="rpp-cab"><span class="chip rpp-mot ${MOT(x)}">${esc(x.motivo || "Falta de volumes")}</span> <b>NF ${esc(x.nf)}</b> · ${esc(x.transp || "")} · solicitado ${esc(x.solicitado || "—")}${x.na_lista ? "" : ` · <span class="chip">saiu da lista</span>`}
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
         ${(([t, m]) => `<div class="rpp-sug ${t}">💡 <b>Sugestão:</b> ${esc(m)}</div>`)(sugestao(x))}
-        ${x.foto_ia ? `<div class="rpp-ia">🤖 <b>Leitura da foto (teste):</b> ${(x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ") : "nenhum volume da NF identificado"} · confiança ${esc(x.foto_ia.confianca || "—")}${x.foto_ia.vol_nf && x.foto_ia.vol_nf.length ? ` · etiqueta ${esc(x.foto_ia.vol_nf.join(", "))}` : ""}${x.foto_ia.observacao ? `<div class="s">${esc(x.foto_ia.observacao)}</div>` : ""}</div>` : ""}
+        ${x.foto_ia ? `<div class="rpp-ia">🤖 <b>Leitura da foto (teste):</b> ${(x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ") : "nenhum volume da NF identificado"} · confiança ${esc(x.foto_ia.confianca || "—")}${x.foto_ia.vol_nf && x.foto_ia.vol_nf.length ? ` · etiqueta ${esc(x.foto_ia.vol_nf.join(", "))}` : ""}${x.foto_ia.observacao ? `<div class="s">${esc(x.foto_ia.observacao)}</div>` : ""}${(x.foto_ia.volumes_vistos || []).length && !["pendente", "feito"].includes(x.solicitar_status) && JSON.stringify([...(x.vol_posse || [])].sort()) !== JSON.stringify([...x.foto_ia.volumes_vistos].sort()) ? `<div><button type="button" class="btn mini contorno" data-rpp-ia="${esc(x.nf)}">✓ Usar a leitura do Claude (marcar ${x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ")} como ${MOT(x) === "avaria" ? "avariado" : "em posse"})</button></div>` : ""}</div>` : ""}
         ${al.map(([t, m]) => `<div class="rpp-al ${t}">⚠ ${esc(m)}</div>`).join("")}
         ${(x.anotacoes || []).length ? `<div class="rpp-anot"><span class="s">Anotações da transportadora:</span>${x.anotacoes.slice(-3).map((a) => `<div><span class="s">${esc(a.quando)}</span> ${esc(a.texto)}</div>`).join("")}</div>` : ""}
         ${x.rastreio && x.rastreio.situacao ? `<div class="s">Rastreio${x.rastreio.fonte ? " " + esc(x.rastreio.fonte) : ""}: ${esc(x.rastreio.situacao)}${x.rastreio.evento ? " · " + esc(x.rastreio.evento) : ""}${x.rastreio.data ? " · " + esc(x.rastreio.data) : ""}</div>` : ""}
@@ -142,7 +142,11 @@
     if (x.solicitar_status === "feito") return `<span class="chip verde">✓ Reposição solicitada ${hora(x.feito_em)}${x.ticket_360 ? ` · <a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">ticket ${esc(x.ticket_360)} ↗</a>` : ""}</span>`;
     if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>`;
     const pode = x.na_lista && rp.length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro);
-    return pode ? `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Solicitar reposição de ${rp.map(esc).join(", ")}</button>${x.solicitar_status === "erro" ? ` <span class="s">(tentar de novo)</span>` : ""}` : "";
+    if (pode) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Aprovar e solicitar reposição de ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</button>${x.solicitar_status === "erro" ? ` <span class="s">(deu erro: tentar de novo${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""})</span>` : ""}`;
+    // por que o botão não aparece (Brenda 27/11 não achou o botão)
+    const motivo = !x.na_lista ? "saiu da lista do portal" : x.venda === false ? "a NF não foi achada como venda no 360" : x.tem_devolucao ? "o pedido tem ticket de devolução/cancelamento no 360"
+      : x.rastreio && x.rastreio.sinistro ? "o rastreio fala em sinistro/roubo" : !rp.length ? (x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? "use a leitura do Claude acima ou clique nos volumes" : "clique nos volumes acima para dizer qual repor") : "";
+    return motivo ? `<span class="s">📤 O botão de solicitar aparece quando der: ${esc(motivo)}.</span>` : "";
   }
   async function solicitar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x) return; const rp = repor(x);
@@ -170,6 +174,13 @@
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
   }
+  async function usarIa(nf) {   // marca os volumes que o Claude leu na foto; a solicitação continua sendo um clique da equipe
+    const x = L.find((y) => y.nf === nf); if (!x || !x.foto_ia) return;
+    const email = ((await sb().auth.getUser()).data.user || {}).email || null;
+    const novo = { vol_posse: [...(x.foto_ia.volumes_vistos || [])], obs: null, marcado_por: email, marcado_em: new Date().toISOString() };
+    const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
+    Object.assign(x, novo); desenhar(); toast("Marcado pela leitura do Claude. Confira e clique em 📤 Aprovar e solicitar.");
+  }
   async function marcar(nf, v) {
     const x = L.find((y) => y.nf === nf); if (!x) return;
     const S = new Set(x.vol_posse || []); S.has(v) ? S.delete(v) : S.add(v);
@@ -183,6 +194,7 @@
     const pr = e.target.closest("[data-rpp-prr]"); if (pr) { const u = await urlPrint(pr.dataset.rppPrr); if (u) window.open(u, "_blank", "noopener"); else toast("Não consegui abrir o print do rastreio.", true); return; }
     const c = e.target.closest("[data-rpp]"); if (c) { card = c.dataset.rpp; desenhar(); return; }
     const v = e.target.closest("[data-rpp-vol]"); if (v) { const x = L.find((y) => y.nf === v.dataset.nf); if (x && ["pendente", "feito"].includes(x.solicitar_status)) return toast("Já foi para a solicitação: não dá para mudar o volume.", true); marcar(v.dataset.nf, v.dataset.rppVol); return; }
+    const ia = e.target.closest("[data-rpp-ia]"); if (ia) { usarIa(ia.dataset.rppIa); return; }
     const bx = e.target.closest("[data-rpp-baixa]"); if (bx) { baixarFoto(bx.dataset.rppBaixa, bx.dataset.nome); return; }
     const tt = e.target.closest("[data-rpp-total]"); if (tt) { marcarTotal(tt.dataset.rppTotal); return; }
     const so = e.target.closest("[data-rpp-sol]"); if (so) solicitar(so.dataset.rppSol);

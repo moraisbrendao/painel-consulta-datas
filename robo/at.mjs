@@ -46,7 +46,10 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
   const H = 20 * 3600000;
   const rast = T.filter((x) => x.nota_at && !/^entregue/i.test((x.rastreio && x.rastreio.situacao) || "") && (!x.rastreio_em || Date.now() - Date.parse(x.rastreio_em) > H));
   log(`AT: ${T.length} tickets na planilha · ${semPeca.length} para ler peças · ${rast.length} para rastrear`);
-  const patch = (tk, c) => chamar(`at_tk?ticket=eq.${encodeURIComponent(tk)}`, "PATCH", c);
+  // confere que gravou de verdade (sem permissão o banco responde OK com 0 linhas)
+  const patch = async (tk, c) => { const r = await chamar(`at_tk?ticket=eq.${encodeURIComponent(tk)}&select=ticket`, "PATCH", c, { Prefer: "return=representation" });
+    if (!Array.isArray(r) || !r.length) throw new Error("não gravou em at_tk: falta rodar a parte 108 no Supabase"); };
+  if (T.length) await patch(T[0].ticket, { ticket: T[0].ticket });   // teste de gravação antes de abrir o 360
   if (so !== "rastreio" && semPeca.length) {
     const p = await entrarMulti360(ctx, log);
     let ok = 0, vazio = 0, erro = 0; const formas = {};
