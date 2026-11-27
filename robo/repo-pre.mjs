@@ -58,6 +58,11 @@ export async function diagRepoPre({ chamar, log, ctx, alvo, createHash }) {
     log("Imagens (esquema e tamanho):", (await d.locator("img").evaluateAll((es) => es.map((e) => `${(e.getAttribute("src") || "").split(":")[0].slice(0, 10)} ${e.naturalWidth}x${e.naturalHeight} mostrada ${Math.round(e.getBoundingClientRect().width)}px`))).join(" | "));
     const antes = respostas.length; await d.locator("img").first().click().catch(() => {}); await p.waitForTimeout(2500);
     log("Depois de clicar na imagem: novas imagens baixadas", respostas.length - antes, "· abas", ctx.pages().length, "· janelas", await p.locator("[role=dialog]").count(), "· imagens maiores na tela:", (await p.locator("img").evaluateAll((es) => es.filter((e) => e.naturalWidth > 900).map((e) => `${e.naturalWidth}x${e.naturalHeight}`))).join(", ") || "nenhuma");
+    // a foto da janela vem reduzida pelo Next (/_next/image?url=...&w=...): tenta a original (parâmetro url) e a maior largura
+    for (const h of hrefs.slice(0, 4)) { try { const u = new URL(h, p.url()); const orig = u.searchParams.get("url");
+      if (orig) { const cand = [new URL(orig, p.url()).href]; const big = new URL(u.href); big.searchParams.set("w", "3840"); big.searchParams.set("q", "100"); cand.push(big.href);
+        log("Foto original: host", new URL(orig, p.url()).host.replace(/[a-z0-9-]+\./, "x."), "· extensão", (new URL(orig, p.url()).pathname.match(/\.[a-z0-9]{2,5}$/i) || ["(sem)"])[0]);
+        for (const c of cand) { const r = await p.request.get(c).catch(() => null); if (!r) { log("  baixar: falhou"); continue; } const ct = r.headers()["content-type"] || ""; log(`  baixar: status ${r.status()} · ${ct.split(";")[0]}`); if (r.ok() && /image|octet/.test(ct)) respostas.push({ ct: /octet/.test(ct) ? "image/x" : ct, buf: await r.body() }); } } } catch (e) { log("  erro original", mascara(e.message)); } }
     for (const h of hrefs.slice(0, 4)) { try { const r = await p.request.get(new URL(h, p.url()).href); const ct = r.headers()["content-type"] || ""; if (/image|octet|pdf/.test(ct)) respostas.push({ ct, buf: await r.body() }); } catch (_) {} }
   } else log("Nenhuma janela abriu depois do clique");
   const sharp = (await import("sharp")).default;
