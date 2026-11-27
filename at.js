@@ -29,6 +29,9 @@
     const f = sem(x.fila), dc = dias(x.criado_em) ?? 0, ds = dias(x.data_saida), st = sem((x.rastreio && x.rastreio.situacao) || "");
     if (!x.na_planilha) return { k: "fechado", quem: "", passo: "Concluído (saiu da planilha)", p: 0 };
     if (entregue(x)) { const de = dias(entregaEm(x)); return { k: "entregue", quem: "Multimóveis", passo: `Confirmar com o cliente e dar baixa no ticket (entregue ${x.rastreio.data ? "em " + String(x.rastreio.data).slice(0, 10) : "no rastreio"})`, p: 60 + (de || 0) }; }
+    // filas do financeiro / SAC: a entrega já não é o assunto (ex.: Recuperação de crédito com saída antiga)
+    if (/recuperacao de credito|devolver valor|definir pagador/.test(f)) return { k: "outras", quem: "Multimóveis", passo: `Resolver na fila ${x.fila}`, p: 20 + dc };
+    if (FILA_CLIENTE.test(f)) return { k: "outras", quem: "Cliente", passo: `Aguardando o cliente (${x.fila})`, p: 20 + dc };
     if (x.data_saida || /aguardando entrega/.test(f)) {
       if (!x.data_saida) return { k: "transporte", quem: "Multimóveis", passo: "Fila Aguardando entrega sem data de saída da Nota AT: conferir se a peça saiu", p: 40 + dc, alerta: true };
       if (EV_DEVOL.test(ev(x))) return { k: "atrasada", quem: "Transportadora", passo: `Peça em devolução: falar com a transportadora e decidir o reenvio (${x.rastreio.evento})`, p: 200 + ds };

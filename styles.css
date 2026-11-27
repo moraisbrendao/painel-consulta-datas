@@ -1538,3 +1538,5 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 #rp-at .at-custo-cards > div { border: 1px solid var(--borda); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 2px; }
 #rp-at .at-custo-cards b { font-size: 20px; color: var(--marinho); }
 @media (max-width: 700px) { #rp-at .at-custo-cards { grid-template-columns: 1fr; } }
+#rp-at .at-lista-box { max-height: 560px; overflow: auto; }
+#rp-at .at-lista-box thead th { position: sticky; top: 0; z-index: 1; }
