@@ -301,31 +301,48 @@ async function printSolicitacao(p, linha) {
   if (!out.prints.length) { try { out.prints.push({ name: "solicitacao.png", mimeType: "image/png", buffer: await p.screenshot() }); } catch (_) {} }
   return out;
 }
-async function criarTicketPortal(p, linha, volumes, teste, log) {
-  await linha.locator("td").last().locator("button").last().click(); await p.waitForTimeout(1200);
+// campos da janela Criar Ticket (só os rótulos, sem dados) e se o botão Adicionar está liberado
+async function camposJanela(d) {
+  const rot = (await d.locator("label").allTextContents().catch(() => [])).map((t) => t.replace(/\s+/g, " ").trim()).filter(Boolean).map((t) => t.replace(/\d/g, "#").slice(0, 30));
+  const ad = d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first();
+  const lib = (await ad.count()) ? await ad.isEnabled().catch(() => false) : null;
+  return { rot, lib };
+}
+async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
+  let passo = "botão ⋯ da linha";
+  const clicar = async (loc, nome) => { passo = nome; await loc.click({ timeout: 12000 }); };
+  try {
+  await clicar(linha.locator("td").last().locator("button").last(), "botão ⋯ da linha"); await p.waitForTimeout(1200);
   const abrir = p.getByRole("menuitem", { name: /abrir ticket/i }).first();
-  if (await abrir.count()) await abrir.click(); else await p.getByText(/^\s*Abrir ticket\s*$/i).first().click();
+  await clicar((await abrir.count()) ? abrir : p.getByText(/^\s*Abrir ticket\s*$/i).first(), "menu Abrir ticket");
   await p.waitForTimeout(2000);
   const d = p.locator("[role=dialog]").last(); if (!(await d.count())) throw new Error("a janela Criar Ticket não abriu");
   const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
-  await vol.click(); await p.waitForTimeout(1200);
+  await clicar(vol, "campo Volumes"); await p.waitForTimeout(1200);
   const marcados = [];
   for (const v of volumes) { const op = p.locator("[role=option], [role=listbox] li, [cmdk-item]").filter({ hasText: new RegExp("^\\s*" + v.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*$") }).first();
-    if (!(await op.count())) throw new Error(`o volume ${v} não está na lista do portal`); await op.click(); marcados.push(v); await p.waitForTimeout(500); }
+    if (!(await op.count())) throw new Error(`o volume ${v} não está na lista do portal`); await op.scrollIntoViewIfNeeded().catch(() => {}); await clicar(op, "opção do volume " + v); marcados.push(v); await p.waitForTimeout(500); }
   // fecha só a lista de volumes (botão Fechar da lista; senão clica no título da janela)
   const fechar = p.getByRole("button", { name: /^\s*fechar\s*$/i }).last();
   if (await fechar.count()) await fechar.click().catch(() => {}); else await d.locator("h1,h2,h3").first().click().catch(() => {});
   await p.waitForTimeout(800);
   const naJanela = ((await d.innerText().catch(() => "")) || "");
   const faltou = volumes.filter((v) => !naJanela.includes(v)); if (faltou.length) throw new Error(`depois de fechar a lista o volume ${faltou.join(", ")} não aparece na janela`);
+  // Observação (Brenda 27/11: o Adicionar não liberava sem ela?): escreve o que está sendo reposto
+  const ob = d.locator("textarea").first();
+  if (obs && await ob.count()) { passo = "campo Observação"; await ob.fill(obs, { timeout: 8000 }).catch(() => {}); await p.waitForTimeout(400); }
+  const cj = await camposJanela(d);
+  log(`  janela Criar Ticket: campos ${JSON.stringify(cj.rot)} · Observação ${(await ob.count()) ? "sim" : "não"} · Adicionar ${cj.lib === null ? "não achado" : cj.lib ? "liberado" : "BLOQUEADO"}`);
+  if (cj.lib === false) throw new Error("o botão Adicionar está bloqueado (falta preencher algum campo da janela)");
   if (teste) { log(`  TESTE: volumes selecionados ${marcados.length}; NÃO cliquei em Adicionar`); await p.keyboard.press("Escape"); await p.waitForTimeout(600); if (await p.locator("[role=dialog]").count()) await d.getByRole("button", { name: /cancelar|fechar/i }).first().click().catch(() => {}); return { teste: true }; }
-  await d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first().click();
+  await clicar(d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first(), "botão Adicionar");
   for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); const b = (await p.locator("body").innerText().catch(() => "")) || ""; if (/ticket criado com sucesso/i.test(b)) return { ok: true }; if (/erro|falha/i.test(b) && !(await p.locator("[role=dialog]").count())) break; }
   throw new Error("cliquei em Adicionar mas não vi \"Ticket criado com sucesso\": conferir no portal antes de tentar de novo");
+  } catch (e) { if (/Timeout/i.test(e.message)) throw new Error(`não consegui clicar em: ${passo} (a tela não respondeu)`); throw e; }
 }
 export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
   // teste: pega 1 caso da lista (o volume em posse marcado, senão finge que o 1º está em posse) e não cria nada
-  const L = teste ? (await chamar("repo_pre?select=*&na_lista=eq.true&order=criado_em&limit=20")).filter((x) => (x.volumes || []).length > 1 && x.venda !== false && !x.tem_devolucao).slice(0, 1).map((x) => ({ ...x, vol_posse: (x.vol_posse || []).length ? x.vol_posse : [x.volumes[0]], ticket_portal_ok: false }))
+  const L = teste ? [...(await chamar("repo_pre?select=*&solicitar_status=eq.erro&na_lista=eq.true&limit=5")), ...(await chamar("repo_pre?select=*&na_lista=eq.true&order=criado_em&limit=20"))].filter((x) => (x.volumes || []).length > 1 && x.venda !== false && !x.tem_devolucao).slice(0, 1).map((x) => ({ ...x, vol_posse: (x.vol_posse || []).length ? x.vol_posse : [x.volumes[0]], ticket_portal_ok: false }))
     : await chamar("repo_pre?select=*&solicitar_status=eq.pendente&order=solicitar_em&limit=20");
   if (!L.length) { log("repo-pre-solicitar: nada pendente"); return; }
   log(`repo-pre-solicitar: ${L.length} caso(s)${teste ? " · MODO TESTE (não cria nada)" : ""}`);
@@ -345,7 +362,7 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
       if (/jadlog/i.test(x.transp || "") && !jad) log("  Jadlog: não achei CNPJ na anotação (sigo sem)");
       if (!x.ticket_portal_ok) {
         etapa = "criar ticket no portal"; linha = await acharLinha(p, x.nf); if (!linha) throw new Error("a NF sumiu da lista depois do print");
-        const c = await criarTicketPortal(p, linha, repor, teste, log);
+        const c = await criarTicketPortal(p, linha, repor, teste, log, /EXTRAVIO TOTAL/.test(x.obs || "") ? "EXTRAVIO TOTAL" : `Reposição do(s) volume(s) ${repor.join(", ")}`);
         if (!teste) await patch(x, { ticket_portal_ok: true, solicitar_msg: "Ticket criado no portal; falta o comentário no 360" });
       }
       // rastreio SSW da transportadora que pediu (a do portal)
@@ -370,6 +387,7 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
       await patch(x, { solicitar_status: /tento de novo/.test(msg) ? "pendente" : "erro", solicitar_msg: msg }).catch(() => {});
       // volta para a lista limpa antes do próximo caso (janela/menu aberto travava o caso seguinte)
       await p.keyboard.press("Escape").catch(() => {}); await p.keyboard.press("Escape").catch(() => {});
-      try { await abrirRepoPre(p, log); await aplicarNovo(p, log); } catch (_) {} }
+      const dl = p.locator("[role=dialog]").last(); if (await dl.count()) await dl.getByRole("button", { name: /cancelar|fechar/i }).first().click({ timeout: 4000 }).catch(() => {});
+      try { await p.reload({ timeout: 30000 }).catch(() => {}); await p.waitForTimeout(2000); await abrirRepoPre(p, log); await aplicarNovo(p, log); } catch (e2) { log("  não consegui voltar para a lista: " + String(e2.message).split("\n")[0].slice(0, 100)); } }
   }
 }
