@@ -505,6 +505,35 @@ if (MODO === "diag-cf") {   // Conferência SSW: quando foi a última importaç�
   log(`  fonte: ${conta(DS, (d) => d.detalhe && (d.detalhe.fonte || d.detalhe.origem))} · dias entre entrega e hoje: ${conta(DS, (d) => { const n = Math.floor((Date.now() - Date.parse(String(d.data_entrega) + "T12:00:00Z")) / 864e5); return n <= 1 ? String(d.data_entrega) : n <= 3 ? "2-3" : n <= 7 ? "4-7" : "8+"; })}`);
   log(`  evento (só palavras-chave): ${conta(DS, (d) => (String(d.ultimo_evento || "").toUpperCase().match(/ENTREGUE|ENTREGA REALIZADA|BAIXAD|FINALIZAD|COMPROVANTE|DEVOLV|SEGREGAD/) || ["outro"])[0])}`);
 }
+if (MODO === "diag-lnk") {   // Links das transportadoras: por que uma NF (TRANSP=h:sha256(número da NF)[:16]) não aparece no link. Só sim/não, sem dados.
+  const { createHash } = await import("node:crypto"); await entrarSupabase();
+  const h = String(process.env.TRANSP || "").replace(/^h:/, ""), hs = (v) => createHash("sha256").update(String(v)).digest("hex").slice(0, 16);
+  const num = (nf) => String(nf || "").split("-")[0].trim().replace(/^0+(?=\d)/, "");
+  const hoje = new Date(Date.now() - 3 * 3600e3).toISOString().slice(0, 10), am = new Date(Date.now() - 3 * 3600e3 + 864e5).toISOString().slice(0, 10);
+  const B = []; for (let de = 0; ; de += 1000) { const x = await chamar(`base_pedidos?select=pedido,nf,transportadora,status_intelipost,data_expedicao,prev_original,prev_atual,range_atrasos&order=pedido&limit=1000&offset=${de}`); x.forEach((b) => { if (hs(num(b.nf)) === h) B.push(b); }); if (x.length < 1000) break; }
+  log(`NF na base: ${B.length} pedido(s) · hoje ${hoje}`);
+  const L = await chamar("transp_links?select=nome,transportadoras,ativo");
+  const chave = (v) => String(v || "").trim().split("-").map((t) => t.trim().replace(/\.0+$/, "").replace(/^0+(?=\d)/, "")).join("-");
+  for (const b of B) {
+    const lk = L.filter((l) => l.ativo && (l.transportadoras || []).includes(b.transportadora)).map((l) => l.nome);
+    const t = (await chamar(`tratativas?select=nova_data,nova_data_fonte,atualizado_em,atualizado_por&pedido=eq.${encodeURIComponent(b.pedido)}`))[0] || {};
+    const f = await chamar(`intelipost_fechados?select=status&pedido=eq.${encodeURIComponent(b.pedido)}`);
+    const k = chave(b.nf);
+    const be = await chamar(`barrar_entrega?select=na_planilha,decisao,portal_status&nf=eq.${encodeURIComponent(k)}`).catch(() => []);
+    const oc = await chamar(`ocorrencias_tk?select=status,solicitante&nf=eq.${encodeURIComponent(k)}`).catch(() => []);
+    const env = await chamar("repo_envios?select=id&order=id.desc&limit=1").catch(() => []);
+    const rp = env[0] ? await chamar(`repo_hist?select=ticket,fila_atual,nf_nova,nota_ticket&envio_id=eq.${env[0].id}`).then((R) => R.filter((r) => chave(r.nota_ticket) === k)).catch(() => []) : [];
+    const resp = await chamar(`link_respostas?select=nome,motivo,em,nova_data&pedido=eq.${encodeURIComponent(b.pedido)}&order=em`).catch(() => null);
+    const prom = String(b.prev_original || b.prev_atual || "").slice(0, 10), nv = String(t.nova_data || "").slice(0, 10);
+    log(`— pedido · transportadora no link? ${lk.length ? "sim (" + lk.join(", ") + ")" : "NÃO (transportadora da base: " + (b.transportadora || "vazia") + ")"}`);
+    log(`  status Intelipost/BI: ${b.status_intelipost || "(vazio)"} · fechado no arquivo Intelipost: ${f.length ? "SIM (" + f[0].status + ")" : "não"} · expedido: ${b.data_expedicao ? "sim" : "NÃO"}`);
+    log(`  prometido ${prom || "?"} (vence até amanhã: ${prom && prom <= am ? "sim" : "não"}) · range ${b.range_atrasos || "(vazio)"}`);
+    log(`  nova data: ${nv || "nenhuma"}${nv ? (nv >= hoje ? " (>= hoje → sai do link)" : " (já passou)") : ""} · fonte ${t.nova_data_fonte || "—"} · gravada em ${t.atualizado_em || "—"} por ${String(t.atualizado_por || "—").replace(/@.*/, "@…")}`);
+    log(`  barrar: ${be.length ? `na planilha ${be[0].na_planilha} · decisão ${be[0].decisao || "—"} · portal ${be[0].portal_status || "—"}` : "não"} · ocorrências: ${oc.map((o) => o.status + "/" + (o.solicitante || "").split(" ")[0]).join(", ") || "nenhuma"}`);
+    log(`  reposição (último detalhamento): ${rp.map((r) => `fila ${r.fila_atual || "—"} · NF nova ${r.nf_nova ? "sim" : "não"}`).join(" | ") || "nenhuma"}`);
+    log(`  respostas pelo link: ${resp == null ? "(parte 86 não rodada)" : resp.map((r) => `${r.em} ${r.motivo} → ${r.nova_data}`).join(" | ") || "nenhuma"}`);
+  }
+}
 if (MODO === "diag-gargalo") {   // onde a transportadora (input transp, padrão VM/Tempo Justo) tem mais atraso hoje: só contagens agregadas
   await entrarSupabase();
   const nrm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toUpperCase().replace(/\s+/g, " ").trim();
