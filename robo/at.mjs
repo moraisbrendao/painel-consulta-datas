@@ -7,7 +7,8 @@ import { abrir } from "./repo-itens.mjs";
 export async function lerPecas(p) {
   const bt = p.getByText(/^\s*Eventos\s*$/).first();
   if (!(await bt.count())) return { erro: "sem botão Eventos" };
-  await bt.click(); await p.waitForTimeout(2500);
+  await bt.click();
+  await p.getByText(/Pe[cç]as de Assist[eê]ncia/i).first().waitFor({ timeout: 8000 }).catch(() => {}); await p.waitForTimeout(400);
   return p.evaluate(() => {
     const vis = (e) => { const b = e.getBoundingClientRect(); return b.width > 0 && b.height > 0; };
     const limpa = (t) => String(t || "").replace(/\s+/g, " ").trim();
@@ -53,7 +54,11 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
   if (so !== "rastreio" && semPeca.length) {
     const p = await entrarMulti360(ctx, log);
     let ok = 0, vazio = 0, erro = 0; const formas = {};
-    for (const x of semPeca) {
+    // 4 abas do 360 ao mesmo tempo (Brenda 27/11: 45 min era muito); mesma sessão logada
+    const ABAS = Math.max(1, Math.min(6, Number(process.env.AT_ABAS) || 4));
+    const pgs = [p]; for (let i = 1; i < Math.min(ABAS, semPeca.length); i++) pgs.push(await p.context().newPage());
+    const fila = [...semPeca];
+    await Promise.all(pgs.map(async (p) => { for (let x = fila.shift(); x; x = fila.shift()) {
       try {
         await abrir(p, x.ticket);
         const r = await lerPecas(p);
@@ -63,7 +68,7 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
         pecas.length ? ok++ : vazio++;
         if (limite <= 5) log(`  formato: cab=${JSON.stringify((r.cab || []).map((c) => c.replace(/[A-Za-zÀ-ÿ]+/g, (w) => (/^(pe[cç]as?|sku|qtde|descri[cç][aã]o|nome|c[oó]digo|valor|unit[aá]rio|total|a[cç][oõ]es|status|item|modelo|cor|lado|tipo|motivo|defeito|volume)$/i.test(w) ? w : "w:" + w.length))))} · 1ª linha ${JSON.stringify(r.forma1 || [])} · ` + pecas.map((y) => `[peça ${String(y.peca).split(/\s+/).length} palavras · sku ${String(y.sku).replace(/[A-Za-z]/g, "A").replace(/\d/g, "#")} · qtde ${y.qtde}]`).join(" "));
       } catch (e) { erro++; await patch(x.ticket, { pecas_msg: String(e.message).split("\n")[0].slice(0, 150) }).catch(() => {}); }
-    }
+    } }));
     log(`AT peças: ${ok} com peça · ${vazio} sem peça · ${erro} com erro · formas ${JSON.stringify(formas).replace(/\d{5,}/g, "#")}`);
   }
   if (so !== "pecas" && R && rast.length) {
