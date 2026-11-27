@@ -94,6 +94,11 @@
     await carregarCad();
     desenhar();
   }
+  const urlsP = new Map();
+  async function urlPrint(p) {   // print do rastreio fica no bucket privado "barrar": link assinado por 1 h
+    if (urlsP.has(p)) return urlsP.get(p);
+    try { const { data, error } = await sb().storage.from("barrar").createSignedUrl(p, 3600); if (error) throw error; urlsP.set(p, data.signedUrl); setTimeout(() => urlsP.delete(p), 3000000); return data.signedUrl; } catch (_) { return null; }
+  }
   function desenhar() {
     if (!ok) { $("rpp-info").textContent = "Para usar esta aba, rode a parte 97 no Supabase."; $("rpp-cards").innerHTML = $("rpp-lista").innerHTML = ""; return; }
     const ult = L.map((x) => x.analisado_em).filter(Boolean).sort().pop();
@@ -106,6 +111,7 @@
     const V = L.filter((x) => (card === "todos" || sit(x) === card) && (!mf || (x.motivo || "Falta de volumes") === mf) && (!q || String(x.nf).replace(/\D/g, "").includes(q)));
     $("rpp-titulo").textContent = `${CARDS.find((c) => c[0] === card)[1]} (${fmt(V.length)})`;
     $("rpp-lista").innerHTML = V.map(caso).join("") || `<p class="vazio">Nenhum caso aqui.</p>`;
+    $("rpp-lista").querySelectorAll("img[data-rpp-prrimg]").forEach(async (im) => { const u = await urlPrint(im.dataset.rppPrrimg); if (u) im.src = u; });
   }
   function caso(x) {
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);
@@ -113,8 +119,9 @@
       || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket." : "Aguardando o robô."}</span>`;
     const fotos = (x.fotos || []).map((f, i) => `<div class="rpp-foto"><button type="button" class="rpp-baixa" data-rpp-baixa="${esc(f)}" data-nome="NF-${esc(x.nf)}-foto-${i + 1}" title="Clique para baixar a foto"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></button><a class="s" href="${esc(f)}" target="_blank" rel="noopener noreferrer">🔍 ampliar</a></div>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const tks = (x.tickets || []).map((t) => `<span class="chip${/devolu|cancel/i.test(`${t.tipo} ${t.fila}`) ? " verm" : ""}">${esc(t.tipo || "ticket")}${t.fila ? " · " + esc(t.fila) : ""}${t.situacao ? " · " + esc(t.situacao) : ""}</span>`).join(" ") || `<span class="s">${x.venda ? "sem tickets" : ""}</span>`;
+    const prr = x.rastreio && x.rastreio.print ? `<div class="rpp-foto rpp-prr"><button type="button" class="rpp-baixa" data-rpp-prr="${esc(x.rastreio.print)}" title="Print do rastreio${x.rastreio.fonte ? " (" + esc(x.rastreio.fonte) + ")" : ""}: clique para ampliar"><img data-rpp-prrimg="${esc(x.rastreio.print)}" alt="Print do rastreio"></button><span class="s">📍 rastreio${x.rastreio.print_em ? " " + hora(x.rastreio.print_em) : ""}</span></div>` : "";
     return `<article class="rpp-caso">
-      <div class="rpp-fotos">${fotos}</div>
+      <div class="rpp-fotos">${fotos}${prr}</div>
       <div class="rpp-corpo">
         <div class="rpp-cab"><span class="chip rpp-mot ${MOT(x)}">${esc(x.motivo || "Falta de volumes")}</span> <b>NF ${esc(x.nf)}</b> · ${esc(x.transp || "")} · solicitado ${esc(x.solicitado || "—")}${x.na_lista ? "" : ` · <span class="chip">saiu da lista</span>`}
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
@@ -170,7 +177,8 @@
     if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
   }
-  $("rp-repopre").addEventListener("click", (e) => {
+  $("rp-repopre").addEventListener("click", async (e) => {
+    const pr = e.target.closest("[data-rpp-prr]"); if (pr) { const u = await urlPrint(pr.dataset.rppPrr); if (u) window.open(u, "_blank", "noopener"); else toast("Não consegui abrir o print do rastreio.", true); return; }
     const c = e.target.closest("[data-rpp]"); if (c) { card = c.dataset.rpp; desenhar(); return; }
     const v = e.target.closest("[data-rpp-vol]"); if (v) { const x = L.find((y) => y.nf === v.dataset.nf); if (x && ["pendente", "feito"].includes(x.solicitar_status)) return toast("Já foi para a solicitação: não dá para mudar o volume.", true); marcar(v.dataset.nf, v.dataset.rppVol); return; }
     const bx = e.target.closest("[data-rpp-baixa]"); if (bx) { baixarFoto(bx.dataset.rppBaixa, bx.dataset.nome); return; }

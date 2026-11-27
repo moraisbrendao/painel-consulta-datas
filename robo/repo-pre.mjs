@@ -263,8 +263,11 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
       r.tem_devolucao = q.tickets.some((t) => /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
     } catch (e) { erros++; r.robo_msg = [r.robo_msg, "360: " + String(e.message).split("\n")[0].slice(0, 120)].filter(Boolean).join(" · "); }
     // rastreio da transportadora que pediu: último status + palavras de sinistro (roubo, furto, acidente...)
-    if (R) try { const t = await (await import("./barrar.mjs")).rastrear({ nf: c.nf, transp_pedido: c.transp || "", palavras: SINISTRO }, R);
-      r.rastreio = t ? { fonte: t.fonte, situacao: t.situacao, evento: t.evento, data: t.data_evento, transp: t.transp, sinistro: t.palavra || null } : null; } catch (_) {}
+    if (R) try { const B = await import("./barrar.mjs"); const t = await B.rastrear({ nf: c.nf, transp_pedido: c.transp || "", palavras: SINISTRO }, R);
+      r.rastreio = t ? { fonte: t.fonte, situacao: t.situacao, evento: t.evento, data: t.data_evento, transp: t.transp, sinistro: t.palavra || null } : null;
+      // print do rastreio (Brenda 27/11): aparece no caso para ver se a ocorrência já está formalizada
+      if (t && t.fonte) try { const { subirArquivo } = await import("./supa.mjs"); r.rastreio.print = await subirArquivo("barrar", `repopre-${encodeURIComponent(c.nf)}-rastreio.png`, await B.printRastreio(ctx, c.nf, t)); r.rastreio.print_em = new Date().toISOString(); } catch (_) { log("  print do rastreio falhou"); }
+    } catch (_) {}
     try { await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" }); }
     catch (e) { if (!/PGRST204|anotacoes|rastreio/.test(String(e.message))) throw e; log("  (parte 102 ainda não rodada: salvo sem anotações/rastreio)"); const { anotacoes, rastreio, ...r2 } = r; await chamar("repo_pre", "POST", r2, { Prefer: "resolution=merge-duplicates,return=minimal" }); }
   }
