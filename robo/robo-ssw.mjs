@@ -884,7 +884,11 @@ if (MODO === "diag-um") {   // um pedido, achado pelo hash (o número não vai p
       const r = await pagina("https://ssw.inf.br/2/ssw_resultSSW", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ NR: sem0(num), cnpj: c, chave: ch, urlori: "https://ssw.inf.br/ajuda/rastreamento.html" }).toString() });
       const m = lerLote(r.txt), v = m.get(sem0(num)); await new Promise((ok) => setTimeout(ok, 1200));
       if (v && v.situacao !== "sem cte") { let em = "?"; if (v.det) { const d = await pagina("https://ssw.inf.br" + v.det).catch(() => null); em = d ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "—").slice(0, 40) : "?"; } log(`CNPJ ...${c.slice(-6)} ${ch ? "com senha" : "sem senha"}: emissor=${em} · melhor=${v.situacao}/${v.sigla} · semRaj=${v._semRaj ? v._semRaj.situacao + "/" + v._semRaj.sigla : "—"} · temRaj=${v._temRaj} · pegaLote=${JSON.stringify(pegaLote(m, { n: sem0(num), transportadora: l.transportadora, nf: l.nf }) || {}, (k, val) => (k === "det" ? undefined : val)).replace(/\d{5,}/g, "#")}`); }
+      if (v && v._L && v._L.length > 1) for (const [i, x] of v._L.entries()) { let em = "?"; if (x.det) { await new Promise((ok) => setTimeout(ok, 1200)); const d = await pagina("https://ssw.inf.br" + x.det).catch(() => null); em = d ? ((sohTexto(d.txt).join("\n").match(/transportando a sua mercadoria:\s*([^\n]+)/i) || [])[1] || "—").slice(0, 40) : "?"; }
+        log(`   linha ${i + 1}: emissor=${em} · ${x.situacao} · sigla ${x.sigla} · série ${x.serie} · evento ${x.data_evento} ${x.ultimo_evento || ""}`); }
       if (!ch) break; }
+    const rd = await chamar(`base_pedidos?select=transportadora,rd:extra->>redespacho&pedido=eq.${encodeURIComponent(l.pedido)}`).catch(() => []);
+    log("base: transportadora", rd[0] && rd[0].transportadora, "· redespacho", rd[0] && rd[0].rd);
   }
 }
 if (MODO === "diag-lote4") {   // testa a leitura do lote: só contagens e estrutura mascarada da 1ª linha
