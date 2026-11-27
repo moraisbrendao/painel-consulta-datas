@@ -316,7 +316,9 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   const abrir = p.getByRole("menuitem", { name: /abrir ticket/i }).first();
   await clicar((await abrir.count()) ? abrir : p.getByText(/^\s*Abrir ticket\s*$/i).first(), "menu Abrir ticket");
   await p.waitForTimeout(2000);
-  const d = p.locator("[role=dialog]").last(); if (!(await d.count())) throw new Error("a janela Criar Ticket não abriu");
+  // a lista de volumes também é um [role=dialog]: fixa a janela que tem o botão Adicionar (27/11: procurava o Adicionar na lista de volumes)
+  const d = p.locator("[role=dialog]").filter({ has: p.getByRole("button", { name: /^\s*adicionar\s*$/i }) }).first(); await d.waitFor({ timeout: 8000 }).catch(() => {});
+  if (!(await d.count())) throw new Error("a janela Criar Ticket não abriu");
   const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
   await clicar(vol, "campo Volumes"); await p.waitForTimeout(1200);
   const marcados = [];
@@ -326,6 +328,7 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   const fechar = p.getByRole("button", { name: /^\s*fechar\s*$/i }).last();
   if (await fechar.count()) await fechar.click().catch(() => {}); else await d.locator("h1,h2,h3").first().click().catch(() => {});
   await p.waitForTimeout(800);
+  if ((await p.locator("[role=dialog]").count()) > 1) { await d.locator("h1,h2,h3,[id$=title]").first().click({ timeout: 4000 }).catch(() => {}); await p.waitForTimeout(800); }
   const naJanela = ((await d.innerText().catch(() => "")) || "");
   const faltou = volumes.filter((v) => !naJanela.includes(v)); if (faltou.length) throw new Error(`depois de fechar a lista o volume ${faltou.join(", ")} não aparece na janela`);
   // Observação (Brenda 27/11: o Adicionar não liberava sem ela?): escreve o que está sendo reposto
