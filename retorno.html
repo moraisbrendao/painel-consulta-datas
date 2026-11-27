@@ -62,7 +62,7 @@
   <main>
     <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
     <div class="cards" id="cards"></div>
-    <div class="barra"><input id="busca" type="search" placeholder="Procurar pedido ou NF"><span class="s" id="cont"></span></div>
+    <div class="barra"><input id="busca" type="search" placeholder="Procurar NF"><span class="s" id="cont"></span></div>
     <div id="lista"></div>
   </main>
   <script src="config.js"></script>
@@ -127,8 +127,8 @@
         return `<div class="ped${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme com a Logística.</div>` : ""}
           ${x.oc_msg ? `<div class="alerta oc"><b>💬 Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
-          <div><b class="num">${esc(x.pedido)}</b><div class="s">NF ${esc(x.nf || "—")}${x.transportadora ? " · " + esc(x.transportadora) : ""}</div>${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}</div>` : ""}</div>
-          <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)} ${chip}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}</div>
+          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}<div class="s">${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}</div>` : ""}</div>
+          <div><div>Prometido ${br(x.prometido)}</div><div>${chip}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
             <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
