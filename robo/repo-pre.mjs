@@ -9,6 +9,8 @@ import { abrirRepoPre, acharLinha } from "./anota-portal.mjs";
 import { entrarMulti360 } from "./multi360.mjs";
 
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 80);
+// reposições: o 360 usa o login do Eduardo (ele cuida das reposições; Brenda 27/11), se estiver nos segredos do GitHub
+const CRED_REPO = () => (process.env.MULTI360_EMAIL_EDUARDO && process.env.MULTI360_SENHA_EDUARDO ? { email: process.env.MULTI360_EMAIL_EDUARDO, senha: process.env.MULTI360_SENHA_EDUARDO, nome: "Eduardo (reposições)" } : undefined);
 let zx = null;
 async function codigosDeBarras(buf) {
   try {
@@ -82,7 +84,7 @@ export async function diagRepoPre({ chamar, log, ctx, alvo, createHash }) {
 // Nada de nome, CPF, telefone ou endereço: só SKU, filas, tipos e situação.
 export async function pedido360(ctx, log, nf) {
   const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
-  const m = pedido360.pg && !pedido360.pg.isClosed() ? pedido360.pg : (pedido360.pg = await entrarMulti360(ctx, log));
+  const m = pedido360.pg && !pedido360.pg.isClosed() ? pedido360.pg : (pedido360.pg = await entrarMulti360(ctx, log, CRED_REPO()));
   await m.goto(BASE + "/pedidos/hub", { waitUntil: "domcontentloaded" }); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   await m.getByRole("button", { name: /filtros/i }).first().click(); await m.waitForTimeout(1200);
   const campo = m.locator("xpath=//*[normalize-space(text())='NF']/following::input[1]").first();
