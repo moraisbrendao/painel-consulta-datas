@@ -108,7 +108,7 @@
     else if (motivos.length) ver = "atencao";
     else ver = ref ? "ok" : "inconc";
     const dePara = sit === "mudou" ? `${dm(inicio)} → ${dm(cur)}${inicio && cur ? ` (${cur > inicio ? "+" : ""}${diasCorr(inicio, cur)} d)` : ""}` : sit === "novo" ? `novo: ${dm(cur)}` : sit === "mantido" ? `mantido: ${dm(cur)}` : sit === "sem" ? "sem retorno" : "";
-    return { p, cur, inicio, sit, trocas: trocas.length, trocasSem: trocasSem.length, quebradas, vencida, empurrou, obsSem, ref, du, par, motivos, fora, impossivel, longe, ver, dePara, urgente, rows };
+    return { p, cur, inicio, sit, trocas: trocas.length, trocasSem: trocasSem.length, quebradas, vencida, empurrou, obsSem, ref, du, par, motivos, fora, impossivel, longe, ver, dePara, urgente, rows, link: semRows.some((r) => r.fonte === "link") };
   }
 
   const CARDS = [
@@ -116,6 +116,7 @@
     ["sem", "Sem retorno", "atrasados ou vencendo em até 2 dias, sem nova data", "vermelho", (x) => x.sit === "sem"],
     ["novo", "Retorno novo na semana", "não tinham data no começo da semana", "", (x) => x.sit === "novo"],
     ["mudou", "Mudou na semana", "data diferente da do começo da semana", "laranja", (x) => x.sit === "mudou"],
+    ["link", "Atualizado pelo link", "a transportadora respondeu pelo link nesta semana", "azul", (x) => x.link],
     ["mantido", "Mesmo retorno", "a mesma data do começo da semana", "", (x) => x.sit === "mantido"],
     ["vezes", "Mudou 2+ vezes", "data trocada mais de uma vez", "laranja", (x) => x.trocas >= 2],
     ["vencida", "Previsão vencida", "a nova data passou e não entregou", "vermelho", (x) => x.vencida],
@@ -128,7 +129,7 @@
     const B = baseAberta(); if (!B || !carregado) return;
     const hoje = hojeISO();
     $("rs-semana").value = semana;
-    L = B.map((p) => avaliar(p, hoje)).filter((x) => x.sit);
+    L = B.map((p) => avaliar(p, hoje)).filter((x) => x.sit || x.link);
     const cont = {}; CARDS.forEach(([k, , , , f]) => (cont[k] = L.filter(f).length));
     $("rs-cards").innerHTML = CARDS.map(([k, rot, sub, cor]) => `<button type="button" class="kpi ${cor}" data-rs="${k}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${fmt(cont[k])}</b><small>${sub}</small><i>↗</i></button>`).join("");
     const m = new Map();

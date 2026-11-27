@@ -105,7 +105,7 @@ export async function pedido360(ctx, log, nf) {
   const prod = corpo.split(/Produtos do Pedido/i)[1] || ""; r.sku = [...new Set(prod.match(/\b[A-Z0-9]{2,}[A-Z0-9-]*\.\d{3}\b/g) || [])];
   const tk = (corpo.split(/Tickets do Pedido/i)[1] || "").split(/Informa[cç][oõ]es do Pedido|Produtos do Pedido/i)[0];
   r.semTickets = /Nenhum ticket vinculado/i.test(tk);
-  for (const b of tk.split(/\bID:\s*/).slice(1)) r.tickets.push({ fila: ((b.match(/Fila:\s*([^\n]+)/) || [])[1] || "").trim(), tipo: ((b.match(/Tipo:\s*([^\n]+(?:\n[^\n:]+\))?)/) || [])[1] || "").replace(/\s+/g, " ").trim(), situacao: ((b.match(/\n(Em Andamento|Resolvido|Encerrado|Fechado|Novo|Aberto|Pendente)[^\n]*/i) || [])[1] || "").trim() });
+  for (const b of tk.split(/\bID:\s*/).slice(1)) r.tickets.push({ id: (b.match(/^\s*#?(\d{3,})/) || [])[1] || null, fila: ((b.match(/Fila:\s*([^\n]+)/) || [])[1] || "").trim(), tipo: ((b.match(/Tipo:\s*([^\n]+(?:\n[^\n:]+\))?)/) || [])[1] || "").replace(/\s+/g, " ").trim(), situacao: ((b.match(/\n(Em Andamento|Resolvido|Encerrado|Fechado|Novo|Aberto|Pendente)[^\n]*/i) || [])[1] || "").trim() });
   return r;
 }
 export async function diag360({ chamar, log, ctx, alvo, createHash }) {
@@ -247,4 +247,93 @@ export async function rodarRepoPre({ chamar, log, ctx, limite = 40 }) {
     await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" });
   }
   log(`repo-pre: ${feitos} analisados agora · ${erros} com erro · ${sairam.length} saíram da lista`);
+}
+
+// ===== modo repo-pre-solicitar (Brenda 27/11): só os casos que a equipe mandou solicitar no E-loggia (solicitar_status = pendente) =====
+// 1) portal: print das anotações/foto (solicitação da transportadora); Jadlog: CNPJ da anotação
+// 2) portal: ⋯ › Abrir Ticket › Volumes = os que faltam › Adicionar → "Ticket criado com sucesso"
+// 3) 360 (login do Eduardo): ticket de Reposição do pedido → Comentário Interno com o print do rastreio SSW + print da solicitação (+ CNPJ Jadlog em maiúsculas)
+// TESTE (TRANSP=teste): faz tudo menos o Adicionar e o comentário (fecha a janela sem criar nada).
+async function printSolicitacao(p, linha) {
+  const out = { prints: [], anot: "" };
+  const bt = linha.locator("button[title='Ver Anotações'], button[title*='Anota' i]").first();
+  if (await bt.count()) { await bt.click().catch(() => {}); const d = p.locator("[role=dialog]").last(); await d.waitFor({ timeout: 10000 }).catch(() => {}); await p.waitForTimeout(900);
+    out.anot = ((await d.innerText().catch(() => "")) || "").replace(/\s*\bClose\b\s*/g, " ");
+    try { out.prints.push({ name: "solicitacao-anotacoes.png", mimeType: "image/png", buffer: await p.screenshot() }); } catch (_) {}
+    await p.keyboard.press("Escape"); await p.waitForTimeout(700); }
+  const ths = (await p.locator("table thead th").allTextContents()).map((t) => t.trim()); const ia = ths.findIndex((h) => /anexo/i.test(h));
+  const ba = ia >= 0 ? linha.locator("td").nth(ia).locator("button, a").first() : null;
+  if (ba && await ba.count()) { await ba.click().catch(() => {}); await p.waitForTimeout(3000);
+    try { out.prints.push({ name: "solicitacao-foto.png", mimeType: "image/png", buffer: await p.screenshot() }); } catch (_) {}
+    await p.keyboard.press("Escape"); await p.waitForTimeout(700); }
+  if (!out.prints.length) { try { out.prints.push({ name: "solicitacao.png", mimeType: "image/png", buffer: await p.screenshot() }); } catch (_) {} }
+  return out;
+}
+async function criarTicketPortal(p, linha, volumes, teste, log) {
+  await linha.locator("td").last().locator("button").last().click(); await p.waitForTimeout(1200);
+  const abrir = p.getByRole("menuitem", { name: /abrir ticket/i }).first();
+  if (await abrir.count()) await abrir.click(); else await p.getByText(/^\s*Abrir ticket\s*$/i).first().click();
+  await p.waitForTimeout(2000);
+  const d = p.locator("[role=dialog]").last(); if (!(await d.count())) throw new Error("a janela Criar Ticket não abriu");
+  const vol = d.locator("xpath=.//*[normalize-space(text())='Volumes']/following::*[self::button or @role='combobox' or self::input][1]").first();
+  await vol.click(); await p.waitForTimeout(1200);
+  const marcados = [];
+  for (const v of volumes) { const op = p.locator("[role=option], [role=listbox] li, [cmdk-item]").filter({ hasText: v }).first();
+    if (!(await op.count())) throw new Error(`o volume ${v} não está na lista do portal`); await op.click(); marcados.push(v); await p.waitForTimeout(500); }
+  // fecha só a lista de volumes (botão Fechar da lista; senão clica no título da janela)
+  const fechar = p.getByRole("button", { name: /^\s*fechar\s*$/i }).last();
+  if (await fechar.count()) await fechar.click().catch(() => {}); else await d.locator("h1,h2,h3").first().click().catch(() => {});
+  await p.waitForTimeout(800);
+  const naJanela = ((await d.innerText().catch(() => "")) || "");
+  const faltou = volumes.filter((v) => !naJanela.includes(v)); if (faltou.length) throw new Error(`depois de fechar a lista o volume ${faltou.join(", ")} não aparece na janela`);
+  if (teste) { log(`  TESTE: volumes selecionados ${marcados.length}; NÃO cliquei em Adicionar`); await p.keyboard.press("Escape"); await p.waitForTimeout(600); if (await p.locator("[role=dialog]").count()) await d.getByRole("button", { name: /cancelar|fechar/i }).first().click().catch(() => {}); return { teste: true }; }
+  await d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first().click();
+  for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); const b = (await p.locator("body").innerText().catch(() => "")) || ""; if (/ticket criado com sucesso/i.test(b)) return { ok: true }; if (/erro|falha/i.test(b) && !(await p.locator("[role=dialog]").count())) break; }
+  throw new Error("cliquei em Adicionar mas não vi \"Ticket criado com sucesso\": conferir no portal antes de tentar de novo");
+}
+export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false }) {
+  // teste: pega 1 caso da lista (o volume em posse marcado, senão finge que o 1º está em posse) e não cria nada
+  const L = teste ? (await chamar("repo_pre?select=*&na_lista=eq.true&order=criado_em&limit=20")).filter((x) => (x.volumes || []).length > 1 && x.venda !== false && !x.tem_devolucao).slice(0, 1).map((x) => ({ ...x, vol_posse: (x.vol_posse || []).length ? x.vol_posse : [x.volumes[0]], ticket_portal_ok: false }))
+    : await chamar("repo_pre?select=*&solicitar_status=eq.pendente&order=solicitar_em&limit=20");
+  if (!L.length) { log("repo-pre-solicitar: nada pendente"); return; }
+  log(`repo-pre-solicitar: ${L.length} caso(s)${teste ? " · MODO TESTE (não cria nada)" : ""}`);
+  const B = await import("./barrar.mjs"), M = await import("./multi360.mjs");
+  const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log); await aplicarNovo(p, log);
+  const patch = (x, c) => chamar(`repo_pre?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", c);
+  for (const x of L) {
+    const repor = (x.volumes || []).filter((v) => !(x.vol_posse || []).includes(v));
+    try {
+      if (!repor.length) throw new Error("nenhum volume para repor");
+      if (x.tem_devolucao || x.venda === false) throw new Error("caso para conferir à mão (devolução ou não é venda)");
+      let linha = await acharLinha(p, x.nf); if (!linha) throw new Error("NF não está mais como Novo na lista do portal");
+      const sol = await printSolicitacao(p, linha);
+      const jad = /jadlog/i.test(x.transp || "") ? (sol.anot.split(/\n+/).find((l) => /cnpj|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/i.test(l)) || "").trim().toUpperCase() : "";
+      if (/jadlog/i.test(x.transp || "") && !jad) log("  Jadlog: não achei CNPJ na anotação (sigo sem)");
+      if (!x.ticket_portal_ok) {
+        linha = await acharLinha(p, x.nf);
+        const c = await criarTicketPortal(p, linha, repor, teste, log);
+        if (!teste) await patch(x, { ticket_portal_ok: true, solicitar_msg: "Ticket criado no portal; falta o comentário no 360" });
+      }
+      // rastreio SSW da transportadora que pediu (a do portal)
+      const r = await B.rastrear({ nf: x.nf, transp_pedido: x.transp || "" }, R).catch(() => null);
+      const arquivos = [];
+      if (r) arquivos.push({ name: `rastreio-${x.nf}.png`, mimeType: "image/png", buffer: await B.printRastreio(ctx, x.nf, r) });
+      arquivos.push(...sol.prints);
+      if (teste) { log(`  TESTE: prints prontos ${arquivos.length} (rastreio ${r ? r.fonte + "/" + r.situacao : "não achado"}) · CNPJ Jadlog ${jad ? "sim" : "não"}`); await patch(x, { solicitar_msg: `Teste OK em ${new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}: nada foi criado.` }); continue; }
+      // 360: o ticket de Reposição aparece no pedido alguns segundos depois
+      let tk = null;
+      for (let i = 0; i < 4 && !tk; i++) { if (i) await new Promise((ok) => setTimeout(ok, 30000));
+        const q = await pedido360(ctx, log, x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || ""));
+        tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null; }
+      if (!tk) throw new Error("ticket criado no portal, mas o ticket de Reposição (Atribuir transportador) ainda não apareceu no 360: tento de novo na próxima rodada");
+      const texto = [`Reposição pré-entrega solicitada pelo portal do transportador (Falta de volumes) · NF ${x.nf}.`,
+        `Volume(s) a repor: ${repor.join(", ")}.`, x.vol_posse && x.vol_posse.length ? `Volume(s) em posse da transportadora (foto): ${x.vol_posse.join(", ")}.` : "",
+        jad ? `REPOSIÇÃO NO CNPJ: ${jad}` : "", `Em anexo: print do rastreio${r ? " (" + r.fonte + ")" : ""} e da solicitação no portal.`].filter(Boolean).join(" ");
+      await M.comentarioInterno(pedido360.pg, tk.id, texto, arquivos);
+      await patch(x, { solicitar_status: "feito", ticket_360: tk.id, solicitar_msg: `Ticket do portal criado e comentário com ${arquivos.length} print(s) no ticket ${tk.id}.`, feito_em: new Date().toISOString() });
+      log(`  feito: ticket portal + comentário 360 (${arquivos.length} prints)`);
+    } catch (e) { const msg = String(e.message).split("\n")[0].slice(0, 200); log("  erro: " + msg.replace(/\d{4,}/g, "#"));
+      await patch(x, { solicitar_status: /tento de novo/.test(msg) ? "pendente" : "erro", solicitar_msg: msg }).catch(() => {});
+      await p.keyboard.press("Escape").catch(() => {}); }
+  }
 }

@@ -1488,3 +1488,6 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 .rpp-tks .chip.verm { background: #fde8e8; color: var(--vermelho); }
 #rpp-busca { max-width: 160px; }
 @media (max-width: 700px) { .rpp-caso { grid-template-columns: 1fr; } .rpp-fotos { flex-direction: row; } .rpp-fotos img, .rpp-semfoto { width: 120px; } }
+.rpp-falta { font-size: 14px; padding: 6px 10px; border-radius: 8px; background: #f5f6f8; border: 1px dashed var(--borda); }
+.rpp-falta.ok { background: #fde8e8; border: 1px solid #f3b4b4; } .rpp-falta.ok b { color: var(--vermelho); }
+.rpp-acao:empty { display: none; }

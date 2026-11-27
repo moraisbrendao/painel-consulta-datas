@@ -4704,3 +4704,32 @@ revoke all on function public.link_pendentes(text) from public;
 grant execute on function public.link_pendentes(text) to anon, authenticated;
 
 notify pgrst, 'reload schema';
+
+-- PARTE 99) Reposição pré › Falta de volumes: botão "Solicitar reposição" (Brenda 27/11)
+-- A equipe clica no E-loggia; o robô cria o ticket no portal (volume faltante) e comenta no ticket de Reposição do 360
+-- (login do Eduardo) com o print do rastreio SSW e da solicitação. Precisa ter rodado a parte 97.
+alter table public.repo_pre add column if not exists solicitar_status text;      -- pendente | feito | erro
+alter table public.repo_pre add column if not exists solicitar_por text;
+alter table public.repo_pre add column if not exists solicitar_em timestamptz;
+alter table public.repo_pre add column if not exists solicitar_msg text;
+alter table public.repo_pre add column if not exists ticket_portal_ok boolean;   -- ticket já criado no portal (não cria de novo)
+alter table public.repo_pre add column if not exists ticket_360 text;
+alter table public.repo_pre add column if not exists feito_em timestamptz;
+
+create or replace function public.rodar_robo_repopre_solicitar()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is null then raise exception 'Falta o token do robô no Supabase (github_robo_token).'; end if;
+  perform net.http_post(
+    url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+    headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                  'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+    body := jsonb_build_object('ref', 'main', 'inputs', jsonb_build_object('modo', 'repo-pre-solicitar')));
+end $$;
+revoke all on function public.rodar_robo_repopre_solicitar() from public, anon;
+grant execute on function public.rodar_robo_repopre_solicitar() to authenticated;
+notify pgrst, 'reload schema';

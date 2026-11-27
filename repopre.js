@@ -18,6 +18,7 @@
   const alertas = (x) => {
     const a = [];
     if (x.robo_msg) a.push(["erro", "Robô: " + x.robo_msg]);
+    if (x.solicitar_status === "erro") a.push(["erro", "Solicitação: " + (x.solicitar_msg || "erro")]);
     if (x.venda === false) a.push(["mao", "NF não achada em 360 › Hub › Pedidos (não é venda?): conferir à mão"]);
     if (x.tem_devolucao) a.push(["mao", "Tem ticket de devolução/cancelamento no 360: conferir à mão"]);
     const d = dBR(x.data_360); if (d && d < seisMeses()) a.push(["aviso", "Pedido com mais de 6 meses: conferir a numeração da NF"]);
@@ -26,13 +27,16 @@
     return a;
   };
   const sit = (x) => {
+    if (x.solicitar_status === "feito") return "feito";
+    if (x.solicitar_status === "pendente") return "fila";
+    if (x.solicitar_status === "erro") return "mao";
     if (!x.na_lista) return "saiu";
     if (!x.analisado_em) return "robo";
     if (alertas(x).some((a) => a[0] === "mao" || a[0] === "erro")) return "mao";
     return x.vol_posse && x.vol_posse.length && repor(x).length ? "pronto" : "marcar";
   };
   const CARDS = [["marcar", "Para marcar o volume", "olhe a foto e clique no volume", "amarelo"], ["pronto", "Pronto para solicitar", "volume a repor definido", "verde"],
-    ["mao", "Conferir à mão", "devolução, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["saiu", "Saíram da lista", "não estão mais Novo no portal", ""], ["todos", "Todos", "", ""]];
+    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["saiu", "Saíram da lista", "não estão mais Novo no portal", ""], ["todos", "Todos", "", ""]];
 
   async function carregar() {
     const r = await sb().from("repo_pre").select("*").order("criado_em", { ascending: true });
@@ -62,11 +66,29 @@
         <div class="rpp-cab"><b>NF ${esc(x.nf)}</b> · ${esc(x.transp || "")} · solicitado ${esc(x.solicitado || "—")}${x.na_lista ? "" : ` · <span class="chip">saiu da lista</span>`}
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
         ${al.map(([t, m]) => `<div class="rpp-al ${t}">⚠ ${esc(m)}</div>`).join("")}
-        <div class="rpp-vols"><span class="s">Volumes da NF:</span> ${vols}</div>
-        <div class="rpp-res">${posse.size && rp.length ? `➜ <b>Repor: ${rp.map(esc).join(", ")}</b> <span class="s">· no portal: ⋯ › Abrir ticket › Volumes: ${rp.map(esc).join(", ")} › Fechar › Adicionar</span>` : posse.size ? "" : `<span class="s">Marque o volume que aparece na foto.</span>`}
+        <div class="rpp-vols"><span class="s">Volumes da NF (clique no que aparece na foto):</span> ${vols}</div>
+        <div class="rpp-falta${posse.size && rp.length ? " ok" : ""}">${posse.size && rp.length ? `📦 <b>Volume faltante (repor): ${rp.map(esc).join(", ")}</b>` : posse.size ? `📦 <b>Nenhum volume faltante</b> <span class="s">(todos marcados como em posse)</span>` : `📦 <b>Volume faltante: ?</b> <span class="s">clique acima no volume que aparece na foto (está com a transportadora); o outro é o faltante</span>`}
           ${x.marcado_por ? `<span class="s">· marcado por ${esc(String(x.marcado_por).split("@")[0])} ${hora(x.marcado_em)}</span>` : ""}</div>
+        <div class="rpp-acao">${acao(x, rp)}</div>
         <div class="rpp-tks"><span class="s">Tickets do pedido no 360:</span> ${tks}</div>
       </div></article>`;
+  }
+  function acao(x, rp) {
+    if (x.solicitar_status === "feito") return `<span class="chip verde">✓ Reposição solicitada ${hora(x.feito_em)}${x.ticket_360 ? ` · <a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">ticket ${esc(x.ticket_360)} ↗</a>` : ""}</span>`;
+    if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>`;
+    const pode = x.na_lista && rp.length && (x.vol_posse || []).length && x.venda !== false && !x.tem_devolucao;
+    return pode ? `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Solicitar reposição de ${rp.map(esc).join(", ")}</button>${x.solicitar_status === "erro" ? ` <span class="s">(tentar de novo)</span>` : ""}` : "";
+  }
+  async function solicitar(nf) {
+    const x = L.find((y) => y.nf === nf); if (!x) return; const rp = repor(x);
+    if (!confirm(`Solicitar a reposição da NF ${nf}?\n\nO robô vai:\n1) no portal: ⋯ › Abrir Ticket › Volumes ${rp.join(", ")} › Adicionar\n2) no 360 (login do Eduardo): comentário no ticket de Reposição com o print do rastreio e da solicitação${/jadlog/i.test(x.transp || "") ? " + o CNPJ da anotação em maiúsculas" : ""}.\n\nIsso cria o ticket de verdade.`)) return;
+    const email = ((await sb().auth.getUser()).data.user || {}).email || null;
+    const novo = { solicitar_status: "pendente", solicitar_por: email, solicitar_em: new Date().toISOString(), solicitar_msg: null };
+    const r = await sb().from("repo_pre").update(novo).eq("nf", nf);
+    if (r.error) return toast(/solicitar_status/.test(r.error.message) ? "Rode a parte 99 no Supabase." : "Não salvei: " + r.error.message, true);
+    Object.assign(x, novo); desenhar();
+    const r2 = await sb().rpc("rodar_robo_repopre_solicitar"); if (r2.error) return toast("Marcado, mas não consegui chamar o robô: " + r2.error.message, true);
+    toast("Robô chamado: em alguns minutos aparece como solicitada."); setTimeout(carregar, 180000);
   }
   async function marcar(nf, v) {
     const x = L.find((y) => y.nf === nf); if (!x) return;
@@ -79,7 +101,8 @@
   }
   $("rp-repopre").addEventListener("click", (e) => {
     const c = e.target.closest("[data-rpp]"); if (c) { card = c.dataset.rpp; desenhar(); return; }
-    const v = e.target.closest("[data-rpp-vol]"); if (v) marcar(v.dataset.nf, v.dataset.rppVol);
+    const v = e.target.closest("[data-rpp-vol]"); if (v) { const x = L.find((y) => y.nf === v.dataset.nf); if (x && ["pendente", "feito"].includes(x.solicitar_status)) return toast("Já foi para a solicitação: não dá para mudar o volume.", true); marcar(v.dataset.nf, v.dataset.rppVol); return; }
+    const so = e.target.closest("[data-rpp-sol]"); if (so) solicitar(so.dataset.rppSol);
   });
   $("rpp-busca").addEventListener("input", desenhar);
   $("rpp-rodar").addEventListener("click", async () => {
