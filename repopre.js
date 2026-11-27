@@ -38,9 +38,21 @@
   const CARDS = [["marcar", "Para marcar o volume", "olhe a foto e clique no volume", "amarelo"], ["pronto", "Pronto para solicitar", "volume a repor definido", "verde"],
     ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["saiu", "Saíram da lista", "não estão mais Novo no portal", ""], ["todos", "Todos", "", ""]];
 
+  // cadastro de volumes (parte 101): SKU → volume → número do volume e descrição
+  let CAD = new Map();   // "sku|volume" e "volume" → { nro, total, descricao }
+  const vKey = (v) => String(v || "").trim().replace(/\.0+$/, "");
+  async function carregarCad() {
+    const skus = [...new Set(L.flatMap((x) => x.sku || []))]; CAD = new Map(); if (!skus.length) return;
+    const r = await sb().from("vol_cadastro").select("modelo,volume,nro,descricao").in("modelo", skus).then((x) => x, () => ({ error: 1 })); if (r.error) return;
+    const tot = {}; (r.data || []).forEach((c) => (tot[c.modelo] = Math.max(tot[c.modelo] || 0, c.nro || 0)));
+    (r.data || []).forEach((c) => { const i = { nro: c.nro, total: tot[c.modelo], descricao: c.descricao, modelo: c.modelo }; CAD.set(c.modelo + "|" + vKey(c.volume), i); CAD.set(c.modelo + "|" + vKey(c.volume).split(".")[0], i); });
+  }
+  const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return null; };
+  const rotVol = (x, v) => { const i = infoVol(x, v); return i && i.nro ? `Vol ${i.nro}/${(x.volumes || []).length || i.total} · ` : ""; };
   async function carregar() {
     const r = await sb().from("repo_pre").select("*").order("criado_em", { ascending: true });
     if (r.error) { ok = false; L = []; } else { ok = true; L = r.data || []; }
+    await carregarCad();
     desenhar();
   }
   function desenhar() {
@@ -56,7 +68,7 @@
   }
   function caso(x) {
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);
-    const vols = (x.volumes || []).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? " posse" : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${esc(v)}${posse.has(v) ? " · em posse" : ""}</button>`).join("")
+    const vols = [...(x.volumes || [])].sort((a, b) => ((infoVol(x, a) || {}).nro || 99) - ((infoVol(x, b) || {}).nro || 99)).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? " posse" : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${esc((infoVol(x, v) || {}).descricao || "")} · ${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${rotVol(x, v)}${esc(v)}${posse.has(v) ? " · em posse" : ""}</button>`).join("")
       || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket." : "Aguardando o robô."}</span>`;
     const fotos = (x.fotos || []).map((f, i) => `<div class="rpp-foto"><button type="button" class="rpp-baixa" data-rpp-baixa="${esc(f)}" data-nome="NF-${esc(x.nf)}-foto-${i + 1}" title="Clique para baixar a foto"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></button><a class="s" href="${esc(f)}" target="_blank" rel="noopener noreferrer">🔍 ampliar</a></div>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const tks = (x.tickets || []).map((t) => `<span class="chip${/devolu|cancel/i.test(`${t.tipo} ${t.fila}`) ? " verm" : ""}">${esc(t.tipo || "ticket")}${t.fila ? " · " + esc(t.fila) : ""}${t.situacao ? " · " + esc(t.situacao) : ""}</span>`).join(" ") || `<span class="s">${x.venda ? "sem tickets" : ""}</span>`;
@@ -67,7 +79,7 @@
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
         ${al.map(([t, m]) => `<div class="rpp-al ${t}">⚠ ${esc(m)}</div>`).join("")}
         <div class="rpp-vols"><span class="s">${(x.volumes || []).length ? `A NF tem <b>${x.volumes.length} volume(s)</b> · clique no(s) que aparece(m) na foto:` : "Volumes da NF:"}</span> ${vols}</div>
-        <div class="rpp-falta${posse.size && rp.length ? " ok" : ""}">${posse.size && rp.length ? `📦 <b>Volume faltante (repor): ${rp.map(esc).join(", ")}</b>` : posse.size ? `📦 <b>Nenhum volume faltante</b> <span class="s">(todos marcados como em posse)</span>` : `📦 <b>Volume faltante: ?</b> <span class="s">clique acima no volume que aparece na foto (está com a transportadora); o outro é o faltante</span>`}
+        <div class="rpp-falta${posse.size && rp.length ? " ok" : ""}">${posse.size && rp.length ? `📦 <b>Volume faltante (repor): ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</b>` : posse.size ? `📦 <b>Nenhum volume faltante</b> <span class="s">(todos marcados como em posse)</span>` : `📦 <b>Volume faltante: ?</b> <span class="s">clique acima no volume que aparece na foto (está com a transportadora); o outro é o faltante</span>`}
           ${x.marcado_por ? `<span class="s">· marcado por ${esc(String(x.marcado_por).split("@")[0])} ${hora(x.marcado_em)}</span>` : ""}</div>
         <div class="rpp-acao">${acao(x, rp)}</div>
         <div class="rpp-tks"><span class="s">Tickets do pedido no 360:</span> ${tks}</div>
@@ -114,6 +126,24 @@
     const so = e.target.closest("[data-rpp-sol]"); if (so) solicitar(so.dataset.rppSol);
   });
   $("rpp-busca").addEventListener("input", desenhar);
+  $("rpp-vol-arq").addEventListener("change", async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array" });
+      const aba = wb.SheetNames.find((n) => /base\s*cadastr/i.test(n)) || wb.SheetNames[0];
+      const M = XLSX.utils.sheet_to_json(wb.Sheets[aba], { header: 1, defval: "" });
+      const hi = M.findIndex((r) => r.some((c) => /c[oó]digo\s*modelo/i.test(String(c))) && r.some((c) => /^volume$/i.test(String(c).trim()))); if (hi < 0) throw new Error(`não achei as colunas "Código Modelo" e "Volume" na aba ${aba}`);
+      const H = M[hi].map((c) => String(c).trim()), col = (re) => H.findIndex((h) => re.test(h));
+      const iM = col(/c[oó]digo\s*modelo/i), iV = col(/^volume$/i), iN = col(/nro\s*volume/i), iQ = col(/qtde/i), iP = col(/^produto$/i), iD = col(/descri/i);
+      const vis = new Set(), linhas = [];
+      for (const r of M.slice(hi + 1)) { const m = String(r[iM] || "").trim(), v = String(r[iV] || "").trim(); if (!m || !v || vis.has(m + "|" + v)) continue; vis.add(m + "|" + v);
+        linhas.push({ modelo: m, volume: v, nro: parseInt(r[iN], 10) || null, qtde: iQ >= 0 ? String(r[iQ]) : null, produto: iP >= 0 ? String(r[iP]) : null, descricao: iD >= 0 ? String(r[iD]).slice(0, 200) : null }); }
+      if (!linhas.length) throw new Error("planilha sem linhas");
+      toast(`Enviando ${linhas.length} volumes…`);
+      for (let i = 0; i < linhas.length; i += 1000) { const r = await sb().from("vol_cadastro").upsert(linhas.slice(i, i + 1000)); if (r.error) throw new Error(/vol_cadastro/.test(r.error.message) ? "Rode a parte 101 no Supabase." : r.error.message); }
+      toast(`Planilha de volumes enviada: ${linhas.length} volumes (aba ${aba}).`); carregar();
+    } catch (err) { toast("Não consegui ler a planilha: " + (err.message || err), true); }
+  });
   $("rpp-rodar").addEventListener("click", async () => {
     const r = await sb().rpc("rodar_robo_repopre"); if (r.error) return toast("Não consegui chamar o robô: " + r.error.message, true);
     toast("Robô chamado: em uns minutos os casos aparecem aqui."); setTimeout(carregar, 240000);

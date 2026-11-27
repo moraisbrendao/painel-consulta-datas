@@ -4776,3 +4776,23 @@ end $$;
 revoke all on function public.link_responder(text, jsonb) from public;
 grant execute on function public.link_responder(text, jsonb) to anon, authenticated;
 notify pgrst, 'reload schema';
+
+-- PARTE 101) Reposição pré › Falta de volumes: cadastro de volumes por produto (Brenda 27/11)
+-- Planilha "Planilha de estoque Filiais", aba "Base Cadastros": Produto, Código Modelo (= SKU do 360), Qtde Embalagem,
+-- Nro Volume, Volume (código), Descrição. Serve para mostrar qual é o volume 1, 2, 3... da NF.
+create table if not exists public.vol_cadastro (
+  modelo    text not null,      -- Código Modelo (SKU), ex. MP6040.678
+  volume    text not null,      -- código do volume, ex. 76280.0002
+  nro       integer,            -- Nro Volume (1, 2, 3...)
+  qtde      text,
+  produto   text,
+  descricao text,
+  primary key (modelo, volume)
+);
+create index if not exists vol_cadastro_volume on public.vol_cadastro (volume);
+alter table public.vol_cadastro enable row level security;
+revoke all on public.vol_cadastro from anon;
+grant select, insert, update, delete on public.vol_cadastro to authenticated;
+drop policy if exists "logistica cuida" on public.vol_cadastro;
+create policy "logistica cuida" on public.vol_cadastro for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+notify pgrst, 'reload schema';
