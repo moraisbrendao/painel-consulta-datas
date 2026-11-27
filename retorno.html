@@ -25,6 +25,8 @@
     .chip { display: inline-block; font-size: 12px; font-weight: 700; padding: 1px 8px; border-radius: 10px; background: #eef1f6; }
     .chip.verm { background: var(--vermelho-f); color: var(--vermelho); }
     .chip.amar { background: #fff1c9; color: #7a5a00; }
+    .chip.verde { background: #e6f6ec; color: #145c33; }
+    .ped .retorno { grid-column: 1 / -1; background: #f0f7f2; border: 1px solid #cfe9d8; border-radius: 10px; padding: 7px 10px; font-size: 13.5px; line-height: 1.5; }
     .campos { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
     .campos input, .campos select { width: 100%; padding: 9px 10px; border: 1px solid #cfd6e2; border-radius: 8px; font-size: 15px; background: #fff; color: var(--texto); }
     .campos .obs, .campos .sku { grid-column: 1 / -1; }
@@ -102,7 +104,7 @@
     <p id="sub">Carregando…</p>
   </header>
   <main>
-    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela; ou use a planilha. Ainda não tem data (ex.: extravio)? Escolha só o motivo e escreva a observação: também salva, e o pedido continua aqui até vocês passarem a data. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela; ou use a planilha. Ainda não tem data (ex.: extravio)? Escolha só o motivo e escreva a observação: também salva. Depois de respondido, o pedido vai para o card <b>Pedidos retornados</b>: lá vocês conferem o que responderam e podem alterar (salva de novo sozinho). Se a nova data vencer, ele volta para a lista.</div>
     <section class="desemp" id="desemp" hidden>
       <div class="d-topo"><h2>📈 Desempenho de vocês</h2><span class="s">mesma conta que a Multimóveis usa para medir as transportadoras</span></div>
       <div class="d-grade">
@@ -140,7 +142,7 @@
     const br = (iso) => (iso ? String(iso).slice(0, 10).split("-").reverse().join("/") : "—");
     const MOTIVOS = ["Em rota de entrega", "Reagendado com o cliente", "Cliente ausente", "Endereço não localizado", "Aguardando transferência", "Atraso operacional", "Avaria", "Não chegou em nosso CD", "Extravio", "Aguardando retorno da Multimóveis", "Falta de volumes", "Outro"];
     const token = new URLSearchParams(location.hash.slice(1)).get("t") || "";
-    let itens = [], hoje = "", filtro = "", chips = new Map(), sel = new Set(), V = [], feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
+    let ret = [], itens = [], hoje = "", filtro = "", chips = new Map(), sel = new Set(), V = [], feitos = new Map(); const rasc = new Map();   // o que já foi digitado (não some ao buscar)
 
     async function rpc(nome, corpo) {
       const r = await fetch(`${CFG.SUPABASE_URL}/rest/v1/rpc/${nome}`, { method: "POST", headers: { apikey: CFG.SUPABASE_ANON_KEY, Authorization: "Bearer " + CFG.SUPABASE_ANON_KEY, "Content-Type": "application/json" }, body: JSON.stringify(corpo) });
@@ -157,8 +159,12 @@
         let r; for (let t = 1; ; t++) { try { r = await rpc("link_pendentes", { p_token: token }); break; }   // banco ocupado: tenta de novo sozinho (até 3 vezes)
           catch (e) { if (t >= 3 || !/timeout|tempo|falar com o sistema/i.test(e.message)) throw /timeout/i.test(e.message) ? new Error("O sistema está ocupado agora. Atualize a página em alguns minutos.") : e;
             $("explica").textContent = "Carregando… o sistema está ocupado, tentando de novo."; await new Promise((ok) => setTimeout(ok, 2500 * t)); } }
-        itens = r.itens || []; hoje = r.hoje;
+        hoje = r.hoje; ret = r.retornados || [];
+        // parte 96 (Brenda 27/11): pedido que a transportadora já respondeu vai para o card "Pedidos retornados"
+        const jaRet = new Set(ret.filter((x) => x.situacao === "aberto").map((x) => x.pedido));
+        itens = (r.itens || []).filter((x) => !(r.retornados && x.sd_motivo && jaRet.has(x.pedido)));
         for (const x of itens) if (x.sd_motivo && !rasc.has(x.pedido)) rasc.set(x.pedido, { motivo: x.sd_motivo, obs: x.sd_obs || "", sku: x.sd_sku || "", nova_data: "" });   // parte 95: retorno sem data já salvo
+        for (const x of ret) if (!rasc.has(x.pedido)) rasc.set(x.pedido, { motivo: x.r_motivo || "", obs: x.r_obs || "", sku: x.r_sku || "", nova_data: x.r_nova && x.r_nova >= hoje ? x.r_nova : "" });
         $("titulo").textContent = `Retorno de entregas · ${r.nome}`;
         document.title = `Retorno de entregas · ${r.nome}`;
         desenhar(); carregarDesempenho();
@@ -177,15 +183,16 @@
       ["barrar", "Em Barrar entrega", (x) => !!x.barrar, "c-verm"],
       ["repo", "Com nota de reposição", (x) => !!x.nf_repo, ""],
       ["salvo", "Salvos agora", (x) => feitos.has(x.pedido), "c-verde"],
+      ["ret", "Pedidos retornados (últimos 30 dias)", null, "c-verde"],
     ];
     function desenharCards() {
-      $("cards").innerHTML = CARDS.filter(([k, , f]) => !k || k === "sem" || k === "salvo" || k === filtro || itens.some(f))
-        .map(([k, nome, f, cls]) => `<button type="button" class="card ${cls}${filtro === k ? " ativo" : ""}" data-f="${k}"><b>${itens.filter(f).length}</b><span>${nome}</span></button>`).join("");
+      $("cards").innerHTML = CARDS.filter(([k, , f]) => !k || k === "sem" || k === "salvo" || k === "ret" || k === filtro || itens.some(f))
+        .map(([k, nome, f, cls]) => `<button type="button" class="card ${cls}${filtro === k ? " ativo" : ""}" data-f="${k}"><b>${k === "ret" ? ret.length : itens.filter(f).length}</b><span>${nome}</span></button>`).join("");
     }
     function desenhar() {
       desenharCards();
-      const q = $("busca").value.trim().toUpperCase(), fc = (CARDS.find((c) => c[0] === filtro) || CARDS[0])[2];
-      V = itens.filter((x) => fc(x) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
+      const q = $("busca").value.trim().toUpperCase(), fc = (CARDS.find((c) => c[0] === filtro) || CARDS[0])[2] || (() => true), modoRet = filtro === "ret";
+      V = (modoRet ? ret : itens).filter((x) => fc(x) && (!q || String(x.pedido).toUpperCase().includes(q) || String(x.nf || "").toUpperCase().includes(q)));
       const pend = itens.filter((x) => !feitos.has(x.pedido)).length, feitosN = feitos.size;
       $("sub").textContent = (pend ? `${pend} pedido${pend === 1 ? "" : "s"} sem nova data` : "Tudo respondido. Obrigado!") + (feitosN ? ` · ${feitosN} salvo${feitosN === 1 ? "" : "s"} agora` : "");
       $("cont").textContent = q || filtro ? `${V.length} na lista` : "";
@@ -193,6 +200,7 @@
         const d = x.prometido ? dias(x.prometido, hoje) : null, ra = rasc.get(x.pedido) || {};
         const chip = d === null ? "" : d > 0 ? `<span class="chip verm">vencido há ${d} dia${d === 1 ? "" : "s"}</span>` : d === 0 ? `<span class="chip amar">vence hoje</span>` : `<span class="chip amar">vence amanhã</span>`;
         const fs = feitos.get(x.pedido); chips.set(x.pedido, chip);
+        if (modoRet) return linhaRet(x, ra, chip);
         return `<div class="ped${fs ? " salvo" : ""}${sel.has(x.pedido) ? " marcado" : ""}" data-p="${esc(x.pedido)}">
           <div><label><input type="checkbox" class="ck" aria-label="Selecionar"${sel.has(x.pedido) ? " checked" : ""}><b class="num">NF ${esc(x.nf || "—")}</b></label>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}${x.repo_tipo ? " · " + (/^parc/i.test(x.repo_tipo) ? "Parcial" : /^tot/i.test(x.repo_tipo) ? "Total" : esc(x.repo_tipo)) : ""}</div>` : ""}</div>
           <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.cep ? `<div class="s">CEP ${esc(String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2"))}</div>` : ""}<div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
@@ -206,8 +214,34 @@
           ${x.barrar ? `<div class="alerta barrar">⛔ Pedido em BARRAR ENTREGA pela Multimóveis: não sair para entrega, segure a mercadoria e confirme o barrar no portal.<div style="font-weight:400;font-size:13px;margin-top:2px">O pedido sairá da tela na próxima atualização dessa página após a confirmação no portal do transportador.</div></div>` : ""}
           ${x.oc_msg ? `<div class="alerta oc"><b class="oc-tit">💬 RETORNO OCORRÊNCIA</b><b>Última mensagem da Multimóveis${x.oc_em ? " (" + br(x.oc_em) + ")" : ""}${x.oc_motivo ? " · " + esc(x.oc_motivo) : ""}: aguardando vocês</b>${esc(x.oc_msg)}</div>` : ""}
         </div>`;
-      }).join("") || (pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
+      }).join("") || (modoRet ? `<div class="aviso">${q ? "Nenhum pedido com essa busca." : "Vocês ainda não responderam nenhum pedido por este link nos últimos 30 dias."}</div>` : pend ? `<div class="aviso">Nenhum pedido com essa busca.</div>` : `<div class="aviso">✓ Nenhum pedido pendente agora. A lista se atualiza sozinha: volte amanhã ou quando quiser.</div>`);
       barraMassa();
+    }
+    // card "Pedidos retornados" (parte 96): o último retorno de cada pedido; em aberto dá para alterar (salva sozinho igual)
+    const hm = (iso) => { try { return new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }); } catch (e) { return ""; } };
+    function linhaRet(x, ra, chip) {
+      const aberto = x.situacao === "aberto", fs = feitos.get(x.pedido);
+      const resumo = `<div class="retorno"><b>✓ Retorno de vocês em ${hm(x.r_em)}</b>${x.r_qtd > 1 ? ` <span class="s">(${x.r_qtd} retornos no período)</span>` : ""}<br>Nova data: <b>${x.r_nova ? br(x.r_nova) : "sem data"}</b> · Motivo: <b>${esc(x.r_motivo || "—")}</b>${x.r_sku ? ` · SKU ${esc(x.r_sku)}` : ""}${x.r_obs ? `<br><span class="s">Obs.: ${esc(x.r_obs)}</span>` : ""}</div>`;
+      const sit = x.situacao === "entregue" ? `<span class="chip verde">entregue</span>` : x.situacao === "cancelado" ? `<span class="chip">cancelado</span>` : x.situacao === "fora" ? `<span class="chip">fora da lista</span>`
+        : x.r_nova && x.r_nova < hoje ? `<span class="chip verm">a data que vocês passaram venceu: coloque uma nova</span>` : !x.r_nova ? `<span class="chip amar">falta a nova data</span>` : `<span class="chip verde">data em dia</span>`;
+      return `<div class="ped ret${fs ? " salvo" : ""}" data-p="${esc(x.pedido)}">
+          <div><b class="num">NF ${esc(x.nf || "—")}</b>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}</div>
+          <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.cep ? `<div class="s">CEP ${esc(String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2"))}</div>` : ""}<div class="s">Prometido ${br(x.prometido)}</div></div>
+          ${aberto ? `<div class="campos">
+            <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
+            <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
+            <input class="sku" maxlength="200" placeholder="SKU do item que está faltando" value="${esc(ra.sku || "")}"${ra.motivo === "Falta de volumes" ? "" : " hidden"} aria-label="SKU do item">
+            <input class="obs" maxlength="300" placeholder="Observação (opcional)" value="${esc(ra.obs || "")}">
+          </div>` : `<div></div>`}
+          <div class="acao"><div class="st">${fs ? `<span class="ok">✓ alterado às ${fs}</span>` : sit}</div><div class="err"></div></div>
+          ${resumo}
+        </div>`;
+    }
+    // depois de salvar, o pedido entra (ou sobe) no card "Pedidos retornados"
+    function retAdd(x) {
+      const base = itens.find((z) => z.pedido === x.pedido) || ret.find((z) => z.pedido === x.pedido) || { pedido: x.pedido };
+      const ant = ret.find((z) => z.pedido === x.pedido);
+      ret = [{ ...base, situacao: "aberto", r_nova: x.nova_data || null, r_motivo: x.motivo, r_obs: x.obs || null, r_sku: x.sku || null, r_em: new Date().toISOString(), r_qtd: (ant ? ant.r_qtd || 1 : 0) + 1 }, ...ret.filter((z) => z.pedido !== x.pedido)];
     }
     // data em massa (Brenda 26/11): marca os pedidos e aplica a mesma data + motivo em todos de uma vez
     function barraMassa() {
@@ -241,6 +275,8 @@
         if (!r.gravados) { st(el, ""); el.querySelector(".err").textContent = "Não aceito: o pedido pode já ter sido entregue. Atualize a página."; return; }
         ultimoEnviado.set(x.pedido, chave);
         const h = new Date().toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+        retAdd(x);
+        if (filtro === "ret") { feitos.set(x.pedido, h); st(el, `<span class="ok">✓ alterado às ${h}</span>`); desenharCards(); return; }
         if (x.nova_data) { feitos.set(x.pedido, h); el.classList.add("salvo"); st(el, `<span class="ok">✓ salvo às ${h}</span>`); }
         else { semDataOk(x); st(el, `<span class="ok">✓ motivo salvo às ${h}</span><div class="s">sem nova data: quando tiver, coloque a data</div>`); }
         const pend = itens.filter((y) => !feitos.has(y.pedido)).length;
@@ -286,7 +322,7 @@
           rasc.set(pedido, x); clearTimeout(timers.get(pedido));
           try {
             const r = await rpc("link_responder", { p_token: token, p_itens: [x] });
-            if (r.gravados) { ok++; x.nova_data ? feitos.set(pedido, h()) : semDataOk(x); ultimoEnviado.set(pedido, JSON.stringify(x)); sel.delete(pedido); } else falhou++;
+            if (r.gravados) { ok++; retAdd(x); x.nova_data ? feitos.set(pedido, h()) : semDataOk(x); ultimoEnviado.set(pedido, JSON.stringify(x)); sel.delete(pedido); } else falhou++;
           } catch (e) { falhou++; }
           bt.textContent = `Salvando ${++n} de ${alvo.length}…`;
         }
@@ -356,7 +392,7 @@
         while (fila.length) {
           const y = fila.shift(); rasc.set(y.pedido, y); clearTimeout(timers.get(y.pedido));
           try { const r = await rpc("link_responder", { p_token: token, p_itens: [y] });
-            if (r.gravados) { ok++; y.nova_data ? feitos.set(y.pedido, h()) : semDataOk(y); ultimoEnviado.set(y.pedido, JSON.stringify(y)); sel.delete(y.pedido); }
+            if (r.gravados) { ok++; retAdd(y); y.nova_data ? feitos.set(y.pedido, h()) : semDataOk(y); ultimoEnviado.set(y.pedido, JSON.stringify(y)); sel.delete(y.pedido); }
             else erros.push(`NF ${(itens.find((z) => z.pedido === y.pedido) || {}).nf || ""}: não aceito (pode já ter sido entregue).`);
           } catch (err) { erros.push(`NF ${(itens.find((z) => z.pedido === y.pedido) || {}).nf || ""}: ${err.message}`); }
           const pg = $("pl-prog"); if (pg) pg.textContent = `Salvando ${++n} de ${enviar.length}…`;
