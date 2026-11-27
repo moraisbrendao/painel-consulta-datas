@@ -4278,3 +4278,43 @@ revoke all on function public.importar_tickets(jsonb, boolean, text, integer) fr
 grant execute on function public.importar_tickets(jsonb, boolean, text, integer) to authenticated;
 
 notify pgrst, 'reload schema';
+
+-- ===== parte 93 =====
+-- 93) Link das transportadoras (Brenda 26/11): a transportadora vê a performance do mês dela (mesma conta da Visão Gerencial:
+--     (entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto), sem cancelados, mês = criação do pedido)
+--     e o gráfico de Produtividade (entregues por dia nos últimos 14 dias, atrasados hoje e o que vence nos próximos 14).
+--     Só números agregados dos pedidos dela; nenhum dado de cliente.
+create or replace function public.link_desempenho(p_token text)
+returns jsonb language plpgsql security definer set search_path = public as $$
+declare l public.transp_links; hoje date := (now() at time zone 'America/Sao_Paulo')::date; r jsonb;
+begin
+  l := public._link_de(p_token);
+  with b as (
+    select coalesce(x.prev_original, x.prev_atual) as prom, x.data_criacao, x.data_entrega,
+           coalesce(x.status_intelipost, '') ilike 'entregue%' as ent, coalesce(x.status_intelipost, '') ilike 'cancelado%' as canc,
+           coalesce(x.status_prazo, '') ilike '%fora do prazo%' as fora, coalesce(x.range_atrasos, '') as rg
+      from public.base_pedidos x where x.transportadora = any (l.transportadoras)),
+  c as (
+    select *, case when ent then case when fora or (data_entrega is not null and prom is not null and data_entrega > prom) then 'ent_atraso' else 'ent_prazo' end
+                   when canc then 'cancelado'
+                   when (rg <> '' and rg ilike 'vencido%') or (rg = '' and prom < hoje) then 'ab_atraso' else 'ab_prazo' end as sit
+      from b)
+  select jsonb_build_object(
+    'hoje', hoje,
+    'meses', coalesce((select jsonb_agg(jsonb_build_object('mes', m, 'volume', v, 'ent_prazo', ep, 'ent_atraso', ea, 'ab_prazo', ap, 'ab_atraso', aa) order by m)
+       from (select to_char(data_criacao, 'YYYY-MM') m, count(*) filter (where sit <> 'cancelado') v,
+                    count(*) filter (where sit = 'ent_prazo') ep, count(*) filter (where sit = 'ent_atraso') ea,
+                    count(*) filter (where sit = 'ab_prazo') ap, count(*) filter (where sit = 'ab_atraso') aa
+               from c where data_criacao >= date_trunc('month', hoje) - interval '2 months' group by 1) z), '[]'::jsonb),
+    'entregues', coalesce((select jsonb_object_agg(d, jsonb_build_array(n, na)) from
+       (select data_entrega::text d, count(*) n, count(*) filter (where sit = 'ent_atraso') na from c
+         where ent and data_entrega between hoje - 14 and hoje group by 1) z), '{}'::jsonb),
+    'vencem', coalesce((select jsonb_object_agg(d, n) from
+       (select prom::text d, count(*) n from c where sit = 'ab_prazo' and prom between hoje and hoje + 14 group by 1) z), '{}'::jsonb),
+    'atrasados', (select count(*) from c where sit = 'ab_atraso'))
+  into r;
+  return r;
+end $$;
+revoke all on function public.link_desempenho(text) from public;
+grant execute on function public.link_desempenho(text) to anon, authenticated;
+notify pgrst, 'reload schema';

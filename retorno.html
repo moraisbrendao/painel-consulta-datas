@@ -35,6 +35,27 @@
     button:disabled { opacity: .5; cursor: default; }
     .rodape { position: fixed; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--linha); padding: 10px 16px; display: flex; justify-content: center; gap: 10px; align-items: center; }
     .ok { color: var(--verde); font-weight: 700; }
+    .desemp { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; }
+    .desemp[hidden] { display: none; }
+    .d-topo { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; margin-bottom: 8px; }
+    .d-topo h2 { margin: 0; font-size: 17px; }
+    .desemp h3 { margin: 0 0 2px; font-size: 15px; }
+    .d-grade { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .d-perf { display: grid; grid-template-columns: minmax(220px, 1fr) 2fr; gap: 6px 18px; align-items: start; }
+    .d-perf h3, .d-perf .d-big, .d-perf > .s { grid-column: 1; }
+    .d-perf .d-tabw { grid-column: 2; grid-row: 1 / span 3; overflow-x: auto; }
+    .d-big { font-size: 34px; font-weight: 800; line-height: 1.05; }
+    .d-big.bom, .d-tab b.bom { color: var(--verde); } .d-big.medio, .d-tab b.medio { color: #b7791f; } .d-big.ruim, .d-tab b.ruim { color: var(--vermelho); }
+    .d-tab { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    .d-tab th, .d-tab td { padding: 4px 6px; border-bottom: 1px solid var(--linha); text-align: right; }
+    .d-tab th:first-child, .d-tab td:first-child { text-align: left; }
+    .d-tab th { color: var(--suave); font-weight: 600; font-size: 12px; }
+    #d-svg svg { width: 100%; height: 230px; display: block; }
+    #d-svg .grade { stroke: #e3e7ee; } #d-svg .eixo { font-size: 11px; fill: #5b667a; } #d-svg .eixo.hoje { font-weight: 800; fill: #1d2433; }
+    #d-svg .rot { font-size: 11px; font-weight: 700; fill: #1d2433; } #d-svg .linha-ent { fill: none; stroke: #0f1f3d; stroke-width: 2; stroke-dasharray: 5 4; }
+    #d-svg .ponto-ent { fill: #fff; stroke: #0f1f3d; stroke-width: 2; }
+    .d-res { font-size: 14px; margin-top: 4px; }
+    @media (max-width: 760px) { .d-perf { grid-template-columns: 1fr; } .d-perf .d-tabw { grid-column: 1; grid-row: auto; } #d-svg svg { height: 200px; } }
     .planilha { background: var(--cartao); border: 1px solid var(--linha); border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 10px; align-items: center; justify-content: space-between; font-size: 14px; }
     .planilha .pl-bts { display: flex; gap: 8px; flex-wrap: wrap; }
     .planilha label.btn-am { font-weight: 700; border-radius: 10px; padding: 10px 16px; cursor: pointer; }
@@ -79,6 +100,13 @@
   </header>
   <main>
     <div class="aviso" id="explica">Estes são os pedidos da Multimóveis com vocês que estão <b>atrasados, vencem hoje/amanhã ou cuja nova data já passou</b> e ainda não têm uma nova data. Coloque a <b>nova data de entrega</b>, escolha o <b>motivo</b>: <b>salva sozinho</b> (aparece ✓ salvo). Para vários pedidos com a mesma data, marque os quadradinhos (ou "Selecionar todos") e use a barra amarela; ou use a planilha. Pode corrigir depois que salva de novo. Amanhã o pedido não aparece mais, a não ser que a nova data vença.</div>
+    <section class="desemp" id="desemp" hidden>
+      <div class="d-topo"><h2>📈 Desempenho de vocês</h2><span class="s">mesma conta que a Multimóveis usa para medir as transportadoras</span></div>
+      <div class="d-grade">
+        <div class="d-perf" id="d-perf"></div>
+        <div class="d-graf"><h3>Produtividade</h3><div class="s">Entregues por dia (linha), atrasados hoje (amarelo) e o que vence nos próximos dias (verde).</div><div id="d-svg"></div><div class="d-res" id="d-res"></div></div>
+      </div>
+    </section>
     <div class="planilha" id="planilha">
       <div><b>📊 Muitos pedidos?</b> Baixe a planilha, preencha as colunas <b>Nova data</b>, <b>Motivo</b> (e SKU / Observação) e suba de volta: salva tudo sozinho.</div>
       <div class="pl-bts"><button type="button" class="btn-cont" id="pl-baixar">⤓ Baixar planilha dos pedidos</button>
@@ -127,7 +155,7 @@
         itens = r.itens || []; hoje = r.hoje;
         $("titulo").textContent = `Retorno de entregas · ${r.nome}`;
         document.title = `Retorno de entregas · ${r.nome}`;
-        desenhar();
+        desenhar(); carregarDesempenho();
       } catch (e) { erro(e.message); }
     }
     function erro(msg) { $("sub").textContent = ""; $("explica").className = "aviso erro"; $("explica").textContent = msg; $("lista").innerHTML = ""; }
@@ -329,6 +357,45 @@
       desenhar();
       res.innerHTML = `<span class="r-ok">✓ ${ok} pedido(s) salvo(s) pela planilha.</span>${vazias ? ` <span class="s">${vazias} linha(s) sem data e motivo ficaram de fora.</span>` : ""}${erros.length ? `<ul>${erros.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}`;
     });
+
+    // desempenho (Brenda 26/11, parte 93): performance do mês (mês da criação) e gráfico de Produtividade, só números agregados
+    async function carregarDesempenho() {
+      let d; try { d = await rpc("link_desempenho", { p_token: token }); } catch (e) { return; }   // parte 93 não rodada: some o quadro
+      if (!d || !d.hoje) return;
+      const NM = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"], nomeM = (m) => `${NM[+m.slice(5) - 1]}/${m.slice(2, 4)}`;
+      const perf = (x) => { const den = x.ent_prazo + x.ent_atraso + x.ab_prazo + x.ab_atraso; return den ? (x.ent_prazo + x.ab_prazo) / den : null; };
+      const pct = (p) => (p == null ? "—" : (Math.round(p * 1000) / 10).toLocaleString("pt-BR") + "%"), cls = (p) => (p == null ? "" : p >= 0.97 ? "bom" : p >= 0.9 ? "medio" : "ruim");
+      const M = d.meses || [], atual = M.find((x) => x.mes === d.hoje.slice(0, 7)), pa = atual ? perf(atual) : null, n = (v) => Number(v || 0).toLocaleString("pt-BR");
+      $("d-perf").innerHTML = `<h3>Performance do mês (${nomeM(d.hoje.slice(0, 7))})</h3>
+        <div class="d-big ${cls(pa)}">${pct(pa)}</div>
+        <div class="s">(entregues no prazo + em aberto sem atraso) ÷ (entregues + em aberto), pedidos criados no mês, sem cancelados. Meta: 97%.</div>
+        <div class="d-tabw"><table class="d-tab"><thead><tr><th>Mês</th><th>Pedidos</th><th>Entregues no prazo</th><th>Entregues c/ atraso</th><th>Em aberto</th><th>Atrasados</th><th>Perf.</th></tr></thead>
+        <tbody>${M.slice().reverse().map((x) => `<tr><td>${nomeM(x.mes)}</td><td>${n(x.volume)}</td><td>${n(x.ent_prazo)}</td><td>${n(x.ent_atraso)}</td><td>${n(x.ab_prazo + x.ab_atraso)}</td><td>${n(x.ab_atraso)}</td><td><b class="${cls(perf(x))}">${pct(perf(x))}</b></td></tr>`).join("") || `<tr><td colspan="7">Sem pedidos nos últimos meses.</td></tr>`}</tbody></table></div>`;
+      // gráfico: 14 dias para trás (entregues) e 14 para frente (vencem), hoje com atrasados + vence hoje
+      const soma = (iso, k) => { const t = new Date(iso + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + k); return t.toISOString().slice(0, 10); };
+      const ddmm = (iso) => iso.slice(8, 10) + "/" + iso.slice(5, 7), E = d.entregues || {}, V = d.vencem || {}, hj = d.hoje;
+      const val = []; for (let i = -14; i <= 14; i++) { const dd = soma(hj, i); val.push({ d: dd, e: dd <= hj ? (E[dd] || [0])[0] : null, v: dd >= hj ? V[dd] || 0 : 0, a: dd === hj ? d.atrasados || 0 : 0 }); }
+      const max = Math.max(1, ...val.map((x) => Math.max(x.e || 0, x.v, x.a)));
+      const W = 1000, H = 260, pl = 40, pb = 40, pt = 20, cw = (W - pl - 10) / val.length, y = (k) => H - pb - (k / max) * (H - pb - pt);
+      let g = "";
+      for (let i = 0; i <= 4; i++) { const k = Math.round((max * i) / 4); g += `<line x1="${pl}" x2="${W - 10}" y1="${y(k)}" y2="${y(k)}" class="grade"/><text x="${pl - 6}" y="${y(k) + 4}" class="eixo" text-anchor="end">${n(k)}</text>`; }
+      val.forEach((x, i) => {
+        const cx = pl + i * cw + cw / 2, bw = Math.min(26, cw * 0.7);
+        if (x.d === hj) { const b2 = Math.min(18, cw * 0.42), xa = cx - b2 - 1, xv = cx + 1;
+          if (x.a) g += `<rect x="${xa}" y="${y(x.a)}" width="${b2}" height="${y(0) - y(x.a)}" fill="#f5b400" rx="2"><title>${n(x.a)} atrasados hoje</title></rect><text x="${xa + b2 / 2}" y="${y(x.a) - 5}" class="rot" text-anchor="middle">${n(x.a)}</text>`;
+          if (x.v) g += `<rect x="${xv}" y="${y(x.v)}" width="${b2}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${n(x.v)} vencem hoje</title></rect><text x="${xv + b2 / 2}" y="${y(x.v) - 5}" class="rot" text-anchor="middle">${n(x.v)}</text>`;
+        } else if (x.v) g += `<rect x="${cx - bw / 2}" y="${y(x.v)}" width="${bw}" height="${y(0) - y(x.v)}" fill="#16a34a" rx="2"><title>${ddmm(x.d)}: ${n(x.v)} vencem</title></rect><text x="${cx}" y="${y(x.v) - 5}" class="rot" text-anchor="middle">${n(x.v)}</text>`;
+        g += `<text x="${cx}" y="${H - pb + 16}" class="eixo${x.d === hj ? " hoje" : ""}" text-anchor="end" transform="rotate(-45 ${cx} ${H - pb + 16})">${ddmm(x.d)}</text>`;
+      });
+      const pts = val.map((x, i) => (x.e === null ? null : [pl + i * cw + cw / 2, y(x.e), x])).filter(Boolean);
+      g += `<polyline points="${pts.map((q) => q[0] + "," + q[1]).join(" ")}" class="linha-ent"/>`;
+      pts.forEach(([px, py, x]) => { g += `<circle cx="${px}" cy="${py}" r="3.5" class="ponto-ent"><title>${ddmm(x.d)}: ${n(x.e)} entregues</title></circle>${x.e ? `<text x="${px}" y="${py - 8}" class="rot" text-anchor="middle">${n(x.e)}</text>` : ""}`; });
+      $("d-svg").innerHTML = `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" role="img" aria-label="Entregas por dia e o que vence">${g}</svg>`;
+      const ult = Object.keys(E).filter((k) => k < hj).sort().pop();
+      $("d-res").innerHTML = (ult ? `<div>No último dia com entrega (<b>${ddmm(ult)}</b>) vocês entregaram <b>${n(E[ult][0])}</b> pedidos, dos quais <b>${n(E[ult][1])}</b> estavam atrasados.</div>` : "")
+        + `<div>Para hoje: <b>${n((d.atrasados || 0) + (V[hj] || 0))}</b> pedidos para entregar, ${n(d.atrasados)} já atrasados e ${n(V[hj] || 0)} vencendo hoje.</div>`;
+      $("desemp").hidden = false;
+    }
     $("lista").addEventListener("input", mexeu); $("lista").addEventListener("change", mexeu);
     $("busca").addEventListener("input", desenhar);
     $("cards").addEventListener("click", (e) => { const b = e.target.closest("[data-f]"); if (!b) return; filtro = filtro === b.dataset.f ? "" : b.dataset.f; desenhar(); });
