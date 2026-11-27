@@ -1463,3 +1463,7 @@ a.oc-link:hover { text-decoration: underline; }
 .lkk-tab .ruim { color: var(--vermelho); font-weight: 700; } .lkk-tab .bom { color: #1d7a43; font-weight: 700; }
 
 .tk .tk-fila { margin-top: 2px; padding-left: 10px; border-left: 2px solid #c8ced8; }
+
+/* item do menu que é link externo (Torre de Controle, 26/11) */
+a.menu-item.menu-link { text-decoration: none; display: flex; align-items: center; }
+a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }

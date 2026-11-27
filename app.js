@@ -138,9 +138,9 @@
   let acessoPag = null;
   const LIVRES = ["ajuda", "logins"];
   const podePag = (p) => !acessoPag || LIVRES.includes(p) || acessoPag.has(p);
-  const primeiraPag = () => { const b = [...document.querySelectorAll(".menu-lateral .menu-item")].find((x) => !x.classList.contains("sem-acesso") && x.dataset.pagina !== "logins" && getComputedStyle(x).display !== "none"); return b ? b.dataset.pagina : "ajuda"; };
+  const primeiraPag = () => { const b = [...document.querySelectorAll(".menu-lateral .menu-item")].find((x) => x.dataset.pagina && !x.classList.contains("sem-acesso") && x.dataset.pagina !== "logins" && getComputedStyle(x).display !== "none"); return b ? b.dataset.pagina : "ajuda"; };
   function aplicarAcesso() {
-    document.querySelectorAll(".menu-lateral .menu-item").forEach((b) => b.classList.toggle("sem-acesso", !podePag(b.dataset.pagina)));
+    document.querySelectorAll(".menu-lateral .menu-item[data-pagina]").forEach((b) => b.classList.toggle("sem-acesso", !podePag(b.dataset.pagina)));
   }
   async function lerAcesso() {
     acessoPag = null;
@@ -4268,7 +4268,7 @@ ${extra}
     window.scrollTo(0, 0);
   }
   document.querySelector(".menu-lateral").addEventListener("click", (e) => {
-    const b = e.target.closest(".menu-item"); if (!b) return;
+    const b = e.target.closest(".menu-item"); if (!b || !b.dataset.pagina) return;   // Torre de Controle é link externo (abre em aba nova)
     irPara(b.dataset.pagina);
     if (b.dataset.pagina === "sac" && perfil !== "sac") desenharSacLogistica();
     if (G_PAGINAS.includes(b.dataset.pagina)) montarGerencial();
