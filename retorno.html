@@ -39,6 +39,7 @@
     .ped.marcado { border-color: var(--azul); box-shadow: 0 0 0 1px var(--azul) inset; }
     .sel-todos { display: inline-flex; align-items: center; font-size: 14px; cursor: pointer; white-space: nowrap; }
     #massa { position: sticky; top: 0; z-index: 5; background: #fffbea; border: 1px solid var(--amarelo); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; box-shadow: 0 4px 14px rgba(15,31,61,.12); }
+    #massa[hidden], #massa [hidden] { display: none; }
     #massa b { font-size: 15px; }
     #massa input, #massa select { padding: 8px 10px; border: 1px solid #cfd6e2; border-radius: 8px; font-size: 15px; background: #fff; color: var(--texto); }
     #massa .m-obs { flex: 1; min-width: 160px; }
@@ -146,7 +147,7 @@
         const fs = feitos.get(x.pedido); chips.set(x.pedido, chip);
         return `<div class="ped${fs ? " salvo" : ""}${sel.has(x.pedido) ? " marcado" : ""}" data-p="${esc(x.pedido)}">
           <div><label><input type="checkbox" class="ck" aria-label="Selecionar"${sel.has(x.pedido) ? " checked" : ""}><b class="num">NF ${esc(x.nf || "—")}</b></label>${x.micro ? `<div class="s">${esc(x.micro)}</div>` : ""}${x.nf_repo ? `<div class="repo">Nota de reposição: ${esc(x.nf_repo)}${x.repo_tipo ? " · " + (/^parc/i.test(x.repo_tipo) ? "Parcial" : /^tot/i.test(x.repo_tipo) ? "Total" : esc(x.repo_tipo)) : ""}</div>` : ""}</div>
-          <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div><div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
+          <div><div>${esc([x.cidade, x.uf].filter(Boolean).join(" / ") || "—")}</div>${x.cep ? `<div class="s">CEP ${esc(String(x.cep).padStart(8, "0").replace(/^(\d{5})(\d{3})$/, "$1-$2"))}</div>` : ""}<div class="s">Prometido ${br(x.prometido)}</div>${x.nova_antiga ? `<div class="s">Data que vocês passaram: ${br(x.nova_antiga)} (já passou)</div>` : ""}</div>
           <div class="campos">
             <input type="date" class="dt" min="${hoje}" max="${maxData()}" value="${esc(ra.nova_data || "")}" aria-label="Nova data de entrega">
             <select class="mt" aria-label="Motivo"><option value="">Motivo…</option>${MOTIVOS.map((m) => `<option${ra.motivo === m ? " selected" : ""}>${m}</option>`).join("")}</select>
