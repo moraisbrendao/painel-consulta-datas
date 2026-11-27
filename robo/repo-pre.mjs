@@ -161,6 +161,13 @@ export async function volumesDoDialogo(p, linha, log) {
 }
 export async function diagRepoPre2({ log, ctx }) {
   const p = await entrarPortal(ctx, log); await abrirRepoPre(p, log);
+  const bts = await p.locator("xpath=//table/following::button").evaluateAll((es) => es.slice(0, 25).map((e) => [e.getAttribute("aria-label"), (e.innerText || "").trim(), e.disabled ? "off" : ""].filter(Boolean).join("/") || "(ícone)"));
+  log("Botões depois da tabela:", bts.map(mascara).join(" | "));
+  log("Texto do rodapé:", mascara(((await p.locator("xpath=//table/following::*[contains(.,'página') or contains(.,'Página') or contains(.,'de ')][1]").first().innerText().catch(() => "")) || "").slice(0, 100)));
+  // filtro Status → opções
+  const st = p.locator("button:has-text('Status')").first(); await st.click().catch(() => {}); await p.waitForTimeout(1200);
+  log("Opções do filtro Status:", (await p.locator("[role=option], [role=menuitemcheckbox], [role=menuitem], [cmdk-item]").allInnerTexts().catch(() => [])).map((t) => t.trim()).join(" | ") || "(nenhuma com role)");
+  await p.keyboard.press("Escape"); await p.waitForTimeout(500);
   const casos = await lerListaRepoPre(p, log);
   const cont = (f) => Object.entries(casos.reduce((a, c) => ((a[f(c)] = (a[f(c)] || 0) + 1), a), {})).map(([k, v]) => `${k}: ${v}`).join(" · ");
   log(`Lista: ${casos.length} linhas em ${Math.max(0, ...casos.map((c) => c.pagina))} página(s)`);
