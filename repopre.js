@@ -88,7 +88,7 @@
     return "marcar";
   };
   const CARDS = [["marcar", "Para analisar", "marque o volume e decida ✓ Repor ou ✗ Não repor", "amarelo"], ["pronto", "Pronto para solicitar", "aprovado: falta mandar o robô", "verde"],
-    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, sinistro, inversão, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["naorep", "Não repor", "decidido: não vai reposição", "vermelho"], ["saiu", "Saíram da lista", "não estão mais Novo no portal", ""], ["todos", "Todos", "", ""]];
+    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, sinistro, inversão, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["naorep", "Não repor", "decidido: não vai reposição", "vermelho"], ["todos", "Todos", "", ""]];
 
   // cadastro de volumes (parte 101): SKU → volume → número do volume e descrição
   let CAD = new Map();   // "sku|volume" e "volume" → { nro, total, descricao }
@@ -117,7 +117,8 @@
   setInterval(() => { if ($("rp-repopre").offsetParent && window.__sb) checarAndamento(); }, 15000);
   async function carregar() {
     const r = await sb().from("repo_pre").select("*").order("criado_em", { ascending: true });
-    if (r.error) { ok = false; L = []; } else { ok = true; L = r.data || []; }
+    // só o que está Novo no portal agora (Brenda 27/11); o histórico fica guardado no banco. Os que o robô está solicitando continuam até ele terminar.
+    if (r.error) { ok = false; L = []; } else { ok = true; L = (r.data || []).filter((x) => x.na_lista || x.solicitar_status === "pendente" || soComentario(x)); }
     await carregarCad();
     desenhar();
   }
@@ -332,7 +333,7 @@
   $("rpp-rodar").addEventListener("click", async () => {
     const r = await sb().rpc("rodar_robo_repopre"); if (r.error) return toast("Não consegui chamar o robô: " + r.error.message, true);
     toast("Robô chamado: em 1 a 2 minutos aparece \"analisando\" aqui em cima; quando terminar, os casos atualizam sozinhos.");
-    ANDA = "Robô chamado, começando…"; chamadoEm = Date.now(); desenhar();
+    ANDA = "Robô chamado, começando…"; chamadoEm = Date.now(); L = []; card = "marcar"; desenhar();   // zera os quadros; voltam quando o robô terminar (só os Novo)
   });
   $("rpp-excel").addEventListener("click", () => {
     if (!L.length) return toast("Nada para exportar.", true);

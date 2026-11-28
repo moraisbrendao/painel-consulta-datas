@@ -235,7 +235,8 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
   if (!(await aplicarNovo(p, log))) throw new Error("não achei o filtro Status = Novo no portal");
   const lista = await lerListaRepoPre(p, null);
   // todos os motivos (Falta de volumes, Avaria, Extravio, Inversão...) da matriz (Brenda 27/11)
-  const alvo = lista.filter((c) => SERIES.includes(String(c.nf || "").split("-")[1]?.trim()));
+  const alvo = lista.filter((c) => SERIES.includes(String(c.nf || "").split("-")[1]?.trim()) && (!c.status || /^\s*novo\s*$/i.test(c.status)));   // só status Novo (Brenda 27/11)
+  if (lista.some((c) => c.status && !/^\s*novo\s*$/i.test(c.status))) log(`  (${lista.filter((c) => c.status && !/^\s*novo\s*$/i.test(c.status)).length} linha(s) da lista não estavam Novo: ignoradas)`);
   log(`Portal: ${lista.length} reposições Novo · ${alvo.length} nas séries ${SERIES.join("/")} (${Object.entries(alvo.reduce((a, c) => ((a[c.motivo || "?"] = (a[c.motivo || "?"] || 0) + 1), a), {})).map(([k, v]) => k + " " + v).join(", ")})`);
   const jaTem = new Map((await chamar("repo_pre?select=nf,analisado_em,volumes,venda&limit=5000")).map((x) => [x.nf, x]));
   // quem saiu da lista (já virou ticket, cancelada ou mudou de status)
