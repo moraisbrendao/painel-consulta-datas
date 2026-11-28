@@ -3,6 +3,7 @@
 // Não guarda dados do cliente (nome, telefone, CPF, endereço) nem texto de comentários: só número da Nota AT e datas.
 // Log público: só contagens.
 const AT_RE = /assist|t[eé]cnic/i;
+const PAR = Number(process.env.TK360_PAR) || 15;   // chamadas ao mesmo tempo (a lista com 6 levava ~10 min)
 
 export async function rodarTk360({ chamar, log, ctx, limite = 3000 }) {
   const { entrarMulti360 } = await import("./multi360.mjs");
@@ -25,7 +26,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 3000 }) {
   const t0 = Date.now();
   const p1 = await get("/tickets?page=1"); const paginas = p1.total_pages || 1;
   const lista = [...(p1.tickets || [])];
-  await pool(Array.from({ length: paginas - 1 }, (_, k) => k + 2), 6, async (pg) => { try { lista.push(...((await get(`/tickets?page=${pg}`)).tickets || [])); } catch (e) { log(`  página falhou: ${e.message}`); } });
+  await pool(Array.from({ length: paginas - 1 }, (_, k) => k + 2), PAR, async (pg) => { try { lista.push(...((await get(`/tickets?page=${pg}`)).tickets || [])); } catch (e) { log(`  página falhou: ${e.message}`); } });
   const porId = new Map(lista.map((t) => [String(t.ticket_id), t]));
   log(`tk360: ${porId.size} tickets em aberto no 360 (${paginas} páginas, ${Math.round((Date.now() - t0) / 1000)} s)`);
   if (porId.size < (p1.count || 0) * 0.95) log(`  atenção: a API diz ${p1.count}, li ${porId.size}`);
@@ -47,7 +48,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 3000 }) {
   log(`tk360: ${fazer.length} para ler o detalhe agora (novos ou atualizados) · ${[...porId.keys()].filter((k) => !ja.has(k)).length} nunca vistos`);
   const linhas = [], tipos = {}; let erros = 0, at = 0, comNota = 0, comPecas = 0, comFrete = 0;
   const gravar = async (forcar) => { if (seco) { linhas.length = 0; return; } while (linhas.length >= (forcar ? 1 : 200)) { const b = linhas.splice(0, 200); await chamar("tk360", "POST", b, { Prefer: "resolution=merge-duplicates,return=minimal" }); } };
-  await pool(fazer, 6, async (t) => {
+  await pool(fazer, PAR, async (t) => {
     const id = String(t.ticket_id); const r = linhaLista(t);
     try {
       const d = await get(`/tickets/${id}`);
