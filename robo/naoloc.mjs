@@ -218,5 +218,5 @@ export async function diagFeitos({ chamar, log }) {
   const por = new Map(T.map((t) => [String(t.ticket_id), t]));
   L.forEach((x, i) => { const t = por.get(String(x.ticket));
     log(`  #${i + 1} ação ${x.acao} em ${x.acao_em} · 360 agora: ${t ? `${t.na_lista ? "aberto" : "fora da lista"} · fila ${t.fila} · status ${t.status || "-"} · atualizado ${t.atualizado}` : "não está no tk360"}`);
-    (t && Array.isArray(t.filas) ? t.filas.slice(-5) : []).forEach((h) => log(`       fila ${h.fila || h.id} desde ${h.desde}`)); });
+    (t && Array.isArray(t.filas) ? t.filas.slice(-5) : []).forEach((h) => log(`       fila ${typeof h.fila === "object" && h.fila ? (h.fila.label || h.fila.name || JSON.stringify(h.fila).slice(0, 80)) : h.fila || h.id} desde ${h.desde}`)); });
 }
