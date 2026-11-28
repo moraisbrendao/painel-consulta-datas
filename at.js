@@ -15,7 +15,13 @@
   const sem = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
   let T = [], ok = true, carregou = false, card = "acao", fTransp = "", fGrupo = "", fQuem = "", busca = "", pag = 1, DESC = new Map(), FR = [], FRn = new Map(), FRp = new Map();
-  const alvo = (x) => x.transp_envio || x.redesp_promob || x.transp_promob || "(sem transportadora)";
+  // um nome só por transportadora (Brenda 27/11: "une as duplicadas"): tira filial, Standard, Transportes… e junta VM com Tempo Justo
+  const NOMES = [[/jad\s*log/, "JadLog"], [/dominalog/, "Dominalog"], [/prolog/, "Prolog"], [/atual\s*cargas/, "Atual Cargas"], [/transiga/, "Transiga"], [/trans\s*sua/, "Trans Sua Log"],
+    [/^blz/, "BLZ"], [/aceville/, "Aceville"], [/vm\s*transp|tempo\s*justo/, "VM Transportes / Tempo Justo"], [/petrymar/, "Petrymar"], [/sajob/, "SAJOB"], [/bento/, "Bento Brasil"], [/transvanio/, "Transvanio"],
+    [/rapido\s*alem/, "Rápido Além Paraíba"], [/translovato/, "Translovato"], [/transito\s*brasil/, "Trânsito Brasil"], [/formato/, "Formato"], [/trilog/, "Trilog"], [/flog/, "Flog"], [/tsl/, "TSL"]];
+  const nomeTp = (t) => { const n = sem(t).trim(); if (!n) return ""; for (const [re, v] of NOMES) if (re.test(n)) return v;
+    return String(t).replace(/\s*-?\s*filial\s+\w+$/i, "").replace(/\s*-?\s*standard$/i, "").replace(/\s+(transportes?|log[ií]stica|ltda)$/i, "").trim(); };
+  const alvo = (x) => nomeTp(x.transp_envio || x.redesp_promob || x.transp_promob) || "(sem transportadora)";
   const entregue = (x) => /^entregue/i.test((x.rastreio && x.rastreio.situacao) || "");
   const dBR = (s) => { const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
   const entregaEm = (x) => (entregue(x) ? dBR(x.rastreio.data) : null);
@@ -157,7 +163,7 @@
     // custo da AT (Brenda 27/11): peças (valor no 360) + frete (Valor CTe da planilha de frete, parte 109)
     const vt = B.map(valorTk).filter((v) => v != null), tot = vt.reduce((a, b) => a + b, 0);
     const ft = B.map(freteTk).filter((v) => v != null), totF = ft.reduce((a, b) => a + b, 0);
-    const porTv = new Map(); B.forEach((x) => { const v = valorTk(x), fv = freteTk(x); if (v == null && fv == null) return; const t = (x._fr && x._fr[0] && x._fr[0].emitente) || alvo(x); if (!porTv.has(t)) porTv.set(t, { p: 0, f: 0, n: 0, nf: 0 }); const o = porTv.get(t); o.p += v || 0; if (fv != null) { o.f += fv; o.nf++; } o.n++; });
+    const porTv = new Map(); B.forEach((x) => { const v = valorTk(x), fv = freteTk(x); if (v == null && fv == null) return; const t = nomeTp(x._fr && x._fr[0] && x._fr[0].emitente) || alvo(x); if (!porTv.has(t)) porTv.set(t, { p: 0, f: 0, n: 0, nf: 0 }); const o = porTv.get(t); o.p += v || 0; if (fv != null) { o.f += fv; o.nf++; } o.n++; });
     const semLiga = FR.filter((f) => !T.some((x) => x._fr && x._fr.includes(f)));
     const cc = (r, v, s2) => `<div><span class="s">${r}</span><b>${v}</b><span class="s">${s2}</span></div>`;
     $("at-custo").innerHTML = (tem$ || FR.length) ? `<div class="at-custo-cards">${cc("Valor das peças", tem$ ? brl(tot) : "—", tem$ ? `${fmt(vt.length)} tickets com valor` : "aguardando o robô")}${cc("Frete das ATs", FR.length ? brl(totF) : "—", FR.length ? `${fmt(ft.length)} tickets com CT-e · ${fmt(FR.length)} CT-e na planilha` : "suba a planilha de frete (CT-e)")}${cc("Custo médio por ticket", brl((vt.length ? tot / vt.length : 0) + (ft.length ? totF / ft.length : 0)), "peças + frete")}</div>
@@ -223,7 +229,7 @@
     const B = T.filter(filtroBase);
     const tk = B.map((x) => ({ Ticket: x.ticket, Criado: br(x.criado_em), "Dias desde a criação": dias(x.criado_em), Situação: (CARDS.find((c) => c[0] === situacao(x).k) || [, situacao(x).k])[1], "Quem age": situacao(x).quem, "Próximo passo": situacao(x).passo, "Fila atual": x.fila, Grupo: x.grupo, "Nota do ticket": x.nota_ticket, "Pedido Intelipost": x.pedido,
       "Nota AT": x.nota_at, "Saída da Nota AT": br(x.data_saida), "Transportadora (envio AT)": alvo(x), "Rastreio": x.rastreio ? x.rastreio.situacao : "", "Último evento": x.rastreio ? [x.rastreio.evento, x.rastreio.data].filter(Boolean).join(" · ") : "",
-      "Peças (item × qtde)": (x.pecas || []).map((p) => `${p.peca || "?"}${p.qtde ? " ×" + p.qtde : ""}`).join("; "), "Produto (SKU)": [...new Set((x.pecas || []).map((p) => p.sku).filter(Boolean))].join(", "), "Valor das peças": valorTk(x), "Frete (Valor CTe)": freteTk(x), "Emissão da Nota AT": dataNota(x) ? br(dataNota(x)) : "", "Transportadora do CT-e": x._fr ? [...new Set(x._fr.map((f) => f.emitente))].join(", ") : "", "Na planilha": x.na_planilha ? "sim" : "não (fechado)" }));
+      "Peças (item × qtde)": (x.pecas || []).map((p) => `${p.peca || "?"}${p.qtde ? " ×" + p.qtde : ""}`).join("; "), "Produto (SKU)": [...new Set((x.pecas || []).map((p) => p.sku).filter(Boolean))].join(", "), "Valor das peças": valorTk(x), "Frete (Valor CTe)": freteTk(x), "Emissão da Nota AT": dataNota(x) ? br(dataNota(x)) : "", "Transportadora do CT-e": x._fr ? [...new Set(x._fr.map((f) => nomeTp(f.emitente)))].join(", ") : "", "Na planilha": x.na_planilha ? "sim" : "não (fechado)" }));
     const pc = new Map(); B.forEach((x) => (x.pecas || []).forEach((p) => { const k = (p.peca || "?").trim(); if (!pc.has(k)) pc.set(k, { "Item (peça)": k, sk: new Set(), tk: new Set(), Qtde: 0 }); const o = pc.get(k); o.tk.add(x.ticket); o.Qtde += Number(p.qtde) || 1; if (p.sku) o.sk.add(p.sku); }));
     const rk = [...pc.values()].sort((a, b) => b.tk.size - a.tk.size).map(({ tk: s2, sk, ...o }) => ({ ...o, "Produtos (SKU)": [...sk].join(", "), Tickets: s2.size }));
     const wb = XLSX.utils.book_new();
