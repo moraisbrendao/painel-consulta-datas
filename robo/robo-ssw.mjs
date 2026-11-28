@@ -1589,6 +1589,8 @@ if (MODO === "diag-volcad") {   // 28/11: o cadastro de volumes cobre os SKUs da
   for (const s of ["MP2405.811", "MP6039.678", "MP2391.811", "MP4385.156"]) log(`${s}: ${JSON.stringify(C.filter((c) => c.modelo === s).map((c) => [c.volume, c.nro, (c.descricao || "").slice(0, 40)]))}`);
   const amostra = await chamar("vol_cadastro?select=modelo,volume,nro&limit=5"); log(`amostra do cadastro: ${JSON.stringify(amostra)}`);
   const vsCad = new Set(C.map((c) => String(c.volume)));
+  try { const n = async (q) => { const r = await chamar(`tk360?select=ticket_id&${q}&limit=10000`); return r.length; };
+    log(`tk360: ${await n("na_lista=eq.true")} gravados · ${await n("detalhe_em=not.is.null")} com detalhe · ${await n("at=not.is.null")} AT · ${await n("detalhe_msg=not.is.null")} com erro`); } catch (e) { log("tk360: " + String(e.message).slice(0, 100)); }
   log(`volumes dos casos achados no cadastro: ${R.flatMap((x) => x.volumes || []).filter((v) => vsCad.has(String(v))).length} de ${R.flatMap((x) => x.volumes || []).length}`);
 }
 if (MODO === "diag-360at") {
