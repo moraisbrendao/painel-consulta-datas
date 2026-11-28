@@ -199,7 +199,9 @@ export async function rodarFechados({ chamar, log, ctx, hashes }) {
   const hh = (n) => createHash("sha256").update(String(n).split("-")[0].trim()).digest("hex").slice(0, 16);
   const quero = new Set(hashes);
   const nfs = new Map();
-  for (const tab of ["base_pedidos", "tk360"]) for (let de = 0; ; de += 1000) { const b = await chamar(`${tab}?select=nf&nf=not.is.null&order=nf&offset=${de}&limit=1000`).catch(() => []); for (const x of b) { const h = hh(x.nf); if (quero.has(h) && !nfs.has(h)) nfs.set(h, String(x.nf).trim()); } if (b.length < 1000) break; }
+  // 28/11: o banco às vezes dá tempo esgotado numa página; antes isso parava a leitura (só 38 de 891 achadas)
+  const pagina = async (tab, chave, de) => { for (let t = 0; t < 5; t++) { try { return await chamar(`${tab}?select=nf&order=${chave}&offset=${de}&limit=1000`); } catch (_) { await new Promise((ok) => setTimeout(ok, 3000 * (t + 1))); } } throw new Error(`não li ${tab} a partir de ${de}`); };
+  for (const [tab, chave] of [["base_pedidos", "pedido"], ["tk360", "ticket_id"]]) for (let de = 0; ; de += 1000) { const b = await pagina(tab, chave, de); for (const x of b) { if (!x.nf) continue; const h = hh(x.nf); if (quero.has(h) && !nfs.has(h)) nfs.set(h, String(x.nf).trim()); } if (b.length < 1000) break; }
   log(`fechados: ${quero.size} NFs pedidas · ${nfs.size} achadas na base`);
   const { entrarMulti360 } = await import("./multi360.mjs");
   let auth = null, raiz = null, origem = null;
