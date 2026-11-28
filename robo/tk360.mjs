@@ -2,7 +2,7 @@
 // Roda EM PARALELO ao upload do detalhamento: grava só na tabela tk360 (parte 110) e não mexe em at_tk nem nas outras.
 // Não guarda dados do cliente (nome, telefone, CPF, endereço) nem texto de comentários: só número da Nota AT e datas.
 // Log público: só contagens.
-const AT_RE = /assist|t[eé]cnic/i;
+const AT_RE = /assist|t[eé]cnic|reposi/i;   // AT e Reposições (Brenda 28/11: "para os outros pedidos também"): nota nova, peças/itens, transportadora, frete
 const PAR = Number(process.env.TK360_PAR) || 8;   // chamadas ao mesmo tempo (15 derrubava as chamadas)
 
 export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
@@ -39,7 +39,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   // 2) o que já temos
   const ja = new Map(); let seco = false;
   try { await chamar("tk360?select=ticket_id&limit=1"); } catch (_) { seco = true; limite = Math.min(limite, 40); log("tk360: a tabela tk360 ainda não existe (parte 110): rodo só um teste de leitura, sem gravar nada"); }
-  if (!seco) for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,atualizado,detalhe_em,tipo,na_lista,rastreio:at->rastreio,rastreio_em:at->>rastreio_em&order=ticket_id&offset=${de}&limit=1000`); b.forEach((x) => ja.set(String(x.ticket_id), x)); if (b.length < 1000) break; }
+  if (!seco) for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,atualizado,detalhe_em,tipo,na_lista,rastreio:at->rastreio,rastreio_em:at->>rastreio_em,at_lido:at->>lido&order=ticket_id&offset=${de}&limit=1000`); b.forEach((x) => ja.set(String(x.ticket_id), x)); if (b.length < 1000) break; }
 
   const agora = new Date().toISOString();
   const linhaLista = (t) => ({ ticket_id: Number(t.ticket_id), fila: t.queue && t.queue.name || null, fila_id: t.queue && t.queue.id || null, status: t.status && (t.status.label || t.status.value) || null,
@@ -53,11 +53,11 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   const idsAt = new Set(atTk.map((x) => String(x.ticket).replace(/\D/g, "")));
   const filasAt = new Set(atTk.map((x) => String(x.fila || "").trim().toLowerCase()).filter(Boolean));
   const ehFilaAt = (t) => { if (idsAt.has(String(t.ticket_id))) return 2; const f = String(t.queue && t.queue.name || "").trim().toLowerCase(); return /\(at\)|\bat\b|assist/i.test(f) ? 2 : filasAt.has(f) ? 1 : 0; };
-  const fazer = [...porId.values()].filter((t) => { const a = ja.get(String(t.ticket_id)); return !a || !a.detalhe_em || a.atualizado !== t.last_update_date; })
+  const fazer = [...porId.values()].filter((t) => { const a = ja.get(String(t.ticket_id)); return !a || !a.detalhe_em || a.atualizado !== t.last_update_date || (AT_RE.test(a.tipo || "") && !a.at_lido); })
     .sort((a, b) => (ehFilaAt(b) - ehFilaAt(a)) || ((ja.has(String(a.ticket_id)) ? 1 : 0) - (ja.has(String(b.ticket_id)) ? 1 : 0))).slice(0, limite);
   log(`tk360: ${fazer.filter((t) => ehFilaAt(t) === 2).length} deles de AT conhecidos (vão primeiro)`);
   log(`tk360: ${fazer.length} para ler o detalhe agora (novos ou atualizados) · ${[...porId.keys()].filter((k) => !ja.has(k)).length} nunca vistos`);
-  const linhas = [], tipos = {}; let erros = 0, at = 0, comNota = 0, comPecas = 0, comFrete = 0;
+  const linhas = [], tipos = {}, evGlobal = {}; let erros = 0, at = 0, comNota = 0, comPecas = 0, comFrete = 0;
   // o PostgREST exige as mesmas chaves em todas as linhas do lote
   const CHAVES = ["ticket_id", "fila", "fila_id", "status", "responsavel", "transp", "canal", "sub_canal", "nf", "pedido_mkt", "criado", "atualizado", "sla", "prioridade", "valor", "reposicao", "estornado", "na_lista", "visto_em",
     "tipo", "motivo", "grupo", "grupo_id", "redespacho", "carga", "datas", "pedido", "tags", "detalhe_em", "at", "detalhe_msg"];
@@ -77,9 +77,10 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
       if (AT_RE.test(r.tipo || "")) {
         at++;
         const [ev, cm] = await Promise.all([get(`/tickets/${id}/events`).catch(() => []), get(`/tickets/${id}/comments`).catch(() => ({}))]);
-        const A = {};
+        const A = { lido: agora }, tiposEv = {};
         for (const e of Array.isArray(ev) ? ev : []) {
-          const x = e.event || {};
+          const x = e.event || {}; tiposEv[e.type] = 1; evGlobal[`${/assist/i.test(r.tipo) ? "AT" : "REP"} ${e.type}`] = (evGlobal[`${/assist/i.test(r.tipo) ? "AT" : "REP"} ${e.type}`] || 0) + 1;
+          if (/reposi|replac|item|volume/i.test(e.type || "") && !A.itens_ev) { A.itens_ev = Object.keys(x).slice(0, 12); }
           if (e.type === "assistance-parts") { A.pecas = (x.parts || []).map((q) => ({ item: q.item ?? null, sku: q.sku ?? null, qtde: q.quantity ?? null, valor: q.price ?? null, peso: q.weight ?? null })); A.pecas_total = x.totals || null; A.pecas_em = e.datetime || null; }
           if (e.type === "assign_carrier_data") { A.transp = x.carrier_fantasy_name || x.carrier_name || null; A.frete = x.shipping_cost ?? null; A.previsao = x.delivery_estimate ?? null; A.transp_em = e.datetime || null; }
           if (e.type === "erp-order-emission") { A.pedido_erp = x.erp_order_id || null; A.pedido_erp_em = e.datetime || null; }
@@ -94,6 +95,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   await gravar(true);
 
   if (seco) { log(`tk360 (teste): ${fazer.length - erros} detalhes lidos · ${erros} com erro · ${at} de Assistência Técnica (${comNota} com Nota AT, ${comPecas} com peças, ${comFrete} com frete) · tipos: ${JSON.stringify(tipos)}`); return; }
+  if (Object.keys(evGlobal).length) log(`tipos de evento lidos: ${JSON.stringify(evGlobal)}`);
   // 4) quem não mudou: só confirma que continua em aberto (dados da lista)
   const iguais = [...porId.values()].filter((t) => !fazer.includes(t) && ja.has(String(t.ticket_id))).map(linhaLista);
   for (let i = 0; i < iguais.length; i += 500) await chamar("tk360", "POST", iguais.slice(i, i + 500), { Prefer: "resolution=merge-duplicates,return=minimal" });
@@ -104,7 +106,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
 
   // 6) comparação com o detalhamento (at_tk), só contagens: para saber quando dá para desligar o upload
   try {
-    const AT = []; for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,fila,at&na_lista=eq.true&at=not.is.null&offset=${de}&limit=1000`); AT.push(...b); if (b.length < 1000) break; }
+    const AT = []; for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,fila,at&na_lista=eq.true&at=not.is.null&tipo=ilike.*assist*&offset=${de}&limit=1000`); AT.push(...b); if (b.length < 1000) break; }
     const D = (await chamar("at_tk?select=ticket,fila,nota_at,data_saida&na_planilha=eq.true&limit=5000"));
     const mA = new Map(AT.map((x) => [String(x.ticket_id), x])), mD = new Map(D.map((x) => [String(x.ticket).replace(/\D/g, ""), x]));
     const ambos = [...mD.keys()].filter((k) => mA.has(k));
@@ -112,5 +114,14 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
     const filaIgual = ambos.filter((k) => (mD.get(k).fila || "").trim().toLowerCase() === (mA.get(k).fila || "").trim().toLowerCase()).length;
     log(`comparação AT: detalhamento ${mD.size} · API ${mA.size} · nos dois ${ambos.length} · só no detalhamento ${mD.size - ambos.length} · só na API ${mA.size - ambos.length} · Nota AT igual ${notaIgual}/${ambos.length} · fila igual ${filaIgual}/${ambos.length}`);
     await chamar("robo_estado", "POST", { nome: "tk360:comparacao", valor: { em: agora, detalhamento: mD.size, api: mA.size, ambos: ambos.length, nota_igual: notaIgual, fila_igual: filaIgual, abertos: porId.size } }, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {});
+    // Reposições: nota nova do 360 (comentário "NF x emitida") × NF EMITIDA PROMOB do detalhamento (tk_saida REP)
+    const RP = []; for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,fila,at&na_lista=eq.true&tipo=ilike.*reposi*&offset=${de}&limit=1000`); RP.push(...b); if (b.length < 1000) break; }
+    const SD = await chamar("tk_saida?select=ticket,nf_nova&origem=eq.REP&limit=20000").catch(() => []);
+    const mR = new Map(RP.map((x) => [String(x.ticket_id), x])), mS = new Map(SD.filter((x) => x.nf_nova).map((x) => [String(x.ticket).replace(/\D/g, ""), x]));
+    const ambR = [...mS.keys()].filter((k) => mR.has(k)), lidosR = RP.filter((x) => x.at).length;
+    const nNum = (v) => String(v || "").split("-")[0].replace(/\D/g, "").replace(/^0+/, "");
+    const notaR = ambR.filter((k) => nNum(mS.get(k).nf_nova) === nNum((mR.get(k).at || {}).nota_at)).length;
+    log(`comparação Reposições: abertas no 360 ${mR.size} (${lidosR} com detalhe lido, ${RP.filter((x) => x.at && x.at.nota_at).length} com NF nova) · detalhamento com NF nova ${mS.size} · nos dois ${ambR.length} · NF nova igual ${notaR}/${ambR.length}`);
+    await chamar("robo_estado", "POST", { nome: "tk360:comparacao_rep", valor: { em: agora, api: mR.size, lidos: lidosR, detalhamento: mS.size, ambos: ambR.length, nota_igual: notaR } }, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {});
   } catch (e) { log("comparação: " + String(e.message).slice(0, 120)); }
 }
