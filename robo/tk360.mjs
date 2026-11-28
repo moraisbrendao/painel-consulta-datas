@@ -172,7 +172,7 @@ export async function diag360Orders({ log, ctx, chamar }) {
   ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization) { auth = h.authorization; const u = new URL(q.url()); origem = u.origin; raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } });
   const p = await entrarMulti360(ctx, log); await p.waitForTimeout(6000); if (!auth) { await p.reload().catch(() => {}); await p.waitForTimeout(6000); }
   const get = async (url) => { const r = await ctx.request.get(url, { headers: { authorization: auth, accept: "application/json" }, timeout: 45000 }).catch(() => null); if (!r) return [0, null]; let j = null; try { j = await r.json(); } catch (_) {} return [r.status(), j]; };
-  const B = await chamar("base_pedidos?select=nf&nf=not.is.null&limit=5&offset=800");
+  const B = await chamar("tk360?select=nf&nf=not.is.null&tipo=ilike.*reposi*&limit=3");
   for (const b of B.slice(0, 3)) {
     const num = String(b.nf).split("-")[0].trim();
     for (const inv of [num, b.nf]) {
