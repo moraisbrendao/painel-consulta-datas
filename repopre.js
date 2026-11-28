@@ -36,6 +36,12 @@
   // ticket de Reposição já aberto no pedido (o robô não cria outro); em nota de reposição/AT só os mais novos que o de origem
   const REPEX = (x) => { const org = (x.tickets || []).find((t) => t.nota_de); return (x.tickets || []).filter((t) => t.id && !t.nota_de && /reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || "") && !/resolvid|encerrad|fechad/i.test(t.situacao || "") && (!org || +t.id > +org.id) && String(t.id) !== String(x.ticket_360 || "")); };
   const lkTk = (h) => h.replace(/#(\d{4,})/g, (_, n) => `<a href="https://appv2.360multi.com/tickets/${n}" target="_blank" rel="noopener noreferrer">#${n} ↗</a>`);   // 28/11: número de ticket vira link do 360
+  // 28/11 (Brenda): motivo Avaria mas a anotação fala em falta (ou o contrário) → confirmar com a TP
+  const PAL_FALTA = /\bfalt|n[aã]o (coletad|recebid|localizad|veio|vieram)|extravi|sem o volume/i;
+  const conflitoMot = (x) => { const m = MOT(x), an = (x.anotacoes || []).map((a) => a.texto).join(" ");
+    if (m === "avaria" && PAL_FALTA.test(an)) return "O motivo é AVARIA, mas a anotação da transportadora fala em FALTA. Confirmar com a transportadora: é falta ou avaria? (avaria = a foto é do volume avariado; falta = a foto mostra os volumes em posse e o resto é a falta)";
+    if (["falta", "extravio"].includes(m) && PAL_AVARIA.test(an)) return "O motivo é FALTA/EXTRAVIO, mas a anotação da transportadora fala em AVARIA. Confirmar com a transportadora: é falta ou avaria? (avaria = a foto é do volume avariado; falta = a foto mostra os volumes em posse)";
+    return ""; };
   const ultAnot = (x) => (x.anotacoes || []).slice(-1)[0] || null;
   // sugestão do robô para o caso (o que acha que falta fazer)
   function sugestao(x) {
@@ -46,6 +52,7 @@
     if (x.venda === false) return ["mao", "NF não achada como venda no 360: conferir à mão."];
     if (!vs.length) return ["aviso", "O robô não leu os volumes da NF: conferir no portal."];
     if (m === "inversao") return ["aviso", "Inversão: deixar a transportadora fazer a troca; se ela não fizer, seguimos com o envio. Conferir à mão."];
+    { const c = conflitoMot(x); if (c) return ["mao", c]; }
     if (m === "sinistro") return ["mao", "Sinistro: conferir o rastreio e o boletim/ocorrência com a transportadora antes de repor."];
     if (m === "avaria") {
       if (mk.length) return ["ok", `Avaria: repor o(s) volume(s) avariado(s) ${mk.map((v) => rotVol(x, v) + v).join(", ")}.`];
@@ -77,6 +84,7 @@
     if (x.solicitar_status === "erro") a.push(["erro", "Erro do portal na solicitação: " + String(x.solicitar_msg || "erro").replace(/^\[[^\]]*\]\s*/, "")]);
     if (x.venda === false) a.push(["mao", "NF não achada em 360 › Hub › Pedidos (não é venda?): conferir à mão"]);
     if (DEVOL(x)) a.push(["mao", "Tem ticket de devolução/cancelamento no 360: conferir à mão"]);
+    { const c = conflitoMot(x); if (c) a.push(["mao", "Falta ou avaria? " + c.split(". ")[0]]); }
     { const ja = REPEX(x); if (ja.length && x.solicitar_status !== "feito") a.push(["aviso", `Já existe ticket de Reposição no 360: ${ja.map((t) => "#" + t.id + (t.fila ? " (" + t.fila + ")" : "")).join(", ")}. O robô não cria outro.`]); }
     if (x.debito && x.debito.status === "faltando") a.push(["erro", "O ticket de Débitos Transportadores (Reposições) não abriu junto: criar pelo Ticket Paralelo no ticket " + (x.ticket_360 || "")]);
     const d = dBR(x.data_360); if (d && d < seisMeses()) a.push(["aviso", "Pedido com mais de 6 meses: conferir a numeração da NF"]);
@@ -116,6 +124,8 @@
     (r.data || []).forEach((c) => { const i = { nro: c.nro, total: tot[c.modelo], descricao: c.descricao, modelo: c.modelo }; CAD.set(c.modelo + "|" + vKey(c.volume), i); CAD.set(c.modelo + "|" + vKey(c.volume).split(".")[0], i); });
   }
   const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return null; };
+  const descCurta = (x, v) => { const d = String((infoVol(x, v) || {}).descricao || "").trim(); if (!d) return ""; const vid = /\bVID\b|VIDR|ESPELH|\bLAP\b|\d+\s*MM\b/i.test(d);
+    return ` <small class="rpp-vdesc">· ${vid ? "🪟 " : ""}${esc(d.length > 30 ? d.slice(0, 29) + "…" : d)}</small>`; };   // 28/11: descrição resumida ao lado do volume
   const rotVol = (x, v) => { const i = infoVol(x, v); return i && i.nro ? `Vol ${i.nro}/${(x.volumes || []).length || i.total} · ` : ""; };
   // robô rodando agora? (robo_estado andamento:repo-pre / repo-pre-solicitar, gravado pelo robô ao começar e terminar)
   let ANDA = "", chamadoEm = 0;
@@ -181,7 +191,7 @@
   }
   function caso(x) {
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);
-    const vols = [...(x.volumes || [])].sort((a, b) => ((infoVol(x, a) || {}).nro || 99) - ((infoVol(x, b) || {}).nro || 99)).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? (MOT(x) === "avaria" ? " avariado" : " posse") : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${esc((infoVol(x, v) || {}).descricao || "")} · ${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${rotVol(x, v)}${esc(v)}${posse.has(v) ? (MOT(x) === "avaria" ? " · avariado" : " · em posse") : ""}</button>`).join("")
+    const vols = [...(x.volumes || [])].sort((a, b) => ((infoVol(x, a) || {}).nro || 99) - ((infoVol(x, b) || {}).nro || 99)).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? (MOT(x) === "avaria" ? " avariado" : " posse") : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${esc((infoVol(x, v) || {}).descricao || "")} · ${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${rotVol(x, v)}${esc(v)}${descCurta(x, v)}${posse.has(v) ? (MOT(x) === "avaria" ? " · avariado" : " · em posse") : ""}</button>`).join("")
       || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket do portal (ele tenta de novo a cada análise)." : "Aguardando o robô."}</span>`;
     const fotos = (x.fotos || []).map((f, i) => `<div class="rpp-foto"><button type="button" class="rpp-baixa" data-rpp-baixa="${esc(f)}" data-nome="NF-${esc(x.nf)}-foto-${i + 1}" title="Clique para baixar a foto"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></button><a class="s" href="${esc(f)}" target="_blank" rel="noopener noreferrer">🔍 ampliar</a></div>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const org = (x.tickets || []).find((t) => t.nota_de);
@@ -259,7 +269,7 @@
     // avaria: NF com 1 volume só = ele é o avariado; senão a anotação que cita a peça (Brenda 28/11: o ✓ tem que aparecer quando a análise já diz qual é)
     const anV = MOT(x) !== "avaria" ? [] : (x.volumes || []).length === 1 ? [...x.volumes] : volsPorAnotacao(x);
     const anRot = (x.volumes || []).length === 1 ? "único volume da NF" : "pela anotação";
-    const ia = !rp.length && iaV.length ? iaV : null, an = !rp.length && !ia && anV.length && (anV.length < (x.volumes || []).length || (x.volumes || []).length === 1) ? anV : null;
+    const cf = !!conflitoMot(x), ia = !cf && !rp.length && iaV.length ? iaV : null, an = !cf && !rp.length && !ia && anV.length && (anV.length < (x.volumes || []).length || (x.volumes || []).length === 1) ? anV : null;
     const alvo = rp.length ? rp.map((v) => rotVol(x, v) + esc(v)).join(", ") : "";
     const sim = rp.length ? `<button type="button" class="btn verde" data-rpp-dec="sim" data-nf="${esc(x.nf)}">✓ Repor ${alvo}</button>`
       : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor ${(MOT(x) === "avaria" ? ia : (x.volumes || []).filter((v) => !ia.includes(v))).map((v) => rotVol(x, v) + esc(v)).join(", ") || "—"} (pela leitura da foto)</button>`

@@ -1612,3 +1612,4 @@ body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
 #rp-repopre.rpp-escuro .rpp-dia th, #rp-repopre.rpp-escuro .rpp-dia td { color: #e5e7eb; border-color: #1f2937; }
 #rp-repopre.rpp-escuro .cartao a { color: #93c5fd; }
 #rp-repopre.rpp-escuro .cartao select, #rp-repopre.rpp-escuro .cartao input[type=search] { background: #111827; color: #e5e7eb; border-color: #374151; }
+.rpp-vdesc { font-weight: 400; opacity: .8; font-size: 11.5px; }
