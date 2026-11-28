@@ -27,7 +27,11 @@
   const serieDe = (x) => String(x.serie || String(x.nf || "").split("-")[1] || "").replace(/^0+/, "");
   const dlogRev = (x) => serieDe(x) === "35" && x.rastreio && (/\bDLOG\b/i.test(x.rastreio.alvo || "") || (/\bDLOG\b/i.test(x.rastreio.transp || "") && !/^sem cte$/i.test(x.rastreio.situacao || "")));
   const SUG = { voltar_barrar: ["azul", "Voltar para o barrar"], entregue: ["verde", "Entregue → não barrado"], cancelar: ["vermelho", "Seguir para cancelamento"], aguardar: ["ambar", "Aguardando prazo"], manual: ["laranja", "Verificar à mão"] };
+  // 28/11 (Brenda: "tem coisa de dias anteriores na fila"): o robô mandou para o Barrar e o ticket VOLTOU para Nota não localizada
+  // (no Barrar marcaram "Sem Emissão em Sistema / Material Não Recebido" ou a transportadora disse que não recebeu). O robô não manda de novo.
+  const voltou = (x) => x.na_planilha && x.acao_status === "feito" && ["voltar_barrar", "entregue"].includes(x.acao) && info && info.enviado_em && Date.parse(info.enviado_em) > Date.parse(x.acao_em) + 36e5;
   const CARDS = [
+    ["voltou", "↩ Voltou do barrar", "rastreio tem CT-e, mas no barrar disseram que não recebeu: cobrar a transportadora", "vermelho", (x) => voltou(x)],
     ["fila", "Na fila", "notas da última planilha", "", (x) => x.na_planilha],
     ["voltar_barrar", "Voltar para o barrar", "está no rastreio", "azul", (x) => x.na_planilha && x.sugestao === "voltar_barrar"],
     ["entregue", "Entregue", "volta para o barrar como não barrado", "verde", (x) => x.na_planilha && x.sugestao === "entregue"],
@@ -54,6 +58,7 @@
   function acaoTxt(x) {
     if (!x.acao_status) return x.segurar ? `<span class="chip cinza">segurada</span>` : "";
     const nome = (SUG[x.acao] || [, x.acao])[1];
+    if (voltou(x)) return `<span class="chip vermelho">↩ Voltou do barrar</span><div class="s">mandei para o barrar em ${hora(x.acao_em)}, mas o ticket voltou para esta fila (no barrar: "Sem Emissão / Material Não Recebido"). O rastreio mostra CT-e: cobrar a transportadora. Não mando de novo.</div>`;
     if (x.acao_status === "feito") return `<span class="chip verde">✓ ${esc(nome)}</span><div class="s">${hora(x.acao_em)}</div>`;
     if (x.acao_status === "teste") return `<span class="chip cinza">teste · ${esc(nome)}</span><div class="s">preenchido e cancelado ${hora(x.acao_em)}</div>`;
     return `<span class="txt-vermelho">⚠ ${esc(x.acao_msg || "erro")}</span>`;
