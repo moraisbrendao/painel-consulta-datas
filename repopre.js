@@ -13,7 +13,7 @@
   const dBR = (s) => { const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
   const seisMeses = () => { const d = new Date(); d.setMonth(d.getMonth() - 6); return d.toISOString().slice(0, 10); };
 
-  let L = [], ok = true, card = "marcar", carregou = false;
+  let TODOS = [], L = [], ok = true, card = "marcar", carregou = false;
   const SEL = new Set();   // casos do Pronto para solicitar marcados para solicitar juntos
   // motivo (Brenda 27/11): Falta de volumes e Extravio = marcados estão COM a transportadora (repõe o resto);
   // Avaria = marcados são os AVARIADOS (repõe esses); Extravio com 1 volume só = extravio total; Inversão = conferir à mão
@@ -96,7 +96,7 @@
   let ENVIO = null;
   async function carregarCad() {
     try { const e = await sb().from("vol_cadastro").select("nro,produto,descricao").eq("modelo", "__ENVIO__").maybeSingle(); ENVIO = e.error ? null : e.data; } catch (_) { ENVIO = null; }
-    const skus = [...new Set(L.flatMap((x) => x.sku || []))]; CAD = new Map(); if (!skus.length) return;
+    const skus = [...new Set(TODOS.flatMap((x) => x.sku || []))]; CAD = new Map(); if (!skus.length) return;
     const r = await sb().from("vol_cadastro").select("modelo,volume,nro,descricao").in("modelo", skus).then((x) => x, () => ({ error: 1 })); if (r.error) return;
     const tot = {}; (r.data || []).forEach((c) => (tot[c.modelo] = Math.max(tot[c.modelo] || 0, c.nro || 0)));
     (r.data || []).forEach((c) => { const i = { nro: c.nro, total: tot[c.modelo], descricao: c.descricao, modelo: c.modelo }; CAD.set(c.modelo + "|" + vKey(c.volume), i); CAD.set(c.modelo + "|" + vKey(c.volume).split(".")[0], i); });
@@ -118,6 +118,7 @@
   async function carregar() {
     const r = await sb().from("repo_pre").select("*").order("criado_em", { ascending: true });
     // só o que está Novo no portal agora (Brenda 27/11); o histórico fica guardado no banco. Os que o robô está solicitando continuam até ele terminar.
+    TODOS = r.error ? [] : r.data || [];
     if (r.error) { ok = false; L = []; } else { ok = true; L = (r.data || []).filter((x) => x.na_lista || x.solicitar_status === "pendente" || soComentario(x)); }
     await carregarCad();
     desenhar();
@@ -145,8 +146,24 @@
     [...SEL].forEach((nf) => { if (!prontos.some((x) => x.nf === nf)) SEL.delete(nf); });
     const barra = card === "pronto" && prontos.length ? `<div class="rpp-selbar"><label><input type="checkbox" data-rpp-todos${SEL.size && SEL.size === prontos.length ? " checked" : ""}> Selecionar todos (${fmt(prontos.length)})</label>
       <button type="button" class="btn amarelo" data-rpp-sollote${SEL.size ? "" : " disabled"}>📤 Solicitar os ${fmt(SEL.size)} selecionado(s)</button><span class="s">Marque só os que você aprovou. O robô faz até 20 por vez.</span></div>` : "";
+    desenharHist();
     $("rpp-lista").innerHTML = barra + (V.map(caso).join("") || `<p class="vazio">Nenhum caso aqui.</p>`);
     $("rpp-lista").querySelectorAll("img[data-rpp-prrimg]").forEach(async (im) => { const u = await urlPrint(im.dataset.rppPrrimg); if (u) im.src = u; });
+  }
+  // quadro por dia do que o robô solicitou (Brenda 27/11, igual ao Barrar)
+  function desenharHist() {
+    const F = TODOS.filter((x) => x.solicitar_status === "feito" && x.feito_em).sort((a, b) => String(b.feito_em).localeCompare(String(a.feito_em)));
+    if (!F.length) { $("rpp-hist").innerHTML = `<p class="vazio">O robô ainda não solicitou nenhuma reposição.</p>`; return; }
+    const dia = (d) => new Date(d).toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "2-digit", year: "numeric" });
+    const G = new Map(); F.forEach((x) => { const k = new Date(x.feito_em).toLocaleDateString("sv-SE"); if (!G.has(k)) G.set(k, []); G.get(k).push(x); });
+    const hh = (d) => new Date(d).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+    $("rpp-hist").innerHTML = [...G.entries()].map(([k, xs], i) => {
+      const porT = Object.entries(xs.reduce((a, x) => ((a[x.transp || "—"] = (a[x.transp || "—"] || 0) + 1), a), {})).sort((a, b) => b[1] - a[1]).map(([t, n]) => `${esc(t)} ${n}`).join(" · ");
+      return `<details class="rpp-dia"${i === 0 ? " open" : ""}><summary><b>${esc(dia(xs[0].feito_em))}</b> · ${xs.length} reposição(ões) <span class="s">· ${porT}</span></summary>
+        <div class="tabela-rolagem"><table class="tabela"><thead><tr><th>Hora</th><th>NF</th><th>Motivo</th><th>Transportadora</th><th>Volumes repostos</th><th>Ticket 360</th><th>Aprovado por</th></tr></thead><tbody>
+        ${xs.map((x) => `<tr><td>${hh(x.feito_em)}</td><td><b>${esc(x.nf)}</b></td><td>${esc(x.motivo || "")}${TOTAL(x) ? " · total" : ""}</td><td>${esc(x.transp || "")}</td><td>${repor(x).map((v) => rotVol(x, v) + esc(v)).join(", ")}</td>
+          <td>${x.ticket_360 ? `<a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">${esc(x.ticket_360)} ↗</a>` : "—"}</td><td>${esc(String(x.solicitar_por || x.marcado_por || "").split("@")[0])}</td></tr>`).join("")}
+        </tbody></table></div></details>`; }).join("");
   }
   function caso(x) {
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);

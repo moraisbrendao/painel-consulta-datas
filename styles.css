@@ -1553,3 +1553,6 @@ body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
 .btn.verde[disabled] { opacity: .45; cursor: not-allowed; }
 .rpp-acao .chip.verm { background: #fde8e8; color: var(--vermelho); }
 .btn .btn-quando { display: block; font-size: 11px; font-weight: 500; opacity: .8; line-height: 1.2; margin-top: 1px; }
+.rpp-dia { border: 1px solid #e3e7ee; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; background: #fff; }
+.rpp-dia summary { cursor: pointer; font-size: 14px; }
+.rpp-dia table { margin-top: 8px; }
