@@ -380,3 +380,26 @@ export async function diag360Lista({ log, ctx }) {
     log(`${cam}: url ${new URL(p.url()).pathname} · títulos ${JSON.stringify((await p.locator("h1,h2,h3").allInnerTexts().catch(() => [])).map(ui).slice(0, 15))} · botões ${JSON.stringify([...new Set((await p.locator("button").allInnerTexts().catch(() => [])).map(ui).filter(Boolean))].slice(0, 20))}`);
     for (const [k, v] of api) log(`  API ${k} → ${v}`); }
 }
+
+// ===== diag-360api (27/11): parâmetros da API de tickets (filtros, paginação) e APIs da tela do ticket. Só formato. =====
+export async function diag360Api({ chamar, log, ctx }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  const vistos = [];
+  const mascaraQ = (u) => { try { const x = new URL(u); return x.pathname.replace(/\d{3,}/g, "#") + " ?" + [...x.searchParams.entries()].map(([k, v]) => `${k}=${/^\d{4,}$/.test(v) ? "#" : v.slice(0, 30)}`).join("&"); } catch (_) { return "?"; } };
+  ctx.on("response", async (r) => { if (!["xhr", "fetch"].includes(r.request().resourceType()) || !/backend\./.test(r.url())) return;
+    let info = ""; try { const j = await r.json(); const top = j && typeof j === "object" && !Array.isArray(j) ? Object.keys(j) : []; const a = Array.isArray(j) ? j : top.map((k) => j[k]).find(Array.isArray);
+      const meta = top.filter((k) => !Array.isArray(j[k]) && typeof j[k] !== "object").map((k) => `${k}=${String(j[k]).slice(0, 12)}`).join(" ");
+      const obj = top.filter((k) => j[k] && typeof j[k] === "object" && !Array.isArray(j[k])).map((k) => `${k}{${Object.keys(j[k]).slice(0, 25).join(",")}}`).join(" ");
+      info = `topo [${top.join(",")}] ${meta} ${obj.slice(0, 600)} ${a ? `· lista ${a.length}` + (a[0] && typeof a[0] === "object" ? ` campos ${Object.keys(a[0]).join(",")}` : "") : ""}`; } catch (_) {}
+    vistos.push(`${r.request().method()} ${mascaraQ(r.url())} → ${r.status()} ${info}`.replace(/\d{5,}/g, "#")); });
+  const p = await entrarMulti360(ctx, log); await p.waitForTimeout(5000);
+  const solta = (t) => { log(`== ${t}`); vistos.splice(0).filter((v) => /tickets|queue|group|history|timeline|chat|message|event|sla|piece|part|item/i.test(v)).forEach((v) => log("  " + v.slice(0, 1500))); };
+  solta("lista inicial");
+  // filtra pela fila Aguardando entrega (AT) e muda de página
+  const bq = p.getByRole("button", { name: /^\s*Aguardando entrega \(AT\)/ }).first(); if (await bq.count()) { await bq.click().catch(() => {}); await p.waitForTimeout(4000); } solta("clique na fila Aguardando entrega (AT)");
+  const prox = p.getByRole("button", { name: /next|pr[óo]xima|›|»/i }).first(); if (await prox.count()) { await prox.click().catch(() => {}); await p.waitForTimeout(3000); } solta("próxima página");
+  // um ticket de AT conhecido: telas Chat, Linha do tempo, Eventos
+  const t = (await chamar("at_tk?select=ticket&na_planilha=eq.true&limit=1"))[0];
+  if (t) { await p.goto(`https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}`, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(6000); solta("ticket aberto (chat)");
+    for (const aba of [/Linha do tempo/i, /Eventos/i]) { const b = p.getByText(aba).first(); if (await b.count()) { await b.click().catch(() => {}); await p.waitForTimeout(3500); } solta("aba " + aba.source); } }
+}
