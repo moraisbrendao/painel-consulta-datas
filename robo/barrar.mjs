@@ -4,17 +4,28 @@
 const PORTAL = "https://ccp.360multi.com";
 const mascara = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim();
 
-export async function entrarPortal(ctx, log) {
+// Brenda 28/11: o Barrar passa a usar o usuário do Eduardo (MULTI360_EMAIL_EDUARDO/SENHA) no portal e no 360
+export const CRED_EDU = () => (process.env.MULTI360_EMAIL_EDUARDO && process.env.MULTI360_SENHA_EDUARDO ? { email: process.env.MULTI360_EMAIL_EDUARDO, senha: process.env.MULTI360_SENHA_EDUARDO, nome: "Eduardo" } : undefined);
+export async function entrarPortal(ctx, log, cred) {
+  if (cred && cred.email && cred.senha) {
+    try { return await entrarPortalCom(ctx, log, cred.email, cred.senha, `usuário ${cred.nome || "informado"}`); }
+    catch (e) { log(`Login do portal com o usuário ${cred.nome || "informado"} falhou (${String(e.message).split("\n")[0].slice(0, 80)}): uso o login de antes`); }
+  }
   // login próprio do Barrar (segredos BARRAR_EMAIL/BARRAR_SENHA, ex.: o usuário da Brenda); senão o do robô de ocorrências
   const PORTAL_EMAIL = process.env.BARRAR_EMAIL || process.env.PORTAL_EMAIL, PORTAL_SENHA = process.env.BARRAR_EMAIL ? process.env.BARRAR_SENHA : process.env.PORTAL_SENHA;
   if (!PORTAL_EMAIL || !PORTAL_SENHA) throw new Error("Faltam os segredos do portal no GitHub.");
-  log(`Login do portal: ${process.env.BARRAR_EMAIL ? "BARRAR_EMAIL" : "PORTAL_EMAIL"}`);
+  return entrarPortalCom(ctx, log, PORTAL_EMAIL, PORTAL_SENHA, process.env.BARRAR_EMAIL ? "BARRAR_EMAIL" : "PORTAL_EMAIL");
+}
+async function entrarPortalCom(ctx, log, EMAIL, SENHA, nome) {
+  log(`Login do portal: ${nome}`);
   const p = await ctx.newPage(); p.setDefaultTimeout(30000);
-  await p.goto(`${PORTAL}/login`);
-  await p.locator("input[name=email]").fill(PORTAL_EMAIL);
-  await p.locator("input[name=password]").fill(PORTAL_SENHA);
-  await p.locator("form button[type=submit]").click();
-  await p.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 30000 });
+  try {
+    await p.goto(`${PORTAL}/login`);
+    await p.locator("input[name=email]").fill(EMAIL);
+    await p.locator("input[name=password]").fill(SENHA);
+    await p.locator("form button[type=submit]").click();
+    await p.waitForURL((u) => !u.pathname.startsWith("/login"), { timeout: 30000 });
+  } catch (e) { await p.close().catch(() => {}); throw e; }
   log("Entrei no portal.");
   return p;
 }
@@ -33,7 +44,7 @@ export async function abrirBarrar(p, log) {
 export async function diagBarrar4({ chamar, ctx, log }) {
   const L = await chamar(`barrar_entrega?select=nf&na_planilha=eq.true&portal_status=eq.erro&portal_msg=like.${encodeURIComponent("Nota não está mais*")}&limit=6`);
   log(`diag4: ${L.length} nota(s) com "não está na lista"`);
-  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
+  const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
   const m = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 60);
   const filtros = p.locator("input[placeholder^='Filtrar por nota']");
   log(`diag4: campos 'Filtrar por nota': ${await filtros.count()} · inputs: ${(await p.$$eval("input", (xs) => xs.map((i) => (i.placeholder || i.type).replace(/\d/g, "#")))).join(" | ")}`);
@@ -50,7 +61,7 @@ export async function diagBarrar4({ chamar, ctx, log }) {
   log("diag4 abas/botões:", abas.map(m).slice(0, 15).join(" | "));
 }
 export async function diagBarrar({ ctx, log }) {
-  const p = await entrarPortal(ctx, log);
+  const p = await entrarPortal(ctx, log, CRED_EDU());
   const menu = await p.evaluate(() => [...document.querySelectorAll("a[href]")].map((a) => `${(a.textContent || "").trim().slice(0, 30)} → ${a.getAttribute("href")}`).filter((x) => /barr/i.test(x)));
   log("Links com 'barr':", menu.map(mascara).join(" | ") || "nenhum");
   await abrirBarrar(p, log);
@@ -76,7 +87,7 @@ export async function diagBarrar({ ctx, log }) {
 
 // segunda parte do diagnóstico: modais (Anotações e ✗) e o Exportar — abre e fecha/cancela, não salva nada
 export async function diagBarrar2({ ctx, log }) {
-  const p = await entrarPortal(ctx, log);
+  const p = await entrarPortal(ctx, log, CRED_EDU());
   await abrirBarrar(p, log);
   const linha = p.locator("table tbody tr").first();
   const modal = async (rot) => {
@@ -270,8 +281,8 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
   if (!falta.length) return;
   await R.carregarSenhasDB();
   const M = await import("./multi360.mjs");
-  let m360 = null; try { m360 = await M.entrarMulti360(ctx, log); } catch (e) { log("barrar: não entrei no 360:", String(e.message).slice(0, 100)); }
-  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
+  let m360 = null; try { m360 = await M.entrarMulti360(ctx, log, CRED_EDU()); } catch (e) { log("barrar: não entrei no 360:", String(e.message).slice(0, 100)); }
+  const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1); let autoN = 0;
   for (const x of falta) {
     try {
@@ -312,7 +323,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
     const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio,portal_status,portal_msg&na_planilha=eq.true&decisao=in.(barrar,nao_barrar)&portal_status=not.is.null&or=(ticket_status.is.null,ticket_status.eq.erro)&limit=100");
     const alvo = L.filter((x) => x.portal_status === "feito" || /continua na lista/i.test(x.portal_msg || ""));
     log(`barrar-ticket: ${alvo.length} nota(s) para pôr os prints no ticket`);
-    const { baixarArquivo } = await import("./supa.mjs"); const M = await import("./multi360.mjs"); const m = alvo.length ? await M.entrarMulti360(ctx, log) : null;
+    const { baixarArquivo } = await import("./supa.mjs"); const M = await import("./multi360.mjs"); const m = alvo.length ? await M.entrarMulti360(ctx, log, CRED_EDU()) : null;
     let ok = 0, er = 0;
     for (const x of alvo) {
       try {
@@ -334,11 +345,11 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   L.splice(0, L.length, ...L.filter(pode));
   log(`barrar-portal: ${L.length} nota(s) aprovadas para o portal`);
   if (!L.length) return;
-  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
+  const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const { baixarArquivo } = await import("./supa.mjs");
   const M = await import("./multi360.mjs"); let m360 = null;
-  const comentar = async (x) => { if (!m360) m360 = await M.entrarMulti360(ctx2, log); return comentarTicket(x, m360, baixarArquivo, M, chamar); };
+  const comentar = async (x) => { if (!m360) m360 = await M.entrarMulti360(ctx2, log, CRED_EDU()); return comentarTicket(x, m360, baixarArquivo, M, chamar); };
   const ctx2 = ctx;
   const paraComentar = [];
   const grava = (nf, st, msg) => chamar(`barrar_entrega?nf=eq.${encodeURIComponent(nf)}`, "PATCH", { portal_status: st, portal_msg: msg, portal_em: new Date().toISOString() });
@@ -397,7 +408,7 @@ export async function diagBarrar3({ chamar, ctx, log }) {
   const [x] = await chamar("barrar_entrega?select=ticket&na_planilha=eq.true&ticket=not.is.null&order=ticket_criado.asc&limit=1");
   if (!x) { log("diag-barrar 3: nenhuma nota com ticket (envie a planilha no painel)"); return; }
   const M = await import("./multi360.mjs");
-  const cred = null;   // Multi360: o mesmo login já cadastrado (MULTI360_EMAIL/MULTI360_SENHA), a pedido da Brenda
+  const cred = CRED_EDU();   // Brenda 28/11: usuário do Eduardo
   const p = await M.entrarMulti360(ctx, log, cred);
   await M.diagComentario(p, x.ticket, log);
 }

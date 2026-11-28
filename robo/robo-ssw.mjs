@@ -1578,6 +1578,17 @@ if (MODO === "tk360") {   // tickets do 360 pela API, em paralelo ao detalhament
   catch (e) { log("tk360: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
+if (MODO === "diag-repoerro") {   // 28/11: por que a solicitação da Reposição pré deu erro (só a mensagem do robô, números mascarados)
+  const { createHash } = await import("node:crypto"); await entrarSupabase();
+  const R = await chamar("repo_pre?select=nf,motivo,transp,solicitar_status,solicitar_msg,solicitar_em,ticket_portal_ok,na_lista,venda,tem_devolucao,volumes,vol_posse,obs&solicitar_status=in.(erro,pendente)&limit=2000");
+  const h = (nf) => createHash("sha256").update(String(nf).split("-")[0].trim()).digest("hex").slice(0, 16);
+  log(`repo_pre: ${R.filter((x) => x.solicitar_status === "erro").length} com erro · ${R.filter((x) => x.solicitar_status === "pendente").length} pendentes`);
+  const g = {}; for (const x of R) { const k = `${x.solicitar_status} | ${String(x.solicitar_msg || "—").replace(/\d{3,}/g, "#")}`; (g[k] = g[k] || []).push(x); }
+  for (const [k, L] of Object.entries(g).sort((a, b) => b[1].length - a[1].length)) {
+    log(`${L.length}× ${k}`);
+    for (const x of L) log(`   h:${h(x.nf)} · série ${String(x.nf).split("-")[1] || "?"} · ${x.motivo || "—"} · ${x.transp || "—"} · em ${String(x.solicitar_em || "").slice(0, 16)} · portal_ok ${!!x.ticket_portal_ok} · na_lista ${x.na_lista} · venda ${x.venda} · dev ${!!x.tem_devolucao} · vols ${(x.volumes || []).length} posse ${(x.vol_posse || []).length} · obs ${String(x.obs || "").replace(/\d{3,}/g, "#").slice(0, 60)}`);
+  }
+}
 if (MODO === "diag-volcad") {   // 28/11: o cadastro de volumes cobre os SKUs da Reposição pré? (SKU e código de volume não são dados de cliente)
   await entrarSupabase();
   const R = await chamar("repo_pre?select=sku,volumes,motivo&na_lista=eq.true&limit=2000");
