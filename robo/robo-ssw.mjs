@@ -1570,6 +1570,19 @@ if (MODO === "at") {   // Assistência Técnica: peças no 360 + rastreio da Not
   catch (e) { log("at: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
+if (MODO === "diag-volcad") {   // 28/11: o cadastro de volumes cobre os SKUs da Reposição pré? (SKU e código de volume não são dados de cliente)
+  await entrarSupabase();
+  const R = await chamar("repo_pre?select=sku,volumes,motivo&na_lista=eq.true&limit=2000");
+  const skus = [...new Set(R.flatMap((x) => x.sku || []))];
+  const C = []; for (let i = 0; i < skus.length; i += 40) C.push(...(await chamar(`vol_cadastro?select=modelo,volume,nro,descricao&modelo=in.(${skus.slice(i, i + 40).map((s) => `"${encodeURIComponent(s)}"`).join(",")})`)));
+  const tot = await chamar("vol_cadastro?select=modelo&limit=1", "GET", null, { Prefer: "count=exact", Range: "0-0" }).catch(() => null);
+  log(`repo_pre: ${R.length} casos · ${skus.length} SKUs · no cadastro: ${new Set(C.map((c) => c.modelo)).size} SKUs, ${C.length} linhas`);
+  const semCad = skus.filter((s) => !C.some((c) => c.modelo === s)); log(`SKUs sem cadastro (até 15): ${semCad.slice(0, 15).join(", ")}`);
+  for (const s of ["MP2405.811", "MP6039.678", "MP2391.811", "MP4385.156"]) log(`${s}: ${JSON.stringify(C.filter((c) => c.modelo === s).map((c) => [c.volume, c.nro, (c.descricao || "").slice(0, 40)]))}`);
+  const amostra = await chamar("vol_cadastro?select=modelo,volume,nro&limit=5"); log(`amostra do cadastro: ${JSON.stringify(amostra)}`);
+  const vsCad = new Set(C.map((c) => String(c.volume)));
+  log(`volumes dos casos achados no cadastro: ${R.flatMap((x) => x.volumes || []).filter((v) => vsCad.has(String(v))).length} de ${R.flatMap((x) => x.volumes || []).length}`);
+}
 if (MODO === "diag-360at") {
   await entrarSupabase();
   const { chromium } = await import("playwright");
