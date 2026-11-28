@@ -93,7 +93,9 @@
   // cadastro de volumes (parte 101): SKU → volume → número do volume e descrição
   let CAD = new Map();   // "sku|volume" e "volume" → { nro, total, descricao }
   const vKey = (v) => String(v || "").trim().replace(/\.0+$/, "");
+  let ENVIO = null;
   async function carregarCad() {
+    try { const e = await sb().from("vol_cadastro").select("nro,produto,descricao").eq("modelo", "__ENVIO__").maybeSingle(); ENVIO = e.error ? null : e.data; } catch (_) { ENVIO = null; }
     const skus = [...new Set(L.flatMap((x) => x.sku || []))]; CAD = new Map(); if (!skus.length) return;
     const r = await sb().from("vol_cadastro").select("modelo,volume,nro,descricao").in("modelo", skus).then((x) => x, () => ({ error: 1 })); if (r.error) return;
     const tot = {}; (r.data || []).forEach((c) => (tot[c.modelo] = Math.max(tot[c.modelo] || 0, c.nro || 0)));
@@ -127,7 +129,7 @@
   function desenhar() {
     if (!ok) { $("rpp-info").textContent = "Para usar esta aba, rode a parte 97 no Supabase."; $("rpp-cards").innerHTML = $("rpp-lista").innerHTML = ""; return; }
     const ult = L.map((x) => x.analisado_em).filter(Boolean).sort().pop();
-    $("rpp-info").innerHTML = `${fmt(L.filter((x) => x.na_lista).length)} caso(s) na lista do portal · última análise do robô ${hora(ult)}`;
+    $("rpp-info").innerHTML = `${fmt(L.filter((x) => x.na_lista).length)} caso(s) na lista do portal · última análise do robô ${hora(ult)} · planilha de volumes: ${ENVIO ? `enviada ${hora(ENVIO.produto)} por ${esc(String(ENVIO.descricao || "").split(" · ")[0])} (${fmt(ENVIO.nro || 0)} volumes)` : `<b style="color:var(--vermelho)">ainda não enviada</b>`}`;
     // botão com ampulheta girando enquanto o robô roda (igual aos outros robôs, Brenda 27/11)
     const bt = $("rpp-rodar"); bt.classList.toggle("ag-validando", !!ANDA); bt.innerHTML = ANDA ? `<span class="ampulheta" aria-hidden="true">⏳</span> ${esc(ANDA)}` : "▶ Analisar agora";
     const n = (k) => L.filter((x) => (k === "todos" || sit(x) === k) && (!$("rpp-motivo").value || (x.motivo || "Falta de volumes") === $("rpp-motivo").value)).length;
@@ -318,6 +320,9 @@
       if (!linhas.length) throw new Error("planilha sem linhas");
       toast(`Enviando ${linhas.length} volumes…`);
       for (let i = 0; i < linhas.length; i += 1000) { const r = await sb().from("vol_cadastro").upsert(linhas.slice(i, i + 1000)); if (r.error) throw new Error(/vol_cadastro/.test(r.error.message) ? "Rode a parte 101 no Supabase." : r.error.message); }
+      // dia/hora do envio (Brenda 27/11): linha marcadora no próprio cadastro (sem SQL novo)
+      const email = ((await sb().auth.getUser()).data.user || {}).email || "";
+      await sb().from("vol_cadastro").upsert({ modelo: "__ENVIO__", volume: "planilha", nro: linhas.length, produto: new Date().toISOString(), descricao: (String(email).split("@")[0] + " · " + f.name).slice(0, 200), qtde: aba }).then(() => {}, () => {});
       toast(`Planilha de volumes enviada: ${linhas.length} volumes (aba ${aba}).`); carregar();
     } catch (err) { toast("Não consegui ler a planilha: " + (err.message || err), true); }
   });
