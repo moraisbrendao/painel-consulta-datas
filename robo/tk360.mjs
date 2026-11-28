@@ -180,7 +180,7 @@ export async function diag360Orders({ log, ctx, chamar }) {
       const lst = j && (j.orders || j.results || j.data || (Array.isArray(j) ? j : null));
       log(`  /orders?invoice=(${inv === num ? "só número" : "número-série"}): ${st} · chaves ${JSON.stringify(j && !Array.isArray(j) ? Object.keys(j) : "lista")} · itens ${lst ? lst.length : "?"} · campos ${JSON.stringify(Object.keys((lst || [])[0] || {})).slice(0, 500)}`);
       const o = (lst || [])[0]; if (!o) continue;
-      const id = o.id || o.order_id || o.uuid;
+      const id = o.anymarket_id || o.id || o.order_id;
       const [s2, t] = await get(`${raiz}/orders/${id}/tickets`);
       const tl = t && (t.tickets || t.results || (Array.isArray(t) ? t : null));
       log(`  /orders/<id>/tickets: ${s2} · chaves ${JSON.stringify(t && !Array.isArray(t) ? Object.keys(t) : "lista")} · tickets ${tl ? tl.length : "?"} · campos ${JSON.stringify(Object.keys((tl || [])[0] || {})).slice(0, 500)} · status ${JSON.stringify([...new Set((tl || []).map((x) => JSON.stringify(x.status).replace(/\d{3,}/g, "#")))]).slice(0, 300)}`);
