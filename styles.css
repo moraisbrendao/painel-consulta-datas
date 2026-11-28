@@ -1542,3 +1542,7 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 #rp-at .at-lista-box thead th { position: sticky; top: 0; z-index: 1; }
 .rpp-rodando { display: inline-flex; align-items: center; gap: 6px; color: #0e7fc0; font-weight: 700; }
 .rpp-rodando .pisca { width: 8px; height: 8px; border-radius: 50%; background: #2f80ed; animation: robo-pisca 1.2s ease-in-out infinite; }
+/* fundo escuro: títulos das abas internas da Reposição (Reposição pré, Inversão…) também claros */
+body.fundo-escuro #pagina-reposicao .titulo-pagina h1, body.fundo-escuro #pagina-reposicao .titulo-pagina h2,
+body.fundo-escuro #pagina-reposicao .titulo-pagina .sub, body.fundo-escuro #pagina-reposicao .titulo-pagina .info-base { color: #e8edf7; }
+body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
