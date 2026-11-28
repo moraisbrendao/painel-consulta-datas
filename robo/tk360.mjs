@@ -3,20 +3,25 @@
 // Não guarda dados do cliente (nome, telefone, CPF, endereço) nem texto de comentários: só número da Nota AT e datas.
 // Log público: só contagens.
 const AT_RE = /assist|t[eé]cnic/i;
-const PAR = Number(process.env.TK360_PAR) || 15;   // chamadas ao mesmo tempo (a lista com 6 levava ~10 min)
+const PAR = Number(process.env.TK360_PAR) || 8;   // chamadas ao mesmo tempo (15 derrubava as chamadas)
 
-export async function rodarTk360({ chamar, log, ctx, limite = 3000 }) {
+export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   const { entrarMulti360 } = await import("./multi360.mjs");
   let auth = null, raiz = null;
   ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization) { auth = h.authorization; const u = new URL(q.url()); raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } });
   const p = await entrarMulti360(ctx, log); await p.waitForTimeout(6000);
   if (!auth) { await p.reload().catch(() => {}); await p.waitForTimeout(6000); }
   if (!auth) throw new Error("não peguei o acesso da API do 360");
+  // token novo quando o 360 devolve 401: um só recarregamento para todas as chamadas (antes zerava o token e todas falhavam)
+  let renovando = null, primeiroErro = "";
+  const renovar = () => renovando || (renovando = (async () => { const antes = auth; await p.reload().catch(() => {}); for (let k = 0; k < 30 && auth === antes; k++) await p.waitForTimeout(500); renovando = null; })());
   const get = async (cam, tent = 0) => {
-    const r = await ctx.request.get(raiz + cam, { headers: { authorization: auth, accept: "application/json" }, timeout: 30000 }).catch((e) => ({ status: () => 0, e }));
-    const st = r.status();
-    if (st === 401 && tent < 2) { auth = null; await p.reload().catch(() => {}); await p.waitForTimeout(5000); return get(cam, tent + 1); }
-    if ((st === 0 || st === 429 || st >= 500) && tent < 3) { await new Promise((ok) => setTimeout(ok, 2000 * (tent + 1))); return get(cam, tent + 1); }
+    if (renovando) await renovando;
+    let st = 0;
+    const r = await ctx.request.get(raiz + cam, { headers: { authorization: auth, accept: "application/json" }, timeout: 45000 }).catch((e) => { if (!primeiroErro) primeiroErro = String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 140); return null; });
+    if (r) st = r.status();
+    if (st === 401 && tent < 3) { await renovar(); return get(cam, tent + 1); }
+    if ((st === 0 || st === 429 || st >= 500) && tent < 4) { await new Promise((ok) => setTimeout(ok, 3000 * (tent + 1))); return get(cam, tent + 1); }
     if (st !== 200) throw new Error(`API ${st}`);
     return r.json();
   };
@@ -43,8 +48,12 @@ export async function rodarTk360({ chamar, log, ctx, limite = 3000 }) {
     sla: t.sla || null, prioridade: t.priority || null, valor: t.total_value ?? null, reposicao: t.reposition ?? null, estornado: t.refunded_order ?? null, na_lista: true, visto_em: agora });
 
   // 3) detalhe só de quem é novo ou mudou (limite por rodada; o resto fica para a próxima)
+  // AT primeiro: filas que o detalhamento de AT já mostrou + filas com "(AT)"/assistência no nome; o resto vai entrando aos poucos
+  const filasAt = new Set((await chamar("at_tk?select=fila&na_planilha=eq.true&limit=5000").catch(() => [])).map((x) => String(x.fila || "").trim().toLowerCase()).filter(Boolean));
+  const ehFilaAt = (t) => { const f = String(t.queue && t.queue.name || "").trim().toLowerCase(); return filasAt.has(f) || /\(at\)|\bat\b|assist/i.test(f); };
   const fazer = [...porId.values()].filter((t) => { const a = ja.get(String(t.ticket_id)); return !a || !a.detalhe_em || a.atualizado !== t.last_update_date; })
-    .sort((a, b) => (ja.has(String(a.ticket_id)) ? 1 : 0) - (ja.has(String(b.ticket_id)) ? 1 : 0)).slice(0, limite);
+    .sort((a, b) => (ehFilaAt(b) - ehFilaAt(a)) || ((ja.has(String(a.ticket_id)) ? 1 : 0) - (ja.has(String(b.ticket_id)) ? 1 : 0))).slice(0, limite);
+  log(`tk360: ${fazer.filter(ehFilaAt).length} deles em filas de AT (vão primeiro)`);
   log(`tk360: ${fazer.length} para ler o detalhe agora (novos ou atualizados) · ${[...porId.keys()].filter((k) => !ja.has(k)).length} nunca vistos`);
   const linhas = [], tipos = {}; let erros = 0, at = 0, comNota = 0, comPecas = 0, comFrete = 0;
   const gravar = async (forcar) => { if (seco) { linhas.length = 0; return; } while (linhas.length >= (forcar ? 1 : 200)) { const b = linhas.splice(0, 200); await chamar("tk360", "POST", b, { Prefer: "resolution=merge-duplicates,return=minimal" }); } };
@@ -84,7 +93,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 3000 }) {
   // 5) quem sumiu da lista do 360 = resolvido/encerrado
   const sairam = [...ja.entries()].filter(([k, x]) => x.na_lista && !porId.has(k)).map(([k]) => k);
   for (let i = 0; i < sairam.length; i += 100) await chamar(`tk360?ticket_id=in.(${sairam.slice(i, i + 100).join(",")})`, "PATCH", { na_lista: false, saiu_em: agora });
-  log(`tk360: ${fazer.length - erros} detalhes lidos · ${erros} com erro · ${at} de Assistência Técnica (${comNota} com Nota AT, ${comPecas} com peças, ${comFrete} com frete) · ${sairam.length} saíram da lista (fechados)`);
+  log(`tk360: ${fazer.length - erros} detalhes lidos · ${erros} com erro${primeiroErro ? ` (1º erro: ${primeiroErro})` : ""} · ${at} de Assistência Técnica (${comNota} com Nota AT, ${comPecas} com peças, ${comFrete} com frete) · ${sairam.length} saíram da lista (fechados)`);
 
   // 6) comparação com o detalhamento (at_tk), só contagens: para saber quando dá para desligar o upload
   try {
