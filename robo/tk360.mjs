@@ -29,6 +29,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
 
   // 1) lista de todos os tickets em aberto (20 por página)
   const t0 = Date.now();
+  const FILAS = new Map(); try { (await get("/parameters/queues")).forEach((q) => FILAS.set(String(q.id), q.label || q.name || q.value)); } catch (_) {}
   const p1 = await get("/tickets?page=1"); const paginas = p1.total_pages || 1;
   const lista = [...(p1.tickets || [])];
   await pool(Array.from({ length: paginas - 1 }, (_, k) => k + 2), PAR, async (pg) => { try { lista.push(...((await get(`/tickets?page=${pg}`)).tickets || [])); } catch (e) { log(`  página falhou: ${e.message}`); } });
@@ -39,7 +40,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   // 2) o que já temos
   const ja = new Map(); let seco = false;
   try { await chamar("tk360?select=ticket_id&limit=1"); } catch (_) { seco = true; limite = Math.min(limite, 40); log("tk360: a tabela tk360 ainda não existe (parte 110): rodo só um teste de leitura, sem gravar nada"); }
-  if (!seco) for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,atualizado,detalhe_em,tipo,na_lista,rastreio:at->rastreio,rastreio_em:at->>rastreio_em,at_lido:at->>lido&order=ticket_id&offset=${de}&limit=1000`); b.forEach((x) => ja.set(String(x.ticket_id), x)); if (b.length < 1000) break; }
+  if (!seco) for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,atualizado,detalhe_em,tipo,na_lista,rastreio:at->rastreio,rastreio_em:at->>rastreio_em,at_lido:at->>lido,tem_hist:datas->>filas&order=ticket_id&offset=${de}&limit=1000`); b.forEach((x) => ja.set(String(x.ticket_id), x)); if (b.length < 1000) break; }
 
   const agora = new Date().toISOString();
   const linhaLista = (t) => ({ ticket_id: Number(t.ticket_id), fila: t.queue && t.queue.name || null, fila_id: t.queue && t.queue.id || null, status: t.status && (t.status.label || t.status.value) || null,
@@ -53,7 +54,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   const idsAt = new Set(atTk.map((x) => String(x.ticket).replace(/\D/g, "")));
   const filasAt = new Set(atTk.map((x) => String(x.fila || "").trim().toLowerCase()).filter(Boolean));
   const ehFilaAt = (t) => { if (idsAt.has(String(t.ticket_id))) return 2; const f = String(t.queue && t.queue.name || "").trim().toLowerCase(); return /\(at\)|\bat\b|assist/i.test(f) ? 2 : filasAt.has(f) ? 1 : 0; };
-  const fazer = [...porId.values()].filter((t) => { const a = ja.get(String(t.ticket_id)); return !a || !a.detalhe_em || a.atualizado !== t.last_update_date || (AT_RE.test(a.tipo || "") && !a.at_lido); })
+  const fazer = [...porId.values()].filter((t) => { const a = ja.get(String(t.ticket_id)); return !a || !a.detalhe_em || a.atualizado !== t.last_update_date || (AT_RE.test(a.tipo || "") && !a.at_lido) || a.tem_hist == null; })
     .sort((a, b) => (ehFilaAt(b) - ehFilaAt(a)) || ((ja.has(String(a.ticket_id)) ? 1 : 0) - (ja.has(String(b.ticket_id)) ? 1 : 0))).slice(0, limite);
   log(`tk360: ${fazer.filter((t) => ehFilaAt(t) === 2).length} deles de AT conhecidos (vão primeiro)`);
   log(`tk360: ${fazer.length} para ler o detalhe agora (novos ou atualizados) · ${[...porId.keys()].filter((k) => !ja.has(k)).length} nunca vistos`);
@@ -66,10 +67,14 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   await pool(fazer, PAR, async (t) => {
     const id = String(t.ticket_id); const r = linhaLista(t);
     try {
-      const d = await get(`/tickets/${id}`);
+      const [d, tl, sl] = await Promise.all([get(`/tickets/${id}`), get(`/tickets/${id}/timeline`).catch(() => []), get(`/tickets/ticket-sla/${id}`).catch(() => null)]);
+      // histórico de filas (Brenda 28/11): a timeline traz uma "versão" do ticket a cada mudança, com queue_id e a data
+      const hist = []; for (const v of (Array.isArray(tl) ? tl : []).filter((v) => v.queue_id != null).sort((a, b) => String(a.ticket_update_date || a.ticket_created_date || "").localeCompare(String(b.ticket_update_date || b.ticket_created_date || "")))) {
+        const q = v.queue_id, quando = v.ticket_update_date || v.ticket_created_date || null; if (!hist.length || hist[hist.length - 1].id !== q) hist.push({ id: q, fila: FILAS.get(String(q)) || null, desde: quando }); }
+      const sla = sl && !Array.isArray(sl) ? { inicio: sl.start_at || null, prazo: sl.sla_deadline || null, horas: sl.sla_hours ?? null, restantes: sl.horas_restantes ?? null, status: sl.sla_status || null, fim: sl.end_at || null } : null;
       const o = d.order || {}, c = d.carrier || {}, ca = c.carrier || {};
       Object.assign(r, { tipo: d.type && d.type.name || null, motivo: d.reason && d.reason.name || null, grupo: d.group && d.group.name || null, grupo_id: d.group && d.group.id || null,
-        transp: ca.label || r.transp, redespacho: c.redispatch_carrier && c.redispatch_carrier.label || null, carga: c.load_number || null, datas: d.dates || null,
+        transp: ca.label || r.transp, redespacho: c.redispatch_carrier && c.redispatch_carrier.label || null, carga: c.load_number || null, datas: { ...(d.dates || {}), filas: hist, sla },
         pedido: { chave: o.access_key || null, anymarket: o.anymarket_id || null, promob: o.promob_order || null, nf: o.invoice || null, canal: o.channel || null, sub_canal: o.sub_channel || null,
           frete: o.freight ?? null, bruto: o.gross_value ?? null, total: o.total_value ?? null, desconto: o.discount ?? null, fulfillment: o.is_fulfillment ?? null, mkt: o.marketplace_number || null },
         tags: d.tags && Object.keys(d.tags).length ? d.tags : null, detalhe_em: agora });
