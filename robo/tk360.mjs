@@ -130,3 +130,27 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
     await chamar("robo_estado", "POST", { nome: "tk360:comparacao_rep", valor: { em: agora, api: mR.size, lidos: lidosR, detalhamento: mS.size, ambos: ambR.length, nota_igual: notaR } }, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {});
   } catch (e) { log("comparação: " + String(e.message).slice(0, 120)); }
 }
+
+// diag (28/11): a API do 360 filtra tickets fechados / por NF? Só contagens e nomes de campos no log.
+export async function diag360Fechados({ log, ctx, chamar }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  let auth = null, raiz = null; const vistos = new Set();
+  ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url())) { const u = new URL(q.url()); vistos.add(u.pathname.replace(/\d{3,}/g, "#") + (u.search ? "?" + [...u.searchParams.keys()].join("&") : "")); if (/\/tickets/.test(q.url()) && h.authorization) { auth = h.authorization; raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } } });
+  const p = await entrarMulti360(ctx, log); await p.waitForTimeout(6000);
+  if (!auth) { await p.reload().catch(() => {}); await p.waitForTimeout(6000); }
+  if (!auth) return log("diag-360fech: sem acesso");
+  const get = async (cam) => { const r = await ctx.request.get(raiz + cam, { headers: { authorization: auth, accept: "application/json" }, timeout: 45000 }).catch(() => null); if (!r) return [0, null]; let j = null; try { j = await r.json(); } catch (_) {} return [r.status(), j]; };
+  const resumo = (j) => !j ? "—" : Array.isArray(j) ? `lista ${j.length} · ${JSON.stringify(j.slice(0, 6).map((x) => x && (x.label || x.name || x.value || x.id))).slice(0, 200)}` : `count ${j.count ?? "?"} · páginas ${j.total_pages ?? "?"} · status ${JSON.stringify([...new Set((j.tickets || []).map((t) => t.status && (t.status.label || t.status.value)))])}`;
+  for (const c of ["/parameters/status", "/parameters/statuses", "/parameters/ticket-status", "/parameters/tickets-status", "/parameters"]) { const [st, j] = await get(c); log(`  ${c}: ${st} ${st === 200 ? resumo(j) : ""}`); }
+  const [, p1] = await get("/tickets?page=1"); log(`  /tickets?page=1: ${resumo(p1)} · campos do ticket ${JSON.stringify(Object.keys((p1 && p1.tickets || [])[0] || {})).slice(0, 400)}`);
+  const ex = (p1 && p1.tickets || [])[0] || {}; const nf = ex.erp_invoice_number;
+  for (const q of ["status=closed", "status=fechado", "status=Fechado", "status=4", "status=5", "status_id=4", "status_id=5", "situation=closed", "closed=true", "all=true", "include_closed=true", "status=all", "status[]=closed",
+    ...(nf ? [`erp_invoice_number=${nf}`, `invoice=${nf}`, `nf=${nf}`, `search=${nf}`, `q=${nf}`] : [])]) {
+    const [st, j] = await get("/tickets?page=1&" + q); log(`  /tickets?…&${q.replace(/\d{4,}/g, "#")}: ${st} ${st === 200 ? resumo(j) : ""}`);
+  }
+  // o próprio site: abre a lista de tickets e mostra quais parâmetros ele usa
+  await p.goto("https://appv2.360multi.com/tickets", { waitUntil: "domcontentloaded" }).catch(() => {}); await p.waitForTimeout(8000);
+  const bts = (await p.locator("button").allInnerTexts().catch(() => [])).map((t) => t.trim()).filter((t) => t && t.length < 30);
+  log(`  botões da lista de tickets: ${JSON.stringify([...new Set(bts)]).slice(0, 400)}`);
+  log(`  chamadas do site: ${JSON.stringify([...vistos]).slice(0, 800)}`);
+}
