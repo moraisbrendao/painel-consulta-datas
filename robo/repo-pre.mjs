@@ -400,9 +400,15 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
   if (teste) { log(`  TESTE: volumes selecionados ${marcados.length}; NÃO cliquei em Adicionar`); await p.keyboard.press("Escape"); await p.waitForTimeout(600); if (await p.locator("[role=dialog]").count()) await d.getByRole("button", { name: /cancelar|fechar/i }).first().click().catch(() => {}); return { teste: true }; }
   await clicar(d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first(), "botão Adicionar");
   // 27/11: o ticket foi criado mas o aviso sumiu antes de o robô ler; a janela fechar sozinha também conta como criado
-  for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); const b = (await p.locator("body").innerText().catch(() => "")) || ""; if (/ticket criado com sucesso|criad[oa] com sucesso|sucesso/i.test(b)) return { ok: true };
+  for (let i = 0; i < 30; i++) { await p.waitForTimeout(1000); const b = (await p.locator("body").innerText().catch(() => "")) || ""; if (/ticket criado com sucesso|criad[oa] com sucesso|sucesso/i.test(b)) return { ok: true };
     if (!(await d.count())) { if (/erro|falha/i.test(b)) break; log("  a janela Criar Ticket fechou depois do Adicionar: conta como criado"); return { ok: true, fechou: true }; } }
-  throw new Error("cliquei em Adicionar mas não vi \"Ticket criado com sucesso\": conferir no portal antes de tentar de novo");
+  // 28/11: diz o que o portal mostrou (aviso, erro ou campo em vermelho) para a equipe saber o porquê
+  const aviso = await p.evaluate(() => { const vis = (e) => !!(e.offsetWidth || e.offsetHeight || e.getClientRects().length);
+    const t = [...document.querySelectorAll("[role=alert], [role=status], [data-sonner-toast], [class*=toast i], [class*=error i], [class*=destructive i], .text-red-500, .text-red-600, [aria-invalid=true]")].filter(vis).map((e) => (e.innerText || e.getAttribute("aria-label") || "").replace(/\s+/g, " ").trim()).filter((x) => x && x.length < 200);
+    const dl = [...document.querySelectorAll("[role=dialog]")].filter(vis).flatMap((d) => d.innerText.split("\n")).map((x) => x.trim()).filter((x) => /erro|falha|inv[aá]lid|obrigat|j[aá] exist|n[aã]o (foi|é) poss|preench|selecion/i.test(x) && x.length < 200);
+    return [...new Set([...t, ...dl])].slice(0, 3).join(" | "); }).catch(() => "");
+  if (aviso) log("  o portal mostrou: " + aviso.replace(/\d{4,}/g, "#").slice(0, 200));
+  throw new Error(aviso ? `o portal respondeu ao Adicionar: ${aviso.slice(0, 160)}` : "cliquei em Adicionar, a janela não fechou e o portal não mostrou aviso de sucesso nem de erro: conferir no portal antes de tentar de novo");
   } catch (e) { if (/Timeout/i.test(e.message)) throw new Error(`não consegui clicar em: ${passo} (a tela não respondeu)`); throw e; }
 }
 export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, hash = "" }) {
