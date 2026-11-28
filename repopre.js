@@ -57,7 +57,7 @@
     if (m === "avaria") {
       if (mk.length) return ["ok", `Avaria: repor o(s) volume(s) avariado(s) ${mk.map((v) => rotVol(x, v) + v).join(", ")}.`];
       if (vs.length === 1) return ["acao", `Avaria em NF de 1 volume só: o avariado é ${rotVol(x, vs[0])}${vs[0]}.${PAL_AVARIA.test(an) ? " A anotação da transportadora confirma a avaria." : ""} Confira e use o ✓ Repor.`];
-      { const av = volsPorAnotacao(x); if (av.length && av.length < vs.length) return ["acao", `Avaria: a anotação da transportadora cita a peça do volume ${av.map((v) => rotVol(x, v) + v + " (" + ((infoVol(x, v) || {}).descricao || "") + ")").join(", ")}. Confira e use o ✓ Repor.`]; }
+      { const av = volsPorAnotacao(x); if (av.length && av.length < vs.length) return ["acao", `Avaria: a anotação da transportadora cita a peça do volume ${av.map((v) => rotVol(x, v) + v + " (" + resumoDesc((infoVol(x, v) || {}).descricao) + ")").join(", ")}. Confira e use o ✓ Repor.`]; }
       { const ev = volsPorEtiqueta(x); if (ev.length && !(x.foto_ia.volumes_vistos || []).length) return ["acao", `Avaria: a etiqueta da foto diz VOL ${(x.foto_ia.vol_nf || []).join(", ")} = volume ${ev.map((v) => rotVol(x, v) + v).join(", ")} pelo cadastro. Confira e use o ✓ Repor.`]; }
       if (!vs.some((v) => infoVol(x, v))) { if (fotos || /\S/.test(an)) return ["acao", "Avaria: este SKU não está no cadastro de volumes, então não sei a descrição nem o nº de cada volume. Suba a ⇪ Planilha de volumes ou clique no volume avariado."]; }
       if (fotos) return ["acao", `Avaria: olhe a foto e clique no volume AVARIADO.${PAL_AVARIA.test(an) ? " A anotação da transportadora também fala da avaria." : ""}`];
@@ -133,8 +133,16 @@
     rows.forEach((c) => { const i = { nro: c.nro, total: tot[c.modelo], descricao: c.descricao, modelo: c.modelo }; CAD.set(c.modelo + "|" + vKey(c.volume), i); CAD.set(c.modelo + "|" + vKey(c.volume).split(".")[0], i); if (!CAD.has("V|" + vKey(c.volume))) CAD.set("V|" + vKey(c.volume), i); });
   }
   const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return CAD.get("V|" + vKey(v)) || null; };
+  // 28/11 (Brenda): descrição resumida = só o que é a peça ("ROUPEIRO 3 PORTAS CORRER"), sem VOL x/y, código do modelo, nº do produto, medidas e cor
+  const ABREV = { PTAS: "PORTAS", PTA: "PORTA", PT: "PORTA", GAV: "GAVETAS", GAVS: "GAVETAS", PRAT: "PRATELEIRA", ESP: "ESPELHO", COZ: "COZINHA", ARM: "ARMÁRIO", BALC: "BALCÃO", CJ: "CONJUNTO", CX: "CAIXA" };
+  const resumoDesc = (d) => {
+    let t = String(d || "").toUpperCase().replace(/\bVOL\.?\s*\d+\s*\/\s*\d+/g, " ").replace(/\d+([.,]\d+)?\s*X\s*\d+([.,]\d+)?(\s*X\s*\d+([.,]\d+)?)?\s*(MM|CM)?\b/g, " ").replace(/\b\d+([.,]\d+)?\s*(MM|CM)\b/g, " ");
+    const partes = t.split(/\s+-\s+/).map((p) => p.split(/\s+/).filter((w) => w && !/^[A-Z]{0,4}\d{3,}[A-Z0-9.]*$/.test(w) && !/^[.\-–,]+$/.test(w)).join(" ").trim()).filter((p) => /[A-ZÀ-Ú]{3,}/.test(p));
+    t = (partes[0] || "").split(" ").map((w) => ABREV[w] || w).join(" ");
+    return t.length > 34 ? t.slice(0, 33) + "…" : t;
+  };
   const descCurta = (x, v) => { const d = String((infoVol(x, v) || {}).descricao || "").trim(); if (!d) return ""; const vid = /\bVID\b|VIDR|ESPELH|\bLAP\b|\d+\s*MM\b/i.test(d);
-    return ` <small class="rpp-vdesc">· ${vid ? "🪟 " : ""}${esc(d.length > 30 ? d.slice(0, 29) + "…" : d)}</small>`; };   // 28/11: descrição resumida ao lado do volume
+    return ` <small class="rpp-vdesc">· ${vid ? "🪟 " : ""}${esc(resumoDesc(d) || d.slice(0, 30))}</small>`; };   // 28/11: descrição resumida ao lado do volume
   const rotVol = (x, v) => { const i = infoVol(x, v); return i && i.nro ? `Vol ${i.nro}/${(x.volumes || []).length || i.total} · ` : ""; };
   // robô rodando agora? (robo_estado andamento:repo-pre / repo-pre-solicitar, gravado pelo robô ao começar e terminar)
   let ANDA = "", chamadoEm = 0;
@@ -282,7 +290,7 @@
     const alvo = rp.length ? rp.map((v) => rotVol(x, v) + esc(v)).join(", ") : "";
     const sim = rp.length ? `<button type="button" class="btn verde" data-rpp-dec="sim" data-nf="${esc(x.nf)}">✓ Repor ${alvo}</button>`
       : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor ${(MOT(x) === "avaria" ? ia : (x.volumes || []).filter((v) => !ia.includes(v))).map((v) => rotVol(x, v) + esc(v)).join(", ") || "—"} (pela leitura da foto)</button>`
-      : an ? `<button type="button" class="btn verde" data-rpp-dec="an" data-nf="${esc(x.nf)}" title="A anotação da transportadora cita a peça deste volume">✓ Repor ${an.map((v) => rotVol(x, v) + esc(v) + " · " + esc((infoVol(x, v) || {}).descricao || "")).join(", ")} (${anRot})</button>`
+      : an ? `<button type="button" class="btn verde" data-rpp-dec="an" data-nf="${esc(x.nf)}" title="A anotação da transportadora cita a peça deste volume">✓ Repor ${an.map((v) => rotVol(x, v) + esc(v) + " · " + esc(resumoDesc((infoVol(x, v) || {}).descricao))).join(", ")} (${anRot})</button>`
       : !(x.volumes || []).length ? (/APROVADO/.test(x.obs || "") ? `<span class="chip verde">✓ Seguir com a reposição · aguardando o robô ler os volumes</span>`
         : `<button type="button" class="btn verde" data-rpp-dec="seguir" data-nf="${esc(x.nf)}" title="Registra que é para seguir; o robô lê os volumes na próxima análise e o caso vai para Pronto">✓ Seguir com a reposição</button>`)
       : `<button type="button" class="btn verde" disabled title="Clique primeiro nos volumes acima (ou em Extravio total)">✓ Repor</button>`;
