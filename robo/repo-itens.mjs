@@ -428,3 +428,23 @@ export async function diag360Api2({ log, ctx }) {
   const tbg = await ctx.request.get(raiz + "/tickets-by-groups", { headers: { authorization: auth } }).then((r) => r.json()).catch(() => []);
   log(`tickets-by-groups: ${JSON.stringify((tbg || []).map((g) => ({ g: g.label, n: g.count })))}`);
 }
+
+// ===== diag-360at (27/11): o detalhe do ticket de AT pela API tem a Nota AT e a saída? Só formato. =====
+export async function diag360At({ chamar, log, ctx }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  let auth = null, raiz = null;
+  ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && h.authorization && !auth) { auth = h.authorization; const u = new URL(q.url()); raiz = u.origin + (u.pathname.match(/^\/desk[^/]*/) || ["/desk"])[0]; } });
+  await entrarMulti360(ctx, log); await new Promise((r) => setTimeout(r, 6000));
+  const forma = (v, d = 0) => v == null ? "null" : Array.isArray(v) ? `[${v.length}${v[0] !== undefined ? ":" + forma(v[0], d + 1) : ""}]` : typeof v === "object" ? (d > 2 ? "{…}" : "{" + Object.entries(v).map(([k, x]) => k + ":" + forma(x, d + 1)).join(",") + "}") : String(v).replace(/\d/g, "9").replace(/[A-Za-zÀ-ÿ]/g, "a").slice(0, 14);
+  const tks = await chamar("at_tk?select=ticket,nota_at,data_saida&na_planilha=eq.true&nota_at=not.is.null&data_saida=not.is.null&limit=2");
+  for (const t of tks) {
+    for (const s of ["", "/events", "/timeline", "/comments"]) {
+      const r = await ctx.request.get(`${raiz}/tickets/${t.ticket}${s}`, { headers: { authorization: auth } }); let j = null; try { j = await r.json(); } catch (_) {}
+      const txt = JSON.stringify(j || ""); const na = String(t.nota_at).split("-")[0];
+      log(`ticket AT ${s || "(detalhe)"} → ${r.status()} · tem a Nota AT no texto: ${txt.includes(na)} · tem a data de saída: ${txt.includes(t.data_saida)}`);
+      if (!s) { const { customer, address, ...resto } = j || {}; log(`  formato: ${forma(resto).slice(0, 2500)}`); }
+      else log(`  formato: ${forma(Array.isArray(j) ? j.slice(0, 2) : j).slice(0, 800)}`);
+      if (txt.includes(na)) { const onde = []; const busca = (o, cam) => { if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) busca(v, cam + "." + k); else if (String(o).includes(na)) onde.push(cam); }; busca(j, ""); log(`  Nota AT aparece em: ${onde.slice(0, 5).join(" | ")}`); }
+    }
+  }
+}
