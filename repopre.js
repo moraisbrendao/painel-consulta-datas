@@ -131,7 +131,8 @@
     const ult = L.map((x) => x.analisado_em).filter(Boolean).sort().pop();
     $("rpp-info").innerHTML = `${fmt(L.filter((x) => x.na_lista).length)} caso(s) na lista do portal · última análise do robô ${hora(ult)} · planilha de volumes: ${ENVIO ? `enviada ${hora(ENVIO.produto)} por ${esc(String(ENVIO.descricao || "").split(" · ")[0])} (${fmt(ENVIO.nro || 0)} volumes)` : `<b style="color:var(--vermelho)">ainda não enviada</b>`}`;
     // botão com ampulheta girando enquanto o robô roda (igual aos outros robôs, Brenda 27/11)
-    const bt = $("rpp-rodar"); bt.classList.toggle("ag-validando", !!ANDA); bt.innerHTML = ANDA ? `<span class="ampulheta" aria-hidden="true">⏳</span> ${esc(ANDA)}` : "▶ Analisar agora";
+    const bt = $("rpp-rodar"); bt.classList.toggle("ag-validando", !!ANDA); bt.innerHTML = ANDA ? `<span class="ampulheta" aria-hidden="true">⏳</span> ${esc(ANDA)}` : `<span>▶ Analisar agora<small class="btn-quando">última: ${hora(ult)}</small></span>`;
+    $("rpp-vol-quando").textContent = ENVIO ? `enviada ${hora(ENVIO.produto)}` : "ainda não enviada";
     const n = (k) => L.filter((x) => (k === "todos" || sit(x) === k) && (!$("rpp-motivo").value || (x.motivo || "Falta de volumes") === $("rpp-motivo").value)).length;
     $("rpp-cards").innerHTML = CARDS.map(([k, rot, sub, cor]) => `<button type="button" class="kpi ${cor}${card === k ? " ativa" : ""}" data-rpp="${k}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${fmt(n(k))}</b><small>${sub}</small></button>`).join("");
     const q = ($("rpp-busca").value || "").replace(/\D/g, "");
