@@ -283,6 +283,15 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
   const M = await import("./multi360.mjs");
   let m360 = null; try { m360 = await M.entrarMulti360(ctx, log, CRED_EDU()); } catch (e) { log("barrar: não entrei no 360:", String(e.message).slice(0, 100)); }
   const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
+  // 28/11: o campo "Filtrar por nota" não respondia (16 erros de locator.fill Timeout): espera o campo, recarrega se preciso e mostra o que tem na tela
+  const SEL_FILTRO = "input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]";
+  const campoOk = async () => { const f = p.locator(SEL_FILTRO).first(); await f.waitFor({ state: "visible", timeout: 20000 }).catch(() => {}); return (await f.count()) && (await f.isEditable().catch(() => false)); };
+  for (let t = 0; t < 3 && !(await campoOk()); t++) {
+    const tela = await p.evaluate(() => ({ url: location.pathname, inputs: [...document.querySelectorAll("input")].map((i) => i.placeholder || i.type), dialogs: [...document.querySelectorAll("[role=dialog],[role=alertdialog]")].map((d) => d.innerText.slice(0, 80)) })).catch(() => ({}));
+    log(`barrar-portal: campo de busca não apareceu (tentativa ${t + 1}) · tela ${JSON.stringify(tela).replace(/\d/g, "#").slice(0, 300)}`);
+    await p.keyboard.press("Escape").catch(() => {}); await p.reload({ timeout: 30000 }).catch(() => {}); await p.waitForTimeout(3000); await abrirBarrar(p, log).catch(() => {});
+  }
+  if (!(await campoOk())) throw new Error("o campo 'Filtrar por nota' do portal não apareceu");
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1); let autoN = 0;
   for (const x of falta) {
     try {
@@ -336,8 +345,8 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   const L = await chamar("barrar_entrega?select=nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio&na_planilha=eq.true&portal_status=is.null&decisao=in.(barrar,nao_barrar)&limit=500" + (soAuto ? "&decisao_por=like.rob*" : ""));
   // 26/11: notas que deram "não está mais na lista" tentam de novo (a busca do portal às vezes demora e a tabela vinha vazia)
   const COLS_AP = "nf,ticket,decisao,decisao_opcao,decisao_motivo,decisao_por,print_path,print_rastreio,rastreio";
-  const deNovo = await chamar(`barrar_entrega?select=${COLS_AP}&na_planilha=eq.true&portal_status=eq.erro&portal_msg=like.${encodeURIComponent("Nota não está mais*")}&decisao=in.(barrar,nao_barrar)&limit=500` + (soAuto ? "&decisao_por=like.rob*" : "")).catch(() => []);
-  if (deNovo.length) { log(`barrar-portal: ${deNovo.length} nota(s) com "não está na lista" vão ser procuradas de novo`); L.push(...deNovo); }
+  const deNovo = await chamar(`barrar_entrega?select=${COLS_AP}&na_planilha=eq.true&portal_status=eq.erro&or=(${encodeURIComponent('portal_msg.like."Nota não está mais*"')},portal_msg.like.*Timeout*,${encodeURIComponent('portal_msg.like."O portal não respondeu*"')})&decisao=in.(barrar,nao_barrar)&limit=500` + (soAuto ? "&decisao_por=like.rob*" : "")).catch(() => []);
+  if (deNovo.length) { log(`barrar-portal: ${deNovo.length} nota(s) com "não está na lista" ou tempo esgotado vão ser tentadas de novo`); L.push(...deNovo); }
   // regra (Brenda, 18/11): sozinho o robô só atua em devolução, entregue ou "não recebeu"; o que uma pessoa escolheu e aprovou no painel ele sempre aplica
   const pode = (x) => !/^rob/i.test(x.decisao_por || "") ? true : x.decisao === "barrar" ? (PAL_DEVOLUCAO.test(sa((x.rastreio || {}).evento)) || /segregado|barrada/i.test(x.decisao_por || "")) : (x.decisao_opcao || OP_NAO_RECEBEU) === OP_NAO_RECEBEU || (ENTREGUE_ATUA && x.decisao_opcao === "Entregue" && (x.rastreio || {}).situacao === "entregue");
   const fora = L.filter((x) => !pode(x)); if (fora.length) log(`barrar-portal: ${fora.length} aprovada(s) fora da regra do robô (ficam para a Brenda)`);
@@ -346,6 +355,15 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   log(`barrar-portal: ${L.length} nota(s) aprovadas para o portal`);
   if (!L.length) return;
   const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
+  // 28/11: o campo "Filtrar por nota" não respondia (16 erros de locator.fill Timeout): espera o campo, recarrega se preciso e mostra o que tem na tela
+  const SEL_FILTRO = "input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]";
+  const campoOk = async () => { const f = p.locator(SEL_FILTRO).first(); await f.waitFor({ state: "visible", timeout: 20000 }).catch(() => {}); return (await f.count()) && (await f.isEditable().catch(() => false)); };
+  for (let t = 0; t < 3 && !(await campoOk()); t++) {
+    const tela = await p.evaluate(() => ({ url: location.pathname, inputs: [...document.querySelectorAll("input")].map((i) => i.placeholder || i.type), dialogs: [...document.querySelectorAll("[role=dialog],[role=alertdialog]")].map((d) => d.innerText.slice(0, 80)) })).catch(() => ({}));
+    log(`barrar-portal: campo de busca não apareceu (tentativa ${t + 1}) · tela ${JSON.stringify(tela).replace(/\d/g, "#").slice(0, 300)}`);
+    await p.keyboard.press("Escape").catch(() => {}); await p.reload({ timeout: 30000 }).catch(() => {}); await p.waitForTimeout(3000); await abrirBarrar(p, log).catch(() => {});
+  }
+  if (!(await campoOk())) throw new Error("o campo 'Filtrar por nota' do portal não apareceu");
   const cont = {}; const soma = (k) => (cont[k] = (cont[k] || 0) + 1);
   const { baixarArquivo } = await import("./supa.mjs");
   const M = await import("./multi360.mjs"); let m360 = null;
@@ -355,7 +373,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   const grava = (nf, st, msg) => chamar(`barrar_entrega?nf=eq.${encodeURIComponent(nf)}`, "PATCH", { portal_status: st, portal_msg: msg, portal_em: new Date().toISOString() });
   for (const x of L) {
     try {
-      const filtro = p.locator("input[placeholder^='Filtrar por nota']").first();
+      const filtro = p.locator(SEL_FILTRO).first();
       // espera a tabela mostrar a nota (até ~15 s, digitando de novo na metade): antes eram 2,2 s fixos e a busca às vezes ainda não tinha voltado
       const linhas = p.locator("table tbody tr"); let alvo = null;
       const procura = async () => { for (let i = 0; i < await linhas.count(); i++) { const t = ((await linhas.nth(i).locator("td").first().textContent().catch(() => "")) || "").replace(/\s+/g, ""); if (t === x.nf.replace(/\s+/g, "")) return linhas.nth(i); } return null; };
@@ -396,7 +414,10 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
         await grava(x.nf, "feito", x.decisao === "barrar" ? "Marcada como barrada (✓) no portal." : `Marcada como não barrada (✗): ${x.decisao_opcao || OP_NAO_RECEBEU}.`); soma(`feito ${x.decisao}`);
         paraComentar.push(x);   // prints no ticket só DEPOIS de terminar o portal (26/11: o login do Multi360 no meio atrapalhava a busca do portal)
       }
-    } catch (e) { soma("erro"); await grava(x.nf, "erro", String(e.message).split("\n")[0].slice(0, 200)).catch(() => {}); await p.keyboard.press("Escape").catch(() => {}); }
+    } catch (e) { soma("erro"); const m0 = String(e.message).split("\n")[0];
+      log("  erro:", m0.replace(/\d{4,}/g, "#").slice(0, 120));
+      await grava(x.nf, "erro", /Timeout/i.test(m0) ? "O portal não respondeu (tempo esgotado): tento de novo na próxima rodada." : m0.slice(0, 200)).catch(() => {}); await p.keyboard.press("Escape").catch(() => {});
+      if (/Timeout/i.test(m0)) { await p.reload({ timeout: 30000 }).catch(() => {}); await p.waitForTimeout(3000); await abrirBarrar(p, log).catch(() => {}); } }
   }
   for (const x of paraComentar)
     await comentar(x).then(() => soma("prints no ticket")).catch(async (e) => { soma("prints no ticket: erro"); await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "erro", ticket_msg: String(e.message).split("\n")[0].slice(0, 200), ticket_em: new Date().toISOString() }).catch(() => {}); });
