@@ -154,3 +154,14 @@ export async function diag360Fechados({ log, ctx, chamar }) {
   log(`  botões da lista de tickets: ${JSON.stringify([...new Set(bts)]).slice(0, 400)}`);
   log(`  chamadas do site: ${JSON.stringify([...vistos]).slice(0, 800)}`);
 }
+// diag 2: quais chamadas a página do pedido (Hub › Pedidos) faz — para achar os tickets FECHADOS do pedido pela API
+export async function diag360Pedido({ log, ctx, chamar }) {
+  const RP = await import("./repo-pre.mjs");
+  const vistos = []; let auth = null;
+  ctx.on("request", (q) => { if (/backend\./.test(q.url())) { const u = new URL(q.url()); vistos.push(q.method() + " " + u.pathname.replace(/\d{3,}/g, "#") + (u.search ? "?" + [...u.searchParams.keys()].join("&") : "")); if (q.headers().authorization) auth = q.headers().authorization; } });
+  const resps = []; ctx.on("response", async (r) => { try { if (!/backend\./.test(r.url()) || r.request().method() !== "GET") return; const j = await r.json().catch(() => null); if (!j) return; const txt = JSON.stringify(j); if (/ticket/i.test(txt)) resps.push({ cam: new URL(r.url()).pathname.replace(/\d{3,}/g, "#"), chaves: Array.isArray(j) ? "lista " + j.length + " " + JSON.stringify(Object.keys(j[0] || {})).slice(0, 300) : JSON.stringify(Object.keys(j)).slice(0, 300), status: [...new Set((txt.match(/"status"\s*:\s*\{[^}]*"value"\s*:\s*"([^"]+)"/g) || []).map((s) => s.replace(/.*"value"\s*:\s*"/, "").replace(/"$/, "")))] }); } catch (_) {} });
+  const [b] = await chamar("base_pedidos?select=nf&nf=not.is.null&limit=1&offset=500");
+  await RP.pedido360(ctx, log, b.nf);
+  log(`diag-360ped: chamadas ${JSON.stringify([...new Set(vistos)]).slice(0, 1200)}`);
+  for (const r of resps.slice(0, 8)) log(`  resposta ${r.cam}: ${r.chaves} · status ${JSON.stringify(r.status)}`);
+}
