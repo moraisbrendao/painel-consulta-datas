@@ -134,7 +134,7 @@
   }
   const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return CAD.get("V|" + vKey(v)) || null; };
   // 28/11 (Brenda): descrição resumida = só o que é a peça ("ROUPEIRO 3 PORTAS CORRER"), sem VOL x/y, código do modelo, nº do produto, medidas e cor
-  const ABREV = { PTAS: "PORTAS", PTA: "PORTA", PT: "PORTA", GAV: "GAVETAS", GAVS: "GAVETAS", PRAT: "PRATELEIRA", ESP: "ESPELHO", COZ: "COZINHA", ARM: "ARMÁRIO", BALC: "BALCÃO", CJ: "CONJUNTO", CX: "CAIXA" };
+  const ABREV = { PTAS: "PORT", PTA: "PORT", PT: "PORT", PORTAS: "PORT", PORTA: "PORT", GAVS: "GAV", GAVETAS: "GAV", GAVETA: "GAV" };   // Brenda 28/11: curto e claro (PORT, GAV)
   const resumoDesc = (d) => {
     let t = String(d || "").toUpperCase().replace(/\bVOL\.?\s*\d+\s*\/\s*\d+/g, " ").replace(/\d+([.,]\d+)?\s*X\s*\d+([.,]\d+)?(\s*X\s*\d+([.,]\d+)?)?\s*(MM|CM)?\b/g, " ").replace(/\b\d+([.,]\d+)?\s*(MM|CM)\b/g, " ");
     const partes = t.split(/\s+-\s+/).map((p) => p.split(/\s+/).filter((w) => w && !/^[A-Z]{0,4}\d{3,}[A-Z0-9.]*$/.test(w) && !/^[.\-–,]+$/.test(w)).join(" ").trim()).filter((p) => /[A-ZÀ-Ú]{3,}/.test(p));
