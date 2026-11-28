@@ -56,7 +56,11 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   log(`tk360: ${fazer.filter(ehFilaAt).length} deles em filas de AT (vão primeiro)`);
   log(`tk360: ${fazer.length} para ler o detalhe agora (novos ou atualizados) · ${[...porId.keys()].filter((k) => !ja.has(k)).length} nunca vistos`);
   const linhas = [], tipos = {}; let erros = 0, at = 0, comNota = 0, comPecas = 0, comFrete = 0;
-  const gravar = async (forcar) => { if (seco) { linhas.length = 0; return; } while (linhas.length >= (forcar ? 1 : 200)) { const b = linhas.splice(0, 200); await chamar("tk360", "POST", b, { Prefer: "resolution=merge-duplicates,return=minimal" }); } };
+  // o PostgREST exige as mesmas chaves em todas as linhas do lote
+  const CHAVES = ["ticket_id", "fila", "fila_id", "status", "responsavel", "transp", "canal", "sub_canal", "nf", "pedido_mkt", "criado", "atualizado", "sla", "prioridade", "valor", "reposicao", "estornado", "na_lista", "visto_em",
+    "tipo", "motivo", "grupo", "grupo_id", "redespacho", "carga", "datas", "pedido", "tags", "detalhe_em", "at", "detalhe_msg"];
+  const norm = (r) => Object.fromEntries(CHAVES.map((k) => [k, r[k] === undefined ? null : r[k]]));
+  const gravar = async (forcar) => { if (seco) { linhas.length = 0; return; } while (linhas.length >= (forcar ? 1 : 200)) { const b = linhas.splice(0, 200).map(norm); await chamar("tk360", "POST", b, { Prefer: "resolution=merge-duplicates,return=minimal" }); } };
   await pool(fazer, PAR, async (t) => {
     const id = String(t.ticket_id); const r = linhaLista(t);
     try {
