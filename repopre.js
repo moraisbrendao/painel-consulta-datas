@@ -175,7 +175,7 @@
   function caso(x) {
     const posse = new Set(x.vol_posse || []), rp = repor(x), al = alertas(x);
     const vols = [...(x.volumes || [])].sort((a, b) => ((infoVol(x, a) || {}).nro || 99) - ((infoVol(x, b) || {}).nro || 99)).map((v, i) => `<button type="button" class="rpp-vol${posse.has(v) ? (MOT(x) === "avaria" ? " avariado" : " posse") : ""}" data-rpp-vol="${esc(v)}" data-nf="${esc(x.nf)}" title="${esc((infoVol(x, v) || {}).descricao || "")} · ${posse.has(v) ? "Está com a transportadora (clique para desmarcar)" : "Clique se este volume aparece na foto"}">${rotVol(x, v)}${esc(v)}${posse.has(v) ? (MOT(x) === "avaria" ? " · avariado" : " · em posse") : ""}</button>`).join("")
-      || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket." : "Aguardando o robô."}</span>`;
+      || `<span class="s">${x.analisado_em ? "O robô não achou os volumes da NF na janela Criar Ticket do portal (ele tenta de novo a cada análise)." : "Aguardando o robô."}</span>`;
     const fotos = (x.fotos || []).map((f, i) => `<div class="rpp-foto"><button type="button" class="rpp-baixa" data-rpp-baixa="${esc(f)}" data-nome="NF-${esc(x.nf)}-foto-${i + 1}" title="Clique para baixar a foto"><img src="${esc(f)}" alt="Foto anexada pela transportadora" loading="lazy"></button><a class="s" href="${esc(f)}" target="_blank" rel="noopener noreferrer">🔍 ampliar</a></div>`).join("") || `<div class="rpp-semfoto">sem foto</div>`;
     const org = (x.tickets || []).find((t) => t.nota_de);
     // nota de reposição/AT (Brenda 27/11): só o link do pedido original e a NF original (NFO)
@@ -242,10 +242,12 @@
       : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor ${(MOT(x) === "avaria" ? ia : (x.volumes || []).filter((v) => !ia.includes(v))).map((v) => rotVol(x, v) + esc(v)).join(", ") || "—"} (pela leitura da foto)</button>`
       : an ? `<button type="button" class="btn verde" data-rpp-dec="an" data-nf="${esc(x.nf)}" title="A anotação da transportadora cita a peça deste volume">✓ Repor ${an.map((v) => rotVol(x, v) + esc(v) + " · " + esc((infoVol(x, v) || {}).descricao || "")).join(", ")} (${anRot})</button>`
       : `<button type="button" class="btn verde" disabled title="Clique primeiro nos volumes acima (ou em Extravio total)">✓ Repor</button>`;
-    return `<div class="rpp-dec"><span class="s">Decisão:</span> ${sim} <button type="button" class="btn vermelho-cont" data-rpp-dec="nao" data-nf="${esc(x.nf)}">✗ Não repor</button>${!rp.length && !ia && !an ? ` <span class="s">${MOT(x) === "avaria" ? "clique no volume avariado acima" : "marque o volume acima"} para liberar o ✓</span>` : ""}</div>`;
+    return `<div class="rpp-dec"><span class="s">Decisão:</span> ${sim} <button type="button" class="btn vermelho-cont" data-rpp-dec="nao" data-nf="${esc(x.nf)}">✗ Não repor</button>${!rp.length && !ia && !an ? ` <span class="s">${!(x.volumes || []).length ? "sem volumes lidos da NF ainda: o ✓ libera quando o robô ler os volumes (o ✗ já vale)" : MOT(x) === "avaria" ? "clique no volume avariado acima para liberar o ✓" : "marque o volume acima para liberar o ✓"}</span>` : ""}</div>`;
   }
   async function decidir(nf, d) {
     const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;
+    const graves = alertas(x).filter((a) => a[0] === "mao" || a[0] === "erro").map((a) => "• " + a[1]);
+    if (d !== "nao" && graves.length && !confirm(`NF ${nf} está em Conferir à mão:\n\n${graves.join("\n")}\n\nVocê conferiu e quer aprovar a reposição mesmo assim?`)) return;
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
     const novo = { marcado_por: email, marcado_em: new Date().toISOString() };
     if (d === "nao") novo.obs = obsDe(x, { aprov: false, nao: true });
@@ -257,7 +259,7 @@
   }
   // o robô clicou em Adicionar mas não viu o aviso (27/11): o ticket do portal existe; falta só o comentário no 360
   const soComentario = (x) => x.solicitar_status === "erro" && (x.ticket_portal_ok || /cliquei em Adicionar|Em Andamento/i.test(x.solicitar_msg || ""));
-  function podeSol(x) { return !["pendente", "feito"].includes(x.solicitar_status) && (x.na_lista || soComentario(x)) && (APROV(x) || soComentario(x)) && !NAOREP(x) && repor(x).length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro); }
+  function podeSol(x) { return !["pendente", "feito"].includes(x.solicitar_status) && (x.na_lista || soComentario(x)) && (APROV(x) || soComentario(x)) && !NAOREP(x) && repor(x).length && (/APROVADO/.test(x.obs || "") || (x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro))); }   // Brenda 28/11: em Conferir à mão a decisão é dela (aprovou = vale)
   async function voltar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
