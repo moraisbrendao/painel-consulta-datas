@@ -32,10 +32,13 @@ export async function rodarFotoTeste({ chamar, log, limite = 10, alvo = "" }) { 
     .filter((x) => (x.fotos || []).length && (x.volumes || []).length && (alvo.startsWith("h:") ? hNf(x.nf) === alvo.slice(2) : alvo === "avaria" ? /avaria/i.test(x.motivo || "") : !x.foto_ia)).slice(0, limite);
   const skus = [...new Set(L.flatMap((x) => x.sku || []))];
   const cad = new Map();
-  if (skus.length) {
-    const C = await chamar(`vol_cadastro?select=modelo,volume,nro,descricao&modelo=in.(${skus.map((s) => `"${encodeURIComponent(s)}"`).join(",")})`).catch(() => []);
+  { const vols = [...new Set(L.flatMap((x) => x.volumes || []))];
+    const q = (campo, xs) => xs.length ? chamar(`vol_cadastro?select=modelo,volume,nro,descricao&${campo}=in.(${xs.map((s) => `"${encodeURIComponent(s)}"`).join(",")})`).catch(() => []) : Promise.resolve([]);
+    let C = await q("modelo", skus);   // 28/11: SKU do 360 pode não ser o Código Modelo → também pelo código do volume
+    const tem = new Set(C.map((c) => c.volume)), mods = [...new Set((await q("volume", vols.filter((v) => !tem.has(v)))).map((c) => c.modelo))].filter((m) => !skus.includes(m));
+    if (mods.length) C = C.concat(await q("modelo", mods));
     const tot = C.reduce((a, c) => ((a[c.modelo] = Math.max(a[c.modelo] || 0, c.nro || 0)), a), {});
-    C.forEach((c) => cad.set(c.volume, { nro: c.nro, total: tot[c.modelo], descricao: c.descricao }));
+    C.forEach((c) => { if (!cad.has(c.volume) || skus.includes(c.modelo)) cad.set(c.volume, { nro: c.nro, total: tot[c.modelo], descricao: c.descricao }); });
   }
   log(`repo-foto (teste): ${L.length} caso(s) com foto para ler`);
   let ok = 0, erro = 0, tokIn = 0, tokOut = 0; const conf = {};

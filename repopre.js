@@ -118,12 +118,21 @@
   let ENVIO = null;
   async function carregarCad() {
     try { const e = await sb().from("vol_cadastro").select("nro,produto,descricao").eq("modelo", "__ENVIO__").maybeSingle(); ENVIO = e.error ? null : e.data; } catch (_) { ENVIO = null; }
-    const skus = [...new Set(TODOS.flatMap((x) => x.sku || []))]; CAD = new Map(); if (!skus.length) return;
-    const r = await sb().from("vol_cadastro").select("modelo,volume,nro,descricao").in("modelo", skus).then((x) => x, () => ({ error: 1 })); if (r.error) return;
-    const tot = {}; (r.data || []).forEach((c) => (tot[c.modelo] = Math.max(tot[c.modelo] || 0, c.nro || 0)));
-    (r.data || []).forEach((c) => { const i = { nro: c.nro, total: tot[c.modelo], descricao: c.descricao, modelo: c.modelo }; CAD.set(c.modelo + "|" + vKey(c.volume), i); CAD.set(c.modelo + "|" + vKey(c.volume).split(".")[0], i); });
+    const skus = [...new Set(TODOS.flatMap((x) => x.sku || []))]; CAD = new Map();
+    const pega = (q) => q.then((x) => (x.error ? [] : x.data || []), () => []);
+    let rows = skus.length ? await pega(sb().from("vol_cadastro").select("modelo,volume,nro,descricao").in("modelo", skus)) : [];
+    // 28/11 (Brenda, NF 15803-34): o SKU do 360 nem sempre é o Código Modelo da planilha → procura também pelo código do volume
+    const tem = new Set(rows.map((c) => vKey(c.volume)));
+    const faltam = [...new Set(TODOS.flatMap((x) => x.volumes || []).map(vKey))].filter((v) => v && !tem.has(v));
+    for (let i = 0; i < faltam.length; i += 150) {
+      const part = faltam.slice(i, i + 150), achou = await pega(sb().from("vol_cadastro").select("modelo").in("volume", [...part, ...part.map((v) => v + ".0")].filter((v, k, a) => a.indexOf(v) === k)));
+      const mods = [...new Set(achou.map((c) => c.modelo))].filter((m) => !skus.includes(m));
+      if (mods.length) rows = rows.concat(await pega(sb().from("vol_cadastro").select("modelo,volume,nro,descricao").in("modelo", mods)));
+    }
+    const tot = {}; rows.forEach((c) => (tot[c.modelo] = Math.max(tot[c.modelo] || 0, c.nro || 0)));
+    rows.forEach((c) => { const i = { nro: c.nro, total: tot[c.modelo], descricao: c.descricao, modelo: c.modelo }; CAD.set(c.modelo + "|" + vKey(c.volume), i); CAD.set(c.modelo + "|" + vKey(c.volume).split(".")[0], i); if (!CAD.has("V|" + vKey(c.volume))) CAD.set("V|" + vKey(c.volume), i); });
   }
-  const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return null; };
+  const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return CAD.get("V|" + vKey(v)) || null; };
   const descCurta = (x, v) => { const d = String((infoVol(x, v) || {}).descricao || "").trim(); if (!d) return ""; const vid = /\bVID\b|VIDR|ESPELH|\bLAP\b|\d+\s*MM\b/i.test(d);
     return ` <small class="rpp-vdesc">· ${vid ? "🪟 " : ""}${esc(d.length > 30 ? d.slice(0, 29) + "…" : d)}</small>`; };   // 28/11: descrição resumida ao lado do volume
   const rotVol = (x, v) => { const i = infoVol(x, v); return i && i.nro ? `Vol ${i.nro}/${(x.volumes || []).length || i.total} · ` : ""; };
