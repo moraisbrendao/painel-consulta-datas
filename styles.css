@@ -1596,3 +1596,19 @@ body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
 #rp-repopre.rpp-escuro .rpp-semfoto { background: #1f2937; color: #9ca3af; border-color: #374151; }
 #rp-repopre.rpp-escuro .rpp-caso .btn.contorno { background: transparent; color: #e5e7eb; border-color: #4b5563; }
 #rp-repopre.rpp-escuro .rpp-tks .chip { background: #1f2937; color: #e5e7eb; }
+/* 28/11 (Brenda): os quadros/cards da Reposição pré também pretos (o fundo da página continua claro) */
+#rp-repopre.rpp-escuro .kpi { background: #111827; border-color: #1f2937; }
+#rp-repopre.rpp-escuro .kpi .kpi-rot, #rp-repopre.rpp-escuro .kpi small { color: #9ca3af; }
+#rp-repopre.rpp-escuro .kpi .kpi-num { color: #fff; }
+#rp-repopre.rpp-escuro .kpi.vermelho .kpi-num { color: #f87171; }
+#rp-repopre.rpp-escuro .kpi.verde .kpi-num { color: #4ade80; }
+#rp-repopre.rpp-escuro .kpi.azul .kpi-num { color: #60a5fa; }
+#rp-repopre.rpp-escuro .kpi.ativa { background: #f2c94c; border-color: #f2c94c; }
+#rp-repopre.rpp-escuro .kpi.ativa .kpi-rot, #rp-repopre.rpp-escuro .kpi.ativa small, #rp-repopre.rpp-escuro .kpi.ativa .kpi-num { color: #111827; }
+#rp-repopre.rpp-escuro .cartao { background: #0b1220; border-color: #1f2937; color: #e5e7eb; }
+#rp-repopre.rpp-escuro .cartao h2, #rp-repopre.rpp-escuro .cartao b { color: #fff; }
+#rp-repopre.rpp-escuro .cartao .sub, #rp-repopre.rpp-escuro .cartao .s { color: #9ca3af; }
+#rp-repopre.rpp-escuro .rpp-dia { background: #111827; border-color: #1f2937; }
+#rp-repopre.rpp-escuro .rpp-dia th, #rp-repopre.rpp-escuro .rpp-dia td { color: #e5e7eb; border-color: #1f2937; }
+#rp-repopre.rpp-escuro .cartao a { color: #93c5fd; }
+#rp-repopre.rpp-escuro .cartao select, #rp-repopre.rpp-escuro .cartao input[type=search] { background: #111827; color: #e5e7eb; border-color: #374151; }
