@@ -49,11 +49,13 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
 
   // 3) detalhe só de quem é novo ou mudou (limite por rodada; o resto fica para a próxima)
   // AT primeiro: filas que o detalhamento de AT já mostrou + filas com "(AT)"/assistência no nome; o resto vai entrando aos poucos
-  const filasAt = new Set((await chamar("at_tk?select=fila&na_planilha=eq.true&limit=5000").catch(() => [])).map((x) => String(x.fila || "").trim().toLowerCase()).filter(Boolean));
-  const ehFilaAt = (t) => { const f = String(t.queue && t.queue.name || "").trim().toLowerCase(); return filasAt.has(f) || /\(at\)|\bat\b|assist/i.test(f); };
+  const atTk = await chamar("at_tk?select=ticket,fila&na_planilha=eq.true&limit=5000").catch(() => []);
+  const idsAt = new Set(atTk.map((x) => String(x.ticket).replace(/\D/g, "")));
+  const filasAt = new Set(atTk.map((x) => String(x.fila || "").trim().toLowerCase()).filter(Boolean));
+  const ehFilaAt = (t) => { if (idsAt.has(String(t.ticket_id))) return 2; const f = String(t.queue && t.queue.name || "").trim().toLowerCase(); return /\(at\)|\bat\b|assist/i.test(f) ? 2 : filasAt.has(f) ? 1 : 0; };
   const fazer = [...porId.values()].filter((t) => { const a = ja.get(String(t.ticket_id)); return !a || !a.detalhe_em || a.atualizado !== t.last_update_date; })
     .sort((a, b) => (ehFilaAt(b) - ehFilaAt(a)) || ((ja.has(String(a.ticket_id)) ? 1 : 0) - (ja.has(String(b.ticket_id)) ? 1 : 0))).slice(0, limite);
-  log(`tk360: ${fazer.filter(ehFilaAt).length} deles em filas de AT (vão primeiro)`);
+  log(`tk360: ${fazer.filter((t) => ehFilaAt(t) === 2).length} deles de AT conhecidos (vão primeiro)`);
   log(`tk360: ${fazer.length} para ler o detalhe agora (novos ou atualizados) · ${[...porId.keys()].filter((k) => !ja.has(k)).length} nunca vistos`);
   const linhas = [], tipos = {}; let erros = 0, at = 0, comNota = 0, comPecas = 0, comFrete = 0;
   // o PostgREST exige as mesmas chaves em todas as linhas do lote
