@@ -1672,7 +1672,7 @@ if (MODO === "naoloc" || MODO === "naoloc-teste" || MODO === "diag-naoloc") {   
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
   const N = await import("./naoloc.mjs");
   try {
-    if (MODO === "diag-naoloc" && /^dlog/.test(process.env.TRANSP || "")) await N.diagDlog({ chamar, log }); else if (MODO === "diag-naoloc") await N.diagNaoloc({ chamar, log, ctx });
+    if (MODO === "diag-naoloc" && /^dlog/.test(process.env.TRANSP || "")) await N.diagDlog({ chamar, log }); else if (MODO === "diag-naoloc" && process.env.TRANSP === "feitos") await N.diagFeitos({ chamar, log }); else if (MODO === "diag-naoloc") await N.diagNaoloc({ chamar, log, ctx });
     else await N.rodarNaoloc({ chamar, log, ctx, subirArquivo, teste: MODO === "naoloc-teste", limite: Number(process.env.SSW_LIMITE) || 200,
       R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } });
   } catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); }

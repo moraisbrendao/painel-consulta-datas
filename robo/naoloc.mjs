@@ -207,3 +207,16 @@ export async function diagNaoloc({ chamar, log, ctx }) {
   log("  rádios:", r.radios.join(" | ") || "nenhum");
   const c = m.getByRole("button", { name: /^\s*cancelar\s*$/i }).last(); if (await c.count()) await c.click().catch(() => {}); else await m.keyboard.press("Escape").catch(() => {});
 }
+
+// 28/11 (Brenda: "tem coisa de dias anteriores na fila"): ação feita, mas a nota continua na planilha → onde está o ticket hoje (tk360) e o histórico de filas. Só contagens/filas/datas (sem NF).
+export async function diagFeitos({ chamar, log }) {
+  const L = await chamar("nao_localizada?select=ticket,acao,acao_em,acao_status&na_planilha=eq.true&acao_status=eq.feito&ticket=not.is.null&limit=500");
+  const info = await chamar("nao_localizada_info?select=*&limit=1").catch(() => []);
+  log(`diag-feitos: ${L.length} nota(s) com ação feita e ainda na planilha · planilha enviada ${(info[0] || {}).enviado_em || "?"}`);
+  if (!L.length) return;
+  const T = await chamar(`tk360?select=ticket_id,fila,na_lista,atualizado,saiu_em,status,filas:datas->filas&ticket_id=in.(${L.map((x) => x.ticket).join(",")})`).catch((e) => (log("  tk360 erro " + e.message), []));
+  const por = new Map(T.map((t) => [String(t.ticket_id), t]));
+  L.forEach((x, i) => { const t = por.get(String(x.ticket));
+    log(`  #${i + 1} ação ${x.acao} em ${x.acao_em} · 360 agora: ${t ? `${t.na_lista ? "aberto" : "fora da lista"} · fila ${t.fila} · status ${t.status || "-"} · atualizado ${t.atualizado}` : "não está no tk360"}`);
+    (t && Array.isArray(t.filas) ? t.filas.slice(-5) : []).forEach((h) => log(`       fila ${h.fila || h.id} desde ${h.desde}`)); });
+}
