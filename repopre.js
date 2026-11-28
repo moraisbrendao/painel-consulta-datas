@@ -19,7 +19,12 @@
   // Avaria = marcados são os AVARIADOS (repõe esses); Extravio com 1 volume só = extravio total; Inversão = conferir à mão
   const MOT = (x) => { const m = String(x.motivo || ""); return /avaria/i.test(m) ? "avaria" : /extravi/i.test(m) ? "extravio" : /invers/i.test(m) ? "inversao" : /sinistr|roub|furt/i.test(m) ? "sinistro" : "falta"; };
   const TOTAL = (x) => /EXTRAVIO TOTAL/.test(x.obs || "");
-  const REVISAR = (x) => /^REVISAR$/.test(x.obs || "");   // "↩ Voltar para analisar" (Brenda 27/11): sai do Pronto até alguém marcar de novo
+  const REVISAR = (x) => /^REVISAR$/.test(x.obs || "");
+  // decisão por caso (Brenda 27/11, igual ao Barrar): ✓ Repor (vai para Pronto) / ✗ Não repor (card próprio). Fica no obs, junto com EXTRAVIO TOTAL.
+  // quem já tinha marcado volume antes dos botões conta como aprovado, para nada sair do Pronto.
+  const NAOREP = (x) => /NÃO REPOR/.test(x.obs || "");
+  const APROV = (x) => /APROVADO/.test(x.obs || "") || (!!x.marcado_por && String(x.marcado_em || "") < "2026-11-28T01:00" && !REVISAR(x) && !NAOREP(x) && ((x.vol_posse || []).length > 0 || TOTAL(x)));
+  const obsDe = (x, mud) => { const t = { total: TOTAL(x), aprov: /APROVADO/.test(x.obs || ""), nao: NAOREP(x), ...mud }; return [t.total && "EXTRAVIO TOTAL", t.aprov && "APROVADO", t.nao && "NÃO REPOR"].filter(Boolean).join(" · ") || null; };   // "↩ Voltar para analisar" (Brenda 27/11): sai do Pronto até alguém marcar de novo
   const repor = (x) => { const vs = x.volumes || [], mk = x.vol_posse || [], m = MOT(x);
     if (m === "avaria") return vs.filter((v) => mk.includes(v));
     if (m === "inversao" || m === "sinistro" || REVISAR(x)) return [];
@@ -72,13 +77,15 @@
     if (x.solicitar_status === "pendente") return "fila";
     if (x.solicitar_status === "erro") return "mao";
     if (!x.na_lista) return "saiu";
+    if (NAOREP(x)) return "naorep";
     if (!x.analisado_em) return "robo";
+    if (APROV(x) && repor(x).length) return "pronto";   // a pessoa decidiu: vale mais que o alerta
     if (alertas(x).some((a) => a[0] === "mao" || a[0] === "erro")) return "mao";
     if (["inversao", "sinistro"].includes(MOT(x))) return "mao";
-    return repor(x).length ? "pronto" : "marcar";
+    return "marcar";
   };
-  const CARDS = [["marcar", "Para analisar", "olhe a foto/anotação e marque o volume", "amarelo"], ["pronto", "Pronto para solicitar", "volume a repor definido", "verde"],
-    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, sinistro, inversão, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["saiu", "Saíram da lista", "não estão mais Novo no portal", ""], ["todos", "Todos", "", ""]];
+  const CARDS = [["marcar", "Para analisar", "marque o volume e decida ✓ Repor ou ✗ Não repor", "amarelo"], ["pronto", "Pronto para solicitar", "aprovado: falta mandar o robô", "verde"],
+    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, sinistro, inversão, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["naorep", "Não repor", "decidido: não vai reposição", "vermelho"], ["saiu", "Saíram da lista", "não estão mais Novo no portal", ""], ["todos", "Todos", "", ""]];
 
   // cadastro de volumes (parte 101): SKU → volume → número do volume e descrição
   let CAD = new Map();   // "sku|volume" e "volume" → { nro, total, descricao }
@@ -161,18 +168,39 @@
   function acao(x, rp) {
     if (x.solicitar_status === "feito") return `<span class="chip verde">✓ Reposição solicitada ${hora(x.feito_em)}${x.ticket_360 ? ` · <a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">ticket ${esc(x.ticket_360)} ↗</a>` : ""}</span>`;
     if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>`;
-    const pode = podeSol(x);
+    const pode = podeSol(x), dec = decisao(x, rp);
     if (pode && soComentario(x)) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">💬 Fazer só o comentário no 360 (o ticket do portal já existe)</button> <span class="s">${esc(x.solicitar_msg || "")}</span>`;
-    const volta = rp.length || x.solicitar_status === "erro" ? ` <button type="button" class="btn contorno" data-rpp-volta="${esc(x.nf)}" title="Desfaz a marcação e devolve o caso para Para analisar">↩ Voltar para analisar</button>` : "";
-    if (pode) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Aprovar e solicitar reposição de ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</button>${volta}${x.solicitar_status === "erro" ? ` <span class="s">(deu erro: tentar de novo${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""})</span>` : ""}`;
+    const volta = APROV(x) || NAOREP(x) || x.solicitar_status === "erro" ? ` <button type="button" class="btn contorno" data-rpp-volta="${esc(x.nf)}" title="Desfaz a decisão e devolve o caso para Para analisar">↩ Voltar para analisar</button>` : "";
+    if (NAOREP(x)) return `<span class="chip verm">✗ Não repor${x.marcado_por ? " · " + esc(String(x.marcado_por).split("@")[0]) + " " + hora(x.marcado_em) : ""}</span>${volta}`;
+    if (!APROV(x)) return dec;
+    if (pode) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">📤 Mandar o robô solicitar a reposição de ${rp.map((v) => rotVol(x, v) + esc(v)).join(", ")}</button>${volta}${x.solicitar_status === "erro" ? ` <span class="s">(deu erro: tentar de novo${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""})</span>` : ""}`;
     // por que o botão não aparece (Brenda 27/11 não achou o botão)
     const motivo = !x.na_lista ? "saiu da lista do portal" : x.venda === false ? "a NF não foi achada como venda no 360" : x.tem_devolucao ? "o pedido tem ticket de devolução/cancelamento no 360"
       : x.rastreio && x.rastreio.sinistro ? "o rastreio fala em sinistro/roubo" : !rp.length ? (x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? "use a leitura do Claude acima ou clique nos volumes" : "clique nos volumes acima para dizer qual repor") : "";
     return (motivo ? `<span class="s">📤 O botão de solicitar aparece quando der: ${esc(motivo)}.</span>` : "") + volta;
   }
+  // botões de decisão do caso (Brenda 27/11: "um botão nos casos igual no barrar")
+  function decisao(x, rp) {
+    const ia = !rp.length && x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos : null;
+    const alvo = rp.length ? rp.map((v) => rotVol(x, v) + esc(v)).join(", ") : "";
+    const sim = rp.length ? `<button type="button" class="btn verde" data-rpp-dec="sim" data-nf="${esc(x.nf)}">✓ Repor ${alvo}</button>`
+      : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor pela leitura do Claude</button>`
+      : `<button type="button" class="btn verde" disabled title="Clique primeiro nos volumes acima (ou em Extravio total)">✓ Repor</button>`;
+    return `<div class="rpp-dec"><span class="s">Decisão:</span> ${sim} <button type="button" class="btn vermelho-cont" data-rpp-dec="nao" data-nf="${esc(x.nf)}">✗ Não repor</button>${!rp.length && !ia ? ` <span class="s">marque o volume acima para liberar o ✓</span>` : ""}</div>`;
+  }
+  async function decidir(nf, d) {
+    const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;
+    const email = ((await sb().auth.getUser()).data.user || {}).email || null;
+    const novo = { marcado_por: email, marcado_em: new Date().toISOString() };
+    if (d === "nao") novo.obs = obsDe(x, { aprov: false, nao: true });
+    else { if (d === "ia") novo.vol_posse = [...(x.foto_ia.volumes_vistos || [])]; novo.obs = obsDe(REVISAR(x) ? { ...x, obs: null } : x, { aprov: true, nao: false }); }
+    const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
+    Object.assign(x, novo); desenhar();
+    toast(d === "nao" ? `NF ${nf}: não repor (card Não repor).` : `NF ${nf} aprovada: está em Pronto para solicitar.`);
+  }
   // o robô clicou em Adicionar mas não viu o aviso (27/11): o ticket do portal existe; falta só o comentário no 360
   const soComentario = (x) => x.solicitar_status === "erro" && (x.ticket_portal_ok || /cliquei em Adicionar|Em Andamento/i.test(x.solicitar_msg || ""));
-  function podeSol(x) { return !["pendente", "feito"].includes(x.solicitar_status) && (x.na_lista || soComentario(x)) && repor(x).length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro); }
+  function podeSol(x) { return !["pendente", "feito"].includes(x.solicitar_status) && (x.na_lista || soComentario(x)) && (APROV(x) || soComentario(x)) && !NAOREP(x) && repor(x).length && x.venda !== false && !x.tem_devolucao && !(x.rastreio && x.rastreio.sinistro); }
   async function voltar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
@@ -217,7 +245,7 @@
   async function marcarTotal(nf) {
     const x = L.find((y) => y.nf === nf); if (!x) return;
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
-    const novo = { obs: TOTAL(x) ? null : "EXTRAVIO TOTAL", vol_posse: [], marcado_por: email, marcado_em: new Date().toISOString() };
+    const novo = { obs: obsDe(REVISAR(x) ? { ...x, obs: null } : x, { total: !TOTAL(x), aprov: false }), vol_posse: [], marcado_por: email, marcado_em: new Date().toISOString() };
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
   }
@@ -226,13 +254,13 @@
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
     const novo = { vol_posse: [...(x.foto_ia.volumes_vistos || [])], obs: null, marcado_por: email, marcado_em: new Date().toISOString() };
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
-    Object.assign(x, novo); desenhar(); toast("Marcado pela leitura do Claude. Confira e clique em 📤 Aprovar e solicitar.");
+    Object.assign(x, novo); desenhar(); toast("Marcado pela leitura do Claude. Confira e clique em ✓ Repor.");
   }
   async function marcar(nf, v) {
     const x = L.find((y) => y.nf === nf); if (!x) return;
     const S = new Set(x.vol_posse || []); S.has(v) ? S.delete(v) : S.add(v);
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
-    const novo = { vol_posse: [...S], marcado_por: email, marcado_em: new Date().toISOString() }; if (REVISAR(x)) novo.obs = null;
+    const novo = { vol_posse: [...S], marcado_por: email, marcado_em: new Date().toISOString() }; novo.obs = REVISAR(x) ? null : obsDe(x, { aprov: false });   // mudou o volume: decide de novo
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf);
     if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
@@ -247,6 +275,7 @@
     const vt = e.target.closest("[data-rpp-volta]"); if (vt) { voltar(vt.dataset.rppVolta); return; }
     const sl = e.target.closest("[data-rpp-sel]"); if (sl) { sl.checked ? SEL.add(sl.dataset.rppSel) : SEL.delete(sl.dataset.rppSel); desenhar(); return; }
     const td = e.target.closest("[data-rpp-todos]"); if (td) { L.filter((x) => sit(x) === "pronto" && podeSol(x)).forEach((x) => (td.checked ? SEL.add(x.nf) : SEL.delete(x.nf))); desenhar(); return; }
+    const dc = e.target.closest("[data-rpp-dec]"); if (dc) { decidir(dc.dataset.nf, dc.dataset.rppDec); return; }
     const lt = e.target.closest("[data-rpp-sollote]"); if (lt) { solicitarLote(); return; }
     const so = e.target.closest("[data-rpp-sol]"); if (so) solicitar(so.dataset.rppSol);
   });

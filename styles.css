@@ -1546,3 +1546,9 @@ a.menu-item .menu-ext { margin-left: auto; opacity: .6; font-size: 12px; }
 body.fundo-escuro #pagina-reposicao .titulo-pagina h1, body.fundo-escuro #pagina-reposicao .titulo-pagina h2,
 body.fundo-escuro #pagina-reposicao .titulo-pagina .sub, body.fundo-escuro #pagina-reposicao .titulo-pagina .info-base { color: #e8edf7; }
 body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
+/* Reposição pré: botões de decisão por caso (27/11) */
+.rpp-dec { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.btn.vermelho-cont { background: #fff; border: 1.5px solid var(--vermelho); color: var(--vermelho); }
+.btn.vermelho-cont:hover { background: #fde8e8; }
+.btn.verde[disabled] { opacity: .45; cursor: not-allowed; }
+.rpp-acao .chip.verm { background: #fde8e8; color: var(--vermelho); }
