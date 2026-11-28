@@ -91,6 +91,18 @@
   }
   const infoVol = (x, v) => { for (const s of x.sku || []) { const i = CAD.get(s + "|" + vKey(v)) || CAD.get(s + "|" + vKey(v).split(".")[0]); if (i) return i; } return null; };
   const rotVol = (x, v) => { const i = infoVol(x, v); return i && i.nro ? `Vol ${i.nro}/${(x.volumes || []).length || i.total} · ` : ""; };
+  // robô rodando agora? (robo_estado andamento:repo-pre / repo-pre-solicitar, gravado pelo robô ao começar e terminar)
+  let ANDA = "", chamadoEm = 0;
+  async function checarAndamento() {
+    try { const r = await sb().from("robo_estado").select("nome,valor").in("nome", ["andamento:repo-pre", "andamento:repo-pre-solicitar"]); if (r.error) return;
+      const ag = Date.now(), ant = ANDA;
+      ANDA = (r.data || []).map((x) => x.valor || {}).filter((v) => v.rodando && v.inicio && ag - Date.parse(v.inicio) < 3 * 3600e3)
+        .map((v) => ` · <span class="rpp-rodando"><span class="pisca"></span>${esc(v.robo)} desde ${hora(v.inicio).split(" às ")[1] || hora(v.inicio)}</span>`).join("");
+      if (!ANDA && chamadoEm && ag - chamadoEm < 180000 && !(r.data || []).some((x) => x.valor && x.valor.fim && Date.parse(x.valor.fim) > chamadoEm)) ANDA = ant;   // ainda subindo no GitHub
+      if (ant && !ANDA) carregar(); else if (ant !== ANDA) desenhar();   // terminou: recarrega os casos
+    } catch (_) {}
+  }
+  setInterval(() => { if ($("rp-repopre").offsetParent && window.__sb) checarAndamento(); }, 15000);
   async function carregar() {
     const r = await sb().from("repo_pre").select("*").order("criado_em", { ascending: true });
     if (r.error) { ok = false; L = []; } else { ok = true; L = r.data || []; }
@@ -105,7 +117,7 @@
   function desenhar() {
     if (!ok) { $("rpp-info").textContent = "Para usar esta aba, rode a parte 97 no Supabase."; $("rpp-cards").innerHTML = $("rpp-lista").innerHTML = ""; return; }
     const ult = L.map((x) => x.analisado_em).filter(Boolean).sort().pop();
-    $("rpp-info").textContent = `${fmt(L.filter((x) => x.na_lista).length)} caso(s) na lista do portal · última análise do robô ${hora(ult)}`;
+    $("rpp-info").innerHTML = `${fmt(L.filter((x) => x.na_lista).length)} caso(s) na lista do portal · última análise do robô ${hora(ult)}${ANDA}`;
     const n = (k) => L.filter((x) => (k === "todos" || sit(x) === k) && (!$("rpp-motivo").value || (x.motivo || "Falta de volumes") === $("rpp-motivo").value)).length;
     $("rpp-cards").innerHTML = CARDS.map(([k, rot, sub, cor]) => `<button type="button" class="kpi ${cor}${card === k ? " ativa" : ""}" data-rpp="${k}"><span class="kpi-rot">${rot}</span><b class="kpi-num">${fmt(n(k))}</b><small>${sub}</small></button>`).join("");
     const q = ($("rpp-busca").value || "").replace(/\D/g, "");
@@ -258,7 +270,8 @@
   });
   $("rpp-rodar").addEventListener("click", async () => {
     const r = await sb().rpc("rodar_robo_repopre"); if (r.error) return toast("Não consegui chamar o robô: " + r.error.message, true);
-    toast("Robô chamado: em uns minutos os casos aparecem aqui."); setTimeout(carregar, 240000);
+    toast("Robô chamado: em 1 a 2 minutos aparece \"analisando\" aqui em cima; quando terminar, os casos atualizam sozinhos.");
+    ANDA = ` · <span class="rpp-rodando"><span class="pisca"></span>robô chamado, começando…</span>`; chamadoEm = Date.now(); desenhar();
   });
   $("rpp-excel").addEventListener("click", () => {
     if (!L.length) return toast("Nada para exportar.", true);
