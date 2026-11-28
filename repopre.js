@@ -404,8 +404,7 @@
   });
   setInterval(() => { if ($("rp-repopre").offsetParent && window.__sb && !carregou) { carregou = true; carregar(); setInterval(() => { if ($("rp-repopre").offsetParent) carregar(); }, 120000); } }, 2000);
   // 28/11 (Brenda): Excel da consulta de tickets FECHADOS do 360 (robô tk360-fech grava em robo_estado)
-  const btFech = document.getElementById("btn-tk-fechados");
-  if (btFech) btFech.addEventListener("click", async () => {
+  document.addEventListener("click", async (ev) => { if (!ev.target.closest("[data-tk-fechados]")) return;
     const r = await sb().from("robo_estado").select("valor,atualizado_em").eq("nome", "tk360:fechados").maybeSingle();
     if (r.error || !r.data) return toast("Ainda não tem consulta de tickets fechados.", true);
     const v = r.data.valor || {}, ST = { solved: "Fechado (resolvido)", closed: "Fechado", canceled: "Cancelado", cancelled: "Cancelado" };
