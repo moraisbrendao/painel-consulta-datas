@@ -1700,7 +1700,7 @@ if (MODO === "repo-pre-solicitar") {   // Reposição pré: cria o ticket no por
 if (MODO === "diag-360fech") {   // 28/11: API do 360 traz tickets fechados / por NF?
   await entrarSupabase(); const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-  try { const T = await import("./tk360.mjs"); if (process.env.TRANSP === "ped") await T.diag360Pedido({ log, ctx, chamar }); else await T.diag360Fechados({ log, ctx, chamar }); } catch (e) { log("diag-360fech: erro " + String(e.message).slice(0, 120)); } finally { await nav.close(); }
+  try { const T = await import("./tk360.mjs"); if (process.env.TRANSP === "ped") await T.diag360Pedido({ log, ctx, chamar }); else if (process.env.TRANSP === "ord") await T.diag360Orders({ log, ctx, chamar }); else await T.diag360Fechados({ log, ctx, chamar }); } catch (e) { log("diag-360fech: erro " + String(e.message).slice(0, 120)); } finally { await nav.close(); }
 }
 if (MODO === "repo-debito" || MODO === "diag-paralelo") {   // 28/11: débito da reposição abriu? / diag da janela Ticket Paralelo (não cria nada)
   await entrarSupabase();

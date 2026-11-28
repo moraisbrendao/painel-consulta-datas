@@ -165,3 +165,27 @@ export async function diag360Pedido({ log, ctx, chamar }) {
   log(`diag-360ped: chamadas ${JSON.stringify([...new Set(vistos)]).slice(0, 1200)}`);
   for (const r of resps.slice(0, 8)) log(`  resposta ${r.cam}: ${r.chaves} · status ${JSON.stringify(r.status)}`);
 }
+// diag 3: formato de /orders/?invoice= e /orders/<id>/tickets (só nomes de campos e valores de status)
+export async function diag360Orders({ log, ctx, chamar }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  let auth = null, raiz = null, origem = null;
+  ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization) { auth = h.authorization; const u = new URL(q.url()); origem = u.origin; raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } });
+  const p = await entrarMulti360(ctx, log); await p.waitForTimeout(6000); if (!auth) { await p.reload().catch(() => {}); await p.waitForTimeout(6000); }
+  const get = async (url) => { const r = await ctx.request.get(url, { headers: { authorization: auth, accept: "application/json" }, timeout: 45000 }).catch(() => null); if (!r) return [0, null]; let j = null; try { j = await r.json(); } catch (_) {} return [r.status(), j]; };
+  const B = await chamar("base_pedidos?select=nf&nf=not.is.null&limit=5&offset=800");
+  for (const b of B.slice(0, 3)) {
+    const num = String(b.nf).split("-")[0].trim();
+    for (const inv of [num, b.nf]) {
+      const [st, j] = await get(`${origem}/orders/?page=1&invoice=${encodeURIComponent(inv)}`);
+      const lst = j && (j.orders || j.results || j.data || (Array.isArray(j) ? j : null));
+      log(`  /orders?invoice=(${inv === num ? "só número" : "número-série"}): ${st} · chaves ${JSON.stringify(j && !Array.isArray(j) ? Object.keys(j) : "lista")} · itens ${lst ? lst.length : "?"} · campos ${JSON.stringify(Object.keys((lst || [])[0] || {})).slice(0, 500)}`);
+      const o = (lst || [])[0]; if (!o) continue;
+      const id = o.id || o.order_id || o.uuid;
+      const [s2, t] = await get(`${raiz}/orders/${id}/tickets`);
+      const tl = t && (t.tickets || t.results || (Array.isArray(t) ? t : null));
+      log(`  /orders/<id>/tickets: ${s2} · chaves ${JSON.stringify(t && !Array.isArray(t) ? Object.keys(t) : "lista")} · tickets ${tl ? tl.length : "?"} · campos ${JSON.stringify(Object.keys((tl || [])[0] || {})).slice(0, 500)} · status ${JSON.stringify([...new Set((tl || []).map((x) => JSON.stringify(x.status).replace(/\d{3,}/g, "#")))]).slice(0, 300)}`);
+      if (tl && tl[0]) log(`  exemplo (sem números): ${JSON.stringify(tl[0], (k, v) => (typeof v === "string" ? v.replace(/\d{3,}/g, "#").slice(0, 40) : typeof v === "number" ? 0 : v)).slice(0, 700)}`);
+      break;
+    }
+  }
+}
