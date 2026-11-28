@@ -47,11 +47,16 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
   const velho = (x) => (x.pecas || []).some((y) => !y.peca || (y.qtde == null && !/\d/.test(y.sku || "")) || !("valor" in y));   // 27/11: valor e peso da peça
   const semPeca = T.filter((x) => !x.pecas_em || velho(x)).slice(0, limite);
   const H = 20 * 3600000;
-  const rast = T.filter((x) => x.nota_at && !/^entregue/i.test((x.rastreio && x.rastreio.situacao) || "") && (!x.rastreio_em || Date.now() - Date.parse(x.rastreio_em) > H));
+  // ATs que só vieram do 360 direto (tk360, ainda fora do detalhamento): rastreio também (Brenda 28/11); grava em tk360.at
+  let API = [];
+  try { const ids = new Set(T.map((x) => String(x.ticket).replace(/\D/g, "")));
+    API = (await chamar("tk360?select=ticket_id,transp,redespacho,at&na_lista=eq.true&tipo=ilike.*assist*&limit=5000")).filter((k) => !ids.has(String(k.ticket_id)) && k.at && k.at.nota_at)
+      .map((k) => ({ ticket: String(k.ticket_id), nota_at: k.at.nota_at, transp_envio: k.at.transp, redesp_promob: k.redespacho, transp_promob: k.transp, rastreio: k.at.rastreio, rastreio_em: k.at.rastreio_em, _api: k.at })); } catch (_) {}
+  const rast = [...T, ...API].filter((x) => x.nota_at && !/^entregue/i.test((x.rastreio && x.rastreio.situacao) || "") && (!x.rastreio_em || Date.now() - Date.parse(x.rastreio_em) > H));
   { const c = (f) => JSON.stringify(Object.entries(T.reduce((a, x) => { const k = f(x); a[k] = (a[k] || 0) + 1; return a; }, {})).sort((a, b) => b[1] - a[1]).slice(0, 25));
     log(`AT filas: ${c((x) => (x.fila || "—").slice(0, 40))}`);
     log(`AT rastreio: ${c((x) => (x.rastreio && x.rastreio.situacao) || "—")} · eventos ${c((x) => String((x.rastreio && x.rastreio.evento) || "—").replace(/\d+/g, "#").trim().split(/\s+/).slice(0, 2).join(" ").slice(0, 25))}`); }
-  log(`AT: ${T.length} tickets na planilha · ${semPeca.length} para ler peças · ${rast.length} para rastrear`);
+  log(`AT: ${T.length} tickets na planilha · ${API.length} só no 360 direto · ${semPeca.length} para ler peças · ${rast.length} para rastrear`);
   // confere que gravou de verdade (sem permissão o banco responde OK com 0 linhas)
   const patch = async (tk, c) => { const r = await chamar(`at_tk?ticket=eq.${encodeURIComponent(tk)}&select=ticket`, "PATCH", c, { Prefer: "return=representation" });
     if (!Array.isArray(r) || !r.length) throw new Error("não gravou em at_tk: falta rodar a parte 108 no Supabase"); };
@@ -85,7 +90,8 @@ export async function rodarAt({ chamar, log, ctx, R, limite = 150, so = "" }) {
       try { r = await B.rastrear({ nf: String(x.nota_at).trim(), transp_pedido: tp }, R); } catch (_) {}
       const rs = r ? { fonte: r.fonte, situacao: r.situacao, evento: r.evento, data: r.data_evento, transp: r.transp } : { situacao: "não achado" };
       cont[rs.situacao || "?"] = (cont[rs.situacao || "?"] || 0) + 1;
-      await patch(x.ticket, { rastreio: rs, rastreio_em: new Date().toISOString() }).catch(() => {});
+      if (x._api) await chamar(`tk360?ticket_id=eq.${x.ticket}`, "PATCH", { at: { ...x._api, rastreio: rs, rastreio_em: new Date().toISOString() } }).catch(() => {});
+      else await patch(x.ticket, { rastreio: rs, rastreio_em: new Date().toISOString() }).catch(() => {});
     }
     log(`AT rastreio: ${JSON.stringify(cont)}`);
   }

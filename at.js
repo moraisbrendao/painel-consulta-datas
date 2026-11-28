@@ -94,7 +94,7 @@
       ap.forEach((k) => { const a = k.at || {}; if (k.visto_em && (!API_EM || k.visto_em > API_EM)) API_EM = k.visto_em;
         let x = porTk.get(String(k.ticket_id));
         if (!x) { x = { ticket: String(k.ticket_id), criado_em: k.criado, fila: k.fila, grupo: k.grupo, nota_ticket: k.nf, nota_at: a.nota_at || null, data_saida: dia(a.nota_at_em), transp_envio: a.transp || null,
-          transp_promob: k.transp, redesp_promob: k.redespacho, na_planilha: k.na_lista, visto_em: k.visto_em, saiu_em: k.saiu_em, pecas: pecasApi(a), pecas_em: k.detalhe_em, _soApi: true }; T.push(x); porTk.set(String(k.ticket_id), x); }
+          transp_promob: k.transp, redesp_promob: k.redespacho, na_planilha: k.na_lista, visto_em: k.visto_em, saiu_em: k.saiu_em, pecas: pecasApi(a), pecas_em: k.detalhe_em, rastreio: a.rastreio || null, rastreio_em: a.rastreio_em || null, _soApi: true }; T.push(x); porTk.set(String(k.ticket_id), x); }
         else {
           if (k.visto_em && (!x.visto_em || k.visto_em > x.visto_em)) { x.fila = k.fila || x.fila; x.na_planilha = k.na_lista; if (!k.na_lista && !x.saiu_em) x.saiu_em = k.saiu_em; x._filaApi = true; }
           if (!x.nota_at && a.nota_at) x.nota_at = a.nota_at;

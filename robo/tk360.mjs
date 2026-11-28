@@ -39,7 +39,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
   // 2) o que já temos
   const ja = new Map(); let seco = false;
   try { await chamar("tk360?select=ticket_id&limit=1"); } catch (_) { seco = true; limite = Math.min(limite, 40); log("tk360: a tabela tk360 ainda não existe (parte 110): rodo só um teste de leitura, sem gravar nada"); }
-  if (!seco) for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,atualizado,detalhe_em,tipo,na_lista&order=ticket_id&offset=${de}&limit=1000`); b.forEach((x) => ja.set(String(x.ticket_id), x)); if (b.length < 1000) break; }
+  if (!seco) for (let de = 0; ; de += 1000) { const b = await chamar(`tk360?select=ticket_id,atualizado,detalhe_em,tipo,na_lista,rastreio:at->rastreio,rastreio_em:at->>rastreio_em&order=ticket_id&offset=${de}&limit=1000`); b.forEach((x) => ja.set(String(x.ticket_id), x)); if (b.length < 1000) break; }
 
   const agora = new Date().toISOString();
   const linhaLista = (t) => ({ ticket_id: Number(t.ticket_id), fila: t.queue && t.queue.name || null, fila_id: t.queue && t.queue.id || null, status: t.status && (t.status.label || t.status.value) || null,
@@ -85,6 +85,7 @@ export async function rodarTk360({ chamar, log, ctx, limite = 1500 }) {
           if (e.type === "erp-order-emission") { A.pedido_erp = x.erp_order_id || null; A.pedido_erp_em = e.datetime || null; }
         }
         for (const m of (cm.comments || [])) { const k = String(m.message || "").match(/NF\s*(\d{3,})\s*-\s*(\d+)\s*emitida/i); if (k) { A.nota_at = `${k[1]}-${k[2]}`; A.nota_at_em = m.datetime || null; } }   // o último vale
+        const ant = ja.get(id); if (ant && ant.rastreio) { A.rastreio = ant.rastreio; A.rastreio_em = ant.rastreio_em; }   // rastreio gravado pelo robô de AT continua
         r.at = A; if (A.nota_at) comNota++; if ((A.pecas || []).length) comPecas++; if (A.frete != null) comFrete++;
       }
     } catch (e) { erros++; r.detalhe_msg = String(e.message).slice(0, 120); }
