@@ -62,15 +62,16 @@
       if (auto && sig === assinatura && ok) return; assinatura = sig;
       info = (inf.data || [])[0] || null; ok = true;
       // virou o dia: planilha de dia anterior = quadros limpos até subir a nova (Brenda 26/11); "ver mesmo assim" mostra a antiga
-      velha = !!(info && info.enviado_em && diaSP(info.enviado_em) < diaSP(Date.now()));
-      L = velha && !verVelha ? [] : out; checarRobo();
+      // 28/11 (Brenda): só limpa depois de 2 h da subida (planilha das 23:53 não some à meia-noite) e o "Erro: verificar" (transportadora não atuou) continua para cobrar
+      velha = !!(info && info.enviado_em && diaSP(info.enviado_em) < diaSP(Date.now()) && Date.now() - new Date(info.enviado_em).getTime() > 2 * 3600e3);
+      L = velha && !verVelha ? out.filter((x) => sit(x) === "manual") : out; checarRobo();
     } catch (e) { ok = false; L = []; $("br-info").textContent = /barrar_entrega|does not exist|schema cache/i.test(e.message || "") ? "Para usar esta aba, rode a parte 49 no Supabase." : "Não consegui carregar: " + (e.message || e); }
     carregou = true; desenhar();
   }
   document.addEventListener("click", (e) => { if (e.target.id === "br-ver-velha") { verVelha = true; assinatura = ""; carregar(); } });
   function desenhar() {
     if (!ok) return;
-    if (velha && !verVelha) $("br-info").innerHTML = `<b>Quadros limpos:</b> a última planilha é de ${esc(hora(info.enviado_em))}. Suba a planilha de hoje para ver as notas. <button type="button" class="link" id="br-ver-velha">ver a de ${esc(new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }))} mesmo assim</button>`;
+    if (velha && !verVelha) $("br-info").innerHTML = `<b>Quadros limpos:</b> a última planilha é de ${esc(hora(info.enviado_em))}. Suba a planilha de hoje para ver as notas. Continuam aqui as ${fmt(L.length)} de "Erro: verificar" (transportadora não atuou) para cobrar. <button type="button" class="link" id="br-ver-velha">ver a de ${esc(new Date(info.enviado_em).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" }))} mesmo assim</button>`;
     else $("br-info").textContent = info ? `Planilha: ${info.arquivo || ""} · ${hora(info.enviado_em)}${info.enviado_por ? " por " + info.enviado_por.split("@")[0] : ""} · ${fmt(L.length)} notas${velha ? " (de um dia anterior)" : ""}` : "Nenhuma planilha enviada ainda.";
     const tps = [...new Set(L.map((x) => x.transp_pedido || ""))].filter(Boolean).sort((a, b) => a.localeCompare(b, "pt-BR")), atual = $("br-transp").value;
     $("br-transp").innerHTML = `<option value="">Todas</option>` + tps.map((t) => `<option${t === atual ? " selected" : ""}>${esc(t)}</option>`).join("");
