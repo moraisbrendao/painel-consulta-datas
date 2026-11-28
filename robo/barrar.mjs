@@ -420,11 +420,14 @@ async function comentarTicket(x, m360, baixarArquivo, M, chamar) {
   if (x.print_path) arquivos.push({ name: `anotacao-${x.nf}.png`, mimeType: "image/png", buffer: await baixarArquivo("barrar", x.print_path) });
   if (!arquivos.length) throw new Error("sem print para anexar");
   const r = x.rastreio || {};
+  // Brenda 28/11: no ticket só o motivo, curto (ex.: "Recusa não pode receber mercadoria"), sem NF nem "prints em anexo"
+  const curto = (t) => { let v = String(t || "").replace(/^\s*(motivo|rastreio)[^:]*:\s*/i, "").replace(/^\s*(recebedor|destinat[aá]rio)\s+/i, "").replace(/\s*\/\s*/g, " ").replace(/\bnao\b/gi, "não").replace(/\s+/g, " ").replace(/[.\s]+$/, "").trim().slice(0, 120);
+    v = v.toLowerCase(); return v ? v[0].toUpperCase() + v.slice(1) : ""; };
   const texto = x.decisao === "barrar" && /^rob.*(segregado|barrada)/i.test(x.decisao_por || "")
-    ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. ${String(x.decisao_motivo || "Pedido segregado.").slice(0, 200)} Print${arquivos.length > 1 ? "s" : ""} em anexo.`
+    ? curto(x.decisao_motivo) || "Pedido segregado"
     : x.decisao === "barrar"
-    ? `Barrar entrega: NF ${x.nf} marcada como BARRADA no portal. Rastreio${r.alvo ? " " + r.alvo : ""}: ${r.evento ? String(r.evento).toLowerCase().slice(0, 80) : "devolução"}. Print${arquivos.length > 1 ? "s" : ""} em anexo.`
-    : `Barrar entrega: NF ${x.nf} marcada como NÃO BARRADA no portal (${x.decisao_opcao || OP_NAO_RECEBEU}). ${x.decisao_motivo ? "Motivo: " + String(x.decisao_motivo).slice(0, 200) + ". " : ""}Print${arquivos.length > 1 ? "s" : ""} em anexo.`;
+    ? curto(r.evento) || "Devolução"
+    : curto(x.decisao_motivo) || curto(x.decisao_opcao || OP_NAO_RECEBEU);
   await M.comentarioInterno(m360, x.ticket, texto, arquivos);
   await chamar(`barrar_entrega?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { ticket_status: "feito", ticket_msg: `Comentário interno com ${arquivos.length} print(s).`, ticket_em: new Date().toISOString() });
 }
