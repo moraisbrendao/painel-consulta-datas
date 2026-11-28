@@ -210,13 +210,16 @@ export async function diagNaoloc({ chamar, log, ctx }) {
 
 // 28/11 (Brenda: "tem coisa de dias anteriores na fila"): ação feita, mas a nota continua na planilha → onde está o ticket hoje (tk360) e o histórico de filas. Só contagens/filas/datas (sem NF).
 export async function diagFeitos({ chamar, log }) {
-  const L = await chamar("nao_localizada?select=ticket,acao,acao_em,acao_status&na_planilha=eq.true&acao_status=eq.feito&ticket=not.is.null&limit=500");
+  const L = await chamar("nao_localizada?select=nf,ticket,acao,acao_em,acao_status&na_planilha=eq.true&acao_status=eq.feito&ticket=not.is.null&limit=500");
   const info = await chamar("nao_localizada_info?select=*&limit=1").catch(() => []);
   log(`diag-feitos: ${L.length} nota(s) com ação feita e ainda na planilha · planilha enviada ${(info[0] || {}).enviado_em || "?"}`);
   if (!L.length) return;
   const T = await chamar(`tk360?select=ticket_id,fila,na_lista,atualizado,saiu_em,status,filas:datas->filas&ticket_id=in.(${L.map((x) => x.ticket).join(",")})`).catch((e) => (log("  tk360 erro " + e.message), []));
   const por = new Map(T.map((t) => [String(t.ticket_id), t]));
-  L.forEach((x, i) => { const t = por.get(String(x.ticket));
+  const BE = await chamar(`barrar_entrega?select=nf,decisao,decisao_opcao,decisao_por,decisao_em,sugestao,sugestao_opcao,portal_status,portal_em,portal_msg&nf=in.(${L.map((x) => `"${encodeURIComponent(x.nf)}"`).join(",")})`).catch((e) => (log("  barrar erro " + e.message), []));
+  const pb = new Map(BE.map((b) => [b.nf, b]));
+  L.forEach((x, i) => { const t = por.get(String(x.ticket)), b = pb.get(x.nf);
+    log(`  #${i + 1} barrar: ${b ? `sugestão ${b.sugestao}/${b.sugestao_opcao || "-"} · decisão ${b.decisao || "-"}/${b.decisao_opcao || "-"} por ${/^rob/i.test(b.decisao_por || "") ? b.decisao_por : b.decisao_por ? "pessoa" : "-"} em ${b.decisao_em || "-"} · portal ${b.portal_status || "-"} ${b.portal_em || ""} ${String(b.portal_msg || "").slice(0, 80)}` : "não está no barrar"}`);
     log(`  #${i + 1} ação ${x.acao} em ${x.acao_em} · 360 agora: ${t ? `${t.na_lista ? "aberto" : "fora da lista"} · fila ${t.fila} · status ${t.status || "-"} · atualizado ${t.atualizado}` : "não está no tk360"}`);
     (t && Array.isArray(t.filas) ? t.filas.slice(-5) : []).forEach((h) => log(`       ${JSON.stringify(h).replace(/\d{6,}/g, "#").slice(0, 160)}`)); });
 }
