@@ -129,6 +129,7 @@ export async function pedido360(ctx, log, nf) {
   await alvo.locator("td").first().click(); await m.waitForTimeout(4000); await m.waitForLoadState("networkidle", { timeout: 20000 }).catch(() => {});
   if (!/Tickets do Pedido/i.test(await m.locator("body").innerText())) { await alvo.locator("a").first().click().catch(() => {}); await m.waitForTimeout(4000); }
   const corpo = await m.locator("body").innerText();
+  try { const u = new URL(m.url()); if (!/\/pedidos\/hub\/?$/.test(u.pathname)) r.url = u.origin + u.pathname; } catch (_) {}   // link do pedido (Brenda 27/11)
   const prod = corpo.split(/Produtos do Pedido/i)[1] || ""; r.sku = [...new Set(prod.match(/\b[A-Z0-9]{2,}[A-Z0-9-]*\.\d{3}\b/g) || [])];
   const tk = (corpo.split(/Tickets do Pedido/i)[1] || "").split(/Informa[cç][oõ]es do Pedido|Produtos do Pedido/i)[0];
   r.semTickets = /Nenhum ticket vinculado/i.test(tk);
@@ -264,21 +265,22 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
   const alvo = lista.filter((c) => SERIES.includes(String(c.nf || "").split("-")[1]?.trim()) && (!c.status || /^\s*novo\s*$/i.test(c.status)));   // só status Novo (Brenda 27/11)
   if (lista.some((c) => c.status && !/^\s*novo\s*$/i.test(c.status))) log(`  (${lista.filter((c) => c.status && !/^\s*novo\s*$/i.test(c.status)).length} linha(s) da lista não estavam Novo: ignoradas)`);
   log(`Portal: ${lista.length} reposições Novo · ${alvo.length} nas séries ${SERIES.join("/")} (${Object.entries(alvo.reduce((a, c) => ((a[c.motivo || "?"] = (a[c.motivo || "?"] || 0) + 1), a), {})).map(([k, v]) => k + " " + v).join(", ")})`);
-  const jaTem = new Map((await chamar("repo_pre?select=nf,analisado_em,volumes,venda&limit=5000")).map((x) => [x.nf, x]));
+  const jaTem = new Map((await chamar("repo_pre?select=nf,analisado_em,volumes,venda,tickets&limit=5000")).map((x) => [x.nf, x]));
   // quem saiu da lista (já virou ticket, cancelada ou mudou de status)
   const nfs = new Set(alvo.map((c) => c.nf));
   const sairam = [...jaTem.keys()].filter((nf) => !nfs.has(nf));
   if (sairam.length) for (let i = 0; i < sairam.length; i += 50) await chamar(`repo_pre?nf=in.(${sairam.slice(i, i + 50).map((n) => `"${n}"`).join(",")})`, "PATCH", { na_lista: false });
   let feitos = 0, erros = 0, origens = 0;
+  const semLink = (a) => (a.tickets || []).some((t) => t.nota_de && t.nf_original && !t.url_pedido);   // nota de reposição/AT sem o link do pedido original: relê uma vez
   // casos novos (nunca analisados) primeiro, para o limite da rodada ir para eles
-  const nunca = (c) => { const a = jaTem.get(c.nf); return !(a && a.volumes && a.volumes.length && a.venda === true); };   // venda não achada: tenta de novo (pode ser nota de reposição/AT)
+  const nunca = (c) => { const a = jaTem.get(c.nf); return !(a && a.volumes && a.volumes.length && a.venda === true && !semLink(a)); };   // venda não achada: tenta de novo (pode ser nota de reposição/AT)
   alvo.sort((x, y) => nunca(y) - nunca(x));
   log(`repo-pre: ${alvo.filter(nunca).length} caso(s) Novo ainda sem análise · os outros já têm histórico e não são reabertos`);
   for (const c of alvo) {
     const antes = jaTem.get(c.nf);
     const base = { nf: c.nf, motivo: c.motivo, status_portal: c.status, transp: c.transp, solicitado: c.data, qtd_volumes: c.qtd, serie: String(c.nf).split("-")[1].trim(), na_lista: true };
     // 27/11 (Brenda): já analisado com volumes e 360 = guarda o histórico e não reanalisa (as etiquetas não mudam); só atualiza os dados da lista
-    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda === true) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
+    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda === true && !semLink(antes)) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
     if (feitos >= limite) { if (!antes) await chamar("repo_pre", "POST", base, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {}); continue; }
     feitos++;
     const r = { ...base, analisado_em: new Date().toISOString(), robo_msg: null };
@@ -298,7 +300,7 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
         if (o) {
           let q2 = null; if (o.nf_original) try { q2 = await pedido360(ctx, log, o.nf_original); } catch (_) {}
           r.venda = true; r.status_360 = `nota de ${o.nota_de === "at" ? "AT" : "reposição"} do ticket ${o.ticket}`; r.sku = q2 && q2.sku.length ? q2.sku : r.sku;
-          r.tickets = [{ id: o.ticket, tipo: o.nota_de === "at" ? "Nota de AT (origem)" : "Nota de reposição (origem)", fila: o.fila || "", situacao: "", nota_de: o.nota_de, nf_original: o.nf_original, itens: o.itens || [], fonte: o.fonte.join(", ") },
+          r.tickets = [{ id: o.ticket, tipo: o.nota_de === "at" ? "Nota de AT (origem)" : "Nota de reposição (origem)", fila: o.fila || "", situacao: "", nota_de: o.nota_de, nf_original: o.nf_original, url_pedido: (q2 && q2.url) || null, itens: o.itens || [], fonte: o.fonte.join(", ") },
             ...((q2 && q2.tickets) || [])];
           r.tem_devolucao = r.tickets.some((t) => !t.nota_de && /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
           if (q2 && q2.data) r.data_360 = q2.data;
