@@ -1701,7 +1701,7 @@ if (MODO === "repo-debito" || MODO === "diag-paralelo") {   // 28/11: débito da
   await entrarSupabase();
   const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
-  try { const RP = await import("./repo-pre.mjs"); if (MODO === "repo-debito") await RP.conferirDebitos({ chamar, log, ctx }); else await RP.diagParalelo({ chamar, log, ctx }); }
+  try { const RP = await import("./repo-pre.mjs"); if (MODO === "repo-debito") await RP.conferirDebitos({ chamar, log, ctx }); else if (process.env.TRANSP === "tk") await RP.diagTicketsFeito({ chamar, log, ctx }); else await RP.diagParalelo({ chamar, log, ctx }); }
   catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }

@@ -533,3 +533,10 @@ export async function diagParalelo({ chamar, log, ctx }) {
   const c = p.locator("[role=dialog]").last().getByRole("button", { name: /cancelar|fechar/i }).first(); if (await c.count()) await c.click().catch(() => {});
   log("diag-paralelo: fechei sem criar nada");
 }
+// diag: tickets do pedido do último caso feito (id, tipo, fila, situação — sem dados de cliente)
+export async function diagTicketsFeito({ chamar, log, ctx }) {
+  const [x] = await chamar("repo_pre?select=nf,tickets,ticket_360&solicitar_status=eq.feito&ticket_360=not.is.null&order=feito_em.desc&limit=1");
+  if (!x) return log("diag-tk: nada");
+  const org = (x.tickets || []).find((t) => t.nota_de); const q = await pedido360(ctx, log, org && org.nf_original ? org.nf_original : x.nf);
+  log(`diag-tk: ticket da reposição ${x.ticket_360}`); for (const t of q.tickets) log(`   #${t.id} · ${t.tipo} · ${t.fila} · ${t.situacao}`);
+}
