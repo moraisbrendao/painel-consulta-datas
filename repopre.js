@@ -86,7 +86,7 @@
     if (x.solicitar_status === "feito") return "feito";
     if (x.solicitar_status === "pendente") return "fila";
     if (!x.na_lista && !soComentario(x)) return "saiu";   // saiu do portal (Brenda 27/11): não fica em Conferir à mão por erro antigo
-    if (x.solicitar_status === "erro") return "mao";
+    if (x.solicitar_status === "erro") return "errosol";   // Brenda 28/11: card próprio "Erro na solicitação no portal"
     if (NAOREP(x)) return "naorep";
     if (!x.analisado_em) return "robo";
     if (APROV(x) && repor(x).length) return "pronto";   // a pessoa decidiu: vale mais que o alerta
@@ -95,7 +95,7 @@
     return "marcar";
   };
   const CARDS = [["marcar", "Para analisar", "marque o volume e decida ✓ Repor ou ✗ Não repor", "amarelo"], ["pronto", "Pronto para solicitar", "aprovado: falta mandar o robô", "verde"],
-    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, sinistro, inversão, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["naorep", "Não repor", "decidido: não vai reposição", "vermelho"], ["todos", "Todos", "", ""]];
+    ["fila", "Solicitando", "o robô está pedindo a reposição", "azul"], ["feito", "Reposição solicitada", "ticket no portal + comentário no 360", "verde"], ["mao", "Conferir à mão", "devolução, sinistro, inversão, não é venda ou erro", "vermelho"], ["robo", "Aguardando o robô", "ainda não analisados", ""], ["errosol", "Erro na solicitação", "o robô não conseguiu solicitar no portal", "vermelho"], ["naorep", "Não repor", "decidido: não vai reposição", "vermelho"], ["todos", "Todos", "", ""]];
 
   // cadastro de volumes (parte 101): SKU → volume → número do volume e descrição
   let CAD = new Map();   // "sku|volume" e "volume" → { nro, total, descricao }
