@@ -83,6 +83,32 @@ export async function diagRepoPre({ chamar, log, ctx, alvo, createHash }) {
 
 // 360 › Hub › Pedidos › Filtros › NF: achou = venda. Abre o pedido e lê o SKU (Produtos do Pedido) e os tickets (fila / tipo / situação).
 // Nada de nome, CPF, telefone ou endereço: só SKU, filas, tipos e situação.
+// NF que não é venda: pode ser nota de REPOSIÇÃO ou de AT (Brenda 27/11). Procura nos dados que já temos
+// (filas Aguardando entrega / AT, detalhamento, AT do 360, Ajuste Intelipost) de qual ticket ela é e qual a NF original.
+export async function origemNota(chamar, nf) {
+  const [num, ser] = String(nf).split("-").map((x) => (x || "").trim()); const nn = num.replace(/^0+/, "");
+  const cands = [...new Set([nf, `${nn}-${ser}`, nn, `${nn}-${String(ser).padStart(2, "0")}`])].map((v) => `"${v}"`).join(",");
+  const q = async (u) => { try { return await chamar(u); } catch (_) { return []; } };
+  const [ag, at, k3, sd, tn] = await Promise.all([
+    q(`aguardando_entrega?nf_nova=in.(${cands})&select=ticket,tipo,tipo_reposicao,nf_original,fila_360&limit=5`),
+    q(`at_tk?nota_at=in.(${cands})&select=ticket,nota_ticket,fila&limit=5`),
+    q(`tk360?at->>nota_at=in.(${cands})&select=ticket_id,nf,fila,tipo&limit=5`),
+    q(`tk_saida?nf_nova=in.(${cands})&select=ticket,origem&limit=5`),
+    q(`troca_notas?nf_nova=in.(${cands})&select=ticket,nf_ticket,tipo&limit=5`)]);
+  const o = { ticket: null, nota_de: null, nf_original: null, fila: null, fonte: [] };
+  const usa = (ticket, de, nfo, fila, fonte) => { if (!ticket) return; o.ticket = o.ticket || String(ticket).replace(/\D/g, ""); o.nota_de = o.nota_de || de; o.nf_original = o.nf_original || nfo || null; o.fila = o.fila || fila || null; o.fonte.push(fonte); };
+  for (const x of at) usa(x.ticket, "at", x.nota_ticket, x.fila, "detalhamento AT");
+  for (const x of k3) usa(x.ticket_id, "at", x.nf, x.fila, "360");
+  for (const x of ag) usa(x.ticket, /assist|\bat\b/i.test(`${x.tipo} ${x.tipo_reposicao}`) ? "at" : "reposicao", x.nf_original, x.fila_360, "Aguardando entrega");
+  for (const x of tn) usa(x.ticket, "reposicao", x.nf_ticket, null, "Ajuste Intelipost");
+  for (const x of sd) usa(x.ticket, /assist/i.test(x.origem || "") ? "at" : "reposicao", null, null, "detalhamento");
+  if (o.ticket && !o.nf_original) { const t = await q(`tk360?ticket_id=eq.${o.ticket}&select=nf,fila&limit=1`); if (t[0]) { o.nf_original = t[0].nf; o.fila = o.fila || t[0].fila; } }
+  // itens: volumes da reposição (lidos do ticket) ou peças da AT
+  if (o.ticket) { if (o.nota_de === "at") { const t = await q(`at_tk?ticket=eq.${o.ticket}&select=pecas&limit=1`); o.itens = ((t[0] || {}).pecas || []).map((p) => p.item || p.peca).filter(Boolean); }
+    else o.itens = (await q(`repo_itens?ticket=eq.${o.ticket}&select=codigo`)).map((x) => x.codigo); }
+  return o.ticket ? o : null;
+}
+
 export async function pedido360(ctx, log, nf) {
   const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
   const m = pedido360.pg && !pedido360.pg.isClosed() ? pedido360.pg : (pedido360.pg = await entrarMulti360(ctx, log, CRED_REPO()));
@@ -243,16 +269,16 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
   const nfs = new Set(alvo.map((c) => c.nf));
   const sairam = [...jaTem.keys()].filter((nf) => !nfs.has(nf));
   if (sairam.length) for (let i = 0; i < sairam.length; i += 50) await chamar(`repo_pre?nf=in.(${sairam.slice(i, i + 50).map((n) => `"${n}"`).join(",")})`, "PATCH", { na_lista: false });
-  let feitos = 0, erros = 0;
+  let feitos = 0, erros = 0, origens = 0;
   // casos novos (nunca analisados) primeiro, para o limite da rodada ir para eles
-  const nunca = (c) => { const a = jaTem.get(c.nf); return !(a && a.volumes && a.volumes.length && a.venda != null); };
+  const nunca = (c) => { const a = jaTem.get(c.nf); return !(a && a.volumes && a.volumes.length && a.venda === true); };   // venda não achada: tenta de novo (pode ser nota de reposição/AT)
   alvo.sort((x, y) => nunca(y) - nunca(x));
   log(`repo-pre: ${alvo.filter(nunca).length} caso(s) Novo ainda sem análise · os outros já têm histórico e não são reabertos`);
   for (const c of alvo) {
     const antes = jaTem.get(c.nf);
     const base = { nf: c.nf, motivo: c.motivo, status_portal: c.status, transp: c.transp, solicitado: c.data, qtd_volumes: c.qtd, serie: String(c.nf).split("-")[1].trim(), na_lista: true };
     // 27/11 (Brenda): já analisado com volumes e 360 = guarda o histórico e não reanalisa (as etiquetas não mudam); só atualiza os dados da lista
-    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda != null) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
+    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda === true) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
     if (feitos >= limite) { if (!antes) await chamar("repo_pre", "POST", base, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {}); continue; }
     feitos++;
     const r = { ...base, analisado_em: new Date().toISOString(), robo_msg: null };
@@ -267,6 +293,18 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
     try { const q = await pedido360(ctx, log, c.nf);
       r.venda = q.venda; r.status_360 = q.status || null; r.data_360 = q.data || null; r.sku = q.sku; r.tickets = q.tickets;
       r.tem_devolucao = q.tickets.some((t) => /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
+      if (!q.venda) {   // nota de reposição ou de AT: acha o ticket nos nossos dados e usa o pedido da NF original
+        const o = await origemNota(chamar, c.nf);
+        if (o) {
+          let q2 = null; if (o.nf_original) try { q2 = await pedido360(ctx, log, o.nf_original); } catch (_) {}
+          r.venda = true; r.status_360 = `nota de ${o.nota_de === "at" ? "AT" : "reposição"} do ticket ${o.ticket}`; r.sku = q2 && q2.sku.length ? q2.sku : r.sku;
+          r.tickets = [{ id: o.ticket, tipo: o.nota_de === "at" ? "Nota de AT (origem)" : "Nota de reposição (origem)", fila: o.fila || "", situacao: "", nota_de: o.nota_de, nf_original: o.nf_original, itens: o.itens || [], fonte: o.fonte.join(", ") },
+            ...((q2 && q2.tickets) || [])];
+          r.tem_devolucao = r.tickets.some((t) => !t.nota_de && /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
+          if (q2 && q2.data) r.data_360 = q2.data;
+          origens++;
+        }
+      }
     } catch (e) { erros++; r.robo_msg = [r.robo_msg, "360: " + String(e.message).split("\n")[0].slice(0, 120)].filter(Boolean).join(" · "); }
     // rastreio da transportadora que pediu: último status + palavras de sinistro (roubo, furto, acidente...)
     if (R) try { const B = await import("./barrar.mjs"); const t = await B.rastrear({ nf: c.nf, transp_pedido: c.transp || "", palavras: SINISTRO }, R);
@@ -277,7 +315,7 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
     try { await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" }); }
     catch (e) { if (!/PGRST204|anotacoes|rastreio/.test(String(e.message))) throw e; log("  (parte 102 ainda não rodada: salvo sem anotações/rastreio)"); const { anotacoes, rastreio, ...r2 } = r; await chamar("repo_pre", "POST", r2, { Prefer: "resolution=merge-duplicates,return=minimal" }); }
   }
-  log(`repo-pre: ${feitos} analisados agora · ${erros} com erro · ${sairam.length} saíram da lista`);
+  log(`repo-pre: ${feitos} analisados agora · ${erros} com erro · ${origens} nota(s) de reposição/AT achadas pelo ticket · ${sairam.length} saíram da lista`);
 }
 
 // ===== modo repo-pre-solicitar (Brenda 27/11): só os casos que a equipe mandou solicitar no E-loggia (solicitar_status = pendente) =====
@@ -419,7 +457,8 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       // 360: o ticket de Reposição aparece no pedido alguns segundos depois
       etapa = "comentário no 360"; let tk = null;
       for (let i = 0; i < 4 && !tk; i++) { if (i) await new Promise((ok) => setTimeout(ok, 30000));
-        const q = await pedido360(ctx, log, x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || ""));
+        const org = (x.tickets || []).find((t) => t.nota_de);   // nota de reposição/AT: o ticket novo nasce no pedido da NF original
+        const q = await pedido360(ctx, log, org && org.nf_original ? org.nf_original : x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || "") && (!org || +t.id > +org.id));
         tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null; }
       if (!tk) throw new Error("ticket criado no portal, mas o ticket de Reposição (Atribuir transportador) ainda não apareceu no 360: tento de novo na próxima rodada");
       // Brenda 27/11: no 360 vão só os prints (sem texto); Jadlog parcial: a linha do CNPJ em maiúsculas continua
