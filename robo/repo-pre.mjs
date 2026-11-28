@@ -390,7 +390,7 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
           log(`  só o número: ${prim.length} linha(s) · 1ª coluna ${JSON.stringify(prim.map((t) => t.replace(/\d/g, "9").slice(0, 20)))}`);
         }
         if (l0 && /^novo$/i.test(st)) linha = l0;   // está Novo: o filtro é que não trouxe
-        else if (l0 && /andamento/i.test(st) && /cliquei em Adicionar|Em Andamento/i.test(x.solicitar_msg || "")) {   // o robô já criou o ticket (não viu o aviso): segue só para o comentário no 360
+        else if (l0 && /andamento/i.test(st) && (x.ticket_portal_ok || /cliquei em Adicionar|Em Andamento/i.test(x.solicitar_msg || ""))) {   // o robô já criou o ticket (não viu o aviso): segue só para o comentário no 360
           log("  ticket já criado pelo robô na rodada anterior: sigo para o comentário no 360"); x.ticket_portal_ok = true; await patch(x, { ticket_portal_ok: true, na_lista: true }); linha = l0;
         }
         else { await aplicarNovo(p, log).catch(() => {}); if (!teste) await patch(x, { na_lista: !!l0 && /^novo$/i.test(st) });

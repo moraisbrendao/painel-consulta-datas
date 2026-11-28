@@ -182,9 +182,10 @@
   }
   async function solicitar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x) return; const rp = repor(x);
-    if (!confirm(`Solicitar a reposição da NF ${nf}?\n\nO robô vai:\n1) no portal: ⋯ › Abrir Ticket › Volumes ${rp.join(", ")} › Adicionar\n2) no 360 (login do Eduardo): comentário no ticket de Reposição com o print do rastreio e da solicitação${/jadlog/i.test(x.transp || "") ? " + o CNPJ da anotação em maiúsculas" : ""}.\n\nIsso cria o ticket de verdade.`)) return;
+    if (soComentario(x) ? !confirm(`NF ${nf}: o ticket do portal já existe.\n\nO robô só vai postar o comentário interno no ticket de Reposição do 360 com o print do rastreio e da solicitação. Continuar?`) : !confirm(`Solicitar a reposição da NF ${nf}?\n\nO robô vai:\n1) no portal: ⋯ › Abrir Ticket › Volumes ${rp.join(", ")} › Adicionar\n2) no 360 (login do Eduardo): comentário no ticket de Reposição com o print do rastreio e da solicitação${/jadlog/i.test(x.transp || "") ? " + o CNPJ da anotação em maiúsculas" : ""}.\n\nIsso cria o ticket de verdade.`)) return;
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
     const novo = { solicitar_status: "pendente", solicitar_por: email, solicitar_em: new Date().toISOString(), solicitar_msg: null };
+    if (soComentario(x)) novo.ticket_portal_ok = true;   // o ticket do portal já existe: o robô faz só o comentário no 360
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf);
     if (r.error) return toast(/solicitar_status/.test(r.error.message) ? "Rode a parte 99 no Supabase." : "Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();

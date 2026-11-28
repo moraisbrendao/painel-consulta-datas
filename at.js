@@ -14,7 +14,7 @@
   const dias = (d) => (d ? Math.max(0, Math.floor((Date.now() - Date.parse(d)) / 86400000)) : null);
   const sem = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-  let T = [], ok = true, carregou = false, card = "acao", fTransp = "", fGrupo = "", fQuem = "", busca = "", pag = 1, DESC = new Map();
+  let T = [], ok = true, carregou = false, card = "acao", fTransp = "", fGrupo = "", fQuem = "", busca = "", pag = 1, DESC = new Map(), FR = [], FRn = new Map(), FRp = new Map();
   const alvo = (x) => x.transp_envio || x.redesp_promob || x.transp_promob || "(sem transportadora)";
   const entregue = (x) => /^entregue/i.test((x.rastreio && x.rastreio.situacao) || "");
   const dBR = (s) => { const m = String(s || "").match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? `${m[3]}-${m[2]}-${m[1]}` : null; };
@@ -65,6 +65,9 @@
   const brl = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
   // valor da linha da peça no 360 (a coluna valor; se vier unitário, o total é valor × qtde: sem saber, usamos o valor da linha)
   const valorPeca = (p) => (p && p.valor != null ? Number(p.valor) || 0 : null);
+  const kN = (t) => String(t || "").split("-").map((v) => v.trim().replace(/^0+(?=\d)/, "")).join("-");
+  const freteTk = (x) => (x._fr && x._fr.length ? x._fr.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0) : null);
+  const dataNota = (x) => (x._fr && x._fr.length ? x._fr.map((f) => f.data_nota).filter(Boolean).sort()[0] || null : null);
   const valorTk = (x) => { const vs = (x.pecas || []).map(valorPeca).filter((v) => v != null); return vs.length ? vs.reduce((a, b) => a + b, 0) : null; };
 
   async function carregar() {
@@ -75,6 +78,13 @@
       tudo = tudo.concat(r.data || []); if (!r.data || r.data.length < 1000) break;
     }
     ok = true; T = tudo;
+    // frete das ATs (parte 109): planilha de CT-e ligada pela Nota AT (nota-série) ou pela Ordem de Compra (NF do pedido)
+    try { let fr = []; for (let de = 0; de < 50000; de += 1000) { const r = await sb().from("at_frete").select("*").range(de, de + 999); if (r.error) break; fr = fr.concat(r.data || []); if (!r.data || r.data.length < 1000) break; }
+      FR = fr; FRn = new Map(); FRp = new Map();
+      FR.forEach((f) => { const k = kN(f.nota); if (!FRn.has(k)) FRn.set(k, []); FRn.get(k).push(f);
+        const oc = (String(f.ordem_compra || "").match(/(\d{4,7})\s*-\s*(\d{1,3})/) || []); if (oc[1]) { const k2 = kN(oc[1] + "-" + oc[2]); if (!FRp.has(k2)) FRp.set(k2, []); FRp.get(k2).push(f); } });
+      T.forEach((x) => { const a = x.nota_at && FRn.get(kN(x.nota_at)), b = !a && x.nota_ticket && FRp.get(kN(x.nota_ticket)); x._fr = a || b || null; });
+    } catch (_) {}
     // descrição da peça: o código do item costuma ser o código do volume da planilha de volumes (Base Cadastros)
     try { const its = [...new Set(T.flatMap((x) => (x.pecas || []).map((p) => (p.peca || "").trim())).filter(Boolean))];
       for (let i = 0; i < its.length; i += 300) { const r = await sb().from("vol_cadastro").select("volume,descricao").in("volume", its.slice(i, i + 300)); (r.data || []).forEach((c) => c.descricao && DESC.set(String(c.volume).trim(), c.descricao)); } } catch (_) {}
@@ -104,6 +114,8 @@
 
     // 2) o que está acontecendo: tempo por etapa (Multimóveis × transportadora × conclusão)
     const ETP = [
+      ...(FR.length ? [["Abertura do ticket → emissão da Nota AT", "Multimóveis", "analisar, digitar o pedido e faturar (data da nota na planilha de frete)", B.filter((x) => dataNota(x)).map((x) => entre(x.criado_em, dataNota(x))), B.filter((x) => x.na_planilha && !x.nota_at).map((x) => dias(x.criado_em))],
+        ["Emissão da Nota AT → saída", "Multimóveis", "separar e expedir a peça", B.filter((x) => dataNota(x) && x.data_saida).map((x) => entre(dataNota(x), x.data_saida)), B.filter((x) => x.na_planilha && x.nota_at && !x.data_saida).map((x) => (dataNota(x) ? dias(dataNota(x)) : null))]] : []),
       ["Abertura do ticket → saída da Nota AT", "Multimóveis", "analisar, digitar, faturar e expedir a peça", B.filter((x) => x.data_saida).map((x) => entre(x.criado_em, x.data_saida)), B.filter((x) => x.na_planilha && !x.data_saida && !entregue(x)).map((x) => dias(x.criado_em))],
       ["Saída da Nota AT → entrega", "Transportadora", "transporte da peça até o cliente (rastreio)", B.filter((x) => entregaEm(x) && x.data_saida).map((x) => entre(x.data_saida, entregaEm(x))), B.filter((x) => x.na_planilha && x.data_saida && !entregue(x)).map((x) => dias(x.data_saida))],
       ["Entrega → baixa do ticket", "Multimóveis", "confirmar com o cliente e encerrar", B.filter((x) => entregaEm(x) && x.saiu_em).map((x) => entre(entregaEm(x), x.saiu_em)), B.filter((x) => x.na_planilha && entregue(x)).map((x) => dias(entregaEm(x)))],
@@ -111,7 +123,7 @@
     ];
     $("at-tempo").innerHTML = `<table class="tabela-pedidos"><thead><tr><th>Etapa</th><th>Quem</th><th class="num">Concluídos</th><th class="num">Mediana (dias)</th><th class="num">Média (dias)</th><th class="num">Em andamento agora</th><th class="num">Média até hoje</th><th class="num">Mais antigo</th></tr></thead><tbody>${ETP.map(([e, q, d, feitos, and]) => { const a = and.filter((v) => v != null), f = feitos.filter((v) => v != null);
       return `<tr><td><b>${esc(e)}</b><div class="s">${esc(d)}</div></td><td>${q === "—" ? "—" : `<span class="at-quem-chip ${QUEM_COR[q] || ""}">${esc(q)}</span>`}</td><td class="num">${fmt(f.length)}</td><td class="num"><b>${med(f) ?? "—"}</b></td><td class="num">${avg(f) ?? "—"}</td><td class="num">${fmt(a.length)}</td><td class="num">${avg(a) ?? "—"}</td><td class="num${a.length && Math.max(...a) > 30 ? " at-ruim" : ""}">${a.length ? Math.max(...a) : "—"}</td></tr>`; }).join("")}</tbody></table>
-      <p class="s">A AT não tem prazo próprio: o prazo é a entrega. Aqui fica separado o tempo da Multimóveis (até a peça sair) do tempo da transportadora (da saída até a entrega no rastreio). Análise e faturamento ainda aparecem juntos porque o detalhamento não traz a data de emissão da Nota AT; a partir dos próximos uploads o histórico guarda quando a nota apareceu. Entregas contam só as confirmadas pelo robô no rastreio.</p>`;
+      <p class="s">A AT não tem prazo próprio: o prazo é a entrega. Aqui fica separado o tempo da Multimóveis (até a peça sair) do tempo da transportadora (da saída até a entrega no rastreio). ${FR.length ? "A data de emissão da Nota AT vem da planilha de frete (CT-e)." : "Para separar análise/faturamento da expedição, suba a planilha de frete (CT-e): ela traz a data de emissão da Nota AT."} Entregas contam só as confirmadas pelo robô no rastreio.</p>`;
 
     // envelhecimento: dias desde a criação do ticket, por fila (só abertos)
     const FX = [["0–7", 0, 7], ["8–15", 8, 15], ["16–30", 16, 30], ["31–60", 31, 60], ["+60", 61, 1e9]];
@@ -142,13 +154,16 @@
     const porPed = new Map(); B.forEach((x) => { const k = x.nota_ticket || x.pedido; if (!k) return; if (!porPed.has(k)) porPed.set(k, []); porPed.get(k).push(x); });
     const rein = [...porPed.entries()].filter(([, l]) => l.length > 1).sort((a, b) => b[1].length - a[1].length);
     $("at-reinc").innerHTML = rein.length ? `<p class="s">${fmt(rein.length)} pedido(s) com mais de um ticket de AT (${fmt(rein.reduce((a, [, l]) => a + l.length, 0))} tickets).</p><table class="tabela-pedidos"><thead><tr><th>NF do pedido</th><th class="num">Tickets de AT</th><th>Tickets</th><th>Peças</th></tr></thead><tbody>${rein.slice(0, 20).map(([k, l]) => `<tr><td><b>${esc(k)}</b></td><td class="num"><b>${l.length}</b></td><td>${l.map((x) => `<a href="https://appv2.360multi.com/tickets/${encodeURIComponent(x.ticket)}" target="_blank" rel="noopener">${esc(x.ticket)}</a>`).join(", ")}</td><td class="s">${esc([...new Set(l.flatMap((x) => (x.pecas || []).map((p) => p.peca)).filter(Boolean))].join(", "))}</td></tr>`).join("")}</tbody></table>` : `<p class="vazio">Nenhum pedido com mais de um ticket de AT.</p>`;
-    // custo da AT (valor das peças no 360; frete não vem em nenhuma fonte ainda)
+    // custo da AT (Brenda 27/11): peças (valor no 360) + frete (Valor CTe da planilha de frete, parte 109)
     const vt = B.map(valorTk).filter((v) => v != null), tot = vt.reduce((a, b) => a + b, 0);
-    const porTv = new Map(); B.forEach((x) => { const v = valorTk(x); if (v == null) return; const t = alvo(x); porTv.set(t, (porTv.get(t) || 0) + v); });
-    $("at-custo").innerHTML = tem$ ? `<div class="at-custo-cards"><div><span class="s">Valor das peças</span><b>${brl(tot)}</b><span class="s">${fmt(vt.length)} tickets com valor</span></div><div><span class="s">Custo médio por ticket</span><b>${brl(vt.length ? tot / vt.length : 0)}</b><span class="s">só peças</span></div><div><span class="s">Frete das ATs</span><b>—</b><span class="s">não vem no detalhamento nem no 360</span></div></div>
-      <table class="tabela-pedidos"><thead><tr><th>Transportadora (envio da AT)</th><th class="num">Valor das peças</th><th class="num">% do total</th></tr></thead><tbody>${[...porTv.entries()].sort((a, b) => b[1] - a[1]).map(([t, v]) => `<tr><td>${esc(t)}</td><td class="num">${brl(v)}</td><td class="num">${tot ? Math.round((v / tot) * 100) : 0}%</td></tr>`).join("")}</tbody></table>
-      <p class="s">Valor = coluna de valor da tabela Peças de Assistência no 360. Custo por produto está no ranking de produtos acima. Para o frete e o custo por motivo, precisamos de uma fonte com esses dados (a planilha de AT não tem motivo nem frete).</p>`
-      : `<p class="vazio">O robô está relendo os tickets para trazer o valor das peças. Em alguns minutos aparece aqui.</p>`;
+    const ft = B.map(freteTk).filter((v) => v != null), totF = ft.reduce((a, b) => a + b, 0);
+    const porTv = new Map(); B.forEach((x) => { const v = valorTk(x), fv = freteTk(x); if (v == null && fv == null) return; const t = (x._fr && x._fr[0] && x._fr[0].emitente) || alvo(x); if (!porTv.has(t)) porTv.set(t, { p: 0, f: 0, n: 0, nf: 0 }); const o = porTv.get(t); o.p += v || 0; if (fv != null) { o.f += fv; o.nf++; } o.n++; });
+    const semLiga = FR.filter((f) => !T.some((x) => x._fr && x._fr.includes(f)));
+    const cc = (r, v, s2) => `<div><span class="s">${r}</span><b>${v}</b><span class="s">${s2}</span></div>`;
+    $("at-custo").innerHTML = (tem$ || FR.length) ? `<div class="at-custo-cards">${cc("Valor das peças", tem$ ? brl(tot) : "—", tem$ ? `${fmt(vt.length)} tickets com valor` : "aguardando o robô")}${cc("Frete das ATs", FR.length ? brl(totF) : "—", FR.length ? `${fmt(ft.length)} tickets com CT-e · ${fmt(FR.length)} CT-e na planilha` : "suba a planilha de frete (CT-e)")}${cc("Custo médio por ticket", brl((vt.length ? tot / vt.length : 0) + (ft.length ? totF / ft.length : 0)), "peças + frete")}</div>
+      <table class="tabela-pedidos"><thead><tr><th>Transportadora</th><th class="num">Tickets</th><th class="num">Valor das peças</th><th class="num">Frete (CT-e)</th><th class="num">Frete médio</th><th class="num">Total</th><th class="num">% do total</th></tr></thead><tbody>${[...porTv.entries()].sort((a, b) => (b[1].p + b[1].f) - (a[1].p + a[1].f)).map(([t, o]) => `<tr><td>${esc(t)}</td><td class="num">${fmt(o.n)}</td><td class="num">${brl(o.p)}</td><td class="num">${o.nf ? brl(o.f) : "—"}</td><td class="num">${o.nf ? brl(o.f / o.nf) : "—"}</td><td class="num"><b>${brl(o.p + o.f)}</b></td><td class="num">${tot + totF ? Math.round(((o.p + o.f) / (tot + totF)) * 100) : 0}%</td></tr>`).join("")}</tbody></table>
+      <p class="s">Peças = coluna de valor da tabela Peças de Assistência no 360. Frete = Valor CTe da planilha de frete, ligado pela Nota AT (nota-série) ou, se não achar, pela Ordem de Compra (NF do pedido); transportadora = emitente do CT-e.${semLiga.length ? ` ${fmt(semLiga.length)} CT-e da planilha não acharam ticket de AT (${brl(semLiga.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0))}): ficam fora da tabela, mas estão no Excel.` : ""} Custo por motivo: a planilha de AT não tem motivo.</p>`
+      : `<p class="vazio">O robô está relendo os tickets para trazer o valor das peças. Suba também a planilha de frete (CT-e) no botão acima.</p>`;
     // evolução semanal: tickets abertos × que saíram da planilha (fechados)
     const sem0 = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
     const W = new Map(); const add = (d, k) => { if (!d) return; const s = sem0(d); if (!W.has(s)) W.set(s, { s, a: 0, f: 0, e: 0 }); W.get(s)[k]++; };
@@ -174,6 +189,30 @@
   $("at-f-transp").addEventListener("change", (e) => { fTransp = e.target.value; pag = 1; desenhar(); });
   $("at-f-grupo").addEventListener("change", (e) => { fGrupo = e.target.value; pag = 1; desenhar(); });
   $("at-busca").addEventListener("input", (e) => { busca = e.target.value.replace(/\D/g, ""); pag = 1; desenhar(); });
+  // planilha de frete das ATs (Brenda 27/11): colunas Chave de acesso, Valor CTe, Nota, Série, Data… (cidade/CEP não são guardados)
+  $("at-frete-arq").addEventListener("change", async (e) => {
+    const f = e.target.files[0]; e.target.value = ""; if (!f) return;
+    try {
+      const wb = XLSX.read(await f.arrayBuffer(), { type: "array", cellDates: true });
+      let M = null, hi = -1;
+      for (const n of wb.SheetNames) { const R = XLSX.utils.sheet_to_json(wb.Sheets[n], { header: 1, defval: null, raw: true }); const i = R.findIndex((r) => r && r.some((c) => /chave de acesso/i.test(String(c || ""))) && r.some((c) => /valor\s*ct-?e/i.test(String(c || "")))); if (i >= 0) { M = R; hi = i; break; } }
+      if (!M) throw new Error('não achei as colunas "Chave de acesso" e "Valor CTe"');
+      const H = M[hi].map((c) => sem(String(c || "").trim())), col = (re, de = 0) => H.findIndex((h, i) => i >= de && re.test(h));
+      const iCh = col(/^chave de acesso$/), iNum = col(/^numero$/), iSer = col(/^serie$/), iEm = col(/^data de emissao$/), iEmit = col(/^emitente$/), iTom = col(/^tomador$/), iUf = col(/^uf cte$/), iVc = col(/^valor cte$/), iIc = col(/^valor icms$/), iVp = col(/^valor produtos$/), iPe = col(/^peso bruto$/), iNo = col(/^nota$/), iSn = col(/^serie$/, iNo + 1), iDn = col(/^data$/), iOc = col(/^ordem de compra$/), iRd = col(/^redespacho$/);
+      if (iNo < 0 || iVc < 0) throw new Error('faltam as colunas "Nota" ou "Valor CTe"');
+      const d = (v) => { if (v == null || v === "") return null; if (v instanceof Date) return `${v.getFullYear()}-${String(v.getMonth() + 1).padStart(2, "0")}-${String(v.getDate()).padStart(2, "0")}`; if (typeof v === "number") { const q = XLSX.SSF.parse_date_code(v); return q ? `${q.y}-${String(q.m).padStart(2, "0")}-${String(q.d).padStart(2, "0")}` : null; } const m = String(v).match(/(\d{4})-(\d{2})-(\d{2})/) || String(v).match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? (m[1].length === 4 ? `${m[1]}-${m[2]}-${m[3]}` : `${m[3]}-${m[2]}-${m[1]}`) : null; };
+      const n = (v) => { if (v == null || v === "") return null; if (typeof v === "number") return v; const t = String(v).replace(/[^\d,.-]/g, ""); return Number(/,\d{1,2}$/.test(t) ? t.replace(/\./g, "").replace(",", ".") : t) || 0; };
+      const t = (v) => (v == null || v === "" ? null : String(v).trim().replace(/\.0+$/, ""));
+      const L = M.slice(hi + 1).filter((r) => r && t(r[iCh])).map((r) => ({ chave_cte: t(r[iCh]), numero_cte: iNum >= 0 ? t(r[iNum]) : null, serie_cte: iSer >= 0 ? t(r[iSer]) : null, emissao_cte: iEm >= 0 ? d(r[iEm]) : null,
+        emitente: iEmit >= 0 ? t(r[iEmit]) : null, tomador: iTom >= 0 ? t(r[iTom]) : null, uf: iUf >= 0 ? t(r[iUf]) : null, valor_cte: n(r[iVc]), valor_icms: iIc >= 0 ? n(r[iIc]) : null, valor_produtos: iVp >= 0 ? n(r[iVp]) : null, peso: iPe >= 0 ? n(r[iPe]) : null,
+        nota: [t(r[iNo]), iSn >= 0 ? t(r[iSn]) : null].filter(Boolean).join("-"), data_nota: iDn >= 0 ? d(r[iDn]) : null, ordem_compra: iOc >= 0 ? t(r[iOc]) : null, redespacho: iRd >= 0 ? t(r[iRd]) : null }));
+      if (!L.length) throw new Error("planilha sem linhas");
+      toast(`Enviando ${L.length} CT-e…`);
+      let tot = 0; for (let i = 0; i < L.length; i += 500) { const r = await sb().rpc("importar_at_frete", { linhas: L.slice(i, i + 500) }); if (r.error) throw new Error(/importar_at_frete|function|schema cache/i.test(r.error.message) ? "falta rodar a parte 109 no Supabase" : r.error.message); tot += r.data || 0; }
+      await carregar(); const lig = T.filter((x) => x._fr).length;
+      toast(`Planilha de frete enviada: ${fmt(tot)} CT-e · ${fmt(lig)} tickets de AT com frete.`);
+    } catch (err) { toast("Não consegui ler a planilha de frete: " + (err.message || err), true); }
+  });
   $("at-rodar").addEventListener("click", async () => {
     const { error } = await sb().rpc("rodar_robo_at");
     if (error) return toast(/rodar_robo_at|function/i.test(error.message) ? "Falta rodar a parte 106 no Supabase." : "Não consegui chamar o robô: " + error.message, true);
@@ -184,12 +223,13 @@
     const B = T.filter(filtroBase);
     const tk = B.map((x) => ({ Ticket: x.ticket, Criado: br(x.criado_em), "Dias desde a criação": dias(x.criado_em), Situação: (CARDS.find((c) => c[0] === situacao(x).k) || [, situacao(x).k])[1], "Quem age": situacao(x).quem, "Próximo passo": situacao(x).passo, "Fila atual": x.fila, Grupo: x.grupo, "Nota do ticket": x.nota_ticket, "Pedido Intelipost": x.pedido,
       "Nota AT": x.nota_at, "Saída da Nota AT": br(x.data_saida), "Transportadora (envio AT)": alvo(x), "Rastreio": x.rastreio ? x.rastreio.situacao : "", "Último evento": x.rastreio ? [x.rastreio.evento, x.rastreio.data].filter(Boolean).join(" · ") : "",
-      "Peças (item × qtde)": (x.pecas || []).map((p) => `${p.peca || "?"}${p.qtde ? " ×" + p.qtde : ""}`).join("; "), "Produto (SKU)": [...new Set((x.pecas || []).map((p) => p.sku).filter(Boolean))].join(", "), "Valor das peças": valorTk(x), "Na planilha": x.na_planilha ? "sim" : "não (fechado)" }));
+      "Peças (item × qtde)": (x.pecas || []).map((p) => `${p.peca || "?"}${p.qtde ? " ×" + p.qtde : ""}`).join("; "), "Produto (SKU)": [...new Set((x.pecas || []).map((p) => p.sku).filter(Boolean))].join(", "), "Valor das peças": valorTk(x), "Frete (Valor CTe)": freteTk(x), "Emissão da Nota AT": dataNota(x) ? br(dataNota(x)) : "", "Transportadora do CT-e": x._fr ? [...new Set(x._fr.map((f) => f.emitente))].join(", ") : "", "Na planilha": x.na_planilha ? "sim" : "não (fechado)" }));
     const pc = new Map(); B.forEach((x) => (x.pecas || []).forEach((p) => { const k = (p.peca || "?").trim(); if (!pc.has(k)) pc.set(k, { "Item (peça)": k, sk: new Set(), tk: new Set(), Qtde: 0 }); const o = pc.get(k); o.tk.add(x.ticket); o.Qtde += Number(p.qtde) || 1; if (p.sku) o.sk.add(p.sku); }));
     const rk = [...pc.values()].sort((a, b) => b.tk.size - a.tk.size).map(({ tk: s2, sk, ...o }) => ({ ...o, "Produtos (SKU)": [...sk].join(", "), Tickets: s2.size }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(tk), "Tickets AT");
     XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rk.length ? rk : [{ "Item (peça)": "ainda sem peças lidas" }]), "Peças");
+    if (FR.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(FR.map((f) => ({ "CT-e": f.numero_cte, "Emissão CT-e": br(f.emissao_cte), Emitente: f.emitente, Tomador: f.tomador, "UF": f.uf, "Valor CTe": Number(f.valor_cte) || 0, "Valor produtos": Number(f.valor_produtos) || 0, Peso: Number(f.peso) || 0, "Nota AT": f.nota, "Data da nota": br(f.data_nota), "Ordem de compra": f.ordem_compra, Redespacho: f.redespacho, "Ticket de AT": (T.find((x) => x._fr && x._fr.includes(f)) || {}).ticket || "não achado" }))), "Frete (CT-e)");
     XLSX.writeFile(wb, `assistencia_tecnica_${new Date().toISOString().slice(0, 10)}.xlsx`);
   });
   window.__at = { recarregar: () => { if (carregou) carregar(); } };

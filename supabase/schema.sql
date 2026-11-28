@@ -5172,3 +5172,35 @@ grant update on public.at_tk to authenticated;
 drop policy if exists at_tk_robo on public.at_tk;
 create policy at_tk_robo on public.at_tk for update to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
 notify pgrst, 'reload schema';
+
+-- parte 109 (27/11): frete das ATs. Planilha de CT-e de AT (Chave de acesso, Valor CTe, Nota, Série, Data...).
+-- Liga ao ticket pela Nota AT (nota-série) e, se não achar, pela Ordem de Compra (NF do pedido).
+create table if not exists public.at_frete (
+  chave_cte text primary key,
+  numero_cte text, serie_cte text, emissao_cte date, emitente text, tomador text, uf text,
+  valor_cte numeric, valor_icms numeric, valor_produtos numeric, peso numeric,
+  nota text, data_nota date, ordem_compra text, redespacho text,
+  enviado_em timestamptz default now()
+);
+alter table public.at_frete enable row level security;
+drop policy if exists at_frete_ler on public.at_frete;
+create policy at_frete_ler on public.at_frete for select to authenticated using ((select not public.e_sac()));
+grant select on public.at_frete to authenticated;
+
+create or replace function public.importar_at_frete(linhas jsonb)
+returns int language plpgsql security definer set search_path = public as $$
+declare n int;
+begin
+  if auth.uid() is null or public.e_sac() then raise exception 'Sem permissão.'; end if;
+  insert into public.at_frete (chave_cte, numero_cte, serie_cte, emissao_cte, emitente, tomador, uf, valor_cte, valor_icms, valor_produtos, peso, nota, data_nota, ordem_compra, redespacho, enviado_em)
+  select l->>'chave_cte', l->>'numero_cte', l->>'serie_cte', nullif(l->>'emissao_cte','')::date, l->>'emitente', l->>'tomador', l->>'uf',
+         nullif(l->>'valor_cte','')::numeric, nullif(l->>'valor_icms','')::numeric, nullif(l->>'valor_produtos','')::numeric, nullif(l->>'peso','')::numeric,
+         l->>'nota', nullif(l->>'data_nota','')::date, l->>'ordem_compra', l->>'redespacho', now()
+  from jsonb_array_elements(linhas) l where coalesce(l->>'chave_cte','') <> ''
+  on conflict (chave_cte) do update set numero_cte = excluded.numero_cte, serie_cte = excluded.serie_cte, emissao_cte = excluded.emissao_cte, emitente = excluded.emitente,
+    tomador = excluded.tomador, uf = excluded.uf, valor_cte = excluded.valor_cte, valor_icms = excluded.valor_icms, valor_produtos = excluded.valor_produtos, peso = excluded.peso,
+    nota = excluded.nota, data_nota = excluded.data_nota, ordem_compra = excluded.ordem_compra, redespacho = excluded.redespacho, enviado_em = now();
+  get diagnostics n = row_count; return n;
+end $$;
+revoke all on function public.importar_at_frete(jsonb) from public, anon;
+grant execute on function public.importar_at_frete(jsonb) to authenticated;
