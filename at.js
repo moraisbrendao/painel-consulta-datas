@@ -14,7 +14,7 @@
   const dias = (d) => (d ? Math.max(0, Math.floor((Date.now() - Date.parse(d)) / 86400000)) : null);
   const sem = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
-  let T = [], ok = true, carregou = false, card = "acao", fTransp = "", fGrupo = "", fQuem = "", busca = "", pag = 1, DESC = new Map(), FR = [], FRn = new Map(), FRp = new Map();
+  let T = [], API_EM = null, ok = true, carregou = false, card = "acao", fTransp = "", fGrupo = "", fQuem = "", busca = "", pag = 1, DESC = new Map(), FR = [], FRn = new Map(), FRp = new Map();
   // um nome só por transportadora (Brenda 27/11: "une as duplicadas"): tira filial, Standard, Transportes… e junta VM com Tempo Justo
   const NOMES = [[/jad\s*log/, "JadLog"], [/dominalog/, "Dominalog"], [/prolog/, "Prolog"], [/atual\s*cargas/, "Atual Cargas"], [/transiga/, "Transiga"], [/trans\s*sua/, "Trans Sua Log"],
     [/^blz/, "BLZ"], [/aceville/, "Aceville"], [/vm\s*transp|tempo\s*justo/, "VM Transportes / Tempo Justo"], [/petrymar/, "Petrymar"], [/sajob/, "SAJOB"], [/bento/, "Bento Brasil"], [/transvanio/, "Transvanio"],
@@ -72,7 +72,8 @@
   // valor da peça no 360 = unitário (Brenda 27/11)
   const valorPeca = (p) => (p && p.valor != null ? (Number(p.valor) || 0) * (Number(p.qtde) || 1) : null);   // Brenda 27/11: o valor do 360 é unitário → × qtde
   const kN = (t) => String(t || "").split("-").map((v) => v.trim().replace(/^0+(?=\d)/, "")).join("-");
-  const freteTk = (x) => (x._fr && x._fr.length ? x._fr.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0) : null);
+  // frete: CT-e da planilha (valor real); sem CT-e, o frete cotado que o 360 registrou na escolha da transportadora
+  const freteTk = (x) => (x._fr && x._fr.length ? x._fr.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0) : x._api && x._api.frete != null && Number(x._api.frete) > 0 ? Number(x._api.frete) : null);
   const dataNota = (x) => (x._fr && x._fr.length ? x._fr.map((f) => f.data_nota).filter(Boolean).sort()[0] || null : null);
   const valorTk = (x) => { const vs = (x.pecas || []).map(valorPeca).filter((v) => v != null); return vs.length ? vs.reduce((a, b) => a + b, 0) : null; };
 
@@ -84,6 +85,25 @@
       tudo = tudo.concat(r.data || []); if (!r.data || r.data.length < 1000) break;
     }
     ok = true; T = tudo;
+    // 360 direto pela API (robô tk360, parte 110): completa e atualiza o detalhamento, e traz ATs novos que o upload ainda não tem
+    API_EM = null;
+    try { let ap = []; for (let de = 0; de < 20000; de += 1000) { const r = await sb().from("tk360").select("ticket_id,fila,grupo,status,nf,criado,transp,redespacho,na_lista,visto_em,saiu_em,detalhe_em,at").ilike("tipo", "%assist%").range(de, de + 999); if (r.error) break; ap = ap.concat(r.data || []); if (!r.data || r.data.length < 1000) break; }
+      const porTk = new Map(T.map((x) => [String(x.ticket).replace(/\D/g, ""), x]));
+      const pecasApi = (a) => ((a && a.pecas) || []).map((p) => ({ peca: p.item, sku: p.sku, qtde: p.qtde, valor: p.valor, peso: p.peso }));
+      const dia = (d) => (d ? String(d).slice(0, 10) : null);
+      ap.forEach((k) => { const a = k.at || {}; if (k.visto_em && (!API_EM || k.visto_em > API_EM)) API_EM = k.visto_em;
+        let x = porTk.get(String(k.ticket_id));
+        if (!x) { x = { ticket: String(k.ticket_id), criado_em: k.criado, fila: k.fila, grupo: k.grupo, nota_ticket: k.nf, nota_at: a.nota_at || null, data_saida: dia(a.nota_at_em), transp_envio: a.transp || null,
+          transp_promob: k.transp, redesp_promob: k.redespacho, na_planilha: k.na_lista, visto_em: k.visto_em, saiu_em: k.saiu_em, pecas: pecasApi(a), pecas_em: k.detalhe_em, _soApi: true }; T.push(x); porTk.set(String(k.ticket_id), x); }
+        else {
+          if (k.visto_em && (!x.visto_em || k.visto_em > x.visto_em)) { x.fila = k.fila || x.fila; x.na_planilha = k.na_lista; if (!k.na_lista && !x.saiu_em) x.saiu_em = k.saiu_em; x._filaApi = true; }
+          if (!x.nota_at && a.nota_at) x.nota_at = a.nota_at;
+          if (!x.transp_envio && a.transp) x.transp_envio = a.transp;
+          if (!(x.pecas || []).length && (a.pecas || []).length) { x.pecas = pecasApi(a); x.pecas_em = x.pecas_em || k.detalhe_em; }
+          else if ((a.pecas || []).length) (x.pecas || []).forEach((p) => { if (p.valor == null) { const q = a.pecas.find((z) => String(z.item).trim() === String(p.peca || "").trim()); if (q) { p.valor = q.valor; p.peso = p.peso ?? q.peso; } } });
+        }
+        x._api = a; });
+    } catch (_) {}
     // frete das ATs (parte 109): planilha de CT-e ligada pela Nota AT (nota-série) ou pela Ordem de Compra (NF do pedido)
     try { let fr = []; for (let de = 0; de < 50000; de += 1000) { const r = await sb().from("at_frete").select("*").range(de, de + 999); if (r.error) break; fr = fr.concat(r.data || []); if (!r.data || r.data.length < 1000) break; }
       FR = fr; FRn = new Map(); FRp = new Map();
@@ -107,7 +127,7 @@
     if (!ok) { $("at-info").textContent = "Para usar esta aba, rode a parte 106 no Supabase e depois suba o detalhamento de tickets."; ["at-cards", "at-lista", "at-env", "at-transp", "at-pecas", "at-evol", "at-quem", "at-tempo", "at-custo", "at-reinc"].forEach((i) => $(i) && ($(i).innerHTML = "")); return; }
     const abertos = T.filter((x) => x.na_planilha);
     const ult = T.map((x) => x.visto_em).filter(Boolean).sort().pop(), pc = T.map((x) => x.pecas_em).filter(Boolean).sort().pop(), rs = T.map((x) => x.rastreio_em).filter(Boolean).sort().pop();
-    $("at-info").textContent = T.length ? `${fmt(abertos.length)} tickets de AT em aberto · planilha de ${hora(ult)} · peças lidas pelo robô ${hora(pc)} · rastreio ${hora(rs)}` : "Nenhum ticket de AT ainda: suba o detalhamento de tickets (botão Tickets no topo).";
+    $("at-info").textContent = T.length ? `${fmt(abertos.length)} tickets de AT em aberto · 360 direto ${API_EM ? hora(API_EM) : "—"}${T.some((x) => x._soApi && x.na_planilha) ? ` (${fmt(T.filter((x) => x._soApi && x.na_planilha).length)} novos que o detalhamento ainda não tem)` : ""} · planilha de ${hora(ult)} · peças lidas pelo robô ${hora(pc)} · rastreio ${hora(rs)}` : "Nenhum ticket de AT ainda: suba o detalhamento de tickets (botão Tickets no topo).";
     opcoes("at-f-transp", T.map(alvo), fTransp, "Todas as transportadoras");
     opcoes("at-f-grupo", T.map((x) => x.grupo || "—"), fGrupo, "Todos os grupos");
     const B = T.filter(filtroBase), S = new Map(B.map((x) => [x.ticket, situacao(x)]));
