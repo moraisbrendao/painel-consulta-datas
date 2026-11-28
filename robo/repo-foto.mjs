@@ -15,6 +15,10 @@ ${["25", "34"].includes(String(x.nf).split("-")[1] || "") ? `ESTA NF É DA SÉRI
 ${/avaria/i.test(x.motivo || "") ? `MOTIVO: AVARIA. Regra da equipe: as fotos de avaria costumam ser TODAS do MESMO volume. Uma foto mais de perto mostra a etiqueta (só para identificar qual volume é) e as outras mostram a avaria (amassado, rasgado, quebrado, molhado) desse mesmo volume, de outros ângulos. Não trate a foto da etiqueta como um volume diferente das outras.
 Diga qual volume da lista acima é o AVARIADO (o da etiqueta), comparando o código do volume, o "VOL x/y", a descrição e o código de barras. Se a NF lida na etiqueta for diferente de ${x.nf}, avise na observação, mas ainda diga qual volume da lista combina com a etiqueta (código do volume / VOL x/y / descrição), se combinar.
 Em "volumes_vistos" coloque só o(s) volume(s) avariado(s).` : `MOTIVO: ${x.motivo || "Falta de volumes"}. As fotos mostram o(s) volume(s) que ESTÃO com a transportadora. Diga quais volumes da lista aparecem nas etiquetas.`}
+Outros casos que a equipe vê (Brenda 28/11):
+- A foto pode ser um PRINT/tela com a lista ou a descrição dos volumes (sem etiqueta): compare essa descrição com a descrição dos volumes da lista acima.
+- ESPELHO / VIDRO: muitas vezes a foto mostra só o espelho ou o vidro, SEM etiqueta. Se a foto mostra um espelho/vidro e a NF tem um volume cuja descrição é de espelho/vidro (ex.: "ESPELHO", "VIDRO", "VID", "LAP" de lapidado, ou medidas em mm como 4MM), esse é o volume. Diga isso na observação ("espelho/vidro sem etiqueta") e use confiança "media".
+- Se a foto não ajudar, a transportadora às vezes descreve a peça na anotação: ${(x.anotacoes || []).slice(-3).map((a) => String(a.texto || "").replace(/\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/g, "[CNPJ]").slice(0, 200)).join(" | ") || "(sem anotação)"}. Compare com a descrição dos volumes.
 Só use o que dá para ler; não chute.
 Responda SOMENTE com um JSON neste formato:
 {"volumes_vistos": ["códigos da lista acima"], "nf_na_etiqueta": "número da NF lido na etiqueta ou null", "vol_nf": ["textos tipo 01/02 lidos"], "confianca": "alta|media|baixa", "observacao": "frase curta (ex.: etiqueta borrada, foto sem etiqueta, avaria visível, etiqueta de outra NF)"}`;
@@ -24,7 +28,7 @@ export async function rodarFotoTeste({ chamar, log, limite = 10, alvo = "" }) { 
   const { createHash } = await import("node:crypto"); const hNf = (nf) => createHash("sha256").update(String(nf).split("-")[0].trim()).digest("hex").slice(0, 16);
   if (!process.env.ANTHROPIC_API_KEY) { log("repo-foto: falta o segredo ANTHROPIC_API_KEY no GitHub. Nada foi lido."); return; }
   const client = new Anthropic();
-  const L = (await chamar("repo_pre?select=nf,motivo,volumes,fotos,sku,foto_ia&na_lista=eq.true&order=criado_em.desc&limit=200"))
+  const L = (await chamar("repo_pre?select=nf,motivo,volumes,fotos,sku,foto_ia,anotacoes&na_lista=eq.true&order=criado_em.desc&limit=200"))
     .filter((x) => (x.fotos || []).length && (x.volumes || []).length && (alvo.startsWith("h:") ? hNf(x.nf) === alvo.slice(2) : alvo === "avaria" ? /avaria/i.test(x.motivo || "") : !x.foto_ia)).slice(0, limite);
   const skus = [...new Set(L.flatMap((x) => x.sku || []))];
   const cad = new Map();
