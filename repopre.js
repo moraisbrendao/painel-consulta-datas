@@ -73,6 +73,12 @@
     if (x.tem_devolucao) a.push(["mao", "Tem ticket de devolução/cancelamento no 360: conferir à mão"]);
     const d = dBR(x.data_360); if (d && d < seisMeses()) a.push(["aviso", "Pedido com mais de 6 meses: conferir a numeração da NF"]);
     if (x.rastreio && x.rastreio.sinistro) a.push(["mao", `Rastreio com "${x.rastreio.sinistro.toLowerCase()}": possível sinistro`]);
+    // nota de reposição/AT (Brenda 27/11): o 360 só serve para conferir se os volumes da NF batem com o que o ticket mandou
+    const org = (x.tickets || []).find((t) => t.nota_de);
+    if (org && (org.itens || []).length && (x.volumes || []).length && org.nota_de !== "at") {
+      const k = (v) => String(v).trim().replace(/\.0+$/, ""), it = new Set(org.itens.map(k)), fora = x.volumes.filter((v) => !it.has(k(v)) && !it.has(k(v).split(".")[0]));
+      a.push(fora.length ? ["aviso", `Volumes da NF no portal que não estão no ticket ${org.id}: ${fora.join(", ")} (o ticket mandou ${org.itens.join(", ")}). Conferir.`] : ["ok", `Volumes da NF batem com o ticket de reposição ${org.id} (${org.itens.join(", ")}).`]);
+    }
     return a;
   };
   const sit = (x) => {
@@ -179,7 +185,7 @@
           <span class="s">· SKU ${esc((x.sku || []).join(", ") || "—")} · 360: ${x.venda == null ? "—" : x.venda ? "venda" + (x.status_360 ? " (" + esc(x.status_360) + ")" : "") : "não achado"}${x.data_360 ? " · " + esc(x.data_360) : ""}</span></div>
         ${(([t, m]) => `<div class="rpp-sug ${t}">💡 <b>Sugestão:</b> ${esc(m)}</div>`)(sugestao(x))}
         ${x.foto_ia ? `<div class="rpp-ia">🤖 <b>Leitura da foto (teste):</b> ${(x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ") : "nenhum volume da NF identificado"} · confiança ${esc(x.foto_ia.confianca || "—")}${x.foto_ia.vol_nf && x.foto_ia.vol_nf.length ? ` · etiqueta ${esc(x.foto_ia.vol_nf.join(", "))}` : ""}${x.foto_ia.observacao ? `<div class="s">${esc(x.foto_ia.observacao)}</div>` : ""}${(x.foto_ia.volumes_vistos || []).length && !["pendente", "feito"].includes(x.solicitar_status) && JSON.stringify([...(x.vol_posse || [])].sort()) !== JSON.stringify([...x.foto_ia.volumes_vistos].sort()) ? `<div><button type="button" class="btn mini contorno" data-rpp-ia="${esc(x.nf)}">✓ Usar a leitura do Claude (marcar ${x.foto_ia.volumes_vistos.map((v) => rotVol(x, v) + esc(v)).join(", ")} como ${MOT(x) === "avaria" ? "avariado" : "em posse"})</button></div>` : ""}</div>` : ""}
-        ${al.map(([t, m]) => `<div class="rpp-al ${t}">⚠ ${esc(m)}</div>`).join("")}
+        ${al.map(([t, m]) => `<div class="rpp-al ${t}">${t === "ok" ? "✓" : "⚠"} ${esc(m)}</div>`).join("")}
         ${(x.anotacoes || []).length ? `<div class="rpp-anot"><span class="s">Anotações da transportadora:</span>${x.anotacoes.slice(-3).map((a) => `<div><span class="s">${esc(a.quando)}</span> ${esc(a.texto)}</div>`).join("")}</div>` : ""}
         ${x.rastreio && x.rastreio.situacao ? `<div class="s">Rastreio${x.rastreio.fonte ? " " + esc(x.rastreio.fonte) : ""}: ${esc(x.rastreio.situacao)}${x.rastreio.evento ? " · " + esc(x.rastreio.evento) : ""}${x.rastreio.data ? " · " + esc(x.rastreio.data) : ""}</div>` : ""}
         <div class="rpp-vols"><span class="s">${(x.volumes || []).length ? `A NF tem <b>${x.volumes.length} volume(s)</b> · ${MOT(x) === "avaria" ? "clique no(s) volume(s) <b>avariado(s)</b>:" : "clique no(s) que estão com a transportadora (foto):"}` : "Volumes da NF:"}</span> ${vols}</div>

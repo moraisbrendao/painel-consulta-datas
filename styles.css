@@ -1556,3 +1556,5 @@ body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
 .rpp-dia { border: 1px solid #e3e7ee; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; background: #fff; }
 .rpp-dia summary { cursor: pointer; font-size: 14px; }
 .rpp-dia table { margin-top: 8px; }
+.rpp-al.ok { background: #e6f4ea; color: #1d7a43; }
+.rpp-al.aviso { background: #fff6db; color: #7a5a00; }
