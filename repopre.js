@@ -197,7 +197,9 @@
   function volsPorAnotacao(x) {
     const an = semAc((x.anotacoes || []).map((a) => a.texto).join(" ")); if (!an) return [];
     const ws = new Set(an.split(/[^A-Z]+/).filter((w) => w.length >= 5).map((w) => w.slice(0, 6)));
-    return (x.volumes || []).filter((v) => { const d = semAc((infoVol(x, v) || {}).descricao); return d && d.split(/[^A-Z]+/).some((w) => w.length >= 5 && !PAL_GEN.has(w) && ws.has(w.slice(0, 6))); });
+    // sinônimos do cadastro: espelho/vidro aparece como "VID ... LAP" (vidro lapidado)
+    const vidro = /ESPELH|VIDR/.test(an);
+    return (x.volumes || []).filter((v) => { const d = semAc((infoVol(x, v) || {}).descricao); return d && (d.split(/[^A-Z]+/).some((w) => w.length >= 5 && !PAL_GEN.has(w) && ws.has(w.slice(0, 6))) || (vidro && /\bVID\b|ESPELH|\d+\s*X\s*\d+\s*X\s*\d+\s*MM/.test(d))); });
   }
   // botões de decisão do caso (Brenda 27/11: "um botão nos casos igual no barrar")
   function decisao(x, rp) {
