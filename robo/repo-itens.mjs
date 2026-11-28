@@ -471,6 +471,7 @@ export async function diag360Hist({ chamar, log, ctx }) {
   let auth = null, raiz = null;
   ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization && !auth) { auth = h.authorization; const u = new URL(q.url()); raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } });
   const p = await entrarMulti360(ctx, log); await new Promise((r) => setTimeout(r, 6000));
+  for (let k = 0; k < 2 && !auth; k++) { await p.goto("https://appv2.360multi.com/tickets", { waitUntil: "domcontentloaded" }).catch(() => {}); await p.waitForTimeout(8000); }
   if (!auth) { log("sem auth"); return; }
   const forma = (v, d = 0) => v == null ? "null" : Array.isArray(v) ? `[${v.length}${v[0] !== undefined ? ":" + forma(v[0], d + 1) : ""}]` : typeof v === "object" ? (d > 2 ? "{…}" : "{" + Object.entries(v).map(([k, x]) => k + ":" + forma(x, d + 1)).join(",") + "}") : typeof v;
   const tks = await chamar("tk360?select=ticket_id,tipo,fila&detalhe_em=not.is.null&order=criado.asc&limit=6");   // os mais antigos: passaram por mais filas
