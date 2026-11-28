@@ -464,3 +464,26 @@ export async function diag360At({ chamar, log, ctx }) {
   }
   delete tiposEv._p; log(`tipos de evento: ${JSON.stringify(tiposEv)}`);
 }
+
+// ===== diag-360hist (28/11): onde está o histórico de filas do ticket na API? Só formato e tipos (sem dados de cliente). =====
+export async function diag360Hist({ chamar, log, ctx }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  let auth = null, raiz = null;
+  ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization && !auth) { auth = h.authorization; const u = new URL(q.url()); raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } });
+  const p = await entrarMulti360(ctx, log); await new Promise((r) => setTimeout(r, 6000));
+  if (!auth) { log("sem auth"); return; }
+  const forma = (v, d = 0) => v == null ? "null" : Array.isArray(v) ? `[${v.length}${v[0] !== undefined ? ":" + forma(v[0], d + 1) : ""}]` : typeof v === "object" ? (d > 2 ? "{…}" : "{" + Object.entries(v).map(([k, x]) => k + ":" + forma(x, d + 1)).join(",") + "}") : typeof v;
+  const tks = await chamar("tk360?select=ticket_id,tipo,fila&detalhe_em=not.is.null&order=criado.asc&limit=6");   // os mais antigos: passaram por mais filas
+  const tiposEv = {}, tiposTl = {};
+  for (const t of tks) {
+    for (const s of ["/events", "/timeline", "/history", "/logs", "/queues", "/transfers", "/queue-history", "/activities", "/movements"]) {
+      const r = await ctx.request.get(`${raiz}/tickets/${t.ticket_id}${s}`, { headers: { authorization: auth } }); let j = null; try { j = await r.json(); } catch (_) {}
+      if (r.status() !== 200) { if (t === tks[0]) log(`${s} → ${r.status()}`); continue; }
+      const arr = Array.isArray(j) ? j : (j && Object.values(j).find(Array.isArray)) || [];
+      if (s === "/events") arr.forEach((e) => { tiposEv[e.type] = (tiposEv[e.type] || 0) + 1; if (/queue|fila|transfer|group|status/i.test(e.type || "") && !tiposEv["_f_" + e.type]) { tiposEv["_f_" + e.type] = 1; log(`  evento ${e.type}: ${forma(e.event).slice(0, 400)} · msg ${String(e.message || "").replace(/\d/g, "9").slice(0, 80)}`); } });
+      else if (s === "/timeline") arr.forEach((e) => Object.keys(e).forEach((k) => (tiposTl[k] = 1)));
+      else if (t === tks[0]) log(`${s} → 200 · ${forma(j).slice(0, 600)}`);
+    }
+  }
+  log(`tickets olhados: ${tks.length} (${[...new Set(tks.map((t) => t.tipo))].join(", ")}) · tipos de evento: ${JSON.stringify(tiposEv)} · campos timeline: ${Object.keys(tiposTl).join(",")}`);
+}

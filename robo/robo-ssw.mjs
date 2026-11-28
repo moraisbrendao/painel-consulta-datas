@@ -1594,6 +1594,12 @@ if (MODO === "diag-volcad") {   // 28/11: o cadastro de volumes cobre os SKUs da
     log(`tk360: ${await n("na_lista=eq.true")} gravados · ${await n("detalhe_em=not.is.null")} com detalhe · ${await n("at=not.is.null")} AT · ${await n("detalhe_msg=not.is.null")} com erro`); } catch (e) { log("tk360: " + String(e.message).slice(0, 100)); }
   log(`volumes dos casos achados no cadastro: ${R.flatMap((x) => x.volumes || []).filter((v) => vsCad.has(String(v))).length} de ${R.flatMap((x) => x.volumes || []).length}`);
 }
+if (MODO === "diag-360hist") {
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 } });
+  try { await (await import("./repo-itens.mjs")).diag360Hist({ chamar, log, ctx }); } catch (e) { log("diag-360hist: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
+}
 if (MODO === "diag-360at") {
   await entrarSupabase();
   const { chromium } = await import("playwright");
