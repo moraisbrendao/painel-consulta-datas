@@ -661,6 +661,7 @@ if (MODO === "diag-bento2") {   // NFs da Bento (por hash da NF-série no input 
 }
 if (MODO === "diag-db") {   // tempos de consultas simples, uma por vez (só tempos e contagens)
   await entrarSupabase();
+  try { const [bi] = await chamar("base_info?select=enviado_em,arquivo,linhas,total&limit=1").catch(async () => await chamar("base_info?select=*&limit=1")); log("base_info: " + JSON.stringify(Object.fromEntries(Object.entries(bi || {}).filter(([k]) => !/por|mail/i.test(k)))).slice(0, 300)); } catch (e) { log("base_info: erro " + String(e.message).slice(0, 80)); }
   const T = [["tratativas?select=pedido&limit=1", "1 linha tratativas"], ["base_pedidos?select=pedido&limit=1", "1 linha base"],
     ["base_pedidos?select=pedido&order=pedido&limit=1000", "1000 pedidos (só coluna pedido)"], ["base_pedidos?select=pedido&order=pedido&limit=1000&offset=12000", "1000 pedidos offset 12000 (só pedido)"],
     ["base_pedidos?select=*&order=pedido&limit=1000", "1000 linhas inteiras"], ["base_pedidos?select=pedido,nf,canal&order=pedido&limit=1000&offset=6000", "1000 linhas 3 colunas offset 6000"],
