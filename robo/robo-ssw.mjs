@@ -1570,6 +1570,12 @@ if (MODO === "at") {   // Assistência Técnica: peças no 360 + rastreio da Not
   catch (e) { log("at: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
+if (MODO === "diag-360api2") {
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 } });
+  try { await (await import("./repo-itens.mjs")).diag360Api2({ log, ctx }); } catch (e) { log("diag-360api2: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
+}
 if (MODO === "diag-360api") {
   await entrarSupabase();
   const { chromium } = await import("playwright");

@@ -403,3 +403,28 @@ export async function diag360Api({ chamar, log, ctx }) {
   if (t) { await p.goto(`https://appv2.360multi.com/tickets/${encodeURIComponent(t.ticket)}`, { waitUntil: "domcontentloaded" }); await p.waitForTimeout(6000); solta("ticket aberto (chat)");
     for (const aba of [/Linha do tempo/i, /Eventos/i]) { const b = p.getByText(aba).first(); if (await b.count()) { await b.click().catch(() => {}); await p.waitForTimeout(3500); } solta("aba " + aba.source); } }
 }
+
+// ===== diag-360api2 (27/11): chama a API de tickets do 360 direto (token da sessão) e testa paginação/filtros. Só tamanhos no log. =====
+export async function diag360Api2({ log, ctx }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  let auth = null, base = null;
+  ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization && !auth) { auth = h.authorization; base = new URL(q.url()); } });
+  const p = await entrarMulti360(ctx, log); await p.waitForTimeout(6000);
+  if (!auth) { log("não vi a chamada de tickets com autorização"); return; }
+  const raiz = base.origin + base.pathname.replace(/\/tickets.*$/, "");
+  log(`API: ${base.host.replace(/360\w+/, "360***")} caminho ${base.pathname.replace(/\d{3,}/g, "#")} · auth ${auth.split(" ")[0]} · query original ${[...base.searchParams.keys()].join("&")}`);
+  const get = async (q) => { const r = await ctx.request.get(raiz + "/tickets" + q, { headers: { authorization: auth, accept: "application/json" } }); let j = null; try { j = await r.json(); } catch (_) {}
+    const top = j && !Array.isArray(j) ? Object.keys(j) : []; const a = Array.isArray(j) ? j : top.map((k) => j[k]).find(Array.isArray) || [];
+    const meta = top.filter((k) => j[k] == null || typeof j[k] !== "object").map((k) => `${k}=${String(j[k]).slice(0, 10)}`).join(" ");
+    return { st: r.status(), n: a.length, meta, a, top }; };
+  const r0 = await get("?page=1"); log(`?page=1 → ${r0.st} · ${r0.n} itens · topo [${r0.top}] ${r0.meta}`);
+  if (r0.a[0]) log(`  1º item: ${JSON.stringify(Object.fromEntries(Object.entries(r0.a[0]).map(([k, v]) => [k, v && typeof v === "object" ? "{" + Object.keys(v).join(",") + "}" : String(v ?? "").replace(/\d/g, "9").replace(/[A-Za-zÀ-ÿ]/g, "a").slice(0, 16)])))}`);
+  for (const q of ["?page=2", "?page=1&per_page=100", "?page=1&limit=100", "?page=1&page_size=100", "?page=1&size=100", "?page=1&perPage=100"]) { const r = await get(q); log(`${q} → ${r.st} · ${r.n} itens ${r.meta}`); }
+  const filas = await ctx.request.get(raiz + "/parameters/queues", { headers: { authorization: auth } }).then((r) => r.json()).catch(() => []);
+  const at = (filas || []).find((f) => /aguardando entrega \(at\)/i.test(f.label || f.value || "")) || {};
+  log(`fila AT id ${at.id} grupo ${at.id_group}`);
+  for (const q of [`?page=1&queue=${at.id}`, `?page=1&queue_id=${at.id}`, `?page=1&queues=${at.id}`, `?page=1&group=${at.id_group}`, `?page=1&group_id=${at.id_group}`, "?page=1&status=on_going", "?page=1&status=open", "?page=1&type=assistencia_tecnica"]) {
+    const r = await get(q); const filasR = [...new Set(r.a.map((x) => (x.queue && (x.queue.name || x.queue.label)) || x.queue))].slice(0, 4); log(`${q} → ${r.st} · ${r.n} itens ${r.meta} · filas ${JSON.stringify(filasR).replace(/\d{3,}/g, "#")}`); }
+  const tbg = await ctx.request.get(raiz + "/tickets-by-groups", { headers: { authorization: auth } }).then((r) => r.json()).catch(() => []);
+  log(`tickets-by-groups: ${JSON.stringify((tbg || []).map((g) => ({ g: g.label, n: g.count })))}`);
+}
