@@ -69,8 +69,8 @@
   const filtroBase = (x) => (!fTransp || alvo(x) === fTransp) && (!fGrupo || (x.grupo || "—") === fGrupo)
     && (!busca || [x.ticket, x.nota_ticket, x.nota_at, x.pedido].some((v) => String(v || "").includes(busca)));
   const brl = (v) => (v == null ? "—" : Number(v).toLocaleString("pt-BR", { style: "currency", currency: "BRL" }));
-  // valor da linha da peça no 360 (a coluna valor; se vier unitário, o total é valor × qtde: sem saber, usamos o valor da linha)
-  const valorPeca = (p) => (p && p.valor != null ? Number(p.valor) || 0 : null);
+  // valor da peça no 360 = unitário (Brenda 27/11)
+  const valorPeca = (p) => (p && p.valor != null ? (Number(p.valor) || 0) * (Number(p.qtde) || 1) : null);   // Brenda 27/11: o valor do 360 é unitário → × qtde
   const kN = (t) => String(t || "").split("-").map((v) => v.trim().replace(/^0+(?=\d)/, "")).join("-");
   const freteTk = (x) => (x._fr && x._fr.length ? x._fr.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0) : null);
   const dataNota = (x) => (x._fr && x._fr.length ? x._fr.map((f) => f.data_nota).filter(Boolean).sort()[0] || null : null);
@@ -168,7 +168,7 @@
     const cc = (r, v, s2) => `<div><span class="s">${r}</span><b>${v}</b><span class="s">${s2}</span></div>`;
     $("at-custo").innerHTML = (tem$ || FR.length) ? `<div class="at-custo-cards">${cc("Valor das peças", tem$ ? brl(tot) : "—", tem$ ? `${fmt(vt.length)} tickets com valor` : "aguardando o robô")}${cc("Frete das ATs", FR.length ? brl(totF) : "—", FR.length ? `${fmt(ft.length)} tickets com CT-e · ${fmt(FR.length)} CT-e na planilha` : "suba a planilha de frete (CT-e)")}${cc("Custo médio por ticket", brl((vt.length ? tot / vt.length : 0) + (ft.length ? totF / ft.length : 0)), "peças + frete")}</div>
       <table class="tabela-pedidos"><thead><tr><th>Transportadora</th><th class="num">Tickets</th><th class="num">Valor das peças</th><th class="num">Frete (CT-e)</th><th class="num">Frete médio</th><th class="num">Total</th><th class="num">% do total</th></tr></thead><tbody>${[...porTv.entries()].sort((a, b) => (b[1].p + b[1].f) - (a[1].p + a[1].f)).map(([t, o]) => `<tr><td>${esc(t)}</td><td class="num">${fmt(o.n)}</td><td class="num">${brl(o.p)}</td><td class="num">${o.nf ? brl(o.f) : "—"}</td><td class="num">${o.nf ? brl(o.f / o.nf) : "—"}</td><td class="num"><b>${brl(o.p + o.f)}</b></td><td class="num">${tot + totF ? Math.round(((o.p + o.f) / (tot + totF)) * 100) : 0}%</td></tr>`).join("")}</tbody></table>
-      <p class="s">Peças = coluna de valor da tabela Peças de Assistência no 360. Frete = Valor CTe da planilha de frete, ligado pela Nota AT (nota-série) ou, se não achar, pela Ordem de Compra (NF do pedido); transportadora = emitente do CT-e.${semLiga.length ? ` ${fmt(semLiga.length)} CT-e da planilha não acharam ticket de AT (${brl(semLiga.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0))}): ficam fora da tabela, mas estão no Excel.` : ""} Custo por motivo: a planilha de AT não tem motivo.</p>`
+      <p class="s">Peças = valor unitário da tabela Peças de Assistência no 360 × quantidade. Frete = Valor CTe da planilha de frete, ligado pela Nota AT (nota-série) ou, se não achar, pela Ordem de Compra (NF do pedido); transportadora = emitente do CT-e.${semLiga.length ? ` ${fmt(semLiga.length)} CT-e da planilha não acharam ticket de AT (${brl(semLiga.reduce((a, f) => a + (Number(f.valor_cte) || 0), 0))}): ficam fora da tabela, mas estão no Excel.` : ""} Custo por motivo: a planilha de AT não tem motivo.</p>`
       : `<p class="vazio">O robô está relendo os tickets para trazer o valor das peças. Suba também a planilha de frete (CT-e) no botão acima.</p>`;
     // evolução semanal: tickets abertos × que saíram da planilha (fechados)
     const sem0 = (d) => { const x = new Date(d); x.setHours(0, 0, 0, 0); x.setDate(x.getDate() - ((x.getDay() + 6) % 7)); return x.toISOString().slice(0, 10); };
