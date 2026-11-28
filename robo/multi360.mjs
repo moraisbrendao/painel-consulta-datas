@@ -236,11 +236,14 @@ export async function comentarioInterno(p, ticket, texto, arquivos) {
   const caixa = p.getByPlaceholder(/digite sua mensagem/i).last();
   await caixa.waitFor({ timeout: 15000 });
   if (arquivos.length) { await p.locator("input[type=file]").last().setInputFiles(arquivos); await p.waitForTimeout(3000); }
-  await caixa.fill(texto);
+  if (texto) await caixa.fill(texto);
   const enviar = p.locator("button:has(svg.lucide-send)").last();
   await enviar.waitFor({ timeout: 10000 });
-  const antes = await p.evaluate(() => document.body.innerText.length);
+  const antes = await p.evaluate(() => document.body.innerText.length), imgs0 = await p.locator("img").count();
   await enviar.click();
+  // só prints (Brenda 27/11): confere pelo chat que ganhou a mensagem/imagens
+  if (!texto) { for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); if ((await p.locator("img").count()) > imgs0 || (await p.evaluate(() => document.body.innerText.length)) > antes) return { ok: true, cresceu: true }; }
+    throw new Error("Cliquei em enviar os prints, mas o chat não mudou."); }
   // confere: a caixa esvazia
   for (let i = 0; i < 20; i++) { await p.waitForTimeout(1000); if (!(await caixa.inputValue().catch(() => ""))) return { ok: true, cresceu: (await p.evaluate(() => document.body.innerText.length)) > antes }; }
   throw new Error("Cliquei em enviar, mas o comentário continuou na caixa.");

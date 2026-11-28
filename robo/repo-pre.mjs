@@ -350,6 +350,7 @@ async function criarTicketPortal(p, linha, volumes, teste, log, obs) {
     const tudo = (await p.locator("button").allInnerTexts().catch(() => [])).map((t) => t.replace(/\s+/g, " ").trim()).filter((t) => /adicionar|criar|salvar|enviar|cancelar/i.test(t));
     log(`  janelas abertas ${nd} · botões nelas ${JSON.stringify(bts)} · botões Adicionar/Criar na página ${JSON.stringify(tudo)} · título Criar Ticket visível ${await p.getByText(/Criar Ticket/i).first().isVisible().catch(() => false)}`); }
   log(`  janela Criar Ticket: campos ${JSON.stringify(cj.rot)} · Observação ${(await ob.count()) ? "sim" : "não"} · Adicionar ${cj.lib === null ? "não achado" : cj.lib ? "liberado" : "BLOQUEADO"}`);
+  if (cj.lib === false && !obs && await ob.count()) { await ob.fill(".", { timeout: 8000 }).catch(() => {}); await p.waitForTimeout(400); cj.lib = (await camposJanela(d)).lib; log(`  Adicionar só liberou com Observação: ${cj.lib ? "sim" : "não"}`); }
   if (cj.lib === false) throw new Error("o botão Adicionar está bloqueado (falta preencher algum campo da janela)");
   if (teste) { log(`  TESTE: volumes selecionados ${marcados.length}; NÃO cliquei em Adicionar`); await p.keyboard.press("Escape"); await p.waitForTimeout(600); if (await p.locator("[role=dialog]").count()) await d.getByRole("button", { name: /cancelar|fechar/i }).first().click().catch(() => {}); return { teste: true }; }
   await clicar(d.getByRole("button", { name: /^\s*adicionar\s*$/i }).first(), "botão Adicionar");
@@ -401,7 +402,7 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       if (/jadlog/i.test(x.transp || "") && !jad) log("  Jadlog: não achei CNPJ na anotação (sigo sem)");
       if (!x.ticket_portal_ok) {
         etapa = "criar ticket no portal"; linha = await acharLinha(p, x.nf); if (!linha) throw new Error("a NF sumiu da lista depois do print");
-        const c = await criarTicketPortal(p, linha, repor, teste, log, /EXTRAVIO TOTAL/.test(x.obs || "") ? "EXTRAVIO TOTAL" : `Reposição do(s) volume(s) ${repor.join(", ")}`);
+        const c = await criarTicketPortal(p, linha, repor, teste, log, /EXTRAVIO TOTAL/.test(x.obs || "") ? "EXTRAVIO TOTAL" : "");   // Brenda 27/11: sem texto de volume na observação
         if (!teste) await patch(x, { ticket_portal_ok: true, solicitar_msg: "Ticket criado no portal; falta o comentário no 360" });
       }
       // rastreio SSW da transportadora que pediu (a do portal)
@@ -416,9 +417,8 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
         const q = await pedido360(ctx, log, x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || ""));
         tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null; }
       if (!tk) throw new Error("ticket criado no portal, mas o ticket de Reposição (Atribuir transportador) ainda não apareceu no 360: tento de novo na próxima rodada");
-      const texto = [`Reposição pré-entrega solicitada pelo portal do transportador (${x.motivo || "Falta de volumes"}) · NF ${x.nf}.`,
-        `Volume(s) a repor: ${repor.join(", ")}.`, x.vol_posse && x.vol_posse.length && !/avaria/i.test(x.motivo || "") ? `Volume(s) em posse da transportadora (foto): ${x.vol_posse.join(", ")}.` : "",
-        jad ? `REPOSIÇÃO NO CNPJ: ${jad}` : "", `Em anexo: print do rastreio${r ? " (" + r.fonte + ")" : ""} e da solicitação no portal.`].filter(Boolean).join(" ");
+      // Brenda 27/11: no 360 vão só os prints (sem texto); Jadlog parcial: a linha do CNPJ em maiúsculas continua
+      const texto = jad ? `REPOSIÇÃO NO CNPJ: ${jad}` : "";
       await M.comentarioInterno(pedido360.pg, tk.id, texto, arquivos);
       await patch(x, { solicitar_status: "feito", ticket_360: tk.id, solicitar_msg: `Ticket do portal criado e comentário com ${arquivos.length} print(s) no ticket ${tk.id}.`, feito_em: new Date().toISOString() });
       log(`  feito: ticket portal + comentário 360 (${arquivos.length} prints)`);
