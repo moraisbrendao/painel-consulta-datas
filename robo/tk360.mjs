@@ -189,3 +189,39 @@ export async function diag360Orders({ log, ctx, chamar }) {
     }
   }
 }
+
+// ===== Tickets FECHADOS dos pedidos (Brenda 28/11): lista de NFs vem como hashes (sha256 do número da NF, 16 letras) =====
+// A lista de tickets da API só traz abertos; os fechados vêm de /orders/?invoice=<nº> → /orders/<anymarket_id>/tickets.
+// Resultado vai para robo_estado "tk360:fechados" (só logados no painel leem). Log público: só contagens.
+const ABERTO = /^(new|open|on_going|awaiting_.*|pending.*|in_progress)$/i;
+export async function rodarFechados({ chamar, log, ctx, hashes }) {
+  const { createHash } = await import("node:crypto");
+  const hh = (n) => createHash("sha256").update(String(n).split("-")[0].trim()).digest("hex").slice(0, 16);
+  const quero = new Set(hashes);
+  const nfs = new Map();
+  for (const tab of ["base_pedidos", "tk360"]) for (let de = 0; ; de += 1000) { const b = await chamar(`${tab}?select=nf&nf=not.is.null&order=nf&offset=${de}&limit=1000`).catch(() => []); for (const x of b) { const h = hh(x.nf); if (quero.has(h) && !nfs.has(h)) nfs.set(h, String(x.nf).trim()); } if (b.length < 1000) break; }
+  log(`fechados: ${quero.size} NFs pedidas · ${nfs.size} achadas na base`);
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  let auth = null, raiz = null, origem = null;
+  ctx.on("request", (q) => { const h = q.headers(); if (/backend\./.test(q.url()) && /\/tickets/.test(q.url()) && h.authorization) { auth = h.authorization; const u = new URL(q.url()); origem = u.origin; raiz = u.origin + u.pathname.replace(/\/tickets.*$/, ""); } });
+  const p = await entrarMulti360(ctx, log); await p.waitForTimeout(6000); if (!auth) { await p.reload().catch(() => {}); await p.waitForTimeout(6000); }
+  if (!auth) throw new Error("sem acesso à API do 360");
+  let renovando = null; const renovar = () => renovando || (renovando = (async () => { const a = auth; await p.reload().catch(() => {}); for (let k = 0; k < 30 && auth === a; k++) await p.waitForTimeout(500); renovando = null; })());
+  const get = async (url, t = 0) => { if (renovando) await renovando; const r = await ctx.request.get(url, { headers: { authorization: auth, accept: "application/json" }, timeout: 45000 }).catch(() => null); const st = r ? r.status() : 0;
+    if (st === 401 && t < 3) { await renovar(); return get(url, t + 1); } if ((st === 0 || st === 429 || st >= 500) && t < 3) { await new Promise((ok) => setTimeout(ok, 2500 * (t + 1))); return get(url, t + 1); } if (st !== 200) throw new Error("API " + st); return r.json(); };
+  const linhas = [], semPedido = [], erros = { n: 0 }; const STATUS = {};
+  const itens = [...nfs.values()]; let i = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => { while (i < itens.length) { const nf = itens[i++]; const num = nf.split("-")[0];
+    try { const o = await get(`${origem}/orders/?page=1&invoice=${encodeURIComponent(num)}`);
+      const ords = (o.orders || []).filter((x) => !x.invoice || String(x.invoice).replace(/\s/g, "") === nf.replace(/\s/g, "") || String(x.invoice).split("-")[0] === num);
+      if (!ords.length) { semPedido.push(nf); continue; }
+      for (const od of ords) { const tks = await get(`${raiz}/orders/${od.anymarket_id}/tickets`);
+        for (const t of tks || []) { STATUS[t.status] = (STATUS[t.status] || 0) + 1; if (ABERTO.test(t.status || "")) continue;
+          linhas.push({ nf, nf_ticket: t.invoice || null, pedido_mkt: od.marketplace_number || null, ticket: t.ticket_id, tipo: t.type && t.type.label || null, fila: t.queue && t.queue.label || null, status: t.status }); } }
+    } catch (e) { erros.n++; } } }));
+  // datas de cada ticket fechado (abertura / última atualização)
+  let j = 0; await Promise.all(Array.from({ length: 6 }, async () => { while (j < linhas.length) { const x = linhas[j++];
+    try { const d = await get(`${raiz}/tickets/${x.ticket}`); const tk = d.ticket || d; x.criado = tk.created_date || tk.created_at || null; x.atualizado = tk.last_update_date || tk.updated_at || null; x.fechado = tk.closed_date || tk.solved_date || tk.end_date || null; x.motivo = (tk.reason && (tk.reason.label || tk.reason.name)) || null; } catch (_) {} } }));
+  await chamar("robo_estado", "POST", { nome: "tk360:fechados", valor: { em: new Date().toISOString(), pedidas: quero.size, achadas: nfs.size, sem_pedido_360: semPedido, linhas }, atualizado_em: new Date().toISOString() }, { Prefer: "resolution=merge-duplicates,return=minimal" });
+  log(`fechados: ${nfs.size} NFs consultadas · ${semPedido.length} sem pedido no 360 · ${erros.n} com erro · ${linhas.length} tickets fechados em ${new Set(linhas.map((x) => x.nf)).size} NFs · status vistos ${JSON.stringify(STATUS)}`);
+}

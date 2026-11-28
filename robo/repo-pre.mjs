@@ -236,7 +236,7 @@ export async function diagRepoPre2({ log, ctx }) {
 }
 
 // ===== modo repo-pre: analisa os casos Novo + Falta de volumes (séries da matriz) e grava em repo_pre. Não solicita nada. =====
-const SERIES = ["7", "4", "31"];
+const SERIES = null;   // Brenda 28/11: todas as séries (25/34 = etiqueta amarela da filial; a equipe ensina as outras conforme aparecem)
 const SINISTRO = /SINISTR\w*|ROUB\w*|FURT\w*|ASSALT\w*|ACIDENT\w*|TOMBAMENT\w*|INCENDI\w*|AVARIA TOTAL|PERDA TOTAL|BOLETIM DE OCORRENCIA/;
 async function anotacoesDaLinha(p, linha) {
   const bt = linha.locator("button[title='Ver Anotações'], button[title*='Anota' i]").first(); if (!(await bt.count())) return [];
@@ -268,9 +268,9 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
   if (!(await aplicarNovo(p, log))) throw new Error("não achei o filtro Status = Novo no portal");
   const lista = await lerListaRepoPre(p, null);
   // todos os motivos (Falta de volumes, Avaria, Extravio, Inversão...) da matriz (Brenda 27/11)
-  const alvo = lista.filter((c) => SERIES.includes(String(c.nf || "").split("-")[1]?.trim()) && (!c.status || /^\s*novo\s*$/i.test(c.status)));   // só status Novo (Brenda 27/11)
+  const alvo = lista.filter((c) => (!SERIES || SERIES.includes(String(c.nf || "").split("-")[1]?.trim())) && (!c.status || /^\s*novo\s*$/i.test(c.status)));   // só status Novo (Brenda 27/11)
   if (lista.some((c) => c.status && !/^\s*novo\s*$/i.test(c.status))) log(`  (${lista.filter((c) => c.status && !/^\s*novo\s*$/i.test(c.status)).length} linha(s) da lista não estavam Novo: ignoradas)`);
-  log(`Portal: ${lista.length} reposições Novo · ${alvo.length} nas séries ${SERIES.join("/")} (${Object.entries(alvo.reduce((a, c) => ((a[c.motivo || "?"] = (a[c.motivo || "?"] || 0) + 1), a), {})).map(([k, v]) => k + " " + v).join(", ")})`);
+  log(`Portal: ${lista.length} reposições Novo · ${alvo.length} ${SERIES ? "nas séries " + SERIES.join("/") : "em todas as séries"} (${Object.entries(alvo.reduce((a, c) => ((a[c.motivo || "?"] = (a[c.motivo || "?"] || 0) + 1), a), {})).map(([k, v]) => k + " " + v).join(", ")})`);
   const jaTem = new Map((await chamar("repo_pre?select=nf,analisado_em,volumes,venda,tickets&limit=5000")).map((x) => [x.nf, x]));
   // quem saiu da lista (já virou ticket, cancelada ou mudou de status)
   const nfs = new Set(alvo.map((c) => c.nf));

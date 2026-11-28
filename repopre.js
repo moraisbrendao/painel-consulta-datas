@@ -237,6 +237,7 @@
   // volume pelo "VOL. NF 03/05" da etiqueta branca (séries da matriz): nº 3 do cadastro, se o total bate (Brenda 27/11)
   function volsPorEtiqueta(x) {
     const vs = x.volumes || [], out = new Set();
+    if (["25", "34"].includes(String(x.nf).split("-")[1] || "")) return [];   // Brenda 28/11: na filial o "VOL NF x/y" da etiqueta branca não vale (só a amarela)
     for (const t of (x.foto_ia && x.foto_ia.vol_nf) || []) { const m = String(t).match(/(\d{1,2})\s*\/\s*(\d{1,2})/); if (!m || +m[2] !== vs.length) continue;
       const v = vs.find((v) => (infoVol(x, v) || {}).nro === +m[1]); if (v) out.add(v); }
     return [...out];
@@ -402,4 +403,24 @@
     XLSX.writeFile(wb, `reposicao_pre_falta_volumes_${new Date().toISOString().slice(0, 10)}.xlsx`);
   });
   setInterval(() => { if ($("rp-repopre").offsetParent && window.__sb && !carregou) { carregou = true; carregar(); setInterval(() => { if ($("rp-repopre").offsetParent) carregar(); }, 120000); } }, 2000);
+  // 28/11 (Brenda): Excel da consulta de tickets FECHADOS do 360 (robô tk360-fech grava em robo_estado)
+  const btFech = document.getElementById("btn-tk-fechados");
+  if (btFech) btFech.addEventListener("click", async () => {
+    const r = await sb().from("robo_estado").select("valor,atualizado_em").eq("nome", "tk360:fechados").maybeSingle();
+    if (r.error || !r.data) return toast("Ainda não tem consulta de tickets fechados.", true);
+    const v = r.data.valor || {}, ST = { solved: "Fechado (resolvido)", closed: "Fechado", canceled: "Cancelado", cancelled: "Cancelado" };
+    const br = (d) => (d ? new Date(d).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }) : "");
+    const L = (v.linhas || []).map((x) => ({ "Nota-Série": x.nf, "Pedido marketplace": x.pedido_mkt || "", Ticket: x.ticket, "Link do ticket": `https://appv2.360multi.com/tickets/${x.ticket}`, Tipo: x.tipo || "", Motivo: x.motivo || "", "Última fila": x.fila || "", Status: ST[x.status] || x.status || "", Abertura: br(x.criado), "Última atualização": br(x.atualizado), "NF no ticket": x.nf_ticket || "" }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(L.length ? L : [{ Aviso: "Nenhum ticket fechado" }]), "Tickets fechados");
+    XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet([{ "Consulta feita em": br(v.em), "NFs pedidas": v.pedidas, "NFs achadas na base": v.achadas, "Sem pedido no 360": (v.sem_pedido_360 || []).length, "Tickets fechados": L.length, "NFs com ticket fechado": new Set(L.map((x) => x["Nota-Série"])).size }]), "Resumo");
+    if ((v.sem_pedido_360 || []).length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(v.sem_pedido_360.map((n) => ({ "Nota-Série": n }))), "Sem pedido no 360");
+    XLSX.writeFile(wb, `tickets_fechados_360_${String(v.em || "").slice(0, 10)}.xlsx`);
+  });
+  // 28/11 (Brenda): cards pretos para analisar (padrão) com opção de cards brancos — só nesta aba, não o fundo
+  function rppTema(escuro) { try { localStorage.setItem("painel.rpp.cards", escuro ? "preto" : "branco"); } catch (_) {}
+    const box = document.getElementById("rp-repopre"); if (box) box.classList.toggle("rpp-escuro", escuro);
+    const b = document.getElementById("rpp-tema"); if (b) { b.textContent = escuro ? "◐ Cards brancos" : "◑ Cards pretos"; b.title = escuro ? "Cards pretos · clique para cards brancos" : "Cards brancos · clique para cards pretos"; } }
+  { let esc0 = true; try { esc0 = localStorage.getItem("painel.rpp.cards") !== "branco"; } catch (_) {} rppTema(esc0);
+    const b = document.getElementById("rpp-tema"); if (b) b.addEventListener("click", () => rppTema(!document.getElementById("rp-repopre").classList.contains("rpp-escuro"))); }
 })();

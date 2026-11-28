@@ -1573,3 +1573,26 @@ body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
 .rpp-mais > summary { cursor: pointer; color: var(--texto-2); }
 .rpp-mais[open] > summary { margin-bottom: 6px; }
 .rpp-mais > * + * { margin-top: 6px; }
+/* Reposição pré › cards pretos (Brenda 28/11: preto e branco nos cards, não no fundo) */
+#rp-repopre.rpp-escuro .rpp-caso { background: #111827; border-color: #1f2937; color: #e5e7eb; }
+#rp-repopre.rpp-escuro .rpp-caso .s, #rp-repopre.rpp-escuro .rpp-mais > summary { color: #9ca3af; }
+#rp-repopre.rpp-escuro .rpp-cab b { color: #fff; }
+#rp-repopre.rpp-escuro .rpp-cab { color: #e5e7eb; }
+#rp-repopre.rpp-escuro .rpp-ver { background: #0f2a1a; border-left-color: #22c55e; }
+#rp-repopre.rpp-escuro .rpp-ver.amar { background: #2a2208; border-left-color: #facc15; }
+#rp-repopre.rpp-escuro .rpp-ver.verm { background: #2b0f12; border-left-color: #f87171; }
+#rp-repopre.rpp-escuro .rpp-ver-t { color: #fff; }
+#rp-repopre.rpp-escuro .rpp-ver.verm .rpp-ver-t { color: #fecaca; }
+#rp-repopre.rpp-escuro .rpp-ver li { color: #fde68a; }
+#rp-repopre.rpp-escuro .rpp-ver li.mao, #rp-repopre.rpp-escuro .rpp-ver li.erro { color: #fca5a5; }
+#rp-repopre.rpp-escuro .rpp-ver li.ok { color: #86efac; }
+#rp-repopre.rpp-escuro .rpp-ver-l { color: #e5e7eb; }
+#rp-repopre.rpp-escuro .rpp-vol { background: #1f2937; color: #e5e7eb; border-color: #374151; }
+#rp-repopre.rpp-escuro .rpp-vol.posse, #rp-repopre.rpp-escuro .rpp-vol.avariado { background: #facc15; color: #111827; border-color: #facc15; }
+#rp-repopre.rpp-escuro .rpp-falta { background: #1f2937; color: #e5e7eb; border-color: #374151; }
+#rp-repopre.rpp-escuro .rpp-falta.ok { background: #0f2a1a; color: #bbf7d0; }
+#rp-repopre.rpp-escuro .rpp-anot, #rp-repopre.rpp-escuro .rpp-ia { background: #1f2937; color: #e5e7eb; border-color: #374151; }
+#rp-repopre.rpp-escuro .rpp-caso a { color: #93c5fd; }
+#rp-repopre.rpp-escuro .rpp-semfoto { background: #1f2937; color: #9ca3af; border-color: #374151; }
+#rp-repopre.rpp-escuro .rpp-caso .btn.contorno { background: transparent; color: #e5e7eb; border-color: #4b5563; }
+#rp-repopre.rpp-escuro .rpp-tks .chip { background: #1f2937; color: #e5e7eb; }

@@ -1697,6 +1697,12 @@ if (MODO === "repo-pre-solicitar") {   // Reposição pré: cria o ticket no por
   try { await (await import("./repo-pre.mjs")).conferirDebitos({ chamar, log, ctx }); } catch (e) { log("débitos: " + String(e.message).slice(0, 80)); }
   finally { await nav.close(); }
 }
+if (MODO === "tk360-fech") {   // 28/11: tickets FECHADOS das NFs pedidas (TRANSP = hashes separados por vírgula)
+  await entrarSupabase(); const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  try { await (await import("./tk360.mjs")).rodarFechados({ chamar, log, ctx, hashes: String(process.env.TRANSP || "").split(",").map((x) => x.trim()).filter((x) => /^[0-9a-f]{16}$/.test(x)) }); }
+  catch (e) { log("tk360-fech: erro " + String(e.message).slice(0, 120)); process.exitCode = 1; } finally { await nav.close(); }
+}
 if (MODO === "diag-360fech") {   // 28/11: API do 360 traz tickets fechados / por NF?
   await entrarSupabase(); const { chromium } = await import("playwright");
   const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
