@@ -243,11 +243,15 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
   const sairam = [...jaTem.keys()].filter((nf) => !nfs.has(nf));
   if (sairam.length) for (let i = 0; i < sairam.length; i += 50) await chamar(`repo_pre?nf=in.(${sairam.slice(i, i + 50).map((n) => `"${n}"`).join(",")})`, "PATCH", { na_lista: false });
   let feitos = 0, erros = 0;
+  // casos novos (nunca analisados) primeiro, para o limite da rodada ir para eles
+  const nunca = (c) => { const a = jaTem.get(c.nf); return !(a && a.volumes && a.volumes.length && a.venda != null); };
+  alvo.sort((x, y) => nunca(y) - nunca(x));
+  log(`repo-pre: ${alvo.filter(nunca).length} caso(s) Novo ainda sem análise · os outros já têm histórico e não são reabertos`);
   for (const c of alvo) {
     const antes = jaTem.get(c.nf);
     const base = { nf: c.nf, motivo: c.motivo, status_portal: c.status, transp: c.transp, solicitado: c.data, qtd_volumes: c.qtd, serie: String(c.nf).split("-")[1].trim(), na_lista: true };
-    // já analisado nas últimas 6 h com volumes e 360: só atualiza os dados da lista
-    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda != null && Date.now() - Date.parse(antes.analisado_em || 0) < 6 * 3600000) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
+    // 27/11 (Brenda): já analisado com volumes e 360 = guarda o histórico e não reanalisa (as etiquetas não mudam); só atualiza os dados da lista
+    if (!reler && antes && antes.volumes && antes.volumes.length && antes.venda != null) { await chamar(`repo_pre?nf=eq.${encodeURIComponent(c.nf)}`, "PATCH", base); continue; }
     if (feitos >= limite) { if (!antes) await chamar("repo_pre", "POST", base, { Prefer: "resolution=merge-duplicates,return=minimal" }).catch(() => {}); continue; }
     feitos++;
     const r = { ...base, analisado_em: new Date().toISOString(), robo_msg: null };
