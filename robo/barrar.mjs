@@ -44,7 +44,7 @@ export async function abrirBarrar(p, log) {
 export async function diagBarrar4({ chamar, ctx, log }) {
   const L = await chamar(`barrar_entrega?select=nf&na_planilha=eq.true&portal_status=eq.erro&portal_msg=like.${encodeURIComponent("Nota não está mais*")}&limit=6`);
   log(`diag4: ${L.length} nota(s) com "não está na lista"`);
-  const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
+  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
   const m = (t) => String(t ?? "").replace(/\d/g, "#").replace(/\s+/g, " ").trim().slice(0, 60);
   const filtros = p.locator("input[placeholder^='Filtrar por nota']");
   log(`diag4: campos 'Filtrar por nota': ${await filtros.count()} · inputs: ${(await p.$$eval("input", (xs) => xs.map((i) => (i.placeholder || i.type).replace(/\d/g, "#")))).join(" | ")}`);
@@ -61,7 +61,7 @@ export async function diagBarrar4({ chamar, ctx, log }) {
   log("diag4 abas/botões:", abas.map(m).slice(0, 15).join(" | "));
 }
 export async function diagBarrar({ ctx, log }) {
-  const p = await entrarPortal(ctx, log, CRED_EDU());
+  const p = await entrarPortal(ctx, log);
   const menu = await p.evaluate(() => [...document.querySelectorAll("a[href]")].map((a) => `${(a.textContent || "").trim().slice(0, 30)} → ${a.getAttribute("href")}`).filter((x) => /barr/i.test(x)));
   log("Links com 'barr':", menu.map(mascara).join(" | ") || "nenhum");
   await abrirBarrar(p, log);
@@ -87,7 +87,7 @@ export async function diagBarrar({ ctx, log }) {
 
 // segunda parte do diagnóstico: modais (Anotações e ✗) e o Exportar — abre e fecha/cancela, não salva nada
 export async function diagBarrar2({ ctx, log }) {
-  const p = await entrarPortal(ctx, log, CRED_EDU());
+  const p = await entrarPortal(ctx, log);
   await abrirBarrar(p, log);
   const linha = p.locator("table tbody tr").first();
   const modal = async (rot) => {
@@ -282,7 +282,7 @@ export async function conferirBarrar({ chamar, log, ctx, R, limite = 200, subirA
   await R.carregarSenhasDB();
   const M = await import("./multi360.mjs");
   let m360 = null; try { m360 = await M.entrarMulti360(ctx, log, CRED_EDU()); } catch (e) { log("barrar: não entrei no 360:", String(e.message).slice(0, 100)); }
-  const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
+  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
   // 28/11: o campo "Filtrar por nota" não respondia (16 erros de locator.fill Timeout): espera o campo, recarrega se preciso e mostra o que tem na tela
   const SEL_FILTRO = "input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]";
   const campoOk = async () => { const f = p.locator(SEL_FILTRO).first(); await f.waitFor({ state: "visible", timeout: 20000 }).catch(() => {}); return (await f.count()) && (await f.isEditable().catch(() => false)); };
@@ -354,7 +354,7 @@ export async function aplicarBarrar({ chamar, log, ctx, soTicket = false, soAuto
   L.splice(0, L.length, ...L.filter(pode));
   log(`barrar-portal: ${L.length} nota(s) aprovadas para o portal`);
   if (!L.length) return;
-  const p = await entrarPortal(ctx, log, CRED_EDU()); await abrirBarrar(p, log);
+  const p = await entrarPortal(ctx, log); await abrirBarrar(p, log);
   // 28/11: o campo "Filtrar por nota" não respondia (16 erros de locator.fill Timeout): espera o campo, recarrega se preciso e mostra o que tem na tela
   const SEL_FILTRO = "input[placeholder^='Filtrar por nota'], input[placeholder*='nota' i]";
   const campoOk = async () => { const f = p.locator(SEL_FILTRO).first(); await f.waitFor({ state: "visible", timeout: 20000 }).catch(() => {}); return (await f.count()) && (await f.isEditable().catch(() => false)); };
