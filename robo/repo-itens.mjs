@@ -356,3 +356,27 @@ export async function diagAt({ chamar, log, ctx, n = 3 }) {
     } catch (e) { log(`AT${k}: erro ${String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 140)}`); }
   }
 }
+
+// ===== diag-360lista (Brenda 27/11): dá para tirar do 360 o que vem no detalhamento, sem upload? Só formato no log, nada de dados =====
+export async function diag360Lista({ log, ctx }) {
+  const { entrarMulti360 } = await import("./multi360.mjs");
+  const api = new Map();   // chamadas da tela (método + caminho mascarado) → tamanho
+  const mascara = (u) => { try { const x = new URL(u); return x.host + x.pathname.replace(/\d{3,}/g, "#") + (x.search ? " ?" + [...x.searchParams.keys()].join("&") : ""); } catch (_) { return "?"; } };
+  ctx.on("response", async (r) => { const t = r.request().resourceType(); if (!["xhr", "fetch"].includes(t)) return; const k = r.request().method() + " " + mascara(r.url());
+    let n = 0, chaves = ""; try { const j = await r.json(); n = JSON.stringify(j).length; const a = Array.isArray(j) ? j : j && (j.data || j.items || j.results || j.tickets || j.rows); chaves = (Array.isArray(a) && a[0] ? `lista ${a.length} · campos ${Object.keys(a[0]).slice(0, 40).join(",")}` : j && typeof j === "object" ? "obj " + Object.keys(j).slice(0, 15).join(",") : ""); } catch (_) {}
+    if (!api.has(k)) api.set(k, `${r.status()} ${n}b ${chaves}`); });
+  const p = await entrarMulti360(ctx, log);
+  await p.waitForTimeout(6000);
+  const ui = (t) => String(t || "").replace(/\s+/g, " ").trim().replace(/\d{3,}/g, "#").slice(0, 40);
+  log(`lista: url ${new URL(p.url()).pathname}`);
+  log(`  colunas da tabela: ${JSON.stringify((await p.locator("table thead th, [role=columnheader]").allInnerTexts().catch(() => [])).map(ui))}`);
+  log(`  linhas visíveis: ${await p.locator("table tbody tr, [role=row]").count()}`);
+  log(`  botões: ${JSON.stringify([...new Set((await p.locator("button").allInnerTexts().catch(() => [])).map(ui).filter(Boolean))].slice(0, 40))}`);
+  log(`  menu/links: ${JSON.stringify([...new Set((await p.locator("nav a, aside a, [role=navigation] a").allInnerTexts().catch(() => [])).map(ui).filter(Boolean))].slice(0, 40))}`);
+  log(`  textos com total/página: ${JSON.stringify((await p.evaluate(() => document.body.innerText.split("\n").filter((l) => /p[aá]gina|total|resultado|registros|de \d+/i.test(l) && l.length < 80).slice(0, 8))).map(ui))}`);
+  for (const [k, v] of api) log(`  API ${k} → ${v}`);
+  // relatórios do 360?
+  for (const cam of ["/reports", "/relatorios", "/dashboard"]) { api.clear(); await p.goto("https://appv2.360multi.com" + cam, { waitUntil: "domcontentloaded" }).catch(() => {}); await p.waitForTimeout(5000);
+    log(`${cam}: url ${new URL(p.url()).pathname} · títulos ${JSON.stringify((await p.locator("h1,h2,h3").allInnerTexts().catch(() => [])).map(ui).slice(0, 15))} · botões ${JSON.stringify([...new Set((await p.locator("button").allInnerTexts().catch(() => [])).map(ui).filter(Boolean))].slice(0, 20))}`);
+    for (const [k, v] of api) log(`  API ${k} → ${v}`); }
+}

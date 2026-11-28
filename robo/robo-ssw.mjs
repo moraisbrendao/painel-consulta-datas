@@ -1570,6 +1570,12 @@ if (MODO === "at") {   // Assistência Técnica: peças no 360 + rastreio da Not
   catch (e) { log("at: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
+if (MODO === "diag-360lista") {   // dá para ler a lista de tickets do 360 sem o detalhamento? (só formato no log)
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 } });
+  try { await (await import("./repo-itens.mjs")).diag360Lista({ log, ctx }); } catch (e) { log("diag-360lista: erro " + String(e.message).split("\n")[0].slice(0, 160)); } finally { await nav.close(); }
+}
 if (MODO === "diag-at") {   // Assistência Técnica: onde o 360 mostra a peça (robo/repo-itens.mjs diagAt) — só formato no log
   await entrarSupabase();
   const { chromium } = await import("playwright");
