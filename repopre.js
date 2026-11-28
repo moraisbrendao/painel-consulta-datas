@@ -44,6 +44,9 @@
     if (m === "sinistro") return ["mao", "Sinistro: conferir o rastreio e o boletim/ocorrência com a transportadora antes de repor."];
     if (m === "avaria") {
       if (mk.length) return ["ok", `Avaria: repor o(s) volume(s) avariado(s) ${mk.map((v) => rotVol(x, v) + v).join(", ")}.`];
+      { const av = volsPorAnotacao(x); if (av.length && av.length < vs.length) return ["acao", `Avaria: a anotação da transportadora cita a peça do volume ${av.map((v) => rotVol(x, v) + v + " (" + ((infoVol(x, v) || {}).descricao || "") + ")").join(", ")}. Confira e use o ✓ Repor.`]; }
+      { const ev = volsPorEtiqueta(x); if (ev.length && !(x.foto_ia.volumes_vistos || []).length) return ["acao", `Avaria: a etiqueta da foto diz VOL ${(x.foto_ia.vol_nf || []).join(", ")} = volume ${ev.map((v) => rotVol(x, v) + v).join(", ")} pelo cadastro. Confira e use o ✓ Repor.`]; }
+      if (!vs.some((v) => infoVol(x, v))) { if (fotos || /\S/.test(an)) return ["acao", "Avaria: este SKU não está no cadastro de volumes, então não sei a descrição nem o nº de cada volume. Suba a ⇪ Planilha de volumes ou clique no volume avariado."]; }
       if (fotos) return ["acao", `Avaria: olhe a foto e clique no volume AVARIADO.${PAL_AVARIA.test(an) ? " A anotação da transportadora também fala da avaria." : ""}`];
       if (PAL_AVARIA.test(an)) return ["acao", "Avaria sem foto, mas a anotação descreve a avaria: leia a anotação e clique no volume avariado."];
       return ["aviso", "Avaria sem foto e sem anotação: pedir à transportadora a foto do volume avariado."];
@@ -75,8 +78,8 @@
   const sit = (x) => {
     if (x.solicitar_status === "feito") return "feito";
     if (x.solicitar_status === "pendente") return "fila";
+    if (!x.na_lista && !soComentario(x)) return "saiu";   // saiu do portal (Brenda 27/11): não fica em Conferir à mão por erro antigo
     if (x.solicitar_status === "erro") return "mao";
-    if (!x.na_lista) return "saiu";
     if (NAOREP(x)) return "naorep";
     if (!x.analisado_em) return "robo";
     if (APROV(x) && repor(x).length) return "pronto";   // a pessoa decidiu: vale mais que o alerta
@@ -179,21 +182,40 @@
       : x.rastreio && x.rastreio.sinistro ? "o rastreio fala em sinistro/roubo" : !rp.length ? (x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? "use a leitura do Claude acima ou clique nos volumes" : "clique nos volumes acima para dizer qual repor") : "";
     return (motivo ? `<span class="s">📤 O botão de solicitar aparece quando der: ${esc(motivo)}.</span>` : "") + volta;
   }
+  // volume pelo "VOL. NF 03/05" da etiqueta branca (séries da matriz): nº 3 do cadastro, se o total bate (Brenda 27/11)
+  function volsPorEtiqueta(x) {
+    const vs = x.volumes || [], out = new Set();
+    for (const t of (x.foto_ia && x.foto_ia.vol_nf) || []) { const m = String(t).match(/(\d{1,2})\s*\/\s*(\d{1,2})/); if (!m || +m[2] !== vs.length) continue;
+      const v = vs.find((v) => (infoVol(x, v) || {}).nro === +m[1]); if (v) out.add(v); }
+    return [...out];
+  }
+  // a anotação da transportadora cita a peça (ex.: "avaria dos espelhos"): volume cuja descrição no cadastro tem essa palavra (Brenda 27/11)
+  const semAc = (t) => String(t || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toUpperCase();
+  const PAL_GEN = new Set(["VOLUME", "VOLUMES", "CAIXA", "PRODUTO", "MOVEL", "MOVEIS", "PECAS", "PECA", "PARTE", "KIT", "MODULO", "COM", "PARA"]);
+  function volsPorAnotacao(x) {
+    const an = semAc((x.anotacoes || []).map((a) => a.texto).join(" ")); if (!an) return [];
+    const ws = new Set(an.split(/[^A-Z]+/).filter((w) => w.length >= 5).map((w) => w.slice(0, 6)));
+    return (x.volumes || []).filter((v) => { const d = semAc((infoVol(x, v) || {}).descricao); return d && d.split(/[^A-Z]+/).some((w) => w.length >= 5 && !PAL_GEN.has(w) && ws.has(w.slice(0, 6))); });
+  }
   // botões de decisão do caso (Brenda 27/11: "um botão nos casos igual no barrar")
   function decisao(x, rp) {
-    const ia = !rp.length && x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos : null;
+    const iaV = x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos : volsPorEtiqueta(x);
+    const anV = MOT(x) === "avaria" ? volsPorAnotacao(x) : [];
+    const ia = !rp.length && iaV.length ? iaV : null, an = !rp.length && !ia && anV.length && anV.length < (x.volumes || []).length ? anV : null;
     const alvo = rp.length ? rp.map((v) => rotVol(x, v) + esc(v)).join(", ") : "";
     const sim = rp.length ? `<button type="button" class="btn verde" data-rpp-dec="sim" data-nf="${esc(x.nf)}">✓ Repor ${alvo}</button>`
-      : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor pela leitura do Claude</button>`
+      : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor ${(MOT(x) === "avaria" ? ia : (x.volumes || []).filter((v) => !ia.includes(v))).map((v) => rotVol(x, v) + esc(v)).join(", ") || "—"} (pela leitura da foto)</button>`
+      : an ? `<button type="button" class="btn verde" data-rpp-dec="an" data-nf="${esc(x.nf)}" title="A anotação da transportadora cita a peça deste volume">✓ Repor ${an.map((v) => rotVol(x, v) + esc(v) + " · " + esc((infoVol(x, v) || {}).descricao || "")).join(", ")} (pela anotação)</button>`
       : `<button type="button" class="btn verde" disabled title="Clique primeiro nos volumes acima (ou em Extravio total)">✓ Repor</button>`;
-    return `<div class="rpp-dec"><span class="s">Decisão:</span> ${sim} <button type="button" class="btn vermelho-cont" data-rpp-dec="nao" data-nf="${esc(x.nf)}">✗ Não repor</button>${!rp.length && !ia ? ` <span class="s">${MOT(x) === "avaria" ? "clique no volume avariado acima" : "marque o volume acima"} para liberar o ✓</span>` : ""}</div>`;
+    return `<div class="rpp-dec"><span class="s">Decisão:</span> ${sim} <button type="button" class="btn vermelho-cont" data-rpp-dec="nao" data-nf="${esc(x.nf)}">✗ Não repor</button>${!rp.length && !ia && !an ? ` <span class="s">${MOT(x) === "avaria" ? "clique no volume avariado acima" : "marque o volume acima"} para liberar o ✓</span>` : ""}</div>`;
   }
   async function decidir(nf, d) {
     const x = L.find((y) => y.nf === nf); if (!x || ["pendente", "feito"].includes(x.solicitar_status)) return;
     const email = ((await sb().auth.getUser()).data.user || {}).email || null;
     const novo = { marcado_por: email, marcado_em: new Date().toISOString() };
     if (d === "nao") novo.obs = obsDe(x, { aprov: false, nao: true });
-    else { if (d === "ia") novo.vol_posse = [...(x.foto_ia.volumes_vistos || [])]; novo.obs = obsDe(REVISAR(x) ? { ...x, obs: null } : x, { aprov: true, nao: false }); }
+    else { if (d === "ia") novo.vol_posse = (x.foto_ia.volumes_vistos || []).length ? [...x.foto_ia.volumes_vistos] : volsPorEtiqueta(x);
+      if (d === "an") novo.vol_posse = volsPorAnotacao(x); novo.obs = obsDe(REVISAR(x) ? { ...x, obs: null } : x, { aprov: true, nao: false }); }
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
     toast(d === "nao" ? `NF ${nf}: não repor (card Não repor).` : `NF ${nf} aprovada: está em Pronto para solicitar.`);
