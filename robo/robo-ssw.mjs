@@ -1558,7 +1558,7 @@ if (MODO === "diag-sla") {   // Reposição: lê o SLA de 3 tickets em aberto (s
 }
 if (MODO === "repo-foto") {   // Reposição pré: TESTE da leitura da foto com o Claude (robo/repo-foto.mjs). Precisa de ANTHROPIC_API_KEY.
   await entrarSupabase();
-  try { await (await import("./repo-foto.mjs")).rodarFotoTeste({ chamar, log, limite: Number(process.env.SSW_LIMITE) || 10 }); }
+  try { await (await import("./repo-foto.mjs")).rodarFotoTeste({ chamar, log, limite: Number(process.env.SSW_LIMITE) || 10, alvo: String(process.env.TRANSP || "").trim() }); }
   catch (e) { log("repo-foto: erro " + String(e.message).split("\n")[0].replace(/\d{5,}/g, "#").slice(0, 160)); process.exitCode = 1; }
 }
 if (MODO === "at") {   // Assistência Técnica: peças no 360 + rastreio da Nota AT (robo/at.mjs). TRANSP=pecas|rastreio faz só uma parte.
