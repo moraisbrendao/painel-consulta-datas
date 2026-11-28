@@ -1694,6 +1694,15 @@ if (MODO === "repo-pre-solicitar") {   // Reposição pré: cria o ticket no por
   try { await (await import("./repo-pre.mjs")).solicitarRepoPre({ chamar, log, ctx, teste: /^teste/.test(process.env.TRANSP || ""), hash: (String(process.env.TRANSP || "").match(/^teste:h:([0-9a-f]{16})$/) || [])[1] || "",
       R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } }); }
   catch (e) { log("repo-pre-solicitar: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
+  try { await (await import("./repo-pre.mjs")).conferirDebitos({ chamar, log, ctx }); } catch (e) { log("débitos: " + String(e.message).slice(0, 80)); }
+  finally { await nav.close(); }
+}
+if (MODO === "repo-debito" || MODO === "diag-paralelo") {   // 28/11: débito da reposição abriu? / diag da janela Ticket Paralelo (não cria nada)
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  try { const RP = await import("./repo-pre.mjs"); if (MODO === "repo-debito") await RP.conferirDebitos({ chamar, log, ctx }); else await RP.diagParalelo({ chamar, log, ctx }); }
+  catch (e) { log(MODO + ": erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
 if (MODO === "repo-pre") {   // Reposição pré: analisa os casos Novo de todos os motivos (robo/repo-pre.mjs). Não solicita nada no portal.
@@ -1703,6 +1712,7 @@ if (MODO === "repo-pre") {   // Reposição pré: analisa os casos Novo de todos
   try { await (await import("./repo-pre.mjs")).rodarRepoPre({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 40, reler: process.env.TRANSP === "reler",
       R: { jadlog, bento, transito, formato, EH_FORMATO, pagina, lerEntrega, cnpjDaSerie, chaveDe, sohTexto, carregarSenhasDB, EH_JADLOG, EH_BENTO, EH_TRANSITO, chamar } }); }
   catch (e) { log("repo-pre: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
+  try { await (await import("./repo-pre.mjs")).conferirDebitos({ chamar, log, ctx }); } catch (e) { log("débitos: " + String(e.message).slice(0, 80)); }
   finally { await nav.close(); }
 }
 if (MODO === "diag-repopre") {   // Reposição pré › Falta de volumes: lê a etiqueta da foto anexada no portal (robo/repo-pre.mjs). Só sim/não no log.

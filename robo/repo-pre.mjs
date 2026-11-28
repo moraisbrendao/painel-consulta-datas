@@ -109,6 +109,12 @@ export async function origemNota(chamar, nf) {
   return o.ticket ? o : null;
 }
 
+// 28/11 (Brenda): "Débitos Transportadores (Cancelamento)" é ticket de débito, não devolução do cliente
+export const DEVOL = (t) => /devolu|cancel/i.test(`${t.tipo} ${t.fila}`) && !/d[eé]bito/i.test(`${t.tipo}`);
+// ticket de Reposição do pedido (não o de débito); em nota de reposição/AT só os mais novos que o ticket de origem
+export const REPOS = (tks, org) => (tks || []).filter((t) => t.id && !t.nota_de && /reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || "") && (!org || +t.id > +org.id));
+export const DEBITO = (tks, org) => (tks || []).filter((t) => t.id && /d[eé]bito/i.test(t.tipo || "") && /reposi/i.test(t.tipo || "") && (!org || +t.id > +org.id));
+
 export async function pedido360(ctx, log, nf) {
   const BASE = (process.env.MULTI360_URL || "https://appv2.360multi.com").replace(/\/$/, "");
   const m = pedido360.pg && !pedido360.pg.isClosed() ? pedido360.pg : (pedido360.pg = await entrarMulti360(ctx, log, CRED_REPO()));
@@ -294,7 +300,7 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
     } catch (e) { erros++; r.robo_msg = "portal: " + String(e.message).split("\n")[0].slice(0, 150); if (/parei por segurança/.test(e.message)) { await chamar("repo_pre", "POST", r, { Prefer: "resolution=merge-duplicates,return=minimal" }); throw e; } }
     try { const q = await pedido360(ctx, log, c.nf);
       r.venda = q.venda; r.status_360 = q.status || null; r.data_360 = q.data || null; r.sku = q.sku; r.tickets = q.tickets;
-      r.tem_devolucao = q.tickets.some((t) => /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
+      r.tem_devolucao = q.tickets.some((t) => DEVOL(t));
       if (!q.venda) {   // nota de reposição ou de AT: acha o ticket nos nossos dados e usa o pedido da NF original
         const o = await origemNota(chamar, c.nf);
         if (o) {
@@ -302,7 +308,7 @@ export async function rodarRepoPre({ chamar, log, ctx, R = null, limite = 40, re
           r.venda = true; r.status_360 = `nota de ${o.nota_de === "at" ? "AT" : "reposição"} do ticket ${o.ticket}`; r.sku = q2 && q2.sku.length ? q2.sku : r.sku;
           r.tickets = [{ id: o.ticket, tipo: o.nota_de === "at" ? "Nota de AT (origem)" : "Nota de reposição (origem)", fila: o.fila || "", situacao: "", nota_de: o.nota_de, nf_original: o.nf_original, url_pedido: (q2 && q2.url) || null, itens: o.itens || [], fonte: o.fonte.join(", ") },
             ...((q2 && q2.tickets) || [])];
-          r.tem_devolucao = r.tickets.some((t) => !t.nota_de && /devolu|cancel/i.test(`${t.tipo} ${t.fila}`));
+          r.tem_devolucao = r.tickets.some((t) => !t.nota_de && DEVOL(t));
           if (q2 && q2.data) r.data_360 = q2.data;
           origens++;
         }
@@ -428,7 +434,7 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
     let etapa = "início";
     try {
       if (!repor.length) throw new Error("nenhum volume para repor");
-      if (x.tem_devolucao || x.venda === false) throw new Error("caso para conferir à mão (devolução ou não é venda)");
+      if (((x.tickets || []).length ? x.tickets.some((t) => !t.nota_de && DEVOL(t)) : x.tem_devolucao) || x.venda === false) throw new Error("caso para conferir à mão (devolução ou não é venda)");
       let linha = await acharLinha(p, x.nf);
       if (!linha) {   // 27/11: confere sem o filtro Novo qual é o status da NF no portal
         acharLinha.log = log; await abrirRepoPre(p, log); const l0 = await acharLinha(p, x.nf); acharLinha.log = null;
@@ -452,6 +458,11 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       const jad = /jadlog/i.test(x.transp || "") ? (sol.anot.split(/\n+/).find((l) => /cnpj|\d{2}\.?\d{3}\.?\d{3}\/?\d{4}-?\d{2}/i.test(l)) || "").trim().toUpperCase() : "";
       if (/jadlog/i.test(x.transp || "") && !jad) log("  Jadlog: não achei CNPJ na anotação (sigo sem)");
       if (!x.ticket_portal_ok) {
+        etapa = "conferir tickets no 360";   // Brenda 28/11: se já existe ticket de Reposição, não cria; avisa
+        { const org = (x.tickets || []).find((t) => t.nota_de); const q0 = await pedido360(ctx, log, org && org.nf_original ? org.nf_original : x.nf);
+          const ja = REPOS(q0.tickets, org).filter((t) => !/resolvid|encerrad|fechad/i.test(t.situacao || ""));
+          if (ja.length && !/FORÇAR/.test(x.obs || "")) { await patch(x, { tickets: org ? [org, ...q0.tickets] : q0.tickets }).catch(() => {});
+            throw new Error(`JÁ EXISTE ticket de Reposição no 360: ${ja.map((t) => "#" + t.id + (t.fila ? " (" + t.fila + ")" : "")).join(", ")}. Não criei outro.`); } }
         etapa = "criar ticket no portal"; linha = await acharLinha(p, x.nf); if (!linha) throw new Error("a NF sumiu da lista depois do print");
         const c = await criarTicketPortal(p, linha, repor, teste, log, /EXTRAVIO TOTAL/.test(x.obs || "") ? "EXTRAVIO TOTAL" : "");   // Brenda 27/11: sem texto de volume na observação
         if (!teste) await patch(x, { ticket_portal_ok: true, solicitar_msg: "Ticket criado no portal; falta o comentário no 360" });
@@ -473,6 +484,9 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       const texto = jad ? `REPOSIÇÃO NO CNPJ: ${jad}` : "";
       await M.comentarioInterno(pedido360.pg, tk.id, texto, arquivos);
       await patch(x, { solicitar_status: "feito", ticket_360: tk.id, solicitar_msg: `Ticket do portal criado e comentário com ${arquivos.length} print(s) no ticket ${tk.id}.`, feito_em: new Date().toISOString() });
+      // Brenda 28/11: o ticket de Débitos Transportadores (Reposições) abre junto; se não abrir, criamos pelo Ticket Paralelo
+      try { const org = (x.tickets || []).find((t) => t.nota_de); const q3 = await pedido360(ctx, log, org && org.nf_original ? org.nf_original : x.nf); const db = DEBITO(q3.tickets, org).filter((t) => +t.id > +tk.id - 50);
+        await patch(x, { debito: db.length ? { status: "ok", ticket: db[0].id, visto_em: new Date().toISOString() } : { status: "aguardando", desde: new Date().toISOString() } }).catch(() => {}); log(`  débito: ${db.length ? "abriu junto" : "ainda não abriu"}`); } catch (e) { log("  débito: não conferi (" + String(e.message).slice(0, 60) + ")"); }
       log(`  feito: ticket portal + comentário 360 (${arquivos.length} prints)`);
     } catch (e) { const msg = (`[${etapa}] ` + String(e.message).split("\n")[0]).slice(0, 220); log("  erro: " + msg.replace(/\d{4,}/g, "#"));
       if (!teste) await patch(x, { solicitar_status: /tento de novo/.test(msg) ? "pendente" : "erro", solicitar_msg: msg }).catch(() => {});   // teste não mexe no caso
@@ -481,4 +495,41 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       const dl = p.locator("[role=dialog]").last(); if (await dl.count()) await dl.getByRole("button", { name: /cancelar|fechar/i }).first().click({ timeout: 4000 }).catch(() => {});
       try { await p.reload({ timeout: 30000 }).catch(() => {}); await p.waitForTimeout(2000); await abrirRepoPre(p, log); await aplicarNovo(p, log); } catch (e2) { log("  não consegui voltar para a lista: " + String(e2.message).split("\n")[0].slice(0, 100)); } }
   }
+}
+
+// ===== débito (Brenda 28/11): o ticket "Débitos Transportadores (Reposições)" abre junto com a reposição; se não abrir, avisa (criação pelo Ticket Paralelo depois do diag) =====
+export async function conferirDebitos({ chamar, log, ctx }) {
+  const desde = new Date(Date.now() - 7 * 864e5).toISOString();
+  const L = (await chamar(`repo_pre?select=nf,tickets,ticket_360,feito_em,debito&solicitar_status=eq.feito&feito_em=gte.${desde}&limit=200`).catch(() => [])).filter((x) => x.ticket_360 && (!x.debito || x.debito.status !== "ok"));
+  if (!L.length) { log("débitos: nada para conferir"); return; }
+  const cont = { ok: 0, aguardando: 0, faltando: 0, erro: 0 };
+  for (const x of L) {
+    try { const org = (x.tickets || []).find((t) => t.nota_de); const q = await pedido360(ctx, log, org && org.nf_original ? org.nf_original : x.nf);
+      const db = DEBITO(q.tickets, org).filter((t) => +t.id > +x.ticket_360 - 50);
+      const horas = (Date.now() - new Date(x.feito_em).getTime()) / 36e5;
+      const d = db.length ? { status: "ok", ticket: db[0].id, visto_em: new Date().toISOString() } : { status: horas >= 2 ? "faltando" : "aguardando", desde: (x.debito && x.debito.desde) || x.feito_em, conferido_em: new Date().toISOString() };
+      await chamar(`repo_pre?nf=eq.${encodeURIComponent(x.nf)}`, "PATCH", { debito: d }); cont[d.status]++;
+    } catch (e) { cont.erro++; log("  débito: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 100)); }
+  }
+  log(`débitos: ${L.length} conferidos · abriu ${cont.ok} · aguardando ${cont.aguardando} · faltando (2 h+) ${cont.faltando} · erro ${cont.erro}`);
+}
+// diag: abre o ticket de Reposição, clica em Ticket Paralelo → Débitos Transportadores (Reposições), lê a janela e CANCELA (não cria nada)
+export async function diagParalelo({ chamar, log, ctx }) {
+  const [x] = await chamar("repo_pre?select=ticket_360&solicitar_status=eq.feito&ticket_360=not.is.null&order=feito_em.desc&limit=1");
+  if (!x) { log("diag-paralelo: nenhum caso feito com ticket"); return; }
+  const M = await import("./multi360.mjs"); const p = await entrarMulti360(ctx, log, CRED_REPO());
+  await M.abrirTicket(p, x.ticket_360);
+  const m = (t) => String(t || "").replace(/\d{3,}/g, "#").replace(/\s+/g, " ").trim().slice(0, 80);
+  await p.getByRole("button", { name: /ticket paralelo/i }).first().click(); await p.waitForTimeout(1500);
+  const itens = await p.locator("[role=menuitem], [role=option], [role=menu] button, [data-radix-popper-content-wrapper] *").evaluateAll((es) => [...new Set(es.map((e) => (e.innerText || "").trim()).filter((t) => t && t.length < 80))]).catch(() => []);
+  log(`diag-paralelo: menu ${JSON.stringify(itens.map(m))}`);
+  await p.getByText(/D[eé]bitos Transportadores \(Reposi[cç][oõ]es\)/i).first().click(); await p.waitForTimeout(2500);
+  const d = p.locator("[role=dialog]").last();
+  const tela = await d.evaluate((el) => ({ titulo: (el.querySelector("h1,h2,h3") || {}).innerText || "", rotulos: [...el.querySelectorAll("label")].map((l) => l.innerText.trim()), campos: [...el.querySelectorAll("input,textarea,select,[role=combobox]")].map((e) => `${e.tagName.toLowerCase()}${e.type ? ":" + e.type : ""}${e.getAttribute("role") ? "/" + e.getAttribute("role") : ""} ${e.getAttribute("placeholder") || e.getAttribute("name") || ""} ${e.required ? "(obrigatório)" : ""} ${(e.value || e.innerText || "").slice(0, 20)}`), botoes: [...el.querySelectorAll("button")].map((b) => b.innerText.trim()).filter(Boolean), texto: el.innerText.split("\n").map((t) => t.trim()).filter(Boolean).slice(0, 25) })).catch((e) => ({ erro: String(e.message).slice(0, 80) }));
+  log(`diag-paralelo: janela ${m(tela.titulo)} · rótulos ${JSON.stringify((tela.rotulos || []).map(m))}`);
+  log(`diag-paralelo: campos ${JSON.stringify((tela.campos || []).map(m))}`);
+  log(`diag-paralelo: botões ${JSON.stringify((tela.botoes || []).map(m))} · texto ${JSON.stringify((tela.texto || []).map(m))}`);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(800);
+  const c = p.locator("[role=dialog]").last().getByRole("button", { name: /cancelar|fechar/i }).first(); if (await c.count()) await c.click().catch(() => {});
+  log("diag-paralelo: fechei sem criar nada");
 }

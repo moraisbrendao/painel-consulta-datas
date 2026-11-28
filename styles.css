@@ -1558,3 +1558,18 @@ body.fundo-escuro #pagina-reposicao .titulo-pagina .sub b { color: #fff; }
 .rpp-dia table { margin-top: 8px; }
 .rpp-al.ok { background: #e6f4ea; color: #1d7a43; }
 .rpp-al.aviso { background: #fff6db; color: #7a5a00; }
+/* Reposição pré › visão rápida (Brenda 28/11) */
+.rpp-ver { border-radius: 8px; padding: 7px 10px; border-left: 5px solid #1d7a43; background: #eef8f1; display: grid; gap: 3px; font-size: 13px; }
+.rpp-ver.amar { border-left-color: #d9a400; background: #fff8e1; }
+.rpp-ver.verm { border-left-color: var(--vermelho); background: #fdeeee; }
+.rpp-ver-t { font-weight: 600; color: var(--marinho); }
+.rpp-ver.verm .rpp-ver-t { color: var(--vermelho); }
+.rpp-ver ul { margin: 0; padding-left: 18px; }
+.rpp-ver li { font-size: 12.5px; color: #5b4a00; }
+.rpp-ver li.mao, .rpp-ver li.erro { color: var(--vermelho); font-weight: 600; }
+.rpp-ver li.ok { color: #1d7a43; }
+.rpp-ver-l { font-size: 12.5px; color: var(--texto); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rpp-mais { font-size: 12.5px; }
+.rpp-mais > summary { cursor: pointer; color: var(--texto-2); }
+.rpp-mais[open] > summary { margin-bottom: 6px; }
+.rpp-mais > * + * { margin-top: 6px; }

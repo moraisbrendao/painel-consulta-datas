@@ -5244,3 +5244,6 @@ revoke all on function public._robo_tk360() from public, anon, authenticated;
 select cron.unschedule(jobid) from cron.job where jobname = 'robo-tk360';
 select cron.schedule('robo-tk360', '0 10,12,14,16,18,20,22 * * 1-6', 'select public._robo_tk360()');
 notify pgrst, 'reload schema';
+
+-- Parte 111 (28/11): Reposição pré › débito da reposição
+alter table public.repo_pre add column if not exists debito jsonb;   -- {status: ok|aguardando|faltando, ticket, desde, visto_em}
