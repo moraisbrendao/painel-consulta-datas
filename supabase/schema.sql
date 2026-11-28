@@ -5204,3 +5204,43 @@ begin
 end $$;
 revoke all on function public.importar_at_frete(jsonb) from public, anon;
 grant execute on function public.importar_at_frete(jsonb) to authenticated;
+
+-- parte 110 (28/11): tickets do 360 puxados direto pela API (robô "tk360"), EM PARALELO ao upload do detalhamento.
+-- Não substitui nada ainda: só guarda, para comparar com o detalhamento. Sem dados de cliente (nome, telefone, CPF, endereço).
+create table if not exists public.tk360 (
+  ticket_id bigint primary key,
+  tipo text, motivo text, grupo text, grupo_id int, fila text, fila_id int, status text, responsavel text, prioridade text,
+  transp text, redespacho text, carga text, canal text, sub_canal text, nf text, pedido_mkt text,
+  criado text, atualizado text, sla text, valor numeric, reposicao text, estornado text,
+  datas jsonb, pedido jsonb, tags jsonb,
+  at jsonb,                 -- só Assistência Técnica: nota_at, nota_at_em, pecas[], transp, frete, previsao, pedido_erp
+  na_lista boolean not null default true, visto_em timestamptz, saiu_em timestamptz,
+  detalhe_em timestamptz, detalhe_msg text
+);
+create index if not exists tk360_nf on public.tk360 (nf);
+create index if not exists tk360_tipo on public.tk360 (tipo) where na_lista;
+alter table public.tk360 enable row level security;
+revoke all on public.tk360 from anon;
+grant select, insert, update on public.tk360 to authenticated;
+drop policy if exists tk360_logistica on public.tk360;
+create policy tk360_logistica on public.tk360 for all to authenticated using ((select not public.e_sac())) with check ((select not public.e_sac()));
+
+-- robô a cada 2 horas, das 7h às 19h de Brasília (seg a sáb)
+create or replace function public._robo_tk360()
+returns void language plpgsql security definer set search_path = public as $$
+declare tk text;
+begin
+  begin select decrypted_secret into tk from vault.decrypted_secrets where name = 'github_robo_token' limit 1;
+  exception when others then tk := null; end;
+  if tk is not null then
+    perform net.http_post(
+      url := 'https://api.github.com/repos/moraisbrendao/painel-consulta-datas/actions/workflows/robo-ssw.yml/dispatches',
+      headers := jsonb_build_object('Authorization', 'Bearer ' || tk, 'Accept', 'application/vnd.github+json',
+                                    'User-Agent', 'painel-preventivo', 'Content-Type', 'application/json'),
+      body := '{"ref":"main","inputs":{"modo":"tk360"}}'::jsonb);
+  end if;
+end $$;
+revoke all on function public._robo_tk360() from public, anon, authenticated;
+select cron.unschedule(jobid) from cron.job where jobname = 'robo-tk360';
+select cron.schedule('robo-tk360', '0 10,12,14,16,18,20,22 * * 1-6', 'select public._robo_tk360()');
+notify pgrst, 'reload schema';

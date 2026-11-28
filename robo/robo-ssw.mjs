@@ -1570,6 +1570,14 @@ if (MODO === "at") {   // Assistência Técnica: peças no 360 + rastreio da Not
   catch (e) { log("at: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
   finally { await nav.close(); }
 }
+if (MODO === "tk360") {   // tickets do 360 pela API, em paralelo ao detalhamento (robo/tk360.mjs, tabela tk360 = parte 110)
+  await entrarSupabase();
+  const { chromium } = await import("playwright");
+  const nav = await chromium.launch(); const ctx = await nav.newContext({ viewport: { width: 1600, height: 900 }, locale: "pt-BR", timezoneId: "America/Sao_Paulo" });
+  try { await (await import("./tk360.mjs")).rodarTk360({ chamar, log, ctx, limite: Number(process.env.SSW_LIMITE) || 3000 }); }
+  catch (e) { log("tk360: erro " + String(e.message).split("\n")[0].replace(/\d{4,}/g, "#").slice(0, 160)); process.exitCode = 1; }
+  finally { await nav.close(); }
+}
 if (MODO === "diag-volcad") {   // 28/11: o cadastro de volumes cobre os SKUs da Reposição pré? (SKU e código de volume não são dados de cliente)
   await entrarSupabase();
   const R = await chamar("repo_pre?select=sku,volumes,motivo&na_lista=eq.true&limit=2000");
