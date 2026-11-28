@@ -222,7 +222,7 @@
   }
   function acao(x, rp) {
     if (x.solicitar_status === "feito") return `<span class="chip verde">✓ Reposição solicitada ${hora(x.feito_em)}${x.ticket_360 ? ` · <a href="https://appv2.360multi.com/tickets/${esc(x.ticket_360)}" target="_blank" rel="noopener noreferrer">ticket ${esc(x.ticket_360)} ↗</a>` : ""}</span>`;
-    if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>`;
+    if (x.solicitar_status === "pendente") return `<span class="chip">⏳ Enviado ao robô ${hora(x.solicitar_em)}${x.solicitar_msg ? " · " + esc(x.solicitar_msg) : ""}</span>${x.ticket_portal_ok || Date.now() - new Date(x.solicitar_em || 0).getTime() > 15 * 60000 ? ` <button type="button" class="btn contorno" data-rpp-denovo="1" title="Chama o robô de novo para os casos em Solicitando">▶ Chamar o robô de novo</button>` : ""}`;
     const pode = podeSol(x), dec = decisao(x, rp);
     if (pode && soComentario(x)) return `<button type="button" class="btn amarelo" data-rpp-sol="${esc(x.nf)}">💬 Fazer só o comentário no 360 (o ticket do portal já existe)</button> <span class="s">${esc(x.solicitar_msg || "")}</span>`;
     const volta = APROV(x) || NAOREP(x) || x.solicitar_status === "erro" ? ` <button type="button" class="btn contorno" data-rpp-volta="${esc(x.nf)}" title="Desfaz a decisão e devolve o caso para Para analisar">↩ Voltar para analisar</button>` : "";
@@ -304,6 +304,8 @@
     const r2 = await sb().rpc("rodar_robo_repopre_solicitar"); if (r2.error) return toast("Marcados, mas não consegui chamar o robô: " + r2.error.message, true);
     toast(`Robô chamado para ${ok} NF(s): em alguns minutos aparecem como solicitadas.`); setTimeout(carregar, 240000);
   }
+  document.addEventListener("click", async (e) => { if (!e.target.closest("[data-rpp-denovo]")) return;   // 28/11: "tento de novo na próxima rodada" ficava parado
+    const r = await sb().rpc("rodar_robo_repopre_solicitar"); toast(r.error ? "Não consegui chamar o robô: " + r.error.message : "Robô chamado: ele termina os casos em Solicitando.", !!r.error); });
   async function solicitar(nf) {
     const x = L.find((y) => y.nf === nf); if (!x) return; const rp = repor(x);
     if (soComentario(x) ? !confirm(`NF ${nf}: o ticket do portal já existe.\n\nO robô só vai postar o comentário interno no ticket de Reposição do 360 com o print do rastreio e da solicitação. Continuar?`) : !confirm(`Solicitar a reposição da NF ${nf}?\n\nO robô vai:\n1) no portal: ⋯ › Abrir Ticket › Volumes ${rp.join(", ")} › Adicionar\n2) no 360 (login do Eduardo): comentário no ticket de Reposição com o print do rastreio e da solicitação${/jadlog/i.test(x.transp || "") ? " + o CNPJ da anotação em maiúsculas" : ""}.\n\nIsso cria o ticket de verdade.`)) return;

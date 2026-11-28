@@ -478,7 +478,10 @@ export async function solicitarRepoPre({ chamar, log, ctx, R, teste = false, has
       for (let i = 0; i < 4 && !tk; i++) { if (i) await new Promise((ok) => setTimeout(ok, 30000));
         const org = (x.tickets || []).find((t) => t.nota_de);   // nota de reposição/AT: o ticket novo nasce no pedido da NF original
         const q = await pedido360(ctx, log, org && org.nf_original ? org.nf_original : x.nf); const cand = q.tickets.filter((t) => t.id && /^reposi/i.test(t.tipo || "") && !/d[eé]bito/i.test(t.tipo || "") && (!org || +t.id > +org.id));
-        tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null; }
+        tk = (cand.filter((t) => /atribuir transportador/i.test(t.fila || "")).sort((a, b) => +b.id - +a.id)[0]) || null;
+        // 28/11: o ticket pode já ter saído de "Atribuir transportador" (ex.: caso que ficou para a rodada seguinte): usa a Reposição aberta mais nova
+        if (!tk && (i === 3 || x.ticket_portal_ok)) tk = (cand.filter((t) => !/resolvid|encerrad|fechad/i.test(t.situacao || "")).sort((a, b) => +b.id - +a.id)[0]) || null;
+        if (tk && x.ticket_portal_ok) log(`  ticket de Reposição achado na fila ${String(tk.fila || "—").replace(/\d/g, "#")}`); }
       if (!tk) throw new Error("ticket criado no portal, mas o ticket de Reposição (Atribuir transportador) ainda não apareceu no 360: tento de novo na próxima rodada");
       // Brenda 27/11: no 360 vão só os prints (sem texto); Jadlog parcial: a linha do CNPJ em maiúsculas continua
       const texto = jad ? `REPOSIÇÃO NO CNPJ: ${jad}` : "";
