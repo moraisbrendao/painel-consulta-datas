@@ -448,4 +448,19 @@ export async function diag360At({ chamar, log, ctx }) {
       if (txt.includes(na)) { const onde = []; const busca = (o, cam) => { if (o && typeof o === "object") for (const [k, v] of Object.entries(o)) busca(v, cam + "." + k); else if (String(o).includes(na)) onde.push(cam); }; busca(j, ""); log(`  Nota AT aparece em: ${onde.slice(0, 5).join(" | ")}`); }
     }
   }
+  // 2ª parte: em quais comentários/eventos estão a Nota AT e a saída (texto mascarado: só palavras minúsculas comuns ficam)
+  const masc = (m) => String(m || "").replace(/\d/g, "9").split(/(\s+)/).map((w) => /^[a-zà-ÿ:.,()\-\/]{1,14}$/.test(w) || /^(NF|AT|CT-e|CTe|NF-e|Nota|Data|Saída|Emitida|Emissão|Pedido|Série)[:.]?$/i.test(w) || /^[9\-\/.:]+$/.test(w) || /^\s+$/.test(w) ? w : "X").join("").slice(0, 160);
+  const mais = await chamar("at_tk?select=ticket,nota_at,data_saida&na_planilha=eq.true&nota_at=not.is.null&limit=8");
+  const tiposEv = {};
+  for (const t of mais) {
+    const id = String(t.ticket).replace(/\D/g, ""); const na = String(t.nota_at).split("-")[0].replace(/^0+/, "");
+    const ds = String(t.data_saida || "").slice(0, 10); const dsBr = ds.split("-").reverse().join("/");
+    const cm = await ctx.request.get(`${raiz}/tickets/${id}/comments`, { headers: { authorization: auth } }).then((r) => r.json()).catch(() => ({}));
+    for (const c of (cm.comments || [])) { const m = String(c.message || ""); const temN = na && m.includes(na), temD = ds && (m.includes(ds) || m.includes(dsBr));
+      if (temN || temD) log(`  comentário ${temN ? "c/ Nota AT" : ""}${temD ? " c/ saída" : ""} · tipo ${c.event_type} · autor ${/integra|sistema|robo|bot|api|erp|promob/i.test(JSON.stringify(c.user || "")) ? "sistema" : "pessoa"} · data igual à saída: ${String(c.datetime || "").slice(0, 10) === ds} · texto "${masc(m)}"`); }
+    const ev = await ctx.request.get(`${raiz}/tickets/${id}/events`, { headers: { authorization: auth } }).then((r) => r.json()).catch(() => []);
+    for (const e of (Array.isArray(ev) ? ev : [])) { const k = `${e.type} {${Object.keys(e.event || {}).join(",")}}`; tiposEv[k] = (tiposEv[k] || 0) + 1;
+      if (/part/i.test(k) && !tiposEv._p) { tiposEv._p = 1; const pt = (e.event.parts || [])[0] || {}; log(`  evento com peças: campos da peça {${Object.keys(pt).join(",")}} · totals {${Object.keys(e.event.totals || {}).join(",")}}`); } }
+  }
+  delete tiposEv._p; log(`tipos de evento: ${JSON.stringify(tiposEv)}`);
 }
