@@ -44,6 +44,7 @@
     if (m === "sinistro") return ["mao", "Sinistro: conferir o rastreio e o boletim/ocorrência com a transportadora antes de repor."];
     if (m === "avaria") {
       if (mk.length) return ["ok", `Avaria: repor o(s) volume(s) avariado(s) ${mk.map((v) => rotVol(x, v) + v).join(", ")}.`];
+      if (vs.length === 1) return ["acao", `Avaria em NF de 1 volume só: o avariado é ${rotVol(x, vs[0])}${vs[0]}.${PAL_AVARIA.test(an) ? " A anotação da transportadora confirma a avaria." : ""} Confira e use o ✓ Repor.`];
       { const av = volsPorAnotacao(x); if (av.length && av.length < vs.length) return ["acao", `Avaria: a anotação da transportadora cita a peça do volume ${av.map((v) => rotVol(x, v) + v + " (" + ((infoVol(x, v) || {}).descricao || "") + ")").join(", ")}. Confira e use o ✓ Repor.`]; }
       { const ev = volsPorEtiqueta(x); if (ev.length && !(x.foto_ia.volumes_vistos || []).length) return ["acao", `Avaria: a etiqueta da foto diz VOL ${(x.foto_ia.vol_nf || []).join(", ")} = volume ${ev.map((v) => rotVol(x, v) + v).join(", ")} pelo cadastro. Confira e use o ✓ Repor.`]; }
       if (!vs.some((v) => infoVol(x, v))) { if (fotos || /\S/.test(an)) return ["acao", "Avaria: este SKU não está no cadastro de volumes, então não sei a descrição nem o nº de cada volume. Suba a ⇪ Planilha de volumes ou clique no volume avariado."]; }
@@ -232,12 +233,14 @@
   // botões de decisão do caso (Brenda 27/11: "um botão nos casos igual no barrar")
   function decisao(x, rp) {
     const iaV = x.foto_ia && (x.foto_ia.volumes_vistos || []).length ? x.foto_ia.volumes_vistos : volsPorEtiqueta(x);
-    const anV = MOT(x) === "avaria" ? volsPorAnotacao(x) : [];
-    const ia = !rp.length && iaV.length ? iaV : null, an = !rp.length && !ia && anV.length && anV.length < (x.volumes || []).length ? anV : null;
+    // avaria: NF com 1 volume só = ele é o avariado; senão a anotação que cita a peça (Brenda 28/11: o ✓ tem que aparecer quando a análise já diz qual é)
+    const anV = MOT(x) !== "avaria" ? [] : (x.volumes || []).length === 1 ? [...x.volumes] : volsPorAnotacao(x);
+    const anRot = (x.volumes || []).length === 1 ? "único volume da NF" : "pela anotação";
+    const ia = !rp.length && iaV.length ? iaV : null, an = !rp.length && !ia && anV.length && (anV.length < (x.volumes || []).length || (x.volumes || []).length === 1) ? anV : null;
     const alvo = rp.length ? rp.map((v) => rotVol(x, v) + esc(v)).join(", ") : "";
     const sim = rp.length ? `<button type="button" class="btn verde" data-rpp-dec="sim" data-nf="${esc(x.nf)}">✓ Repor ${alvo}</button>`
       : ia ? `<button type="button" class="btn verde" data-rpp-dec="ia" data-nf="${esc(x.nf)}" title="Marca os volumes que o Claude leu na foto e aprova">✓ Repor ${(MOT(x) === "avaria" ? ia : (x.volumes || []).filter((v) => !ia.includes(v))).map((v) => rotVol(x, v) + esc(v)).join(", ") || "—"} (pela leitura da foto)</button>`
-      : an ? `<button type="button" class="btn verde" data-rpp-dec="an" data-nf="${esc(x.nf)}" title="A anotação da transportadora cita a peça deste volume">✓ Repor ${an.map((v) => rotVol(x, v) + esc(v) + " · " + esc((infoVol(x, v) || {}).descricao || "")).join(", ")} (pela anotação)</button>`
+      : an ? `<button type="button" class="btn verde" data-rpp-dec="an" data-nf="${esc(x.nf)}" title="A anotação da transportadora cita a peça deste volume">✓ Repor ${an.map((v) => rotVol(x, v) + esc(v) + " · " + esc((infoVol(x, v) || {}).descricao || "")).join(", ")} (${anRot})</button>`
       : `<button type="button" class="btn verde" disabled title="Clique primeiro nos volumes acima (ou em Extravio total)">✓ Repor</button>`;
     return `<div class="rpp-dec"><span class="s">Decisão:</span> ${sim} <button type="button" class="btn vermelho-cont" data-rpp-dec="nao" data-nf="${esc(x.nf)}">✗ Não repor</button>${!rp.length && !ia && !an ? ` <span class="s">${MOT(x) === "avaria" ? "clique no volume avariado acima" : "marque o volume acima"} para liberar o ✓</span>` : ""}</div>`;
   }
@@ -247,7 +250,7 @@
     const novo = { marcado_por: email, marcado_em: new Date().toISOString() };
     if (d === "nao") novo.obs = obsDe(x, { aprov: false, nao: true });
     else { if (d === "ia") novo.vol_posse = (x.foto_ia.volumes_vistos || []).length ? [...x.foto_ia.volumes_vistos] : volsPorEtiqueta(x);
-      if (d === "an") novo.vol_posse = volsPorAnotacao(x); novo.obs = obsDe(REVISAR(x) ? { ...x, obs: null } : x, { aprov: true, nao: false }); }
+      if (d === "an") novo.vol_posse = (x.volumes || []).length === 1 ? [...x.volumes] : volsPorAnotacao(x); novo.obs = obsDe(REVISAR(x) ? { ...x, obs: null } : x, { aprov: true, nao: false }); }
     const r = await sb().from("repo_pre").update(novo).eq("nf", nf); if (r.error) return toast("Não salvei: " + r.error.message, true);
     Object.assign(x, novo); desenhar();
     toast(d === "nao" ? `NF ${nf}: não repor (card Não repor).` : `NF ${nf} aprovada: está em Pronto para solicitar.`);
